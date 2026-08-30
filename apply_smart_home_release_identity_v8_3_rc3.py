@@ -17,25 +17,34 @@ def replace_once(text: str, old: str, new: str, name: str) -> str:
 def apply(repo: Path) -> None:
     hub = repo / "src" / "smart_hub.cpp"
     text = hub.read_text(encoding="utf-8")
-    text = replace_once(
-        text,
-        'snprintf(build, sizeof(build), "%s · %s", SMART_HOME_VERSION, SMART_HOME_UPSTREAM_SHA_SHORT);',
-        'snprintf(build, sizeof(build), "%s RC3 · %s", SMART_HOME_VERSION, SMART_HOME_UPSTREAM_SHA_SHORT);',
-        "System RC3 provenance",
-    )
+
+    # Use the stable System header identity rather than depending on the exact
+    # lower provenance-format implementation, which changed during RC2/RC3.
+    if 'drawHeader("SYSTEM", "Smart Home v8.3", 3);' in text:
+        text = replace_once(
+            text,
+            'drawHeader("SYSTEM", "Smart Home v8.3", 3);',
+            'drawHeader("SYSTEM", "Smart Home v8.3 RC3", 3);',
+            "System RC3 header identity",
+        )
+    elif 'drawHeader("SYSTEM", "Smart Home v8.3 RC3", 3);' not in text:
+        raise PatchError("System RC3 header identity anchor missing")
     hub.write_text(text, encoding="utf-8")
 
     build = repo / "include" / "smart_home_build.h"
     text = build.read_text(encoding="utf-8")
-    text = replace_once(
-        text,
-        '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 Hardening RC"',
-        '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"',
-        "RC3 build label",
-    )
+    if '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 Hardening RC"' in text:
+        text = replace_once(
+            text,
+            '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 Hardening RC"',
+            '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"',
+            "RC3 build label",
+        )
+    elif '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"' not in text:
+        raise PatchError("RC3 build-label anchor missing")
     build.write_text(text, encoding="utf-8")
 
-    if "v8.3 RC3" not in hub.read_text(encoding="utf-8"):
+    if "Smart Home v8.3 RC3" not in hub.read_text(encoding="utf-8"):
         raise PatchError("RC3 physical identity missing")
     if '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"' not in build.read_text(encoding="utf-8"):
         raise PatchError("RC3 build label missing")
