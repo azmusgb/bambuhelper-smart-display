@@ -1,0 +1,24 @@
+{
+  "release": "production-rc-v6",
+  "sourceCommit": "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4",
+  "board": {
+    "id": "ws_lcd_350",
+    "name": "Waveshare ESP32-S3-Touch-LCD-3.5",
+    "chipFamily": "ESP32-S3",
+    "display": "3.5\" ST7796 IPS 320×480",
+    "touch": "FT6336 capacitive",
+    "flash": "16 MB",
+    "psram": "8 MB"
+  },
+  "profiles": {
+    "smart-display": {
+      "label": "Smart Display v6",
+      "recommended": true,
+      "version": "v3.8.1 + Smart Display v6",
+      "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin",
+      "size": 2207040,
+      "sha256": "82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac",
+      "description": "BambuHelper + Home + Workshop + Custom + System pages"
+    }
+  }
+}
