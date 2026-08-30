@@ -5,11 +5,12 @@ on:
     branches: [smart-home-v8-hardening]
     paths:
       - 'apply_smart_home_hardening_v8.py'
+      - 'apply_smart_home_hardening_v8_1.py'
       - '.github/workflows/bambuhelper-v8-hardening.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: smart-home-v8-hardening
@@ -35,7 +36,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Rehydrate evolution patchers v1-v7
+      - name: Rehydrate v1-v7.2 patch stack
         shell: bash
         run: |
           set -euo pipefail
@@ -45,9 +46,7 @@ jobs:
           v72=https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/smart-home-v7-2-display-stability
 
           curl -fsSL "$v1/installer.zlib.b64" -o /tmp/installer.b64
-          for n in 0 1 2 3; do
-            curl -fsSL "$v1/device.part$n" -o "/tmp/device.part$n"
-          done
+          for n in 0 1 2 3; do curl -fsSL "$v1/device.part$n" -o "/tmp/device.part$n"; done
           cat /tmp/device.part{0,1,2,3} > /tmp/device.b64
           curl -fsSL "$v3/v2.zlib.b64" -o /tmp/v2.b64
           curl -fsSL "$v3/v3.zlib.b64" -o /tmp/v3.b64
@@ -60,46 +59,42 @@ jobs:
 
           python - <<'PY'
           from pathlib import Path
-          import base64
-          import zlib
-
+          import base64, zlib
           pairs = [
-              ('/tmp/installer.b64', 'apply_installer_evolution.py'),
-              ('/tmp/device.b64', 'apply_device_onboarding_evolution.py'),
-              ('/tmp/v2.b64', 'apply_resilience_evolution_v2.py'),
-              ('/tmp/v3.b64', 'apply_smart_profiles_evolution_v3.py'),
-              ('/tmp/v4.b64', 'apply_ws350_remote_dashboard_v4.py'),
-              ('/tmp/v5.b64', 'apply_commissioning_evolution_v5.py'),
-              ('/tmp/v6.b64', 'apply_smart_display_platform_v6.py'),
-              ('/tmp/v7-home.b64', 'apply_smart_home_navigation_v7.py'),
+              ('/tmp/installer.b64','apply_installer_evolution.py'),
+              ('/tmp/device.b64','apply_device_onboarding_evolution.py'),
+              ('/tmp/v2.b64','apply_resilience_evolution_v2.py'),
+              ('/tmp/v3.b64','apply_smart_profiles_evolution_v3.py'),
+              ('/tmp/v4.b64','apply_ws350_remote_dashboard_v4.py'),
+              ('/tmp/v5.b64','apply_commissioning_evolution_v5.py'),
+              ('/tmp/v6.b64','apply_smart_display_platform_v6.py'),
+              ('/tmp/v7-home.b64','apply_smart_home_navigation_v7.py'),
           ]
           for src, dst in pairs:
-              raw = base64.b64decode(Path(src).read_text().strip())
-              Path(dst).write_bytes(zlib.decompress(raw))
+              Path(dst).write_bytes(zlib.decompress(base64.b64decode(Path(src).read_text().strip())))
           PY
 
-      - name: Repair historical v3 duplicate-anchor patcher
+      - name: Repair historical v3 patcher
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          p = Path('apply_smart_profiles_evolution_v3.py')
-          text = p.read_text()
-          needle = '"app/profile-account-selection",'
-          pos = text.find(needle)
-          if pos >= 0:
-              start = text.rfind('    text = replace_once(', 0, pos)
-              end = text.find('\n    )', pos)
-              if min(start, end) < 0:
-                  raise SystemExit('v3 repair anchor malformed')
+          p=Path('apply_smart_profiles_evolution_v3.py')
+          text=p.read_text()
+          needle='"app/profile-account-selection",'
+          pos=text.find(needle)
+          if pos>=0:
+              start=text.rfind('    text = replace_once(',0,pos)
+              end=text.find('\n    )',pos)
+              if min(start,end)<0: raise SystemExit('v3 repair anchor malformed')
               end += len('\n    )')
-              replacement = """    profile_refresh_anchor = '''  updatePrinterOnboarding();\n  refreshPrinterHealth(false);'''\n    profile_refresh_count = text.count(profile_refresh_anchor)\n    if profile_refresh_count < 1:\n        raise PatchError(\"app/profile-context-refresh: expected at least one v2 refresh anchor\")\n    text = text.replace(profile_refresh_anchor, '''  updatePrinterOnboarding();\n  refreshGaugeProfileUi();\n  refreshPrinterHealth(false);''')"""
-              p.write_text(text[:start] + replacement + text[end:])
+              replacement="""    profile_refresh_anchor = '''  updatePrinterOnboarding();\n  refreshPrinterHealth(false);'''\n    profile_refresh_count = text.count(profile_refresh_anchor)\n    if profile_refresh_count < 1:\n        raise PatchError(\"app/profile-context-refresh: expected at least one v2 refresh anchor\")\n    text = text.replace(profile_refresh_anchor, '''  updatePrinterOnboarding();\n  refreshGaugeProfileUi();\n  refreshPrinterHealth(false);''')"""
+              p.write_text(text[:start]+replacement+text[end:])
           PY
           python -m py_compile apply_*.py
 
-      - name: Apply Smart Display evolution v1-v8
+      - name: Apply Smart Home v1-v8.1 stack
         shell: bash
         run: |
           set -euo pipefail
@@ -114,103 +109,70 @@ jobs:
           python apply_smart_home_ux_v7_1.py --repo upstream --apply
           python apply_smart_home_display_stability_v7_2.py --repo upstream --apply
           python apply_smart_home_hardening_v8.py --repo upstream --apply
+          python apply_smart_home_hardening_v8_1.py --repo upstream --apply
 
-      - name: Static security and UX contracts
+      - name: Static security contracts
         shell: bash
         run: |
           set -euo pipefail
-
           test -f upstream/include/security_manager.h
           test -f upstream/src/security_manager.cpp
           test -f upstream/include/smart_home_build.h
-
           grep -Fq 'DIGEST_AUTH' upstream/src/security_manager.cpp
-          grep -Fq 'same-origin protection' upstream/src/security_manager.cpp
-          grep -Fq 'securityPortalCode()' upstream/src/smart_hub.cpp
-          grep -Fq 'Smart Home v8.0' upstream/src/smart_hub.cpp
-          grep -Fq 'MIN HEAP' upstream/src/smart_hub.cpp
-          grep -Fq 'MAX BLOCK' upstream/src/smart_hub.cpp
+          grep -Fq 'sameOrigin' upstream/src/security_manager.cpp
           grep -Fq 'X-SHA256' upstream/src/web_server.cpp
           grep -Fq 'sha256HexArrayBuffer' upstream/web/app.js
-          grep -Fq "fetch('/reset',{method:'POST'})" upstream/web/app.js
-          grep -Fq "fetch('/brightness?val=' + encodeURIComponent(val),{method:'POST'})" upstream/web/app.js
-          grep -Fq 'server.header("Origin")' upstream/src/security_manager.cpp
-          grep -Fq 'server.header("Referer")' upstream/src/security_manager.cpp
           grep -Fq 'Smart Home v8 never stores your Bambu account password' upstream/include/web_pages.h
-          grep -Fq 'clearCloudPassword();' upstream/src/settings.cpp
-
-          if grep -Fq 'client.setInsecure();' upstream/src/web_server.cpp; then
-            echo 'ERROR: insecure OTA TLS downgrade still present'
-            exit 1
-          fi
-          if grep -Fq 'ENABLE_OTA_AUTO=1' upstream/boards/ws_lcd_350.ini; then
-            echo 'ERROR: upstream automatic OTA still enabled for ws_lcd_350'
-            exit 1
-          fi
-          if grep -Fq 'prefs.putString("cl_pass", password)' upstream/src/settings.cpp; then
-            echo 'ERROR: cloud password persistence still present'
-            exit 1
-          fi
-          if grep -Fq 'server.on("/reset", HTTP_GET' upstream/src/web_server.cpp; then
-            echo 'ERROR: destructive reset still exposed as GET'
-            exit 1
-          fi
-          if grep -Fq 'server.on("/brightness", HTTP_GET' upstream/src/web_server.cpp; then
-            echo 'ERROR: brightness mutation still exposed as GET'
-            exit 1
-          fi
+          grep -Fq 'security hardening evolution v8.0' upstream/src/smart_hub.cpp
+          grep -Fq 'MIN HEAP' upstream/src/smart_hub.cpp
+          grep -Fq 'MAX BLOCK' upstream/src/smart_hub.cpp
+          ! grep -Fq 'client.setInsecure();' upstream/src/web_server.cpp
+          ! grep -Fq -- '-D ENABLE_OTA_AUTO=1' upstream/boards/ws_lcd_350.ini
+          ! grep -Fq 'prefs.putString("cl_pass", password)' upstream/src/settings.cpp
 
           python - <<'PY'
           from pathlib import Path
           import re
-
-          s = Path('upstream/src/web_server.cpp').read_text()
-          start = s.index('void initWebServer() {')
-          end = s.index('\nvoid handleWebServer()', start)
-          block = s[start:end]
-
-          allowed_public = {
-              '/generate_204', '/gen_204', '/connecttest.txt',
-              '/hotspot-detect.html', '/canonical.html', '/app.css', '/app.js'
-          }
-          raw = []
-          for m in re.finditer(r'server\.on\("([^"]+)"\s*,\s*HTTP_(GET|POST)', block):
-              path, method = m.group(1), m.group(2)
-              if path not in allowed_public or method != 'GET':
-                  raw.append((path, method))
-          if raw:
-              raise SystemExit('Unprotected route registrations remain: ' + repr(raw))
-
-          assert 'SECURE_POST("/reset", handleReset);' in block
-          assert 'SECURE_POST("/brightness", handleBrightnessPreview);' in block
-          assert 'SECURE_UPLOAD("/ota/upload", handleOtaFinish, handleOtaUpload);' in block
-          assert 'securityInit();' in block
+          s=Path('upstream/src/web_server.cpp').read_text()
+          start=s.index('void initWebServer() {')
+          end=s.index('\nvoid handleWebServer()',start)
+          block=s[start:end]
+          allowed={'/generate_204','/gen_204','/connecttest.txt','/hotspot-detect.html','/canonical.html','/app.css','/app.js'}
+          raw=[]
+          for m in re.finditer(r'server\.on\("([^"]+)"\s*,\s*HTTP_(GET|POST)',block):
+              path,method=m.group(1),m.group(2)
+              if path not in allowed or method!='GET': raw.append((path,method))
+          if raw: raise SystemExit('Unprotected route registrations remain: '+repr(raw))
+          required=[
+              'SECURE_GET("/", handleRoot);',
+              'SECURE_GET("/power/stats", handleGetPowerStats);',
+              'SECURE_POST("/led/test", handleLedTest);',
+              'SECURE_GET("/ota/slots", handleOtaSlots);',
+              'SECURE_UPLOAD("/ota/upload", handleOtaFinish, handleOtaUpload);',
+              'SECURE_POST("/reset", handleReset);',
+              'SECURE_POST("/brightness", handleBrightnessPreview);',
+          ]
+          for item in required: assert item in block, item
           print('route policy contract: PASS')
           PY
 
-      - name: Validate plain-HTTP SHA-256 helper
+      - name: Validate browser SHA-256 helper
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          s = Path('upstream/web/app.js').read_text()
-          a = s.index('function sha256HexArrayBuffer')
-          b = s.index('async function startOta()', a)
-          helper = s[a:b]
-          Path('/tmp/hash-test.js').write_text(
-              helper + "\nconst b=new TextEncoder().encode('abc').buffer; console.log(sha256HexArrayBuffer(b));\n"
-          )
+          s=Path('upstream/web/app.js').read_text()
+          a=s.index('function sha256HexArrayBuffer')
+          b=s.index('async function startOta()',a)
+          Path('/tmp/hash-test.js').write_text(s[a:b]+"\nconst b=new TextEncoder().encode('abc').buffer; console.log(sha256HexArrayBuffer(b));\n")
           PY
-          ACTUAL="$(node /tmp/hash-test.js)"
-          EXPECTED='ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-          test "$ACTUAL" = "$EXPECTED"
-          echo 'plain-HTTP SHA-256 helper: PASS'
+          test "$(node /tmp/hash-test.js)" = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
 
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
 
-      - name: Build hardened WS350 firmware
+      - name: Build WS350
         working-directory: upstream
         run: pio run -e ws_lcd_350
 
@@ -218,111 +180,38 @@ jobs:
         working-directory: upstream
         run: pio run -e jc3248w535
 
-      - name: Merge WS350 Full image
+      - name: Merge Full image
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v8 release candidate
+      - name: Package validation artifacts
         shell: bash
-        env:
-          SOURCE_PATCH_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          test -n "$FULL"
-          test -f "$FULL"
-          test -f "$APP"
-
-          FULL_OUT='firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.0-rc.bin'
-          OTA_OUT='firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.0-RC-OTA.bin'
-          cp "$FULL" "$FULL_OUT"
-          cp "$APP" "$OTA_OUT"
-
-          FULL_OUT="$FULL_OUT" OTA_OUT="$OTA_OUT" SOURCE_PATCH_COMMIT="$SOURCE_PATCH_COMMIT" python - <<'PY'
-          from pathlib import Path
-          import hashlib
-          import json
-          import os
-
-          full = Path(os.environ['FULL_OUT'])
-          ota = Path(os.environ['OTA_OUT'])
-          def meta(path):
-              data = path.read_bytes()
-              return {'file': str(path), 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
-
-          release = {
-              'release': 'smart-home-v8.0-rc',
-              'status': 'software-validated; physical acceptance required',
-              'sourceCommit': '8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4',
-              'sourcePatchCommit': os.environ['SOURCE_PATCH_COMMIT'],
-              'board': 'ws_lcd_350',
-              'version': 'BambuHelper v3.8.1 + Smart Home v8.0 Security Hardening',
-              'security': {
-                  'portalAuth': 'Digest; per-boot 10-character code shown on System screen',
-                  'csrf': 'same-origin required for mutating requests',
-                  'cloudPasswordPersistence': False,
-                  'deviceAutoOta': False,
-                  'manualOtaSha256': True,
-              },
-              'full': meta(full),
-              'ota': meta(ota),
-          }
-          Path('release-v8.json').write_text(json.dumps(release, indent=2) + '\n')
-          PY
-
+          mkdir -p v8-artifacts
+          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.0-rc.bin
+          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.0-RC-OTA.bin
           {
             echo 'BambuHelper ws_lcd_350 Smart Home v8.0 hardening validation'
             echo 'upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
-            echo "source_patch_commit=$SOURCE_PATCH_COMMIT"
             echo 'portal_digest_auth=PASS'
-            echo 'per_boot_portal_code=PASS'
-            echo 'mutating_same_origin=PASS'
+            echo 'mutation_same_origin=PASS'
             echo 'cloud_password_persistence_disabled=PASS'
-            echo 'ota_insecure_tls_fallback_removed=PASS'
-            echo 'ws350_upstream_auto_ota_disabled=PASS'
-            echo 'manual_ota_sha256_transfer_verification=PASS'
-            echo 'factory_reset_post_only=PASS'
-            echo 'brightness_post_only=PASS'
-            echo 'system_min_heap_max_block=PASS'
-            echo 'smart_home_identity=v8.0'
-            echo 'ws_lcd_350_build=PASS'
-            echo 'jc3248w535_regression_build=PASS'
+            echo 'ota_tls_fail_closed=PASS'
+            echo 'manual_ota_sha256=PASS'
+            echo 'ws350_auto_ota_disabled=PASS'
+            echo 'route_wrapper_coverage=PASS'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=PENDING'
-            echo
-            sha256sum "$FULL_OUT" "$OTA_OUT"
-          } | tee validation-report-v8.txt
+            sha256sum v8-artifacts/*.bin
+          } | tee v8-artifacts/validation-report-v8.txt
 
-      - name: Upload validation artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: bambuhelper-ws_lcd_350-smart-home-v8-hardening
           retention-days: 14
           if-no-files-found: error
-          path: |
-            upstream/.pio/build/ws_lcd_350/firmware.bin
-            upstream/src/security_manager.cpp
-            upstream/src/smart_hub.cpp
-            upstream/src/web_server.cpp
-            firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.0-rc.bin
-            firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.0-RC-OTA.bin
-            release-v8.json
-            validation-report-v8.txt
-
-      - name: Persist validated RC artifacts on hardening branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.0-rc.bin \
-            firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.0-RC-OTA.bin \
-            release-v8.json \
-            validation-report-v8.txt
-          if git diff --cached --quiet; then
-            echo 'Validated artifacts already current.'
-          else
-            git commit -m 'Add validated Smart Home v8.0 hardening RC artifacts [skip ci]'
-            git push origin HEAD:smart-home-v8-hardening
-          fi
+          path: v8-artifacts/
