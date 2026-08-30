@@ -1,33 +1,45 @@
 {
-  "release": "production-rc-v7",
+  "release": "production-rc-v7.1",
   "sourceCommit": "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4",
   "board": {
     "id": "ws_lcd_350",
     "name": "Waveshare ESP32-S3-Touch-LCD-3.5",
     "chipFamily": "ESP32-S3",
-    "display": "3.5\" ST7796 IPS 320\u00d7480",
+    "display": "3.5\" ST7796 IPS 320×480",
     "touch": "FT6336 capacitive",
     "flash": "16 MB",
     "psram": "8 MB"
   },
   "profiles": {
-    "smart-home-v7": {
-      "label": "Smart Home v7",
+    "smart-home-v7.1": {
+      "label": "Smart Home v7.1",
       "recommended": true,
+      "version": "BambuHelper v3.8.1 + Smart Home v7.1 UX",
+      "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin",
+      "size": 2208400,
+      "sha256": "9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb",
+      "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin",
+      "otaSize": 2142864,
+      "otaSha256": "938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c",
+      "description": "Recommended: physically informed 320×480 UX pass with a stronger progress hierarchy, detailed AMS tray cards, X2D dual-nozzle thermal cards, safe bottom spacing, and explicit Smart Home v7.1 build identity."
+    },
+    "smart-home-v7": {
+      "label": "Smart Home v7 (rollback)",
+      "recommended": false,
       "version": "v3.8.1 + Smart Home Navigation v7",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin",
       "size": 2207472,
       "sha256": "c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7",
-      "description": "Recommended: replaces the legacy idle clock with Smart Home, adds visible tap hints, yields immediately to active printing, and preserves printer/HMS priority."
+      "description": "Previous physically validated navigation build retained as rollback."
     },
     "smart-display-v6": {
-      "label": "Smart Display v6 (rollback)",
+      "label": "Smart Display v6 (legacy rollback)",
       "recommended": false,
       "version": "v3.8.1 + Smart Display v6",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin",
       "size": 2207040,
       "sha256": "82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac",
-      "description": "Previous validated build retained as rollback; it retains the legacy idle-clock behavior found during physical testing."
+      "description": "Legacy rollback retaining the original idle-clock behavior."
     }
   }
 }
