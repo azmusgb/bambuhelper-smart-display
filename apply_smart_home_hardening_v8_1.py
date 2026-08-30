@@ -5,6 +5,7 @@ import argparse
 from apply_smart_home_secret_safe_backups_v8_2 import apply as apply_secret_safe_backups
 from apply_smart_home_code_only_auth_v8_3 import apply as apply_code_only_auth
 from apply_smart_home_system_stability_v8_3_rc2 import apply as apply_system_stability
+from apply_smart_home_session_auth_v8_3_rc3 import apply as apply_session_auth
 
 
 class PatchError(RuntimeError):
@@ -41,10 +42,14 @@ def apply(repo: Path) -> None:
     # Compose the post-v8 hardening increments in deterministic order.
     # v8.3 strips wrapped credential serialization calls and then asserts no
     # password/save fields remain before the firmware is allowed to build.
-    # RC2 then removes the full-frame System redraw found on physical WS350.
+    # RC2 removes the full-frame System redraw found on physical WS350.
+    # RC3 replaces browser Digest challenges with a RAM-only session login and
+    # pauses background polling during OTA so the ESP32 single-client server can
+    # complete the upload/response without authentication races.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
     apply_system_stability(repo)
+    apply_session_auth(repo)
 
 
 if __name__ == "__main__":
@@ -55,4 +60,4 @@ if __name__ == "__main__":
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v8.3 RC2: hardening + secret-safe backups + passwordless auth + System display stability applied")
+    print("Smart Home v8.3 RC3: hardening + backups + code-only Bambu auth + display stability + portal sessions + OTA reliability applied")
