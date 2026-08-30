@@ -1,0 +1,127 @@
+name: Polish Smart Home v7.1 production OTA UX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/polish-v7-1-production.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make Wi-Fi OTA a first-class verified path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('app.js')
+          s=p.read_text()
+          old="const EXPECTED_RELEASE='production-rc-v7.1';let release=null,selectedProfile='smart-home-v7.1',assetVerified=false,hardwareConfirmed=false"
+          new="const EXPECTED_RELEASE='production-rc-v7.1';let release=null,selectedProfile='smart-home-v7.1',assetVerified=false,otaVerified=false,hardwareConfirmed=false"
+          if old not in s: raise SystemExit('app const anchor missing')
+          s=s.replace(old,new,1)
+
+          old="release=d;$('release-pill').textContent='RC v7.1 · '+d.board.id;renderProfile();await verifyAsset()}"
+          new="release=d;$('release-pill').textContent='RC v7.1 · '+d.board.id;renderProfile();await Promise.all([verifyAsset(),verifyOtaAsset()])}"
+          if old not in s: raise SystemExit('loadRelease anchor missing')
+          s=s.replace(old,new,1)
+
+          old="$('prov-sha').textContent=p.sha256;$('prov-verified').textContent=assetVerified?'Verified in this browser':'Pending';updateReadiness()}"
+          new="$('prov-sha').textContent=p.sha256;$('prov-verified').textContent=assetVerified?'Verified in this browser':'Pending';renderOta();updateReadiness()}"
+          if old not in s: raise SystemExit('renderProfile anchor missing')
+          s=s.replace(old,new,1)
+
+          anchor="function buildManifest(){"
+          if anchor not in s: raise SystemExit('buildManifest anchor missing')
+          ota_code=r'''function renderOta(){const p=profile(),panel=$('ota-panel'),btn=$('ota-download'),meta=$('ota-meta'),status=$('ota-status');if(!panel||!btn||!meta||!status)return;if(!p?.otaFile){panel.hidden=true;otaVerified=false;return}panel.hidden=false;meta.textContent=fmtBytes(p.otaSize)+' · SHA-256 '+p.otaSha256;status.textContent=otaVerified?'OTA application image verified in this browser. Safe to download for manual Wi-Fi update.':'OTA image verification pending.';btn.href=otaVerified?new URL(p.otaFile,location.href).href:'#';btn.classList.toggle('disabled',!otaVerified);btn.setAttribute('aria-disabled',otaVerified?'false':'true');setState('ota-state',otaVerified?'VERIFIED':'PENDING',otaVerified?'ok':'warn')}
+async function verifyOtaAsset(){otaVerified=false;const p=profile();if(!p?.otaFile){renderOta();return}setState('ota-state','CHECKING','warn');$('ota-status').textContent='Fetching and hashing the OTA application image…';try{const r=await fetch(p.otaFile,{cache:'no-store'});if(!r.ok)throw new Error('OTA HTTP '+r.status);const buf=await r.arrayBuffer();if(buf.byteLength!==p.otaSize)throw new Error('OTA size mismatch');const actual=await sha256Buffer(buf);if(actual.toLowerCase()!==p.otaSha256.toLowerCase())throw new Error('OTA SHA-256 mismatch');otaVerified=true;setState('ota-state','VERIFIED','ok');$('ota-status').textContent='OTA application image verified in this browser. Safe to download for manual Wi-Fi update.'}catch(e){otaVerified=false;setState('ota-state','FAILED','bad');$('ota-status').textContent='OTA verification failed: '+e.message}renderOta()}
+'''
+          s=s.replace(anchor,ota_code+anchor,1)
+
+          old="$('profile').addEventListener('change',async e=>{selectedProfile=e.target.value;await verifyAsset()});"
+          new="$('profile').addEventListener('change',async e=>{selectedProfile=e.target.value;otaVerified=false;await Promise.all([verifyAsset(),verifyOtaAsset()])});"
+          if old not in s: raise SystemExit('profile event anchor missing')
+          s=s.replace(old,new,1)
+
+          old="$('verify-asset').addEventListener('click',verifyAsset);$('check-usb')"
+          new="$('verify-asset').addEventListener('click',verifyAsset);$('verify-ota').addEventListener('click',verifyOtaAsset);$('ota-download').addEventListener('click',e=>{if(!otaVerified)e.preventDefault()});$('check-usb')"
+          if old not in s: raise SystemExit('event insertion anchor missing')
+          s=s.replace(old,new,1)
+
+          old="'sha256: '+p.sha256,'browser_integrity_verified: '+(assetVerified?'yes':'no')"
+          new="'sha256: '+p.sha256,'browser_integrity_verified: '+(assetVerified?'yes':'no'),'ota_sha256: '+(p.otaSha256||'n/a'),'ota_browser_verified: '+(otaVerified?'yes':'no')"
+          if old not in s: raise SystemExit('receipt anchor missing')
+          s=s.replace(old,new,1)
+
+          old="'firmware_sha256: '+p.sha256,'browser_integrity_verified: '+(assetVerified?'yes':'no')"
+          new="'firmware_sha256: '+p.sha256,'browser_integrity_verified: '+(assetVerified?'yes':'no'),'ota_sha256: '+(p.otaSha256||'n/a'),'ota_browser_verified: '+(otaVerified?'yes':'no')"
+          if old not in s: raise SystemExit('support anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('index.html')
+          s=p.read_text()
+          start=s.find('<div class="warning" style="margin-top:16px"><strong>Already running BambuHelper? Update over Wi‑Fi.</strong>')
+          if start<0: raise SystemExit('OTA warning start missing')
+          end=s.find('</div></section>',start)
+          if end<0: raise SystemExit('OTA warning end missing')
+          end += len('</div>')
+          ota='''<div class="ota-panel" id="ota-panel"><div class="ota-head"><div><span class="kicker">RECOMMENDED FOR AN EXISTING DEVICE</span><h3>Update over Wi‑Fi</h3><p>Keep the device powered and on your LAN. This installer independently verifies the OTA application image before the download button is enabled.</p></div><span class="state warn" id="ota-state">PENDING</span></div><div class="ota-proof"><strong>Smart Home v7.1 OTA</strong><small id="ota-meta">Loading OTA provenance…</small><p id="ota-status">OTA image verification pending.</p></div><div class="button-row"><button class="btn secondary" id="verify-ota">Verify OTA image</button><a class="btn disabled" id="ota-download" href="#" aria-disabled="true" download>Download verified OTA</a></div><ol class="ota-steps"><li><b>1</b><span>Download the verified OTA <code>.bin</code>.</span></li><li><b>2</b><span>Open the device web UI → <strong>WiFi &amp; System</strong>.</span></li><li><b>3</b><span>Choose <strong>Firmware / OTA Update</strong> and upload the file.</span></li><li><b>4</b><span>Wait for the device to reboot. Do not remove power during the update.</span></li></ol><div class="ota-caution"><strong>OTA uses the application image only.</strong> Never upload the Full image through the OTA page. Use the USB installer below only for a fresh install or recovery.</div></div>'''
+          s=s[:start]+ota+s[end:]
+          s=s.replace('<h2>Flash over USB</h2>','<h2>Fresh install / recovery over USB</h2>',1)
+          s=s.replace('<p class="hint">Use a USB data cable. Disconnect Diagnostics and close other serial tools before installing.</p>','<p class="hint">Use this path for first install, recovery, or when Wi-Fi OTA is unavailable. Use a USB data cable; disconnect Diagnostics and close other serial tools before installing.</p>',1)
+          p.write_text(s)
+
+          p=Path('styles.css')
+          s=p.read_text()
+          extra='''.ota-panel{margin-top:16px;padding:16px;border:1px solid rgba(74,211,127,.28);border-radius:14px;background:linear-gradient(180deg,rgba(74,211,127,.06),rgba(20,25,32,.7))}.ota-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.ota-head h3{margin:4px 0 3px;font-size:17px}.ota-head p{margin:0;max-width:720px;font-size:11px}.ota-proof{margin:12px 0;padding:11px 12px;border:1px solid var(--line2);border-radius:11px;background:var(--panel2)}.ota-proof strong,.ota-proof small{display:block}.ota-proof small{margin-top:4px;color:var(--dim);font:10px ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}.ota-proof p{margin:7px 0 0;font-size:11px}.ota-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:14px 0 0;padding:0;list-style:none}.ota-steps li{display:flex;gap:8px;padding:10px;border:1px solid var(--line2);border-radius:10px;background:var(--panel2);font-size:10px;line-height:1.4}.ota-steps b{display:grid;place-items:center;flex:none;width:20px;height:20px;border-radius:50%;background:rgba(74,211,127,.16);color:var(--ok);font-size:9px}.ota-caution{margin-top:10px;padding:10px 11px;border-left:3px solid var(--warn);background:rgba(233,185,73,.07);color:var(--muted);font-size:10px}.btn.disabled{pointer-events:none;opacity:.42}.ota-panel[hidden]{display:none!important}@media(max-width:900px){.ota-steps{grid-template-columns:1fr 1fr}}@media(max-width:600px){.ota-head{flex-direction:column}.ota-steps{grid-template-columns:1fr}}
+'''
+          if '.ota-panel{' not in s: s += extra
+          p.write_text(s)
+
+          p=Path('netlify.toml')
+          s=p.read_text()
+          headers='''\n[[headers]]\n  for = "/"\n  [headers.values]\n    Cache-Control = "no-cache, no-store, must-revalidate"\n\n[[headers]]\n  for = "/*.html"\n  [headers.values]\n    Cache-Control = "no-cache, no-store, must-revalidate"\n\n[[headers]]\n  for = "/app.js"\n  [headers.values]\n    Cache-Control = "no-cache, must-revalidate"\n\n[[headers]]\n  for = "/styles.css"\n  [headers.values]\n    Cache-Control = "no-cache, must-revalidate"\n'''
+          if 'for = "/app.js"' not in s: s += headers
+          p.write_text(s)
+
+          p=Path('README.md')
+          s=p.read_text()
+          note='''\n### Update paths\n- **Existing device:** Wi-Fi OTA is the recommended path. The production installer verifies the OTA image size and SHA-256 in the browser before enabling download.\n- **Fresh install / recovery:** use the verified Full image through ESP Web Tools over USB.\n- Full and OTA images are intentionally different artifacts; never upload the Full image to BambuHelper's OTA page.\n'''
+          if '### Update paths' not in s:
+              marker='### Validated assets\n'
+              s=s.replace(marker,note+'\n'+marker,1)
+          p.write_text(s)
+          PY
+
+      - name: Validate production contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          python3 build.py
+          grep -Fq 'verifyOtaAsset' app.js
+          grep -Fq 'Download verified OTA' index.html
+          grep -Fq 'Fresh install / recovery over USB' index.html
+          grep -Fq '.ota-panel{' styles.css
+          grep -Fq 'for = "/app.js"' netlify.toml
+          grep -Fq '### Update paths' README.md
+
+      - name: Commit production polish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js index.html styles.css netlify.toml README.md
+          git diff --cached --quiet && exit 0
+          git commit -m 'Make verified Wi-Fi OTA the primary upgrade path'
+          git push origin HEAD:main
