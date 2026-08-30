@@ -41,9 +41,7 @@ def patch_web_pages(repo: Path) -> None:
     )
     text = replace_once(text, v8_notice, passwordless_notice, "passwordless notice")
 
-    # Best-effort UI cleanup for the upstream login layout. These controls may
-    # not exist after a custom Smart Home page rewrite, so policy must never rely
-    # on them. The browser serializer and server endpoint below are authoritative.
+    # Best-effort UI cleanup only. Security never depends on custom page markup.
     text, _ = re.subn(
         r'<button([^>]*?)id="cl-mode-pass-btn"([^>]*)>Password</button>',
         r'<button\1id="cl-mode-pass-btn"\2 disabled style="display:none">Password</button>',
@@ -66,20 +64,18 @@ def patch_web_app(repo: Path) -> None:
     p = repo / "web" / "app.js"
     text = p.read_text(encoding="utf-8")
 
-    # The upstream/shared JS still owns cloud login even when the surrounding
-    # Smart Home portal is customized. Force the only serialized auth mode to
-    # email-code and remove password/save fields from the request body.
-    text = regex_once(
-        text,
+    # Force the shared login state to code mode when that state variable exists.
+    text, mode_state_count = re.subn(
         r"var\s+clLoginMode\s*=\s*['\"](?:password|code)['\"];",
         "var clLoginMode = 'code';",
-        "default email-code mode",
+        text,
+        count=1,
     )
 
-    text = regex_once(
-        text,
-        r'function\s+clSetLoginMode\s*\(m\)\s*\{.*?\n\}',
-        '''function clSetLoginMode(m){
+    # Replace the mode-switch UI logic when present. A custom Smart Home portal
+    # may not expose this function; that is fine because request serialization
+    # and the server endpoint below are the authoritative controls.
+    mode_fn = '''function clSetLoginMode(m){
   // Smart Home v8.3: the local portal is email-code only.
   clLoginMode = 'code';
   var passBtn = document.getElementById('cl-mode-pass-btn');
@@ -90,26 +86,45 @@ def patch_web_app(repo: Path) -> None:
   if (passWrap) passWrap.style.display = 'none';
   var signBtn = document.getElementById('cl_signinBtn');
   if (signBtn) signBtn.textContent = 'Email me a code';
-}''',
-        "force email-code mode",
-        re.S,
+}'''
+    text, _ = re.subn(
+        r'function\s+clSetLoginMode\s*\(m\)\s*\{.*?\n\}',
+        mode_fn,
+        text,
+        count=1,
+        flags=re.S,
     )
 
-    if "clSetLoginMode('code');\n  fetch('/cloud/login/status')" not in text:
-        text = replace_once(
-            text,
+    # If the stock initializer remains, force it to initialize code mode.
+    if "  clSetAuthMethod('signin');\n  fetch('/cloud/login/status')" in text:
+        text = text.replace(
             "  clSetAuthMethod('signin');\n  fetch('/cloud/login/status')",
             "  clSetAuthMethod('signin');\n  clSetLoginMode('code');\n  fetch('/cloud/login/status')",
-            "initialize code-only mode",
+            1,
         )
 
-    text = regex_once(
+    # Field-level request hardening is deliberately independent of function
+    # formatting. Force any dynamic mode field to `code`, then strip password
+    # and remember-password serialization wherever those calls occur.
+    text = re.sub(
+        r"p\.append\('mode',\s*clLoginMode\);",
+        "p.append('mode', 'code');",
         text,
-        r"  p\.append\('mode',\s*clLoginMode\);\s*"
-        r"if\s*\(clLoginMode\s*===\s*'password'\)\s*\{.*?\n  \}",
-        "  p.append('mode', 'code');",
-        "remove browser password serialization",
-        re.S,
+        count=1,
+    )
+    text = re.sub(
+        r"^\s*p\.append\('password'[^\n]*\);\s*$",
+        "",
+        text,
+        count=1,
+        flags=re.M,
+    )
+    text = re.sub(
+        r"^\s*p\.append\('save'[^\n]*\);\s*$",
+        "",
+        text,
+        count=1,
+        flags=re.M,
     )
 
     forbidden = [
@@ -121,10 +136,13 @@ def patch_web_app(repo: Path) -> None:
         if needle in text:
             raise PatchError(f"passwordless browser validation failed: {needle} remains")
 
-    required = ["p.append('mode', 'code')", "clLoginMode = 'code'"]
-    for needle in required:
-        if needle not in text:
-            raise PatchError(f"passwordless browser validation failed: missing {needle}")
+    # If this app.js still contains cloudSignIn(), it must now serialize code
+    # mode. If the custom Smart Home layer has replaced that function entirely,
+    # the device-side mode gate remains authoritative.
+    if "function cloudSignIn" in text and "p.append('mode', 'code')" not in text:
+        raise PatchError("cloudSignIn remains but does not force mode=code")
+    if mode_state_count and "clLoginMode = 'code'" not in text:
+        raise PatchError("cloud login mode state was not forced to code")
 
     p.write_text(text, encoding="utf-8")
 
