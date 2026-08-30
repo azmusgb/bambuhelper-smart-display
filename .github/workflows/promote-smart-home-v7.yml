@@ -3,8 +3,7 @@ name: Promote validated Smart Home v7
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/promote-smart-home-v7.yml'
+    paths: ['.github/workflows/promote-smart-home-v7.yml']
   workflow_dispatch:
 
 permissions:
@@ -15,237 +14,108 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Verify v7 and v6 release assets
+      - name: Verify validated release assets
         shell: bash
         run: |
           set -euo pipefail
           V7=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin
           V6=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
-          test "$(stat -c%s "$V7")" = '2207472'
-          test "$(stat -c%s "$V6")" = '2207040'
+          test "$(stat -c%s "$V7")" = 2207472
+          test "$(stat -c%s "$V6")" = 2207040
           echo 'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7  '"$V7" | sha256sum -c -
           echo '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac  '"$V6" | sha256sum -c -
           grep -Fq 'legacy_clock_replaced_by_smart_home=PASS' validation-report-v7.txt
           grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.txt
 
-      - name: Promote v7 installer and retain v6 rollback
+      - name: Generate production v7 release tree
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import json
+          import json, textwrap
 
-          release = {
-            'release': 'production-rc-v7',
-            'sourceCommit': '8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4',
-            'board': {
-              'id': 'ws_lcd_350',
-              'name': 'Waveshare ESP32-S3-Touch-LCD-3.5',
-              'chipFamily': 'ESP32-S3',
-              'display': '3.5" ST7796 IPS 320×480',
-              'touch': 'FT6336 capacitive',
-              'flash': '16 MB',
-              'psram': '8 MB'
-            },
-            'profiles': {
-              'smart-home-v7': {
-                'label': 'Smart Home v7',
-                'recommended': True,
-                'version': 'v3.8.1 + Smart Home Navigation v7',
-                'file': 'firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin',
-                'size': 2207472,
-                'sha256': 'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7',
-                'description': 'Recommended: replaces the legacy idle clock with Smart Home, adds visible tap hints, yields immediately to active printing, and preserves printer/HMS priority.'
-              },
-              'smart-display-v6': {
-                'label': 'Smart Display v6 (rollback)',
-                'recommended': False,
-                'version': 'v3.8.1 + Smart Display v6',
-                'file': 'firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin',
-                'size': 2207040,
-                'sha256': '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac',
-                'description': 'Previous validated build retained as rollback. It includes Smart Display pages but retains the legacy idle-clock behavior discovered during physical testing.'
-              }
+          release={
+            'release':'production-rc-v7',
+            'sourceCommit':'8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4',
+            'board':{'id':'ws_lcd_350','name':'Waveshare ESP32-S3-Touch-LCD-3.5','chipFamily':'ESP32-S3','display':'3.5" ST7796 IPS 320×480','touch':'FT6336 capacitive','flash':'16 MB','psram':'8 MB'},
+            'profiles':{
+              'smart-home-v7':{'label':'Smart Home v7','recommended':True,'version':'v3.8.1 + Smart Home Navigation v7','file':'firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin','size':2207472,'sha256':'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7','description':'Recommended: replaces the legacy idle clock with Smart Home, adds visible tap hints, yields immediately to active printing, and preserves printer/HMS priority.'},
+              'smart-display-v6':{'label':'Smart Display v6 (rollback)','recommended':False,'version':'v3.8.1 + Smart Display v6','file':'firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin','size':2207040,'sha256':'82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac','description':'Previous validated build retained as rollback; it retains the legacy idle-clock behavior found during physical testing.'}
             }
           }
-          Path('release.json').write_text(json.dumps(release, indent=2) + '\n')
+          Path('release.json').write_text(json.dumps(release,indent=2)+'\n')
 
-          index = Path('index.html').read_text()
-          index = index.replace('RC v6', 'RC v7').replace('Production RC v6', 'Production RC v7')
-          index = index.replace(
-            'One installer. One verified target. One firmware profile.',
-            'Smart Home that behaves like an appliance.'
-          )
-          index = index.replace(
-            'Purpose-built for the <strong>Waveshare ESP32-S3-Touch-LCD-3.5</strong>. The browser verifies the selected Full image before Install is enabled.',
-            'Purpose-built for the <strong>Waveshare ESP32-S3-Touch-LCD-3.5</strong>. Smart Home v7 replaces the legacy idle clock, makes the tap cycle discoverable, and keeps v6 available as rollback. The browser verifies the selected Full image before Install is enabled.'
-          )
-          index = index.replace(
-            '<select id="profile"><option value="smart-display">Smart Display v6 — validated production profile</option></select>',
-            '<select id="profile"><option value="smart-home-v7">Smart Home v7 — recommended · fixes idle/clock navigation</option><option value="smart-display-v6">Smart Display v6 — rollback</option></select>'
-          )
-          index = index.replace(
-            'Printer → Home → Workshop → Custom → System.',
-            'Home → Workshop → Custom → System → Printer → Home.'
-          )
+          index=Path('index.html').read_text()
+          index=index.replace('RC v6','RC v7').replace('Production RC v6','Production RC v7')
+          index=index.replace('One installer. One verified target. One firmware profile.','Smart Home that behaves like an appliance.')
+          index=index.replace('Purpose-built for the <strong>Waveshare ESP32-S3-Touch-LCD-3.5</strong>. The browser verifies the selected Full image before Install is enabled.','Purpose-built for the <strong>Waveshare ESP32-S3-Touch-LCD-3.5</strong>. Smart Home v7 replaces the legacy idle clock, makes navigation obvious, and keeps v6 available as rollback. The browser verifies the selected Full image before Install is enabled.')
+          index=index.replace('<select id="profile"><option value="smart-display">Smart Display v6 — validated production profile</option></select>','<select id="profile"><option value="smart-home-v7">Smart Home v7 — recommended · fixes idle/clock navigation</option><option value="smart-display-v6">Smart Display v6 — rollback</option></select>')
+          index=index.replace('Printer → Home → Workshop → Custom → System.','Home → Workshop → Custom → System → Printer → Home.')
           Path('index.html').write_text(index)
 
-          app = Path('app.js').read_text()
-          app = app.replace("EXPECTED_RELEASE='production-rc-v6'", "EXPECTED_RELEASE='production-rc-v7'")
-          app = app.replace("selectedProfile='smart-display'", "selectedProfile='smart-home-v7'")
-          app = app.replace("'RC v6 · '+d.board.id", "'RC v7 · '+d.board.id")
-          app = app.replace(
-            "name:selectedProfile==='smart-display'?'BambuHelper Smart Display':'BambuHelper'",
-            "name:selectedProfile==='smart-home-v7'?'BambuHelper Smart Home':'BambuHelper Smart Display'"
-          )
-          app = app.replace("'release: production-rc-v6'", "'release: production-rc-v7'")
+          app=Path('app.js').read_text()
+          app=app.replace("EXPECTED_RELEASE='production-rc-v6'","EXPECTED_RELEASE='production-rc-v7'")
+          app=app.replace("selectedProfile='smart-display'","selectedProfile='smart-home-v7'")
+          app=app.replace("'RC v6 · '+d.board.id","'RC v7 · '+d.board.id")
+          app=app.replace("name:selectedProfile==='smart-display'?'BambuHelper Smart Display':'BambuHelper'","name:selectedProfile==='smart-home-v7'?'BambuHelper Smart Home':'BambuHelper Smart Display'")
+          app=app.replace("'release: production-rc-v6'","'release: production-rc-v7'")
           Path('app.js').write_text(app)
 
-          build = '''#!/usr/bin/env python3
+          build='''#!/usr/bin/env python3
           from pathlib import Path
-          import hashlib
-          import json
-          import shutil
-
-          root = Path(__file__).resolve().parent
-          dist = root / "dist"
-          if dist.exists():
-              shutil.rmtree(dist)
+          import hashlib,json,shutil
+          root=Path(__file__).resolve().parent
+          dist=root/'dist'
+          if dist.exists(): shutil.rmtree(dist)
           dist.mkdir()
-
-          for name in ["index.html", "styles.css", "app.js", "release.json"]:
-              shutil.copy2(root / name, dist / name)
-
-          release = json.loads((root / "release.json").read_text())
-          if release["release"] != "production-rc-v7":
-              raise SystemExit("unexpected release id")
-          if release["board"]["id"] != "ws_lcd_350":
-              raise SystemExit("unexpected board target")
-
-          for profile_id, profile in release["profiles"].items():
-              source = root / profile["file"]
-              if not source.is_file():
-                  raise SystemExit(f"missing firmware asset for {profile_id}: {source}")
-              raw = source.read_bytes()
-              actual = hashlib.sha256(raw).hexdigest()
-              if len(raw) != profile["size"]:
-                  raise SystemExit(f"{profile_id} size mismatch: {len(raw)} != {profile['size']}")
-              if actual != profile["sha256"]:
-                  raise SystemExit(f"{profile_id} SHA mismatch: {actual}")
-              output = dist / profile["file"]
-              output.parent.mkdir(parents=True, exist_ok=True)
-              shutil.copy2(source, output)
-              print("Verified and published", profile_id, output.relative_to(dist), len(raw), actual)
+          for name in ['index.html','styles.css','app.js','release.json']: shutil.copy2(root/name,dist/name)
+          release=json.loads((root/'release.json').read_text())
+          assert release['release']=='production-rc-v7'
+          assert release['board']['id']=='ws_lcd_350'
+          for profile_id,p in release['profiles'].items():
+              source=root/p['file']
+              raw=source.read_bytes()
+              actual=hashlib.sha256(raw).hexdigest()
+              if len(raw)!=p['size']: raise SystemExit(f"{profile_id} size mismatch")
+              if actual!=p['sha256']: raise SystemExit(f"{profile_id} SHA mismatch: {actual}")
+              output=dist/p['file']; output.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(source,output)
+              print('Verified and published',profile_id,len(raw),actual)
           '''
-          # Dedent fixed workflow indentation.
-          import textwrap
           Path('build.py').write_text(textwrap.dedent(build))
 
-          readme = '''# BambuHelper Smart Display
+          readme='''# BambuHelper Smart Display
 
           Production installer for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`) + Bambu X2D**.
 
-          ## Recommended firmware: Smart Home v7
-
-          Physical testing of v6 exposed a real UX defect: BambuHelper's legacy `SCREEN_CLOCK`
-          consumed the first touch as a wake action, making Smart Display navigation feel hidden.
-          Smart Home v7 fixes the runtime integration rather than documenting a workaround.
+          ## Smart Home v7 — recommended
+          Physical testing of v6 exposed a UX defect: the legacy `SCREEN_CLOCK` consumed the first touch as wake, hiding Smart Display navigation. v7 fixes the runtime integration.
 
           **Tap cycle:** Home → Workshop → Custom → System → Printer → Home
 
-          v7 changes:
           - Smart Home replaces the legacy idle clock when Smart Display is enabled.
-          - A device already on the legacy clock after upgrading wakes directly to Smart Home.
-          - Idle-entered Home yields immediately when printing starts.
-          - Home, Workshop, Custom and System show visible `TAP > ...` hints.
-          - HMS/error and print-finish priority remain ahead of Smart pages.
+          - Upgraded devices on the old clock wake directly to Smart Home.
+          - Idle Home yields immediately when printing starts.
+          - Home/Workshop/Custom/System show visible `TAP > ...` hints.
+          - HMS/error and print-finish priority are preserved.
           - Explicit display-off behavior remains respected.
 
-          ### Smart Home v7 — recommended
-          - Size: **2,207,472 bytes**
-          - SHA-256: `c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7`
-          - Validation run: `33293416153`
-          - `ws_lcd_350` build: PASS
-          - shared `jc3248w535` regression compile: PASS
+          v7: 2,207,472 bytes · SHA-256 `c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7` · validation run `33293416153` · `ws_lcd_350` PASS · `jc3248w535` regression PASS.
 
-          ### Smart Display v6 — rollback
-          - Size: **2,207,040 bytes**
-          - SHA-256: `82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac`
-
-          The browser verifies the selected Full image's exact size and SHA-256 before enabling
-          ESP Web Tools. Netlify's build verifies every published profile again.
+          v6 rollback: 2,207,040 bytes · SHA-256 `82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac`.
 
           Production: <https://bambuhelper-smart-display.netlify.app/>
 
-          v7 still requires physical acceptance on the Waveshare board: idle Home, repeated tap
-          cycle, print preemption, X2D telemetry, power-cycle behavior, and enclosure access.
+          v7 still requires physical acceptance on the Waveshare board: idle Home, repeated tap cycle, print preemption, X2D telemetry, power cycling, and enclosure access.
           '''
           Path('README.md').write_text(textwrap.dedent(readme))
-
-          workflow = '''name: Validate production Smart Home release
-
-          on:
-            push:
-              branches: [main]
-              paths:
-                - 'release.json'
-                - 'build.py'
-                - 'index.html'
-                - 'app.js'
-                - 'firmware/**'
-                - '.github/workflows/release-main.yml'
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          jobs:
-            validate-release:
-              runs-on: ubuntu-latest
-              steps:
-                - name: Checkout main
-                  uses: actions/checkout@v4
-                - name: Validate installer and every firmware profile
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    node --check app.js
-                    python3 build.py
-                    python3 - <<'CHECK'
-                    import hashlib, json
-                    from pathlib import Path
-                    r=json.loads(Path('release.json').read_text())
-                    assert r['release']=='production-rc-v7'
-                    assert r['board']['id']=='ws_lcd_350'
-                    assert r['profiles']['smart-home-v7']['recommended'] is True
-                    assert 'smart-display-v6' in r['profiles']
-                    for profile_id,p in r['profiles'].items():
-                        raw=Path(p['file']).read_bytes()
-                        assert len(raw)==p['size'], profile_id
-                        assert hashlib.sha256(raw).hexdigest()==p['sha256'], profile_id
-                        published=(Path('dist')/p['file']).read_bytes()
-                        assert hashlib.sha256(published).hexdigest()==p['sha256'], profile_id
-                        print(profile_id, 'PASS', p['sha256'])
-                    CHECK
-          '''
-          Path('.github/workflows/release-main.yml').write_text(textwrap.dedent(workflow))
-
-          # One-time workflows have completed their job; remove them from production main.
-          for name in [
-            '.github/workflows/import-v7-validated-firmware.yml',
-            '.github/workflows/promote-smart-home-v7.yml'
-          ]:
-              p=Path(name)
-              if p.exists(): p.unlink()
           PY
 
-      - name: Validate promoted tree before commit
+      - name: Validate and commit production files
         shell: bash
         run: |
           set -euo pipefail
@@ -253,16 +123,8 @@ jobs:
           python3 build.py
           grep -Fq 'Smart Home v7 — recommended' index.html
           grep -Fq 'Smart Display v6 — rollback' index.html
-          grep -Fq 'production-rc-v7' release.json
-          test -f dist/firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin
-          test -f dist/firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
-
-      - name: Commit production v7 promotion
-        shell: bash
-        run: |
-          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add release.json index.html app.js build.py README.md
           git commit -m 'Promote Smart Home v7 and retain v6 rollback'
           git push origin HEAD:main
