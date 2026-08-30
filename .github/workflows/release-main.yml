@@ -9,6 +9,7 @@ on:
       - 'index.html'
       - 'app.js'
       - 'firmware/**'
+      - 'validation-report-v7.1.txt'
       - '.github/workflows/release-main.yml'
   workflow_dispatch:
 
@@ -19,51 +20,53 @@ jobs:
   validate-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-
-      - name: Validate installer and every firmware profile
+      - uses: actions/checkout@v4
+      - name: Validate installer and all preserved firmware
         shell: bash
         run: |
           set -euo pipefail
           node --check app.js
           python3 build.py
           python3 - <<'PY'
-          import hashlib, json
+          import hashlib,json
           from pathlib import Path
-
-          release=json.loads(Path('release.json').read_text())
-          assert release['release']=='production-rc-v7'
-          assert release['sourceCommit']=='8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
-          assert release['board']['id']=='ws_lcd_350'
-          assert release['profiles']['smart-home-v7']['recommended'] is True
-          assert 'smart-display-v6' in release['profiles']
-
+          r=json.loads(Path('release.json').read_text())
+          assert r['release']=='production-rc-v7.1'
+          assert r['sourceCommit']=='8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
+          assert r['board']['id']=='ws_lcd_350'
+          assert r['profiles']['smart-home-v7.1']['recommended'] is True
           expected={
-              'smart-home-v7': (2207472, 'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'),
-              'smart-display-v6': (2207040, '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac'),
-          }
-          for profile_id, profile in release['profiles'].items():
-              assert profile_id in expected, profile_id
-              expected_size, expected_sha = expected[profile_id]
-              assert profile['size']==expected_size, profile_id
-              assert profile['sha256']==expected_sha, profile_id
-              raw=Path(profile['file']).read_bytes()
-              assert len(raw)==profile['size'], profile_id
-              assert hashlib.sha256(raw).hexdigest()==profile['sha256'], profile_id
-              published=(Path('dist')/profile['file']).read_bytes()
-              assert hashlib.sha256(published).hexdigest()==profile['sha256'], profile_id
-              print(profile_id, 'PASS', profile['sha256'])
+            'smart-home-v7.1':(2208400,'9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb'),
+            'smart-home-v7':(2207472,'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'),
+            'smart-display-v6':(2207040,'82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac')}
+          assert set(r['profiles'])==set(expected)
+          for pid,(size,sha) in expected.items():
+            p=r['profiles'][pid]
+            assert p['size']==size and p['sha256']==sha
+            raw=Path(p['file']).read_bytes()
+            assert len(raw)==size and hashlib.sha256(raw).hexdigest()==sha
+            pub=(Path('dist')/p['file']).read_bytes()
+            assert hashlib.sha256(pub).hexdigest()==sha
+            print(pid,'PASS',sha)
+          ota=r['profiles']['smart-home-v7.1']
+          raw=Path(ota['otaFile']).read_bytes()
+          assert ota['otaSize']==2142864
+          assert ota['otaSha256']=='938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c'
+          assert len(raw)==ota['otaSize']
+          assert hashlib.sha256(raw).hexdigest()==ota['otaSha256']
+          published=(Path('dist')/ota['otaFile']).read_bytes()
+          assert hashlib.sha256(published).hexdigest()==ota['otaSha256']
+          print('OTA PASS',ota['otaSha256'])
           PY
-
-      - name: Validate v7 physical-fix evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -Fq 'legacy_clock_replaced_by_smart_home=PASS' validation-report-v7.txt
-          grep -Fq 'legacy_clock_upgrade_wake_to_home=PASS' validation-report-v7.txt
-          grep -Fq 'idle_home_immediate_print_preemption=PASS' validation-report-v7.txt
-          grep -Fq 'tap_discoverability_hints=PASS' validation-report-v7.txt
-          grep -Fq 'hub_page_cycle=HOME_WORKSHOP_CUSTOM_SYSTEM_PRINTER_HOME' validation-report-v7.txt
-          grep -Fq 'hms_finish_printer_priority_preserved=PASS' validation-report-v7.txt
-          grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.txt
+          grep -Fq 'workshop_vertical_space_rebalanced=PASS' validation-report-v7.1.txt
+          grep -Fq 'progress_hierarchy=PASS' validation-report-v7.1.txt
+          grep -Fq 'ams_material_and_remaining=PASS' validation-report-v7.1.txt
+          grep -Fq 'dual_nozzle_thermal_cards=PASS' validation-report-v7.1.txt
+          grep -Fq 'bottom_clip_removed=PASS' validation-report-v7.1.txt
+          grep -Fq 'custom_release_identity=Smart_Home_v7.1_ux71' validation-report-v7.1.txt
+          grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.1.txt
+          grep -Fq "EXPECTED_RELEASE='production-rc-v7.1'" app.js
+          grep -Fq "selectedProfile='smart-home-v7.1'" app.js
+          grep -Fq 'Smart Home v7.1 — recommended' index.html
+          grep -Fq 'Download v7.1 OTA image' index.html
+          echo 'production-rc-v7.1 contract: PASS'
