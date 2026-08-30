@@ -1,8 +1,17 @@
-BambuHelper Smart Display production repository
-==============================================
-firmware_sha256=82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac
-firmware_size=2207040
-compressed_xz_size=1016236
-release_profile=smart-display
+BambuHelper Smart Home production RC v7
+=====================================
+release=production-rc-v7
 board=ws_lcd_350
-source_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+full_size=2207472
+full_sha256=c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7
+legacy_clock_replaced_by_smart_home=PASS
+legacy_clock_upgrade_wake_to_home=PASS
+idle_home_immediate_print_preemption=PASS
+tap_discoverability_hints=PASS
+tap_cycle=HOME_WORKSHOP_CUSTOM_SYSTEM_PRINTER_HOME
+hms_finish_printer_priority_preserved=PASS
+shared_layout_regression=jc3248w535_passed
+rollback_v6_preserved=yes
+v6_size=2207040
+v6_sha256=82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac
+physical_acceptance=pending
