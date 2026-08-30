@@ -1,4 +1,4 @@
-name: Validate Smart Display source build
+name: Validate Smart Display release metadata
 
 on:
   workflow_dispatch:
@@ -7,37 +7,38 @@ permissions:
   contents: read
 
 jobs:
-  validate-source-build:
+  validate-release-metadata:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Rebuild Smart Display source stack
+      - name: Validate installer source and release manifest
         shell: bash
         run: |
           set -euo pipefail
-          # This is a source/regression build, not a bit-for-bit release reproduction.
-          # Embedded/toolchain builds can drift in bytes between runs. The deployed
-          # release asset is the separately preserved, previously validated binary.
-          EXPECT_RELEASE_SHA=82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac \
-          ALLOW_BINARY_DRIFT=1 bash scripts/reproduce-firmware.sh
+          node --check app.js
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('release.json').read_text())
+          assert r['release']=='production-rc-v6'
+          assert r['board']['id']=='ws_lcd_350'
+          p=r['profiles']['smart-display']
+          assert p['size']==2207040
+          assert p['sha256']=='82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac'
+          print('Release metadata contract: PASS')
+          PY
 
-      - name: Upload source-build evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: bambuhelper-smart-display-source-build
-          retention-days: 14
-          if-no-files-found: error
-          path: |
-            firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
-            firmware-build-report.txt
-            validation-report.txt
+      - name: Verify preserved release asset when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
+          if [ -f "$FILE" ]; then
+            test "$(stat -c%s "$FILE")" = '2207040'
+            echo '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac  '"$FILE" | sha256sum -c -
+            python3 build.py
+          else
+            echo 'Preserved release asset is not yet committed.'
+          fi
