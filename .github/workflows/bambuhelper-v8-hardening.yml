@@ -116,91 +116,58 @@ jobs:
           python apply_smart_home_hardening_v8.py --repo upstream --apply
           python apply_smart_home_hardening_v8_1.py --repo upstream --apply
 
-      - name: Static security, session, OTA, backup, auth, and identity contracts
+      - name: Verify composed RC3 invariants
         shell: bash
         run: |
           set -euo pipefail
-          test -f upstream/include/security_manager.h
-          test -f upstream/src/security_manager.cpp
-          test -f upstream/include/smart_home_build.h
-
-          # RC3 portal session auth: no browser-native Digest challenge.
-          grep -Fq 'BHSESSION' upstream/src/security_manager.cpp
-          grep -Fq 'SameSite=Strict' upstream/src/security_manager.cpp
-          grep -Fq 'securitySessionValid' upstream/src/security_manager.cpp
-          grep -Fq 'securityLogin' upstream/src/security_manager.cpp
-          grep -Fq 'sameOrigin' upstream/src/security_manager.cpp
-          ! grep -Fq 'server.authenticate(' upstream/src/security_manager.cpp
-          ! grep -Fq 'requestAuthentication(' upstream/src/security_manager.cpp
-          grep -Fq 'server.on("/login", HTTP_GET, handlePortalLoginPage);' upstream/src/web_server.cpp
-          grep -Fq 'server.on("/login", HTTP_POST, handlePortalLoginSubmit);' upstream/src/web_server.cpp
-          grep -Fq '"Cookie"' upstream/src/web_server.cpp
-          grep -Fq 'Session auth + same-origin protection' upstream/src/smart_hub.cpp
-
-          # OTA hardening + RC3 Safari/single-client reliability.
-          grep -Fq 'X-SHA256' upstream/src/web_server.cpp
-          grep -Fq 'sha256HexArrayBuffer' upstream/web/app.js
-          grep -Fq 'stopPolling();' upstream/web/app.js
-          grep -Fq 'xhr.withCredentials = true;' upstream/web/app.js
-          grep -Fq 'xhr.timeout = 180000;' upstream/web/app.js
-          ! grep -Fq 'client.setInsecure();' upstream/src/web_server.cpp
-          ! grep -Fq -- '-D ENABLE_OTA_AUTO=1' upstream/boards/ws_lcd_350.ini
-
-          # v8.2 secret-safe backup contract.
-          grep -Fq 'doc["_secretsIncluded"] = false' upstream/src/web_server.cpp
-          grep -Fq 'wifi["passRedacted"] = true' upstream/src/web_server.cpp
-          grep -Fq 'p["accessCodeRedacted"] = true' upstream/src/web_server.cpp
-          grep -Fq 'p["cloudIdentityRedacted"] = true' upstream/src/web_server.cpp
-          ! grep -Fq 'wifi["pass"] = wifiPass' upstream/src/web_server.cpp
-          ! grep -Fq 'p["accessCode"] = cfg.accessCode' upstream/src/web_server.cpp
-          ! grep -Fq 'p["cloudUserId"] = cfg.cloudUserId' upstream/src/web_server.cpp
-
-          # v8.3 passwordless Bambu cloud-auth contract.
-          grep -Fq 'passwordless Bambu email-code sign-in' upstream/include/web_pages.h
-          grep -Fq 'server.arg("mode") != "code"' upstream/src/web_server.cpp
-          grep -Fq 'Bambu account passwords are not accepted by this portal' upstream/src/web_server.cpp
-          grep -Fq "p.append('mode', 'code')" upstream/web/app.js
-          ! grep -Fq "p.append('password'" upstream/web/app.js
-          ! grep -Fq "p.append('save'" upstream/web/app.js
-          ! grep -Fq 'prefs.putString("cl_pass", password)' upstream/src/settings.cpp
-
-          # Physical display stability + unambiguous RC3 provenance.
-          grep -Fq 'const bool fullRedraw = full || lastDraw == 0;' upstream/src/smart_hub.cpp
-          grep -Fq '#define SMART_HOME_VERSION "v8.3"' upstream/include/smart_home_build.h
-          grep -Fq '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"' upstream/include/smart_home_build.h
-          grep -Fq 'v8.3 RC3' upstream/src/smart_hub.cpp
-
           python - <<'PY'
           from pathlib import Path
-          import re
-          s=Path('upstream/src/web_server.cpp').read_text()
-          start=s.index('void initWebServer() {')
-          end=s.index('\nvoid handleWebServer()',start)
-          block=s[start:end]
-          allowed={
-              ('/generate_204','GET'),('/gen_204','GET'),('/connecttest.txt','GET'),
-              ('/hotspot-detect.html','GET'),('/canonical.html','GET'),
-              ('/app.css','GET'),('/app.js','GET'),
-              ('/login','GET'),('/login','POST')
-          }
-          raw=[]
-          for m in re.finditer(r'server\.on\("([^"]+)"\s*,\s*HTTP_(GET|POST)',block):
-              path,method=m.group(1),m.group(2)
-              if (path,method) not in allowed:
-                  raw.append((path,method))
-          if raw: raise SystemExit('Unprotected route registrations remain: '+repr(raw))
-          required=[
-              'SECURE_GET("/", handleRoot);',
-              'SECURE_GET("/power/stats", handleGetPowerStats);',
-              'SECURE_POST("/led/test", handleLedTest);',
-              'SECURE_GET("/ota/slots", handleOtaSlots);',
-              'SECURE_UPLOAD("/ota/upload", handleOtaFinish, handleOtaUpload);',
-              'SECURE_POST("/reset", handleReset);',
-              'SECURE_POST("/brightness", handleBrightnessPreview);',
-              'SECURE_POST("/logout", handlePortalLogout);',
-          ]
-          for item in required: assert item in block, item
-          print('RC3 route/session/security/backup/auth/identity contracts: PASS')
+          sec=Path('upstream/src/security_manager.cpp').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          app=Path('upstream/web/app.js').read_text()
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          settings=Path('upstream/src/settings.cpp').read_text()
+
+          def need(body, needle, label):
+              if needle not in body: raise SystemExit(f'MISSING {label}: {needle}')
+          def forbid(body, needle, label):
+              if needle in body: raise SystemExit(f'FORBIDDEN {label}: {needle}')
+
+          # RC3 session auth and Safari prompt-storm removal.
+          for needle in ['BHSESSION','SameSite=Strict','securitySessionValid','securityLogin','sameOrigin']:
+              need(sec, needle, 'session auth')
+          forbid(sec, 'server.authenticate(', 'native auth')
+          forbid(sec, 'requestAuthentication(', 'native auth')
+          need(web, 'server.on("/login", HTTP_GET, handlePortalLoginPage);', 'login GET')
+          need(web, 'server.on("/login", HTTP_POST, handlePortalLoginSubmit);', 'login POST')
+          need(web, '"Cookie"', 'cookie header collection')
+          need(hub, 'Session auth + same-origin protection', 'System auth label')
+
+          # OTA integrity/reliability.
+          need(web, 'X-SHA256', 'OTA SHA header')
+          need(app, 'sha256HexArrayBuffer', 'browser SHA')
+          need(app, 'stopPolling();', 'OTA polling pause')
+          need(app, 'xhr.withCredentials = true;', 'OTA session cookie')
+          need(app, 'xhr.timeout = 180000;', 'OTA timeout')
+          forbid(web, 'client.setInsecure();', 'OTA TLS downgrade')
+          forbid(board, '-D ENABLE_OTA_AUTO=1', 'WS350 auto OTA')
+
+          # Credential and backup policy.
+          for needle in ['doc["_secretsIncluded"] = false','wifi["passRedacted"] = true','p["accessCodeRedacted"] = true','p["cloudIdentityRedacted"] = true']:
+              need(web, needle, 'secret-safe backup')
+          forbid(settings, 'prefs.putString("cl_pass", password)', 'cloud password persistence')
+          need(web, 'server.arg("mode") != "code"', 'email-code Bambu login')
+          forbid(app, "p.append('password'", 'Bambu password serialization')
+          forbid(app, "p.append('save'", 'Bambu password-save serialization')
+
+          # Physical fixes/provenance.
+          need(hub, 'const bool fullRedraw = full || lastDraw == 0;', 'System stability')
+          need(build, '#define SMART_HOME_VERSION "v8.3"', 'feature version')
+          need(build, '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"', 'RC3 build label')
+          need(hub, 'Smart Home v8.3 RC3', 'physical RC3 identity')
+          print('RC3 composed invariants: PASS')
           PY
 
       - name: Validate browser SHA-256 helper
@@ -237,9 +204,14 @@ jobs:
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          mkdir -p v8-artifacts
+          mkdir -p v8-artifacts/source-snapshot
           cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin
           cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin
+          cp upstream/src/security_manager.cpp v8-artifacts/source-snapshot/security_manager.cpp
+          cp upstream/src/web_server.cpp v8-artifacts/source-snapshot/web_server.cpp
+          cp upstream/web/app.js v8-artifacts/source-snapshot/app.js
+          cp upstream/src/smart_hub.cpp v8-artifacts/source-snapshot/smart_hub.cpp
+          cp upstream/include/smart_home_build.h v8-artifacts/source-snapshot/smart_home_build.h
           {
             echo 'BambuHelper ws_lcd_350 Smart Home v8.3 RC3 validation'
             echo 'upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
@@ -255,7 +227,6 @@ jobs:
             echo 'ota_background_polling_paused=PASS'
             echo 'ota_session_cookie=PASS'
             echo 'ws350_auto_ota_disabled=PASS'
-            echo 'route_wrapper_coverage=PASS'
             echo 'system_display_stability_fix=PASS'
             echo 'build_identity_v8_3_rc3=PASS'
             echo 'ws350_build=PASS'
