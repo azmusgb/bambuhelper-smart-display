@@ -11,7 +11,7 @@ Production installer for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`) + Bam
 - SHA-256: `82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac`
 - Source baseline: `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4`
 
-The repository stores the firmware source compressed as `firmware-source.xz`. Netlify runs `python3 build.py`, verifies SHA-256 against `release.json`, reconstructs the Full `.bin`, and publishes it with the installer.
+The repository stores the compressed firmware as Base64 chunks under `firmware-parts/`. Netlify runs `python3 build.py`, reconstructs the XZ payload, verifies SHA-256 against `release.json`, then publishes the Full `.bin` with the installer.
 
 ## Installer workflow
 
