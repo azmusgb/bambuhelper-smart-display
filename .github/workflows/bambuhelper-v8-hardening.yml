@@ -52,9 +52,9 @@ jobs:
           cat /tmp/device.part{0,1,2,3} > /tmp/device.b64
           curl -fsSL "$v3/v2.zlib.b64" -o /tmp/v2.b64
           curl -fsSL "$v3/v3.zlib.b64" -o /tmp/v3.b64
-          curl -fsSL "$v6/v4.b64" -o /tmp/v4.b64
-          curl -fsSL "$v6/v5.b64" -o /tmp/v5.b64
-          curl -fsSL "$v6/v6.b64" -o /tmp/v6.b64
+          curl -fsSL "$v6/v4.zlib.b64" -o /tmp/v4.b64
+          curl -fsSL "$v6/v5.zlib.b64" -o /tmp/v5.b64
+          curl -fsSL "$v6/v6.zlib.b64" -o /tmp/v6.b64
           curl -fsSL "$v72/.bambuhelper-validation/v7-home.zlib.b64" -o /tmp/v7-home.b64
           curl -fsSL "$v72/apply_smart_home_ux_v7_1.py" -o apply_smart_home_ux_v7_1.py
           curl -fsSL "$v72/apply_smart_home_display_stability_v7_2.py" -o apply_smart_home_display_stability_v7_2.py
