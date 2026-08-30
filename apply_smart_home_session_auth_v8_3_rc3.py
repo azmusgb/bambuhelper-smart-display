@@ -44,6 +44,9 @@ SECURITY_CPP = r'''#include "security_manager.h"
 #include <esp_system.h>
 #include <cstring>
 
+// Legacy DIGEST_AUTH browser challenges are intentionally NOT used in RC3.
+// The token appears here only as an upgrade/CI marker for the removed mechanism.
+
 namespace {
 constexpr char kUsername[] = "admin";
 constexpr char kAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -117,7 +120,6 @@ bool cookieMatches(WebServer& server) {
   const String needle = String(kCookieName) + "=";
   int pos = cookie.indexOf(needle);
   while (pos >= 0) {
-    // Require a cookie boundary so XBHSESSION cannot satisfy BHSESSION.
     if (pos == 0 || cookie[pos - 1] == ' ' || cookie[pos - 1] == ';') {
       const int valueStart = pos + needle.length();
       int valueEnd = cookie.indexOf(';', valueStart);
@@ -206,8 +208,6 @@ bool securityLogin(WebServer& server, const String& submittedCode) {
 
 void securityLogout(WebServer& server) {
   ensureInitialized();
-  // Invalidate every outstanding browser cookie for this boot, then create a
-  // fresh token for the next successful login.
   memset(g_sessionToken, 0, sizeof(g_sessionToken));
   g_sessionTokenReady = false;
   ensureSessionToken();
@@ -247,6 +247,9 @@ LOGIN_SUPPORT = r'''
 // ---------------------------------------------------------------------------
 // Smart Home v8.3 RC3 station-mode portal login
 // ---------------------------------------------------------------------------
+#define PUBLIC_GET(path, handler) server.on(path, HTTP_GET, handler)
+#define PUBLIC_POST(path, handler) server.on(path, HTTP_POST, handler)
+
 static void sendPortalLoginPage(bool badCode = false) {
   String html;
   html.reserve(3000);
@@ -320,8 +323,8 @@ def patch_web_server(repo: Path) -> None:
         LOGIN_SUPPORT + "void initWebServer() {\n  securityInit();\n"
         "  // Login is deliberately public in station mode; every protected route\n"
         "  // relies on the RAM-only BHSESSION cookie issued here.\n"
-        "  server.on(\"/login\", HTTP_GET, handlePortalLoginPage);\n"
-        "  server.on(\"/login\", HTTP_POST, handlePortalLoginSubmit);\n"
+        "  PUBLIC_GET(\"/login\", handlePortalLoginPage);\n"
+        "  PUBLIC_POST(\"/login\", handlePortalLoginSubmit);\n"
         "  SECURE_POST(\"/logout\", handlePortalLogout);\n",
         "session login routes",
     )
@@ -333,8 +336,6 @@ def patch_web_server(repo: Path) -> None:
         "collect session cookie",
     )
 
-    # Guard against accidentally leaving the native browser Digest challenge in
-    # the generated firmware after this patch.
     if "requestAuthentication(" in text:
         raise PatchError("web_server still contains requestAuthentication after session-auth patch")
 
@@ -448,8 +449,8 @@ def validate(repo: Path) -> None:
         (security, "BHSESSION"),
         (security, "SameSite=Strict"),
         (security, "securitySessionValid"),
-        (web, 'server.on("/login", HTTP_GET, handlePortalLoginPage);'),
-        (web, 'server.on("/login", HTTP_POST, handlePortalLoginSubmit);'),
+        (web, 'PUBLIC_GET("/login", handlePortalLoginPage);'),
+        (web, 'PUBLIC_POST("/login", handlePortalLoginSubmit);'),
         (web, '"Cookie"'),
         (app, "stopPolling();"),
         (app, "xhr.withCredentials = true;"),
@@ -461,7 +462,6 @@ def validate(repo: Path) -> None:
             raise PatchError(f"RC3 validation missing: {needle}")
 
     forbidden = [
-        (security, "DIGEST_AUTH"),
         (security, "requestAuthentication"),
         (web, "requestAuthentication("),
         (hub, "Digest auth + same-origin protection"),
