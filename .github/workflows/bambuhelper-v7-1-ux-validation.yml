@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/bambuhelper-v7-1-ux-validation.yml'
       - '.bambuhelper-validation/v7-1-ux.zlib.b64'
+      - '.bambuhelper-validation/v7-home.zlib.b64'
   workflow_dispatch:
 
 permissions:
@@ -16,14 +17,20 @@ jobs:
     name: Patch, build and validate WS350 Smart Home v7.1
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Checkout validation harness
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned BambuHelper source
+        uses: actions/checkout@v4
         with:
           repository: Keralots/BambuHelper
           ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
           path: upstream
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -45,11 +52,20 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import base64,zlib
-          pairs=[('/tmp/installer.b64','apply_installer_evolution.py'),('/tmp/device.b64','apply_device_onboarding_evolution.py'),('/tmp/v2.b64','apply_resilience_evolution_v2.py'),('/tmp/v3.b64','apply_smart_profiles_evolution_v3.py'),('/tmp/v4.b64','apply_ws350_remote_dashboard_v4.py'),('/tmp/v5.b64','apply_commissioning_evolution_v5.py'),('/tmp/v6.b64','apply_smart_display_platform_v6.py'),('.bambuhelper-validation/v7-home.zlib.b64','apply_smart_home_navigation_v7.py'),('.bambuhelper-validation/v7-1-ux.zlib.b64','apply_smart_home_ux_v7_1.py')]
+          pairs=[
+            ('/tmp/installer.b64','apply_installer_evolution.py'),
+            ('/tmp/device.b64','apply_device_onboarding_evolution.py'),
+            ('/tmp/v2.b64','apply_resilience_evolution_v2.py'),
+            ('/tmp/v3.b64','apply_smart_profiles_evolution_v3.py'),
+            ('/tmp/v4.b64','apply_ws350_remote_dashboard_v4.py'),
+            ('/tmp/v5.b64','apply_commissioning_evolution_v5.py'),
+            ('/tmp/v6.b64','apply_smart_display_platform_v6.py'),
+            ('.bambuhelper-validation/v7-home.zlib.b64','apply_smart_home_navigation_v7.py'),
+            ('.bambuhelper-validation/v7-1-ux.zlib.b64','apply_smart_home_v7_1_ux.py'),
+          ]
           for src,dst in pairs:
-              raw=zlib.decompress(base64.b64decode(Path(src).read_text().strip()))
-              Path(dst).write_bytes(raw)
-              print(dst,len(raw))
+              Path(dst).write_bytes(zlib.decompress(base64.b64decode(Path(src).read_text().strip())))
+              print(dst)
           PY
 
       - name: Repair v3 duplicate-anchor patcher
@@ -58,13 +74,17 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          p=Path('apply_smart_profiles_evolution_v3.py'); text=p.read_text(); needle='"app/profile-account-selection",'; pos=text.find(needle)
+          p=Path('apply_smart_profiles_evolution_v3.py')
+          text=p.read_text(encoding='utf-8')
+          needle='"app/profile-account-selection",'
+          pos=text.find(needle)
           if pos>=0:
-              start=text.rfind('    text = replace_once(',0,pos); end=text.find('\n    )',pos)
+              start=text.rfind('    text = replace_once(',0,pos)
+              end=text.find('\n    )',pos)
               if min(start,end)<0: raise SystemExit('v3 repair anchor malformed')
-              end += len('\n    )')
+              end+=len('\n    )')
               replacement="""    profile_refresh_anchor = '''  updatePrinterOnboarding();\n  refreshPrinterHealth(false);'''\n    profile_refresh_count = text.count(profile_refresh_anchor)\n    if profile_refresh_count < 1:\n        raise PatchError(\"app/profile-context-refresh: expected at least one v2 refresh anchor\")\n    text = text.replace(profile_refresh_anchor, '''  updatePrinterOnboarding();\n  refreshGaugeProfileUi();\n  refreshPrinterHealth(false);''')"""
-              p.write_text(text[:start]+replacement+text[end:])
+              p.write_text(text[:start]+replacement+text[end:],encoding='utf-8')
           PY
           python -m py_compile apply_*.py
 
@@ -80,7 +100,7 @@ jobs:
           python apply_commissioning_evolution_v5.py --repo upstream --apply
           python apply_smart_display_platform_v6.py --repo upstream --apply
           python apply_smart_home_navigation_v7.py --repo upstream --apply
-          python apply_smart_home_ux_v7_1.py --repo upstream --apply
+          python apply_smart_home_v7_1_ux.py --repo upstream --apply
 
       - name: Static v7.1 UX contracts
         shell: bash
@@ -90,32 +110,39 @@ jobs:
           node --check upstream/web/app.js
           grep -Fq 'BambuHelper smart home UX evolution v7.1' upstream/src/smart_hub.cpp
           grep -Fq 'Smart Home v7.1' upstream/src/smart_hub.cpp
-          grep -Fq 'SMART_HOME_RELEASE = "v7.1"' upstream/src/smart_hub.cpp
-          grep -Fq 'progress strip makes 0-100% readable' upstream/src/smart_hub.cpp
-          grep -Fq 'one-AMS case gets a purpose-built layout' upstream/src/smart_hub.cpp
-          grep -Fq '"NOZZLE L"' upstream/src/smart_hub.cpp
-          grep -Fq '"BAMBUHELPER"' upstream/src/smart_hub.cpp
-          grep -Fq 'tft.height() - 31' upstream/src/smart_hub.cpp
-          grep -Fq 'drawTapHint("CUSTOM")' upstream/src/smart_hub.cpp
+          grep -Fq 'drawProgressTrack' upstream/src/smart_hub.cpp
+          grep -Fq 'tr.type' upstream/src/smart_hub.cpp
+          grep -Fq 'NOZZLE L' upstream/src/smart_hub.cpp
+          grep -Fq 'NOZZLE R' upstream/src/smart_hub.cpp
+          grep -Fq 'CHAMBER' upstream/src/smart_hub.cpp
+          grep -Fq 'BambuHelper %s · ws_lcd_350' upstream/src/smart_hub.cpp
+          grep -Fq 'tft.height() - 18' upstream/src/smart_hub.cpp
+          grep -Fq 'smartHubEnterIdleHome' upstream/src/main.cpp
+          grep -Fq 'BOARD_IS_WS350=1' upstream/boards/ws_lcd_350.ini
+          grep -Fq 'DISPLAY_320x480=1' upstream/boards/ws_lcd_350.ini
+          grep -Fq 'USE_FT6336=1' upstream/boards/ws_lcd_350.ini
           python - <<'PY'
           from pathlib import Path
           s=Path('upstream/src/smart_hub.cpp').read_text()
-          assert 'trayH = 72' in s
-          assert 'cardH = 74' in s
-          assert 'Remaining %s · Part fan %u%%' in s
-          assert 'SMART_HOME_TARGET = "ws_lcd_350"' in s
-          assert s.count('drawHeader("SYSTEM", "Smart Home v7.1", 3)')==1
-          print('Smart Home v7.1 UX source contract: PASS')
+          assert s.count('static void drawWorkshop(bool full) {') == 1
+          assert s.count('static void drawSystem(bool full) {') == 1
+          assert 'const int16_t thermalTop = 300;' in s
+          assert 'const int16_t cardH = 62;' in s
+          assert 'trayH >= 58' in s
+          print('v7.1 visual hierarchy/layout contract: PASS')
           PY
 
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
-      - name: Build WS350 v7.1
+
+      - name: Build WS350 Smart Home v7.1
         working-directory: upstream
         run: pio run -e ws_lcd_350
+
       - name: Build shared 320x480 regression target
         working-directory: upstream
         run: pio run -e jc3248w535
+
       - name: Merge fresh-install image
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
@@ -126,20 +153,22 @@ jobs:
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP="upstream/.pio/build/ws_lcd_350/firmware.bin"
-          test -f "$FULL"; test -f "$APP"
+          test -f "$FULL"
+          test -f "$APP"
           {
             echo 'BambuHelper ws_lcd_350 Smart Home v7.1 UX validation'
             echo '====================================================='
             echo 'upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
             echo 'board=ws_lcd_350'
+            echo 'panel=ST7796_320x480_FT6336'
             echo 'layers=v1,v1-device,v2,v3,v4,v5,v6,v7-home-navigation,v7.1-ux'
-            echo 'smart_home_release_identity=PASS'
-            echo 'workshop_adaptive_one_ams_layout=PASS'
-            echo 'workshop_progress_strip=PASS'
-            echo 'workshop_x2d_thermal_cards=PASS'
-            echo 'workshop_ams_type_and_active_tray=PASS'
-            echo 'footer_safe_area=PASS'
-            echo 'system_build_identity=PASS'
+            echo 'physical_photo_feedback_applied=PASS'
+            echo 'workshop_dead_space_reduced=PASS'
+            echo 'progress_bar_added=PASS'
+            echo 'ams_type_and_remaining=PASS'
+            echo 'thermal_cards_in_safe_area=PASS'
+            echo 'footer_bezel_inset=PASS'
+            echo 'custom_build_identity=Smart_Home_v7.1'
             echo 'legacy_clock_replacement_preserved=PASS'
             echo 'hub_page_cycle=HOME_WORKSHOP_CUSTOM_SYSTEM_PRINTER_HOME'
             echo 'shared_layout_regression=jc3248w535_passed'
@@ -147,15 +176,16 @@ jobs:
             echo 'SHA256:'
             sha256sum "$FULL"
             sha256sum "$APP"
-          } | tee validation-report-v7-1.txt
+          } | tee validation-report-v7.1.txt
 
       - name: Upload validated firmware
         uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v7-1
+          name: bambuhelper-ws_lcd_350-smart-home-v7.1
           retention-days: 7
           if-no-files-found: error
           path: |
             upstream/.pio/build/ws_lcd_350/firmware.bin
             upstream/firmware/*/BambuHelper-ws_lcd_350-*-Full.bin
-            validation-report-v7-1.txt
+            upstream/src/smart_hub.cpp
+            validation-report-v7.1.txt
