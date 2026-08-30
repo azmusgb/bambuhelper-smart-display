@@ -1,4 +1,4 @@
-name: BambuHelper ws_lcd_350 Smart Home v8 hardening
+name: BambuHelper ws_lcd_350 Smart Home v8.3 RC3
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
       - 'apply_smart_home_hardening_v8_1.py'
       - 'apply_smart_home_secret_safe_backups_v8_2.py'
       - 'apply_smart_home_code_only_auth_v8_3.py'
+      - 'apply_smart_home_system_stability_v8_3_rc2.py'
+      - 'apply_smart_home_session_auth_v8_3_rc3.py'
+      - 'apply_smart_home_release_identity_v8_3_rc3.py'
       - '.github/workflows/bambuhelper-v8-hardening.yml'
   workflow_dispatch:
 
@@ -96,7 +99,7 @@ jobs:
           PY
           python -m py_compile apply_*.py
 
-      - name: Apply Smart Home v1-v8.3 stack
+      - name: Apply Smart Home v1-v8.3 RC3 stack
         shell: bash
         run: |
           set -euo pipefail
@@ -113,7 +116,7 @@ jobs:
           python apply_smart_home_hardening_v8.py --repo upstream --apply
           python apply_smart_home_hardening_v8_1.py --repo upstream --apply
 
-      - name: Static security, backup, auth, and release-identity contracts
+      - name: Static security, session, OTA, backup, auth, and identity contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -121,18 +124,29 @@ jobs:
           test -f upstream/src/security_manager.cpp
           test -f upstream/include/smart_home_build.h
 
-          # v8 portal / OTA hardening
-          grep -Fq 'DIGEST_AUTH' upstream/src/security_manager.cpp
+          # RC3 portal session auth: no browser-native Digest challenge.
+          grep -Fq 'BHSESSION' upstream/src/security_manager.cpp
+          grep -Fq 'SameSite=Strict' upstream/src/security_manager.cpp
+          grep -Fq 'securitySessionValid' upstream/src/security_manager.cpp
+          grep -Fq 'securityLogin' upstream/src/security_manager.cpp
           grep -Fq 'sameOrigin' upstream/src/security_manager.cpp
+          ! grep -Fq 'server.authenticate(' upstream/src/security_manager.cpp
+          ! grep -Fq 'requestAuthentication(' upstream/src/security_manager.cpp
+          grep -Fq 'server.on("/login", HTTP_GET, handlePortalLoginPage);' upstream/src/web_server.cpp
+          grep -Fq 'server.on("/login", HTTP_POST, handlePortalLoginSubmit);' upstream/src/web_server.cpp
+          grep -Fq '"Cookie"' upstream/src/web_server.cpp
+          grep -Fq 'Session auth + same-origin protection' upstream/src/smart_hub.cpp
+
+          # OTA hardening + RC3 Safari/single-client reliability.
           grep -Fq 'X-SHA256' upstream/src/web_server.cpp
           grep -Fq 'sha256HexArrayBuffer' upstream/web/app.js
-          grep -Fq 'MIN HEAP' upstream/src/smart_hub.cpp
-          grep -Fq 'MAX BLOCK' upstream/src/smart_hub.cpp
+          grep -Fq 'stopPolling();' upstream/web/app.js
+          grep -Fq 'xhr.withCredentials = true;' upstream/web/app.js
+          grep -Fq 'xhr.timeout = 180000;' upstream/web/app.js
           ! grep -Fq 'client.setInsecure();' upstream/src/web_server.cpp
           ! grep -Fq -- '-D ENABLE_OTA_AUTO=1' upstream/boards/ws_lcd_350.ini
-          ! grep -Fq 'prefs.putString("cl_pass", password)' upstream/src/settings.cpp
 
-          # v8.2 secret-safe backup contract
+          # v8.2 secret-safe backup contract.
           grep -Fq 'doc["_secretsIncluded"] = false' upstream/src/web_server.cpp
           grep -Fq 'wifi["passRedacted"] = true' upstream/src/web_server.cpp
           grep -Fq 'p["accessCodeRedacted"] = true' upstream/src/web_server.cpp
@@ -141,19 +155,20 @@ jobs:
           ! grep -Fq 'p["accessCode"] = cfg.accessCode' upstream/src/web_server.cpp
           ! grep -Fq 'p["cloudUserId"] = cfg.cloudUserId' upstream/src/web_server.cpp
 
-          # v8.3 passwordless Bambu cloud-auth contract
+          # v8.3 passwordless Bambu cloud-auth contract.
           grep -Fq 'passwordless Bambu email-code sign-in' upstream/include/web_pages.h
           grep -Fq 'server.arg("mode") != "code"' upstream/src/web_server.cpp
           grep -Fq 'Bambu account passwords are not accepted by this portal' upstream/src/web_server.cpp
           grep -Fq "p.append('mode', 'code')" upstream/web/app.js
           ! grep -Fq "p.append('password'" upstream/web/app.js
           ! grep -Fq "p.append('save'" upstream/web/app.js
+          ! grep -Fq 'prefs.putString("cl_pass", password)' upstream/src/settings.cpp
 
-          # Physical-device provenance must match the candidate under test.
+          # Physical display stability + unambiguous RC3 provenance.
+          grep -Fq 'const bool fullRedraw = full || lastDraw == 0;' upstream/src/smart_hub.cpp
           grep -Fq '#define SMART_HOME_VERSION "v8.3"' upstream/include/smart_home_build.h
-          grep -Fq '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 Hardening RC"' upstream/include/smart_home_build.h
-          grep -Fq 'Smart Home v8.3' upstream/src/smart_hub.cpp
-          ! grep -Fq '#define SMART_HOME_VERSION "v8.0"' upstream/include/smart_home_build.h
+          grep -Fq '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"' upstream/include/smart_home_build.h
+          grep -Fq 'v8.3 RC3' upstream/src/smart_hub.cpp
 
           python - <<'PY'
           from pathlib import Path
@@ -162,11 +177,17 @@ jobs:
           start=s.index('void initWebServer() {')
           end=s.index('\nvoid handleWebServer()',start)
           block=s[start:end]
-          allowed={'/generate_204','/gen_204','/connecttest.txt','/hotspot-detect.html','/canonical.html','/app.css','/app.js'}
+          allowed={
+              ('/generate_204','GET'),('/gen_204','GET'),('/connecttest.txt','GET'),
+              ('/hotspot-detect.html','GET'),('/canonical.html','GET'),
+              ('/app.css','GET'),('/app.js','GET'),
+              ('/login','GET'),('/login','POST')
+          }
           raw=[]
           for m in re.finditer(r'server\.on\("([^"]+)"\s*,\s*HTTP_(GET|POST)',block):
               path,method=m.group(1),m.group(2)
-              if path not in allowed or method!='GET': raw.append((path,method))
+              if (path,method) not in allowed:
+                  raw.append((path,method))
           if raw: raise SystemExit('Unprotected route registrations remain: '+repr(raw))
           required=[
               'SECURE_GET("/", handleRoot);',
@@ -176,9 +197,10 @@ jobs:
               'SECURE_UPLOAD("/ota/upload", handleOtaFinish, handleOtaUpload);',
               'SECURE_POST("/reset", handleReset);',
               'SECURE_POST("/brightness", handleBrightnessPreview);',
+              'SECURE_POST("/logout", handlePortalLogout);',
           ]
           for item in required: assert item in block, item
-          print('route/security/backup/auth/release-identity contracts: PASS')
+          print('RC3 route/session/security/backup/auth/identity contracts: PASS')
           PY
 
       - name: Validate browser SHA-256 helper
@@ -209,19 +231,20 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v8.3 validation artifacts
+      - name: Package v8.3 RC3 validation artifacts
         shell: bash
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p v8-artifacts
-          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.3-rc.bin
-          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC-OTA.bin
+          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin
+          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v8.3 hardening validation'
+            echo 'BambuHelper ws_lcd_350 Smart Home v8.3 RC3 validation'
             echo 'upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
-            echo 'portal_digest_auth=PASS'
+            echo 'portal_session_auth=PASS'
+            echo 'native_digest_prompt_removed=PASS'
             echo 'mutation_same_origin=PASS'
             echo 'cloud_password_persistence_disabled=PASS'
             echo 'bambu_cloud_passwordless_email_code_only=PASS'
@@ -229,18 +252,21 @@ jobs:
             echo 'settings_import_preserves_existing_secrets=PASS'
             echo 'ota_tls_fail_closed=PASS'
             echo 'manual_ota_sha256=PASS'
+            echo 'ota_background_polling_paused=PASS'
+            echo 'ota_session_cookie=PASS'
             echo 'ws350_auto_ota_disabled=PASS'
             echo 'route_wrapper_coverage=PASS'
-            echo 'build_identity_v8_3=PASS'
+            echo 'system_display_stability_fix=PASS'
+            echo 'build_identity_v8_3_rc3=PASS'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
-            echo 'physical_acceptance=PENDING'
+            echo 'physical_acceptance=RETEST_REQUIRED'
             sha256sum v8-artifacts/*.bin
-          } | tee v8-artifacts/validation-report-v8.3.txt
+          } | tee v8-artifacts/validation-report-v8.3-rc3.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v8.3-hardening
+          name: bambuhelper-ws_lcd_350-smart-home-v8.3-rc3
           retention-days: 14
           if-no-files-found: error
           path: v8-artifacts/
