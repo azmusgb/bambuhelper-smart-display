@@ -52,9 +52,9 @@ jobs:
           cat /tmp/device.part{0,1,2,3} > /tmp/device.b64
           curl -fsSL "$v3/v2.zlib.b64" -o /tmp/v2.b64
           curl -fsSL "$v3/v3.zlib.b64" -o /tmp/v3.b64
-          curl -fsSL "$v6/v4.zlib.b64" -o /tmp/v4.b64
-          curl -fsSL "$v6/v5.zlib.b64" -o /tmp/v5.b64
-          curl -fsSL "$v6/v6.zlib.b64" -o /tmp/v6.b64
+          curl -fsSL "$v6/v4.b64" -o /tmp/v4.b64
+          curl -fsSL "$v6/v5.b64" -o /tmp/v5.b64
+          curl -fsSL "$v6/v6.b64" -o /tmp/v6.b64
           curl -fsSL "$v72/.bambuhelper-validation/v7-home.zlib.b64" -o /tmp/v7-home.b64
           curl -fsSL "$v72/apply_smart_home_ux_v7_1.py" -o apply_smart_home_ux_v7_1.py
           curl -fsSL "$v72/apply_smart_home_display_stability_v7_2.py" -o apply_smart_home_display_stability_v7_2.py
@@ -113,7 +113,7 @@ jobs:
           python apply_smart_home_hardening_v8.py --repo upstream --apply
           python apply_smart_home_hardening_v8_1.py --repo upstream --apply
 
-      - name: Static security, backup, and auth contracts
+      - name: Static security, backup, auth, and release-identity contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -126,7 +126,6 @@ jobs:
           grep -Fq 'sameOrigin' upstream/src/security_manager.cpp
           grep -Fq 'X-SHA256' upstream/src/web_server.cpp
           grep -Fq 'sha256HexArrayBuffer' upstream/web/app.js
-          grep -Fq 'security hardening evolution v8.0' upstream/src/smart_hub.cpp
           grep -Fq 'MIN HEAP' upstream/src/smart_hub.cpp
           grep -Fq 'MAX BLOCK' upstream/src/smart_hub.cpp
           ! grep -Fq 'client.setInsecure();' upstream/src/web_server.cpp
@@ -149,6 +148,12 @@ jobs:
           grep -Fq "p.append('mode', 'code')" upstream/web/app.js
           ! grep -Fq "p.append('password'" upstream/web/app.js
           ! grep -Fq "p.append('save'" upstream/web/app.js
+
+          # Physical-device provenance must match the candidate under test.
+          grep -Fq '#define SMART_HOME_VERSION "v8.3"' upstream/include/smart_home_build.h
+          grep -Fq '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 Hardening RC"' upstream/include/smart_home_build.h
+          grep -Fq 'Smart Home v8.3' upstream/src/smart_hub.cpp
+          ! grep -Fq '#define SMART_HOME_VERSION "v8.0"' upstream/include/smart_home_build.h
 
           python - <<'PY'
           from pathlib import Path
@@ -173,7 +178,7 @@ jobs:
               'SECURE_POST("/brightness", handleBrightnessPreview);',
           ]
           for item in required: assert item in block, item
-          print('route/security/backup/auth contracts: PASS')
+          print('route/security/backup/auth/release-identity contracts: PASS')
           PY
 
       - name: Validate browser SHA-256 helper
@@ -226,6 +231,7 @@ jobs:
             echo 'manual_ota_sha256=PASS'
             echo 'ws350_auto_ota_disabled=PASS'
             echo 'route_wrapper_coverage=PASS'
+            echo 'build_identity_v8_3=PASS'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=PENDING'
