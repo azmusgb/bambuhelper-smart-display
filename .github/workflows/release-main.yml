@@ -1,4 +1,4 @@
-name: Validate Smart Display release metadata
+name: Validate Smart Home release metadata
 
 on:
   workflow_dispatch:
@@ -22,23 +22,30 @@ jobs:
           import json
           from pathlib import Path
           r=json.loads(Path('release.json').read_text())
-          assert r['release']=='production-rc-v6'
+          assert r['release']=='production-rc-v7'
           assert r['board']['id']=='ws_lcd_350'
-          p=r['profiles']['smart-display']
-          assert p['size']==2207040
-          assert p['sha256']=='82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac'
-          print('Release metadata contract: PASS')
+          p=r['profiles']['smart-home-v7']
+          assert p['recommended'] is True
+          assert p['size']==2207472
+          assert p['sha256']=='c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'
+          rb=r['profiles']['smart-display-v6']
+          assert rb['size']==2207040
+          assert rb['sha256']=='82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac'
+          print('Smart Home v7 release metadata contract: PASS')
           PY
 
-      - name: Verify preserved release asset when present
+      - name: Verify preserved release assets
         shell: bash
         run: |
           set -euo pipefail
-          FILE=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
-          if [ -f "$FILE" ]; then
-            test "$(stat -c%s "$FILE")" = '2207040'
-            echo '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac  '"$FILE" | sha256sum -c -
-            python3 build.py
-          else
-            echo 'Preserved release asset is not yet committed.'
-          fi
+          V7=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin
+          V6=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
+          test "$(stat -c%s "$V7")" = '2207472'
+          echo 'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7  '"$V7" | sha256sum -c -
+          test "$(stat -c%s "$V6")" = '2207040'
+          echo '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac  '"$V6" | sha256sum -c -
+          grep -Fq 'legacy_clock_replaced_by_smart_home=PASS' validation-report-v7.txt
+          grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.txt
+          python3 build.py
+          test -f dist/$V7
+          test -f dist/$V6
