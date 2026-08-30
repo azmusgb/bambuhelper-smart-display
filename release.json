@@ -1,24 +1,33 @@
 {
-  "release": "production-rc-v6",
+  "release": "production-rc-v7",
   "sourceCommit": "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4",
   "board": {
     "id": "ws_lcd_350",
     "name": "Waveshare ESP32-S3-Touch-LCD-3.5",
     "chipFamily": "ESP32-S3",
-    "display": "3.5\" ST7796 IPS 320×480",
+    "display": "3.5\" ST7796 IPS 320\u00d7480",
     "touch": "FT6336 capacitive",
     "flash": "16 MB",
     "psram": "8 MB"
   },
   "profiles": {
-    "smart-display": {
-      "label": "Smart Display v6",
+    "smart-home-v7": {
+      "label": "Smart Home v7",
       "recommended": true,
+      "version": "v3.8.1 + Smart Home Navigation v7",
+      "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin",
+      "size": 2207472,
+      "sha256": "c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7",
+      "description": "Recommended: replaces the legacy idle clock with Smart Home, adds visible tap hints, yields immediately to active printing, and preserves printer/HMS priority."
+    },
+    "smart-display-v6": {
+      "label": "Smart Display v6 (rollback)",
+      "recommended": false,
       "version": "v3.8.1 + Smart Display v6",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin",
       "size": 2207040,
       "sha256": "82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac",
-      "description": "BambuHelper + Home + Workshop + Custom + System pages"
+      "description": "Previous validated build retained as rollback; it retains the legacy idle-clock behavior found during physical testing."
     }
   }
 }
