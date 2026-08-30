@@ -22,31 +22,11 @@ def apply(repo: Path) -> None:
     text = p.read_text(encoding="utf-8")
 
     replacements = [
-        (
-            '  server.on("/power/stats",  HTTP_GET, handleGetPowerStats);\n',
-            '  SECURE_GET("/power/stats", handleGetPowerStats);\n',
-            "power stats route",
-        ),
-        (
-            '  server.on("/led/test",    HTTP_POST, handleLedTest);\n',
-            '  SECURE_POST("/led/test", handleLedTest);\n',
-            "LED test route",
-        ),
-        (
-            '  server.on("/ota/slots",    HTTP_GET,  handleOtaSlots);\n',
-            '  SECURE_GET("/ota/slots", handleOtaSlots);\n',
-            "OTA slots route",
-        ),
-        (
-            '  server.on("/ota/auto",   HTTP_POST, handleOtaAuto);\n',
-            '  SECURE_POST("/ota/auto", handleOtaAuto);\n',
-            "OTA auto route",
-        ),
-        (
-            '  server.on("/ota/status", HTTP_GET,  handleOtaStatus);\n',
-            '  SECURE_GET("/ota/status", handleOtaStatus);\n',
-            "OTA status route",
-        ),
+        ('  server.on("/power/stats",  HTTP_GET, handleGetPowerStats);\n', '  SECURE_GET("/power/stats", handleGetPowerStats);\n', "power stats route"),
+        ('  server.on("/led/test",    HTTP_POST, handleLedTest);\n', '  SECURE_POST("/led/test", handleLedTest);\n', "LED test route"),
+        ('  server.on("/ota/slots",    HTTP_GET,  handleOtaSlots);\n', '  SECURE_GET("/ota/slots", handleOtaSlots);\n', "OTA slots route"),
+        ('  server.on("/ota/auto",   HTTP_POST, handleOtaAuto);\n', '  SECURE_POST("/ota/auto", handleOtaAuto);\n', "OTA auto route"),
+        ('  server.on("/ota/status", HTTP_GET,  handleOtaStatus);\n', '  SECURE_GET("/ota/status", handleOtaStatus);\n', "OTA status route"),
     ]
 
     for old, new, name in replacements:
@@ -58,8 +38,8 @@ def apply(repo: Path) -> None:
     p.write_text(text, encoding="utf-8")
 
     # Compose the post-v8 hardening increments in a deterministic order.
-    # v8.3 now strips credential fields independently of function formatting,
-    # then fails closed if any browser password serialization remains.
+    # v8.3 strips wrapped credential serialization calls and then asserts no
+    # password/save fields remain before the firmware is allowed to build.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
 
