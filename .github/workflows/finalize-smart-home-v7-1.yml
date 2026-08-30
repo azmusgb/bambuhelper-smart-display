@@ -1,0 +1,148 @@
+name: Finalize Smart Home v7.1 production site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-smart-home-v7-1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update installer for v7.1 and Wi-Fi OTA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('app.js')
+          s=p.read_text()
+          s=s.replace("EXPECTED_RELEASE='production-rc-v7'","EXPECTED_RELEASE='production-rc-v7.1'")
+          s=s.replace("selectedProfile='smart-home-v7'","selectedProfile='smart-home-v7.1'")
+          s=s.replace("$('release-pill').textContent='RC v7 · '+d.board.id","$('release-pill').textContent='RC v7.1 · '+d.board.id")
+          s=s.replace("selectedProfile==='smart-home-v7'?'BambuHelper Smart Home':'BambuHelper Smart Display'","selectedProfile.startsWith('smart-home')?'BambuHelper Smart Home':'BambuHelper Smart Display'")
+          s=s.replace("'release: production-rc-v7'","'release: production-rc-v7.1'")
+          p.write_text(s)
+
+          p=Path('index.html')
+          s=p.read_text()
+          s=s.replace('id="release-pill">RC v7<','id="release-pill">RC v7.1<')
+          s=s.replace('Smart Home v7 replaces the legacy idle clock, makes navigation obvious, and keeps v6 available as rollback.', 'Smart Home v7.1 keeps the v7 navigation fix and redesigns Workshop around the real 320×480 Waveshare screen: stronger progress hierarchy, useful AMS detail, X2D thermal cards, safer bottom spacing, and explicit custom-build identity.')
+          s=s.replace('<option value="smart-home-v7">Smart Home v7 — recommended · fixes idle/clock navigation</option><option value="smart-display-v6">Smart Display v6 — rollback</option>', '<option value="smart-home-v7.1">Smart Home v7.1 — recommended · physical UX pass</option><option value="smart-home-v7">Smart Home v7 — rollback</option><option value="smart-display-v6">Smart Display v6 — legacy rollback</option>')
+          ota='''<div class="warning" style="margin-top:16px"><strong>Already running BambuHelper? Update over Wi‑Fi.</strong><br>Download the v7.1 OTA application image, then open the device web UI → WiFi &amp; System → Firmware / OTA Update and upload it. Do <em>not</em> use the Full image for OTA.<div class="button-row" style="margin-top:10px"><a class="btn" href="firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin" download>Download v7.1 OTA image</a></div><small>OTA SHA‑256: <code>938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c</code> · 2,142,864 bytes</small></div>'''
+          anchor='<div class="integrity-row"><button class="btn secondary" id="verify-asset">Verify firmware again</button><span id="integrity-detail">Loading release manifest…</span></div></section>'
+          if ota not in s:
+              s=s.replace(anchor, anchor.replace('</section>', ota+'</section>'))
+          s=s.replace('Production RC v7 · ws_lcd_350', 'Production RC v7.1 · ws_lcd_350')
+          p.write_text(s)
+          PY
+
+      - name: Update production documentation
+        shell: bash
+        run: |
+          cat > README.md <<'MD'
+          # BambuHelper Smart Display
+
+          Production installer for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`) + Bambu X2D**.
+
+          ## Smart Home v7.1 — recommended
+
+          v7 fixed the physical navigation defect where legacy `SCREEN_CLOCK` consumed the first touch. v7.1 is the first visual/UX pass driven by a real photo of the Waveshare running the evolved firmware.
+
+          **Tap cycle:** Home → Workshop → Custom → System → Printer → Home
+
+          v7.1 improvements:
+          - Workshop uses the full 320×480 canvas instead of leaving a large dead zone.
+          - Progress is promoted to a dedicated status band with layer and remaining time.
+          - AMS tray cards show tray number, remaining percentage, filament type, and active-tray emphasis.
+          - X2D left/right nozzle, bed, and chamber temperatures are separate readable cards.
+          - Bottom telemetry clipping is removed by moving data into a safe-area card grid.
+          - System explicitly identifies `Smart Home v7.1`, `ws_lcd_350`, and UX build `ux71` while retaining upstream BambuHelper `3.8.1` as the base-version axis.
+          - v7 navigation, printer preemption, HMS/error priority, and print-finish priority remain intact.
+
+          ### Validated assets
+          - Full/USB: 2,208,400 bytes · SHA-256 `9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb`
+          - Wi-Fi OTA/app: 2,142,864 bytes · SHA-256 `938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c`
+          - Validation run: `33295355598`
+          - `ws_lcd_350`: PASS
+          - shared `jc3248w535` 320×480 regression build: PASS
+
+          v7 and v6 remain available as rollback profiles.
+
+          Production: <https://bambuhelper-smart-display.netlify.app/>
+
+          The next release gate is physical acceptance of the v7.1 visual layout on the actual Waveshare display.
+          MD
+
+      - name: Strengthen production validation
+        shell: bash
+        run: |
+          cat > .github/workflows/release-main.yml <<'YML'
+          name: Validate production Smart Home release
+          on:
+            push:
+              branches: [main]
+              paths:
+                - 'release.json'
+                - 'build.py'
+                - 'index.html'
+                - 'app.js'
+                - 'firmware/**'
+                - 'validation-report-v7.1.txt'
+                - '.github/workflows/release-main.yml'
+            workflow_dispatch:
+          permissions:
+            contents: read
+          jobs:
+            validate-release:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: Validate installer and all preserved firmware
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    node --check app.js
+                    python3 build.py
+                    python3 - <<'PY'
+                    import hashlib,json
+                    from pathlib import Path
+                    r=json.loads(Path('release.json').read_text())
+                    assert r['release']=='production-rc-v7.1'
+                    assert r['board']['id']=='ws_lcd_350'
+                    assert r['profiles']['smart-home-v7.1']['recommended'] is True
+                    expected={
+                      'smart-home-v7.1':(2208400,'9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb'),
+                      'smart-home-v7':(2207472,'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'),
+                      'smart-display-v6':(2207040,'82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac')}
+                    for pid,(size,sha) in expected.items():
+                      p=r['profiles'][pid]; raw=Path(p['file']).read_bytes()
+                      assert len(raw)==size and hashlib.sha256(raw).hexdigest()==sha
+                      pub=(Path('dist')/p['file']).read_bytes()
+                      assert hashlib.sha256(pub).hexdigest()==sha
+                    ota=r['profiles']['smart-home-v7.1']
+                    raw=Path(ota['otaFile']).read_bytes()
+                    assert len(raw)==2142864
+                    assert hashlib.sha256(raw).hexdigest()=='938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c'
+                    print('production-rc-v7.1 contract: PASS')
+                    PY
+                    grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.1.txt
+                    grep -Fq 'custom_release_identity=Smart_Home_v7.1_ux71' validation-report-v7.1.txt
+          YML
+
+      - name: Remove one-time promotion workflows and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/promote-smart-home-v7-1.yml .github/workflows/finalize-smart-home-v7-1.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Finalize Smart Home v7.1 production release'
+          git push origin HEAD:main
