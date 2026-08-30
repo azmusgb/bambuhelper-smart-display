@@ -6,6 +6,8 @@ on:
     paths:
       - 'apply_smart_home_hardening_v8.py'
       - 'apply_smart_home_hardening_v8_1.py'
+      - 'apply_smart_home_secret_safe_backups_v8_2.py'
+      - 'apply_smart_home_code_only_auth_v8_3.py'
       - '.github/workflows/bambuhelper-v8-hardening.yml'
   workflow_dispatch:
 
@@ -94,7 +96,7 @@ jobs:
           PY
           python -m py_compile apply_*.py
 
-      - name: Apply Smart Home v1-v8.1 stack
+      - name: Apply Smart Home v1-v8.3 stack
         shell: bash
         run: |
           set -euo pipefail
@@ -111,24 +113,42 @@ jobs:
           python apply_smart_home_hardening_v8.py --repo upstream --apply
           python apply_smart_home_hardening_v8_1.py --repo upstream --apply
 
-      - name: Static security contracts
+      - name: Static security, backup, and auth contracts
         shell: bash
         run: |
           set -euo pipefail
           test -f upstream/include/security_manager.h
           test -f upstream/src/security_manager.cpp
           test -f upstream/include/smart_home_build.h
+
+          # v8 portal / OTA hardening
           grep -Fq 'DIGEST_AUTH' upstream/src/security_manager.cpp
           grep -Fq 'sameOrigin' upstream/src/security_manager.cpp
           grep -Fq 'X-SHA256' upstream/src/web_server.cpp
           grep -Fq 'sha256HexArrayBuffer' upstream/web/app.js
-          grep -Fq 'Smart Home v8 never stores your Bambu account password' upstream/include/web_pages.h
           grep -Fq 'security hardening evolution v8.0' upstream/src/smart_hub.cpp
           grep -Fq 'MIN HEAP' upstream/src/smart_hub.cpp
           grep -Fq 'MAX BLOCK' upstream/src/smart_hub.cpp
           ! grep -Fq 'client.setInsecure();' upstream/src/web_server.cpp
           ! grep -Fq -- '-D ENABLE_OTA_AUTO=1' upstream/boards/ws_lcd_350.ini
           ! grep -Fq 'prefs.putString("cl_pass", password)' upstream/src/settings.cpp
+
+          # v8.2 secret-safe backup contract
+          grep -Fq 'doc["_secretsIncluded"] = false' upstream/src/web_server.cpp
+          grep -Fq 'wifi["passRedacted"] = true' upstream/src/web_server.cpp
+          grep -Fq 'p["accessCodeRedacted"] = true' upstream/src/web_server.cpp
+          grep -Fq 'p["cloudIdentityRedacted"] = true' upstream/src/web_server.cpp
+          ! grep -Fq 'wifi["pass"] = wifiPass' upstream/src/web_server.cpp
+          ! grep -Fq 'p["accessCode"] = cfg.accessCode' upstream/src/web_server.cpp
+          ! grep -Fq 'p["cloudUserId"] = cfg.cloudUserId' upstream/src/web_server.cpp
+
+          # v8.3 passwordless Bambu cloud-auth contract
+          grep -Fq 'passwordless Bambu email-code sign-in' upstream/include/web_pages.h
+          grep -Fq 'server.arg("mode") != "code"' upstream/src/web_server.cpp
+          grep -Fq 'Bambu account passwords are not accepted by this portal' upstream/src/web_server.cpp
+          grep -Fq "p.append('mode', 'code')" upstream/web/app.js
+          ! grep -Fq "p.append('password'" upstream/web/app.js
+          ! grep -Fq "p.append('save'" upstream/web/app.js
 
           python - <<'PY'
           from pathlib import Path
@@ -153,7 +173,7 @@ jobs:
               'SECURE_POST("/brightness", handleBrightnessPreview);',
           ]
           for item in required: assert item in block, item
-          print('route policy contract: PASS')
+          print('route/security/backup/auth contracts: PASS')
           PY
 
       - name: Validate browser SHA-256 helper
@@ -184,21 +204,24 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package validation artifacts
+      - name: Package v8.3 validation artifacts
         shell: bash
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p v8-artifacts
-          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.0-rc.bin
-          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.0-RC-OTA.bin
+          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v8.3-rc.bin
+          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC-OTA.bin
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v8.0 hardening validation'
+            echo 'BambuHelper ws_lcd_350 Smart Home v8.3 hardening validation'
             echo 'upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
             echo 'portal_digest_auth=PASS'
             echo 'mutation_same_origin=PASS'
             echo 'cloud_password_persistence_disabled=PASS'
+            echo 'bambu_cloud_passwordless_email_code_only=PASS'
+            echo 'settings_export_secret_redaction=PASS'
+            echo 'settings_import_preserves_existing_secrets=PASS'
             echo 'ota_tls_fail_closed=PASS'
             echo 'manual_ota_sha256=PASS'
             echo 'ws350_auto_ota_disabled=PASS'
@@ -207,11 +230,11 @@ jobs:
             echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=PENDING'
             sha256sum v8-artifacts/*.bin
-          } | tee v8-artifacts/validation-report-v8.txt
+          } | tee v8-artifacts/validation-report-v8.3.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v8-hardening
+          name: bambuhelper-ws_lcd_350-smart-home-v8.3-hardening
           retention-days: 14
           if-no-files-found: error
           path: v8-artifacts/
