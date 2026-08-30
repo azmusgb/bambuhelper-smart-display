@@ -58,8 +58,8 @@ def apply(repo: Path) -> None:
     p.write_text(text, encoding="utf-8")
 
     # Compose the post-v8 hardening increments in a deterministic order.
-    # v8.3 uses structural/regex anchors so it remains compatible with the
-    # preceding Smart Home UX layers instead of depending on display prose.
+    # v8.3 enforces policy in request serialization + server routing; portal
+    # markup decoration is deliberately non-authoritative for custom UX builds.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
 
