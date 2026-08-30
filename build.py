@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import base64
 import hashlib
 import json
-import lzma
 import shutil
 
 root = Path(__file__).resolve().parent
@@ -15,24 +13,20 @@ dist.mkdir()
 for name in ["index.html", "styles.css", "app.js", "release.json"]:
     shutil.copy2(root / name, dist / name)
 
-encoded = "".join(
-    part.read_text().strip()
-    for part in sorted((root / "firmware-parts").glob("*.b64"))
-)
-compressed = base64.b64decode(encoded, validate=True)
-raw = lzma.decompress(compressed)
-
-expected_sha = "82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac"
-actual = hashlib.sha256(raw).hexdigest()
-if actual != expected_sha:
-    raise SystemExit(f"firmware SHA mismatch: {actual}")
-
 release = json.loads((root / "release.json").read_text())
 profile = release["profiles"]["smart-display"]
-if len(raw) != profile["size"] or actual != profile["sha256"]:
-    raise SystemExit("release manifest does not match firmware source")
+source = root / profile["file"]
+if not source.is_file():
+    raise SystemExit(f"missing verified firmware asset: {source}")
+
+raw = source.read_bytes()
+actual = hashlib.sha256(raw).hexdigest()
+if len(raw) != profile["size"]:
+    raise SystemExit(f"firmware size mismatch: {len(raw)} != {profile['size']}")
+if actual != profile["sha256"]:
+    raise SystemExit(f"firmware SHA mismatch: {actual}")
 
 output = dist / profile["file"]
 output.parent.mkdir(parents=True, exist_ok=True)
-output.write_bytes(raw)
-print("Built", output.relative_to(dist), len(raw), actual)
+shutil.copy2(source, output)
+print("Verified and published", output.relative_to(dist), len(raw), actual)
