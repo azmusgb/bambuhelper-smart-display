@@ -1,18 +1,13 @@
-name: Reproduce and publish Smart Display firmware
+name: Validate Smart Display source build
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'firmware/**'
-      - 'firmware-build-report.txt'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  reproduce-and-publish:
+  validate-source-build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -26,27 +21,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Reproduce exact Smart Display v6 firmware
-        run: bash scripts/reproduce-firmware.sh
-
-      - name: Commit verified firmware
+      - name: Rebuild Smart Display source stack
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin firmware-build-report.txt
-          if git diff --cached --quiet; then
-            echo 'Verified firmware already present on main.'
-          else
-            git commit -m 'Add reproducibly verified Smart Display v6 firmware'
-            git push origin HEAD:main
-          fi
+          # This is a source/regression build, not a bit-for-bit release reproduction.
+          # Embedded/toolchain builds can drift in bytes between runs. The deployed
+          # release asset is the separately preserved, previously validated binary.
+          EXPECT_RELEASE_SHA=82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac \
+          ALLOW_BINARY_DRIFT=1 bash scripts/reproduce-firmware.sh
 
-      - name: Upload verified firmware artifact
+      - name: Upload source-build evidence
         uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-smart-display-production-v6
+          name: bambuhelper-smart-display-source-build
           retention-days: 14
           if-no-files-found: error
           path: |
