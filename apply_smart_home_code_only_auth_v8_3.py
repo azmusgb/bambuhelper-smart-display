@@ -173,10 +173,38 @@ def patch_web_server(repo: Path) -> None:
     p.write_text(text, encoding="utf-8")
 
 
+def patch_build_identity(repo: Path) -> None:
+    """Make the physical device identify the actual release candidate."""
+    build = repo / "include" / "smart_home_build.h"
+    text = build.read_text(encoding="utf-8")
+    text = replace_once(
+        text,
+        '#define SMART_HOME_VERSION "v8.0"',
+        '#define SMART_HOME_VERSION "v8.3"',
+        "Smart Home version identity",
+    )
+    text = replace_once(
+        text,
+        '#define SMART_HOME_BUILD_LABEL "Smart Home v8.0 Hardening RC"',
+        '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 Hardening RC"',
+        "Smart Home build label",
+    )
+    build.write_text(text, encoding="utf-8")
+
+    hub = repo / "src" / "smart_hub.cpp"
+    text = hub.read_text(encoding="utf-8")
+    if "Smart Home v8.0" in text:
+        text = text.replace("Smart Home v8.0", "Smart Home v8.3")
+    if "Smart Home v8.3" not in text:
+        raise PatchError("Smart Home v8.3 physical-screen identity missing")
+    hub.write_text(text, encoding="utf-8")
+
+
 def apply(repo: Path) -> None:
     patch_web_pages(repo)
     patch_web_app(repo)
     patch_web_server(repo)
+    patch_build_identity(repo)
 
 
 def main() -> int:
@@ -187,7 +215,7 @@ def main() -> int:
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v8.3 email-code-only cloud sign-in applied")
+    print("Smart Home v8.3 email-code-only cloud sign-in + release identity applied")
     return 0
 
 
