@@ -2,6 +2,8 @@
 from pathlib import Path
 import argparse
 
+from apply_smart_home_secret_safe_backups_v8_2 import apply as apply_secret_safe_backups
+
 
 class PatchError(RuntimeError):
     pass
@@ -54,6 +56,10 @@ def apply(repo: Path) -> None:
 
     p.write_text(text, encoding="utf-8")
 
+    # v8.2 stays composed after the route-coverage fix so the existing CI entry
+    # point validates the whole hardened stack without duplicating the pipeline.
+    apply_secret_safe_backups(repo)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -63,4 +69,4 @@ if __name__ == "__main__":
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v8.1 route coverage fix applied")
+    print("Smart Home v8.1 route coverage + v8.2 secret-safe backups applied")
