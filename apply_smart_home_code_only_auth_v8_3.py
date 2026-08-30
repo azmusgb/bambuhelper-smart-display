@@ -17,32 +17,68 @@ def replace_once(text: str, old: str, new: str, name: str) -> str:
     return text.replace(old, new, 1)
 
 
+def regex_once(text: str, pattern: str, repl: str, name: str, flags: int = 0) -> str:
+    updated, count = re.subn(pattern, repl, text, count=1, flags=flags)
+    if count != 1:
+        raise PatchError(f"{name}: expected exactly 1 match, found {count}")
+    return updated
+
+
 def patch_web_pages(repo: Path) -> None:
     p = repo / "include" / "web_pages.h"
     text = p.read_text(encoding="utf-8")
 
-    text = replace_once(
+    # Earlier Smart Home layers have changed this explanatory copy over time.
+    # Anchor to the stable sign-in container + mode selector instead of prose.
+    banner = (
+        '<div class="banner" style="margin-bottom:var(--sp-3)">'
+        '<span class="dot" style="background:var(--success)"></span><div>'
+        '<strong>Passwordless sign-in.</strong>'
+        '<div class="small text-dim" style="margin-top:4px">'
+        'Smart Home v8 uses Bambu email-code authentication only. '
+        'Your Bambu account password is never accepted by this local HTTP portal.'
+        '</div></div></div>'
+    )
+    text = regex_once(
         text,
-        '<p class="small text-dim" style="margin:0 0 var(--sp-3);line-height:1.6">The device signs in and fetches the token itself. This page has no password and runs over plain HTTP, so what you type here crosses your network unencrypted - use it on a network you trust.</p>',
-        '<div class="banner" style="margin-bottom:var(--sp-3)"><span class="dot" style="background:var(--success)"></span><div><strong>Passwordless sign-in.</strong><div class="small text-dim" style="margin-top:4px">Smart Home v8 uses Bambu email-code authentication only. Your Bambu account password is never accepted by this local HTTP portal.</div></div></div>',
+        r'(<div id="cl_signinWrap"[^>]*>\s*).*?(\s*<div class="seg"\s+style="margin-bottom:var\(--sp-3\)"[^>]*>)',
+        lambda m: m.group(1) + banner + m.group(2),
         "passwordless banner",
+        re.S,
     )
 
-    text = replace_once(
+    selector = (
+        '<div class="seg" style="margin-bottom:var(--sp-3)">\n'
+        '          <button type="button" id="cl-mode-pass-btn" aria-pressed="false" disabled style="display:none">Password</button>\n'
+        '          <button type="button" id="cl-mode-code-btn" aria-pressed="true" disabled>Email code</button>\n'
+        '        </div>'
+    )
+    text = regex_once(
         text,
-        '<div class="seg" style="margin-bottom:var(--sp-3)">\n          <button type="button" id="cl-mode-pass-btn" aria-pressed="true" onclick="clSetLoginMode(\'password\')">Password</button>\n          <button type="button" id="cl-mode-code-btn" aria-pressed="false" onclick="clSetLoginMode(\'code\')">Email code</button>\n        </div>',
-        '<div class="seg" style="margin-bottom:var(--sp-3)">\n          <button type="button" id="cl-mode-pass-btn" aria-pressed="false" disabled style="display:none">Password</button>\n          <button type="button" id="cl-mode-code-btn" aria-pressed="true" disabled>Email code</button>\n        </div>',
+        r'<div class="seg"\s+style="margin-bottom:var\(--sp-3\)"[^>]*>\s*'
+        r'<button[^>]*id="cl-mode-pass-btn"[^>]*>Password</button>\s*'
+        r'<button[^>]*id="cl-mode-code-btn"[^>]*>Email code</button>\s*</div>',
+        selector,
         "login mode selector",
+        re.S,
     )
 
-    text = re.sub(
-        r'<div id="cl_passWrap">',
-        '<div id="cl_passWrap" style="display:none">',
+    text = regex_once(
         text,
-        count=1,
+        r'<div id="cl_passWrap"[^>]*>',
+        '<div id="cl_passWrap" style="display:none">',
+        "hide password field",
     )
-    if 'id="cl_passWrap" style="display:none"' not in text:
-        raise PatchError("password field could not be hidden")
+
+    required = [
+        "Passwordless sign-in.",
+        'id="cl-mode-pass-btn" aria-pressed="false" disabled style="display:none"',
+        'id="cl-mode-code-btn" aria-pressed="true" disabled',
+        'id="cl_passWrap" style="display:none"',
+    ]
+    for needle in required:
+        if needle not in text:
+            raise PatchError(f"passwordless markup validation failed: missing {needle}")
 
     p.write_text(text, encoding="utf-8")
 
@@ -51,17 +87,14 @@ def patch_web_app(repo: Path) -> None:
     p = repo / "web" / "app.js"
     text = p.read_text(encoding="utf-8")
 
-    text = replace_once(text, "var clLoginMode = 'password';", "var clLoginMode = 'code';", "default email-code mode")
+    text = regex_once(
+        text,
+        r"var\s+clLoginMode\s*=\s*['\"](?:password|code)['\"];",
+        "var clLoginMode = 'code';",
+        "default email-code mode",
+    )
 
-    old = '''function clSetLoginMode(m){
-  clLoginMode = m;
-  document.getElementById('cl-mode-pass-btn').setAttribute('aria-pressed', m === 'password');
-  document.getElementById('cl-mode-code-btn').setAttribute('aria-pressed', m === 'code');
-  document.getElementById('cl_passWrap').style.display = (m === 'password') ? '' : 'none';
-  document.getElementById('cl_signinBtn').textContent = (m === 'password') ? 'Sign in' : 'Email me a code';
-}
-'''
-    new = '''function clSetLoginMode(m){
+    new_mode_fn = '''function clSetLoginMode(m){
   // Smart Home v8.3 intentionally permits only the Bambu email-code flow.
   clLoginMode = 'code';
   var passBtn = document.getElementById('cl-mode-pass-btn');
@@ -71,29 +104,44 @@ def patch_web_app(repo: Path) -> None:
   if (codeBtn) codeBtn.setAttribute('aria-pressed', 'true');
   if (passWrap) passWrap.style.display = 'none';
   document.getElementById('cl_signinBtn').textContent = 'Email me a code';
-}
-'''
-    text = replace_once(text, old, new, "force email-code mode")
-
-    text = replace_once(
+}'''
+    text = regex_once(
         text,
-        "  clSetAuthMethod('signin');\n  fetch('/cloud/login/status')",
-        "  clSetAuthMethod('signin');\n  clSetLoginMode('code');\n  fetch('/cloud/login/status')",
-        "initialize code-only mode",
+        r'function\s+clSetLoginMode\s*\(m\)\s*\{.*?\n\}',
+        new_mode_fn,
+        "force email-code mode",
+        re.S,
     )
 
-    old_branch = '''  p.append('mode', clLoginMode);
-  if (clLoginMode === 'password'){
-    p.append('password', document.getElementById('cl_pass').value);
-    p.append('save', document.getElementById('cl_savePass').checked ? '1' : '0');
-  }
-'''
-    new_branch = '''  p.append('mode', 'code');
-'''
-    text = replace_once(text, old_branch, new_branch, "remove browser password serialization")
+    # Initialize the sign-in pane explicitly in code-only mode. Be idempotent if
+    # an earlier compatibility layer already inserted the call.
+    if "clSetLoginMode('code');\n  fetch('/cloud/login/status')" not in text:
+        text = replace_once(
+            text,
+            "  clSetAuthMethod('signin');\n  fetch('/cloud/login/status')",
+            "  clSetAuthMethod('signin');\n  clSetLoginMode('code');\n  fetch('/cloud/login/status')",
+            "initialize code-only mode",
+        )
 
-    if "p.append('password'" in text:
-        raise PatchError("browser password serialization remains")
+    # Remove the browser password serialization branch entirely. The device-side
+    # route is also gated below, so both sides independently enforce the policy.
+    text = regex_once(
+        text,
+        r"  p\.append\('mode',\s*clLoginMode\);\s*"
+        r"if\s*\(clLoginMode\s*===\s*'password'\)\s*\{.*?\n  \}",
+        "  p.append('mode', 'code');",
+        "remove browser password serialization",
+        re.S,
+    )
+
+    forbidden = [
+        "p.append('password'",
+        "p.append('save'",
+        "clLoginMode = 'password'",
+    ]
+    for needle in forbidden:
+        if needle in text:
+            raise PatchError(f"passwordless browser validation failed: {needle} remains")
 
     p.write_text(text, encoding="utf-8")
 
@@ -102,14 +150,9 @@ def patch_web_server(repo: Path) -> None:
     p = repo / "src" / "web_server.cpp"
     text = p.read_text(encoding="utf-8")
 
-    anchor = '''  if (server.arg("mode") == "code") {
-    cloudLoginRequestEmailCode(email.c_str());
-    sendCloudLoginState();
-    return;
-  }
-
-  String password = server.arg("password");
-'''
+    # Replace the existing code-mode fast path with a fail-closed mode gate.
+    # The legacy password implementation can remain below for easier upstream
+    # rebases, but is unreachable because every non-code request returns here.
     replacement = '''  // Smart Home v8.3: this local portal never accepts a Bambu account
   // password. Email-code sign-in gives us a short-lived verification secret
   // instead of transmitting a long-lived password over plain LAN HTTP.
@@ -120,15 +163,25 @@ def patch_web_server(repo: Path) -> None:
   cloudLoginRequestEmailCode(email.c_str());
   sendCloudLoginState();
   return;
-
-  // Kept unreachable for source compatibility with upstream login internals;
-  // the request gate above prevents this legacy password path from executing.
-  String password = server.arg("password");
 '''
-    text = replace_once(text, anchor, replacement, "server password gate")
+    text = regex_once(
+        text,
+        r'  if\s*\(server\.arg\("mode"\)\s*==\s*"code"\)\s*\{\s*'
+        r'cloudLoginRequestEmailCode\(email\.c_str\(\)\);\s*'
+        r'sendCloudLoginState\(\);\s*return;\s*\}\s*',
+        replacement,
+        "server password gate",
+        re.S,
+    )
 
-    if 'server.arg("mode") != "code"' not in text:
-        raise PatchError("server code-only gate missing")
+    required = [
+        'server.arg("mode") != "code"',
+        'Bambu account passwords are not accepted by this portal',
+        'cloudLoginRequestEmailCode(email.c_str())',
+    ]
+    for needle in required:
+        if needle not in text:
+            raise PatchError(f"passwordless server validation failed: missing {needle}")
 
     p.write_text(text, encoding="utf-8")
 
