@@ -58,8 +58,8 @@ def apply(repo: Path) -> None:
     p.write_text(text, encoding="utf-8")
 
     # Compose the post-v8 hardening increments in a deterministic order.
-    # v8.3 enforces policy in request serialization + server routing; portal
-    # markup decoration is deliberately non-authoritative for custom UX builds.
+    # v8.3 now strips credential fields independently of function formatting,
+    # then fails closed if any browser password serialization remains.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
 
