@@ -1,0 +1,45 @@
+name: Promote Smart Home v7.1 validated firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-smart-home-v7-1.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact validated artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v71
+          gh run download 33295355598 --repo azmusgb/bambuhelper-smart-display --name bambuhelper-ws_lcd_350-smart-home-v7-1 --dir /tmp/v71
+          FULL=/tmp/v71/upstream/firmware/v3.8.1/BambuHelper-ws_lcd_350-v3.8.1-Full.bin
+          APP=/tmp/v71/upstream/.pio/build/ws_lcd_350/firmware.bin
+          REPORT=/tmp/v71/validation-report-v7.1.txt
+          test "$(stat -c%s "$FULL")" = 2208400
+          test "$(stat -c%s "$APP")" = 2142864
+          echo '9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb  '"$FULL" | sha256sum -c -
+          echo '938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c  '"$APP" | sha256sum -c -
+          grep -Fq 'shared_layout_regression=jc3248w535_passed' "$REPORT"
+          mkdir -p firmware
+          cp "$FULL" firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin
+          cp "$APP" firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin
+          cp "$REPORT" validation-report-v7.1.txt
+      - name: Commit validated artifacts to main
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin validation-report-v7.1.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add validated Smart Home v7.1 Full and OTA firmware'
+          git push origin HEAD:main
