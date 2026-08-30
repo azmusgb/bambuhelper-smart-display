@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/finalize-smart-home-v7-1.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Update installer for v7.1 and Wi-Fi OTA
         shell: bash
         run: |
@@ -80,69 +82,16 @@ jobs:
           The next release gate is physical acceptance of the v7.1 visual layout on the actual Waveshare display.
           MD
 
-      - name: Strengthen production validation
-        shell: bash
-        run: |
-          cat > .github/workflows/release-main.yml <<'YML'
-          name: Validate production Smart Home release
-          on:
-            push:
-              branches: [main]
-              paths:
-                - 'release.json'
-                - 'build.py'
-                - 'index.html'
-                - 'app.js'
-                - 'firmware/**'
-                - 'validation-report-v7.1.txt'
-                - '.github/workflows/release-main.yml'
-            workflow_dispatch:
-          permissions:
-            contents: read
-          jobs:
-            validate-release:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - name: Validate installer and all preserved firmware
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    node --check app.js
-                    python3 build.py
-                    python3 - <<'PY'
-                    import hashlib,json
-                    from pathlib import Path
-                    r=json.loads(Path('release.json').read_text())
-                    assert r['release']=='production-rc-v7.1'
-                    assert r['board']['id']=='ws_lcd_350'
-                    assert r['profiles']['smart-home-v7.1']['recommended'] is True
-                    expected={
-                      'smart-home-v7.1':(2208400,'9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb'),
-                      'smart-home-v7':(2207472,'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'),
-                      'smart-display-v6':(2207040,'82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac')}
-                    for pid,(size,sha) in expected.items():
-                      p=r['profiles'][pid]; raw=Path(p['file']).read_bytes()
-                      assert len(raw)==size and hashlib.sha256(raw).hexdigest()==sha
-                      pub=(Path('dist')/p['file']).read_bytes()
-                      assert hashlib.sha256(pub).hexdigest()==sha
-                    ota=r['profiles']['smart-home-v7.1']
-                    raw=Path(ota['otaFile']).read_bytes()
-                    assert len(raw)==2142864
-                    assert hashlib.sha256(raw).hexdigest()=='938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c'
-                    print('production-rc-v7.1 contract: PASS')
-                    PY
-                    grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.1.txt
-                    grep -Fq 'custom_release_identity=Smart_Home_v7.1_ux71' validation-report-v7.1.txt
-          YML
-
-      - name: Remove one-time promotion workflows and commit
+      - name: Commit production site updates
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/workflows/promote-smart-home-v7-1.yml .github/workflows/finalize-smart-home-v7-1.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Finalize Smart Home v7.1 production release'
+          git add app.js index.html README.md
+          if git diff --cached --quiet; then
+            echo 'No site changes needed.'
+            exit 0
+          fi
+          git commit -m 'Finalize Smart Home v7.1 installer and OTA path'
           git push origin HEAD:main
