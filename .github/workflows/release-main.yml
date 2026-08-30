@@ -1,0 +1,55 @@
+name: Reproduce and publish Smart Display firmware
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'firmware/**'
+      - 'firmware-build-report.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reproduce-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Reproduce exact Smart Display v6 firmware
+        run: bash scripts/reproduce-firmware.sh
+
+      - name: Commit verified firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin firmware-build-report.txt
+          if git diff --cached --quiet; then
+            echo 'Verified firmware already present on main.'
+          else
+            git commit -m 'Add reproducibly verified Smart Display v6 firmware'
+            git push origin HEAD:main
+          fi
+
+      - name: Upload verified firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-smart-display-production-v6
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
+            firmware-build-report.txt
+            validation-report.txt
