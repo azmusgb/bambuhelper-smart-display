@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 
 from apply_smart_home_secret_safe_backups_v8_2 import apply as apply_secret_safe_backups
+from apply_smart_home_code_only_auth_v8_3 import apply as apply_code_only_auth
 
 
 class PatchError(RuntimeError):
@@ -56,9 +57,9 @@ def apply(repo: Path) -> None:
 
     p.write_text(text, encoding="utf-8")
 
-    # v8.2 stays composed after the route-coverage fix so the existing CI entry
-    # point validates the whole hardened stack without duplicating the pipeline.
+    # Compose the post-v8 hardening increments in a deterministic order.
     apply_secret_safe_backups(repo)
+    apply_code_only_auth(repo)
 
 
 if __name__ == "__main__":
@@ -69,4 +70,4 @@ if __name__ == "__main__":
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v8.1 route coverage + v8.2 secret-safe backups applied")
+    print("Smart Home v8.1 route coverage + v8.2 secret-safe backups + v8.3 passwordless cloud auth applied")
