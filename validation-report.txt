@@ -1,0 +1,8 @@
+BambuHelper Smart Display production repository
+==============================================
+firmware_sha256=82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac
+firmware_size=2207040
+compressed_xz_size=1016236
+release_profile=smart-display
+board=ws_lcd_350
+source_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
