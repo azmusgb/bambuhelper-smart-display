@@ -1,0 +1,18 @@
+BambuHelper ws_lcd_350 Smart Display Platform v6 validation
+==========================================================
+upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+board=ws_lcd_350
+panel=ST7796_320x480_FT6336
+layers=v1,v1-device,v2,v3,v4,v5,v6
+hub_screen_states=PASS
+hub_home_page=PASS
+hub_workshop_page=PASS
+hub_custom_json_feed=PASS
+hub_system_page=PASS
+hub_web_config=PASS
+hub_printer_priority_integration=PASS
+shared_layout_regression=jc3248w535_passed
+full_image=upstream/firmware/v3.8.1/BambuHelper-ws_lcd_350-v3.8.1-Full.bin
+SHA256:
+82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac  upstream/firmware/v3.8.1/BambuHelper-ws_lcd_350-v3.8.1-Full.bin
+44dc634240f5b2dd5dfd255fcd2a8ae3d0d9c9b5e740f523b0982c5445483cd7  upstream/.pio/build/ws_lcd_350/firmware.bin
