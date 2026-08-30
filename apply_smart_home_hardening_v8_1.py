@@ -45,7 +45,8 @@ def apply(repo: Path) -> None:
     # RC2 removes the full-frame System redraw found on physical WS350.
     # RC3 replaces browser Digest challenges with a RAM-only session login and
     # pauses background polling during OTA so the ESP32 single-client server can
-    # complete the upload/response without authentication races.
+    # complete the upload/response without authentication races. Physical-test
+    # regression covered: Safari prompt storm + OTA 98% unexpected response.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
     apply_system_stability(repo)
