@@ -47,7 +47,8 @@ def apply(repo: Path) -> None:
     # RC3 replaces browser Digest challenges with a RAM-only session login,
     # pauses background polling during OTA so the ESP32 single-client server can
     # complete the upload/response without authentication races, and marks the
-    # physical build explicitly as RC3.
+    # physical build explicitly as RC3. Provenance anchoring is intentionally
+    # based on the stable System header so renderer refactors do not break CI.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
     apply_system_stability(repo)
