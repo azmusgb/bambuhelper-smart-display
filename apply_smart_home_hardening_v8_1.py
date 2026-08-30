@@ -4,6 +4,7 @@ import argparse
 
 from apply_smart_home_secret_safe_backups_v8_2 import apply as apply_secret_safe_backups
 from apply_smart_home_code_only_auth_v8_3 import apply as apply_code_only_auth
+from apply_smart_home_system_stability_v8_3_rc2 import apply as apply_system_stability
 
 
 class PatchError(RuntimeError):
@@ -37,11 +38,13 @@ def apply(repo: Path) -> None:
 
     p.write_text(text, encoding="utf-8")
 
-    # Compose the post-v8 hardening increments in a deterministic order.
+    # Compose the post-v8 hardening increments in deterministic order.
     # v8.3 strips wrapped credential serialization calls and then asserts no
     # password/save fields remain before the firmware is allowed to build.
+    # RC2 then removes the full-frame System redraw found on physical WS350.
     apply_secret_safe_backups(repo)
     apply_code_only_auth(repo)
+    apply_system_stability(repo)
 
 
 if __name__ == "__main__":
@@ -52,4 +55,4 @@ if __name__ == "__main__":
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v8.1 route coverage + v8.2 secret-safe backups + v8.3 passwordless cloud auth applied")
+    print("Smart Home v8.3 RC2: hardening + secret-safe backups + passwordless auth + System display stability applied")
