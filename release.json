@@ -1,5 +1,5 @@
 {
-  "release": "production-rc-v7.1",
+  "release": "production-rc-v7.2",
   "sourceCommit": "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4",
   "board": {
     "id": "ws_lcd_350",
@@ -11,9 +11,21 @@
     "psram": "8 MB"
   },
   "profiles": {
-    "smart-home-v7.1": {
-      "label": "Smart Home v7.1",
+    "smart-home-v7.2": {
+      "label": "Smart Home v7.2",
       "recommended": true,
+      "version": "BambuHelper v3.8.1 + Smart Home v7.2 Display Stability",
+      "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin",
+      "size": 2208288,
+      "sha256": "ed72f08e4977edd14dc7590a129469405d81e0f565f327402ea5e5190543233a",
+      "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin",
+      "otaSize": 2142752,
+      "otaSha256": "3eb17d01fb980dbea82e07242bb385ea35b6035b3b57038616b0579f846a95fc",
+      "description": "Recommended: v7.1 visual UX plus a video-driven display-stability pass. Workshop no longer clears the full panel on every render cycle; dynamic redraws are rate-limited and the header/footer stay stable."
+    },
+    "smart-home-v7.1": {
+      "label": "Smart Home v7.1 (rollback)",
+      "recommended": false,
       "version": "BambuHelper v3.8.1 + Smart Home v7.1 UX",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin",
       "size": 2208400,
@@ -21,16 +33,16 @@
       "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin",
       "otaSize": 2142864,
       "otaSha256": "938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c",
-      "description": "Recommended: physically informed 320×480 UX pass with a stronger progress hierarchy, detailed AMS tray cards, X2D dual-nozzle thermal cards, safe bottom spacing, and explicit Smart Home v7.1 build identity."
+      "description": "Previous physical UX build retained as immediate rollback."
     },
     "smart-home-v7": {
-      "label": "Smart Home v7 (rollback)",
+      "label": "Smart Home v7 (older rollback)",
       "recommended": false,
       "version": "v3.8.1 + Smart Home Navigation v7",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin",
       "size": 2207472,
       "sha256": "c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7",
-      "description": "Previous physically validated navigation build retained as rollback."
+      "description": "Navigation-fix release retained as older rollback."
     },
     "smart-display-v6": {
       "label": "Smart Display v6 (legacy rollback)",
