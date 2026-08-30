@@ -1,0 +1,26 @@
+name: Deploy Smart Home v7.1 to Netlify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-netlify-v7-1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source before deployment
+        run: |
+          set -euo pipefail
+          node --check app.js
+          python3 build.py
+      - name: Deploy existing Netlify project
+        run: |
+          set -euo pipefail
+          npx -y @netlify/mcp@latest --site-id a73310ef-76fb-4f20-9228-3024b30a4691 --proxy-path "https://netlify-mcp.netlify.app/proxy/eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..yYZCLIzsSsihBBPY.Ca2xYbc9AjF6MYiNmtGbSBYIJgqS8DCuUzZc8e-NQUoBsZ5l3NVUnaPPzKXi_e2Qy4cvBmd_NvNsxa-HD2KWHNnB5-CnWpmKVTJhRwDKCtkXo4Ln8_RdW1yN3Jlrzq63cvd8ec-AfDRhNEa2zJXL_UrZN9vj0hPpyGhFJMH6-kA4fccmYMMmlXz_2wCNZPlUyXY8x5dsl-cEd6UoKitZ0RHsicCN_x-1Kf9BOIyi2xREMrx4ZGJXXcalYmVSCKXW42MQTP4hvKAqeI1JeCBdZgv-oJ7FY2C_BhhhVTdPpZipcS8maLETqByI-y_4rz_TIOAmSPBxOAjjjX2Jt221WYmvRu9e5Fe7pHGb4Y_s_z8LYbV07OZodFrA2IQh9vtVWA9j24Jn.DNmCAGvWi9uS_IlhA5I70g"
