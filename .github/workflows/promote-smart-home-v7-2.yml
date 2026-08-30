@@ -1,0 +1,46 @@
+name: Promote Smart Home v7.2 validated firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-smart-home-v7-2.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact validated v7.2 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v72
+          gh run download 33297286792 --repo azmusgb/bambuhelper-smart-display --name 'bambuhelper-ws_lcd_350-smart-home-v7.2' --dir /tmp/v72
+          FULL=/tmp/v72/upstream/firmware/v3.8.1/BambuHelper-ws_lcd_350-v3.8.1-Full.bin
+          APP=/tmp/v72/upstream/.pio/build/ws_lcd_350/firmware.bin
+          REPORT=/tmp/v72/validation-report-v7.2.txt
+          test "$(stat -c%s "$FULL")" = 2208288
+          test "$(stat -c%s "$APP")" = 2142752
+          echo 'ed72f08e4977edd14dc7590a129469405d81e0f565f327402ea5e5190543233a  '"$FULL" | sha256sum -c -
+          echo '3eb17d01fb980dbea82e07242bb385ea35b6035b3b57038616b0579f846a95fc  '"$APP" | sha256sum -c -
+          grep -Fq 'workshop_full_screen_clear_only_on_entry=PASS' "$REPORT"
+          grep -Fq 'shared_layout_regression=jc3248w535_passed' "$REPORT"
+          mkdir -p firmware
+          cp "$FULL" firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin
+          cp "$APP" firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin
+          cp "$REPORT" validation-report-v7.2.txt
+      - name: Commit validated v7.2 artifacts
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin validation-report-v7.2.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add validated Smart Home v7.2 Full and OTA firmware'
+          git push origin HEAD:main
