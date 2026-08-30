@@ -1,0 +1,1 @@
+Trigger reproducible Smart Display v6 firmware validation.
