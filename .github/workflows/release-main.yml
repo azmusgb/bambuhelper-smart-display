@@ -1,51 +1,69 @@
-name: Validate Smart Home release metadata
+name: Validate production Smart Home release
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'release.json'
+      - 'build.py'
+      - 'index.html'
+      - 'app.js'
+      - 'firmware/**'
+      - '.github/workflows/release-main.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  validate-release-metadata:
+  validate-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
 
-      - name: Validate installer source and release manifest
+      - name: Validate installer and every firmware profile
         shell: bash
         run: |
           set -euo pipefail
           node --check app.js
+          python3 build.py
           python3 - <<'PY'
-          import json
+          import hashlib, json
           from pathlib import Path
-          r=json.loads(Path('release.json').read_text())
-          assert r['release']=='production-rc-v7'
-          assert r['board']['id']=='ws_lcd_350'
-          p=r['profiles']['smart-home-v7']
-          assert p['recommended'] is True
-          assert p['size']==2207472
-          assert p['sha256']=='c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'
-          rb=r['profiles']['smart-display-v6']
-          assert rb['size']==2207040
-          assert rb['sha256']=='82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac'
-          print('Smart Home v7 release metadata contract: PASS')
+
+          release=json.loads(Path('release.json').read_text())
+          assert release['release']=='production-rc-v7'
+          assert release['sourceCommit']=='8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
+          assert release['board']['id']=='ws_lcd_350'
+          assert release['profiles']['smart-home-v7']['recommended'] is True
+          assert 'smart-display-v6' in release['profiles']
+
+          expected={
+              'smart-home-v7': (2207472, 'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'),
+              'smart-display-v6': (2207040, '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac'),
+          }
+          for profile_id, profile in release['profiles'].items():
+              assert profile_id in expected, profile_id
+              expected_size, expected_sha = expected[profile_id]
+              assert profile['size']==expected_size, profile_id
+              assert profile['sha256']==expected_sha, profile_id
+              raw=Path(profile['file']).read_bytes()
+              assert len(raw)==profile['size'], profile_id
+              assert hashlib.sha256(raw).hexdigest()==profile['sha256'], profile_id
+              published=(Path('dist')/profile['file']).read_bytes()
+              assert hashlib.sha256(published).hexdigest()==profile['sha256'], profile_id
+              print(profile_id, 'PASS', profile['sha256'])
           PY
 
-      - name: Verify preserved release assets
+      - name: Validate v7 physical-fix evidence
         shell: bash
         run: |
           set -euo pipefail
-          V7=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7-validated.bin
-          V6=firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-display-v6-validated.bin
-          test "$(stat -c%s "$V7")" = '2207472'
-          echo 'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7  '"$V7" | sha256sum -c -
-          test "$(stat -c%s "$V6")" = '2207040'
-          echo '82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac  '"$V6" | sha256sum -c -
           grep -Fq 'legacy_clock_replaced_by_smart_home=PASS' validation-report-v7.txt
+          grep -Fq 'legacy_clock_upgrade_wake_to_home=PASS' validation-report-v7.txt
+          grep -Fq 'idle_home_immediate_print_preemption=PASS' validation-report-v7.txt
+          grep -Fq 'tap_discoverability_hints=PASS' validation-report-v7.txt
+          grep -Fq 'hub_page_cycle=HOME_WORKSHOP_CUSTOM_SYSTEM_PRINTER_HOME' validation-report-v7.txt
+          grep -Fq 'hms_finish_printer_priority_preserved=PASS' validation-report-v7.txt
           grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.txt
-          python3 build.py
-          test -f dist/$V7
-          test -f dist/$V6
