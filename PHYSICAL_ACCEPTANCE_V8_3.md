@@ -1,109 +1,122 @@
-# Smart Home v8.3 Physical Acceptance Runbook
+# Smart Home v8.3 RC3 — Physical Acceptance
 
-Target hardware: **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)**  
-Firmware base: **BambuHelper v3.8.1**  
-Candidate: **Smart Home v8.3 Hardening RC**
+Release state: **SOFTWARE-VALIDATED / PHYSICAL-RETEST-REQUIRED**
 
-This runbook is the final gate between software validation and promotion to production. Do not merge/promote v8.3 solely because CI is green; the real display, touch controller, Wi-Fi path, printer telemetry, and OTA rollback behavior must be exercised on the physical board.
+Target: **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)**  
+Base: **BambuHelper v3.8.1 @ `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4`**
 
-## 1. Select the correct image
+RC3 exists because physical testing of the earlier v8.3 candidate exposed two real defects:
 
-Use the binaries from the **latest successful `BambuHelper ws_lcd_350 Smart Home v8 hardening` GitHub Actions run** and verify the SHA-256 values against `validation-report-v8.3.txt` in the same artifact.
+- System-screen full-frame repaint/flicker.
+- Safari/iOS repeated Digest-auth prompts, with manual OTA reaching about 98% and ending with `Update failed: unexpected response`.
 
-- **Existing BambuHelper / Smart Home installation:** use the `...Smart-Home-v8.3-RC-OTA.bin` application image through the device's manual OTA page.
-- **First install or recovery only:** use the `...Full-smart-home-v8.3-rc.bin` merged image with the established full-flash/recovery procedure.
+RC2 removed the System full-frame repaint. RC3 removes browser-native Digest challenges, replaces them with a RAM-only session login, and pauses background polling for the duration of manual OTA.
 
-Never substitute a binary for another board target.
+## 1. Correct images
 
-## 2. Capture pre-upgrade evidence
+For an already-running BambuHelper / Smart Home device, use:
 
-Before flashing:
+`BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin`
 
-- Record the currently installed Smart Home/BambuHelper version.
-- Export settings if desired. Treat older exports as potentially secret-bearing; v8.3 exports are intentionally redacted.
-- Record printer connection mode (LAN or Cloud), configured printer(s), and AMS visibility.
-- Photograph or record the current Home / Workshop / System screens for visual comparison.
+SHA-256:
 
-## 3. OTA upgrade acceptance
+`499a73a43dc27b0ccfea3688115bda11b0ef3d972a80ed6e9e0b0a90d97d67fc`
 
-For an already-running device:
+For USB first-install/recovery only:
 
-1. Open the device portal on the trusted LAN.
-2. Confirm the station-mode portal requires Digest authentication.
-3. Read the current per-boot admin code from the physical **System** screen and authenticate as `admin`.
-4. Select the v8.3 OTA image.
-5. Confirm the browser computes and submits SHA-256 before upload.
-6. Start the update and allow the device to reboot normally.
-7. Do not power-cycle during image write or first reboot.
+`BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin`
 
-**PASS:** update completes, device reboots, display initializes, touch works, and System screen reports **Smart Home v8.3**.
+SHA-256:
 
-## 4. Display and touch acceptance
+`21adbffad9854271acb2a93b05fe6e0df7d6e24113276f1bbad7a17e46d8c737`
 
-Verify on the actual 320×480 panel:
+Never substitute a firmware image for another board target.
 
-- No boot loop, white screen, inverted display, or persistent corruption.
-- Touch coordinates map correctly across all screen regions.
-- Home → Workshop → Custom → System → Printer navigation remains usable.
-- Workshop no longer exhibits the prior rapid full-screen rolling redraw/pulse behavior.
-- Text remains inside the bezel-safe area.
-- AMS cards, progress, temperatures, ETA, and page/footer elements do not overlap.
-- A print-state/HMS priority screen can still preempt Smart Home when applicable.
+## 2. Boot / display stability
 
-**PASS:** no visible regression from v7.2 display-stability behavior and no touch dead zones.
+After RC3 boots:
 
-## 5. Portal security acceptance
+- System header shows **Smart Home v8.3 RC3**.
+- Leave System visible for at least 30 seconds.
+- Telemetry may update, but the entire panel must not blank, pulse, roll, or rebuild visibly.
+- Verify Home → Workshop → Custom → System → Printer → Home navigation.
+- Confirm touch remains correctly mapped across the screen.
 
-While connected in normal station mode:
+**PASS:** no System or Workshop full-frame flicker and no touch/navigation regression.
 
-- Unauthenticated access to management/configuration routes is rejected.
-- Correct `admin` + current on-device code grants access.
-- Reboot the device and verify the admin code changes.
-- Mutating requests from the normal portal succeed after authentication.
-- A mutation without accepted same-origin provenance is rejected.
-- Captive-portal/AP onboarding remains usable when intentionally placed into onboarding mode.
+## 3. Portal session authentication
 
-**PASS:** management is protected in station mode without breaking first-boot recovery/onboarding.
+In normal station mode:
 
-## 6. Bambu connectivity acceptance
+1. Browse to the device IP.
+2. There must be **no native Safari/browser username-password dialog**.
+3. The browser should redirect to the BambuHelper Smart Home sign-in page.
+4. Enter only the current 10-character **PORTAL CODE** shown on the physical System screen.
+5. After successful sign-in, browse between sections for several minutes.
+6. Background polling must not cause another sign-in prompt.
+7. Reboot the display: the old browser session must no longer authenticate and a new portal code must be generated.
+
+The session token is random, RAM-only, `HttpOnly`, `SameSite=Strict`, and is invalidated by reboot/logout.
+
+**PASS:** one portal-code sign-in per boot, with no repeating native-browser credential prompts.
+
+## 4. Same-origin mutation protection
+
+After session login:
+
+- Normal configuration mutations from the portal succeed.
+- An authenticated mutation without accepted Origin/Referer provenance is rejected.
+- AP/captive onboarding remains usable when intentionally entered.
+
+**PASS:** session authentication fixes browser usability without weakening CSRF protection.
+
+## 5. Bambu connectivity
 
 ### LAN mode
 
-- Connect to the P1/X/A-series printer using the configured LAN credentials.
-- Confirm printer state, progress, nozzle/bed/chamber telemetry, current layer, ETA, and AMS data populate.
-- Observe at least one reconnect/recovery cycle if practical (for example, briefly remove Wi-Fi and restore it).
+Confirm printer state, progress, nozzle/bed/chamber telemetry, layer information, ETA and AMS data populate normally. If practical, briefly interrupt Wi-Fi and confirm recovery/reconnection.
 
 ### Cloud mode, if used
 
-- Confirm the portal offers **email-code sign-in only**.
-- Verify the portal does not request or transmit the long-lived Bambu account password.
-- Complete Bambu email-code authentication.
-- Verify cloud token operation after a normal reboot.
+- Portal offers Bambu **email-code sign-in only**.
+- It does not request or transmit a long-lived Bambu account password.
+- Complete email-code authentication and verify token operation after a normal reboot.
 
-**PASS:** required printer telemetry works and cloud authentication does not regress to password mode.
+**PASS:** printer/AMS functionality remains intact and cloud auth does not regress to password mode.
 
-## 7. Secret-safe backup acceptance
+## 6. Secret-safe backup
 
-Export settings from v8.3 and inspect the JSON.
+Export settings JSON and verify:
 
-The export must:
+- `_secretsIncluded` is `false`;
+- Wi-Fi password is omitted/redacted;
+- printer LAN access code is omitted/redacted;
+- cloud identity is omitted/redacted;
+- no Bambu account password is present.
 
-- retain non-secret configuration such as Wi-Fi SSID and printer metadata;
-- report `_secretsIncluded=false`;
-- mark Wi-Fi password, printer LAN access code, and cloud identity as redacted;
-- contain no usable Wi-Fi password, LAN access code, or Bambu account password.
+Restore the redacted backup onto the already-provisioned device.
 
-Then import that redacted backup onto the already provisioned device.
+**PASS:** existing device secrets remain usable instead of being replaced with blanks. A fresh device is expected to require credentials again.
 
-**PASS:** existing secrets remain intact and the printer reconnects without requiring them to be re-entered.
+## 7. Manual OTA reliability — RC3 critical retest
 
-A restore onto a fresh/unprovisioned device is expected to require Wi-Fi and printer credentials again.
+From a browser that is already signed in to the RC3 portal:
 
-## 8. Runtime health acceptance
+1. Select a valid OTA image.
+2. Browser computes SHA-256 before upload.
+3. Background hardware/status polling stops while the ESP32 WebServer owns the long-running upload connection.
+4. Upload reaches **100%**.
+5. UI receives JSON success rather than `unexpected response`.
+6. Device restarts automatically.
+7. On reconnect, use the newly generated portal code because reboot invalidates the old RAM session.
 
-Leave the device running for a meaningful observation window, ideally including an active print.
+RC3 also reports HTTP status/body details for failed OTA responses rather than hiding every non-JSON response behind `unexpected response`.
 
-Record from the System/diagnostics surface:
+**PASS:** successful OTA returns a success response and automatic reboot occurs without a native auth challenge.
+
+## 8. Runtime health
+
+Observe the device for at least 15 minutes, preferably including active printer telemetry. Record:
 
 - free heap;
 - minimum free heap;
@@ -112,44 +125,30 @@ Record from the System/diagnostics surface:
 - Wi-Fi RSSI;
 - reconnect behavior.
 
-Watch for:
+**PASS:** no continuous memory decline, allocation-failure loop, watchdog reset, UI lockup, or disappearing AMS state.
 
-- steady heap decline;
-- repeated TLS/MQTT allocation failures;
-- spontaneous reboot/watchdog reset;
-- touch/display lock-up;
-- AMS state disappearing after partial updates.
+## 9. Recovery readiness
 
-**PASS:** memory remains bounded/stable and no unexplained reset or UI lockup occurs.
-
-## 9. OTA failure and rollback acceptance
-
-Where practical, validate recovery behavior without intentionally corrupting the device:
-
-- Confirm an upload with an incorrect/missing SHA-256 is rejected before activation.
-- Confirm the updater does **not** downgrade to insecure TLS (`setInsecure()` fallback is removed by contract).
-- Confirm the normal rollback/recovery path remains available if the new slot fails boot health checks.
-- Keep the last physically accepted Full image available before testing.
+- Keep the RC3 Full image available before promotion.
+- Incorrect/missing manual OTA SHA-256 must be rejected before activation.
+- TLS must never fall back to `setInsecure()`.
+- Existing alternate-slot/recovery mechanisms remain available.
 
 ## 10. Promotion decision
 
-Promote v8.3 only when all required categories are PASS:
-
 | Gate | Result |
 |---|---|
-| Boot / display / touch | PENDING |
-| Smart Home navigation / redraw stability | PENDING |
-| Digest-auth portal / rotating admin code | PENDING |
-| Same-origin mutation protection | PENDING |
-| Local printer + AMS telemetry | PENDING |
-| Email-code cloud auth, if used | PENDING / N/A |
-| Secret-safe export / restore | PENDING |
-| Manual OTA SHA-256 | PENDING |
-| Runtime heap / PSRAM stability | PENDING |
-| Rollback / recovery readiness | PENDING |
+| Boot / touch | RETEST |
+| System + Workshop redraw stability | RETEST |
+| Portal-code session auth / no Safari prompt storm | RETEST |
+| Same-origin mutation protection | RETEST |
+| Local printer + AMS telemetry | RETEST |
+| Email-code cloud auth, if used | RETEST / N/A |
+| Secret-safe export / restore | RETEST |
+| Manual OTA SHA-256 + 100% success response | RETEST |
+| Runtime heap / PSRAM stability | RETEST |
+| Rollback / recovery readiness | RETEST |
 
-### Acceptance evidence
+Do not merge/promote PR #2 until the physical WS350 passes these gates.
 
-For each failed item, capture the screen/page, exact action, expected result, actual result, and whether the device recovered without reflashing. Attach that evidence to PR #2 before changing the promotion status.
-
-**Release state until this checklist is complete: `SOFTWARE-VALIDATED / PHYSICAL-ACCEPTANCE-PENDING`.**
+**Release state: `SOFTWARE-VALIDATED / PHYSICAL-RETEST-REQUIRED`.**
