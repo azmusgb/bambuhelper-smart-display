@@ -17,6 +17,12 @@ v7.1 improvements:
 - System explicitly identifies `Smart Home v7.1`, `ws_lcd_350`, and UX build `ux71` while retaining upstream BambuHelper `3.8.1` as the base-version axis.
 - v7 navigation, printer preemption, HMS/error priority, and print-finish priority remain intact.
 
+
+### Update paths
+- **Existing device:** Wi-Fi OTA is the recommended path. The production installer verifies the OTA image size and SHA-256 in the browser before enabling download.
+- **Fresh install / recovery:** use the verified Full image through ESP Web Tools over USB.
+- Full and OTA images are intentionally different artifacts; never upload the Full image to BambuHelper's OTA page.
+
 ### Validated assets
 - Full/USB: 2,208,400 bytes · SHA-256 `9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb`
 - Wi-Fi OTA/app: 2,142,864 bytes · SHA-256 `938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c`
