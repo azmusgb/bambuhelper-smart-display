@@ -188,3 +188,5 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: v9-artifacts/
+
+# Validation trigger: run RC2 against the current main branch.
