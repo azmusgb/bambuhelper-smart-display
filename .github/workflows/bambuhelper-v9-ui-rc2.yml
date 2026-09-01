@@ -2,7 +2,7 @@ name: BambuHelper ws_lcd_350 Smart Home v9 UI RC2
 
 on:
   push:
-    branches: [smart-home-v9-ui-overhaul]
+    branches: [main]
     paths:
       - 'apply_smart_home_visual_v9.py'
       - 'apply_smart_home_print_ui_v9.py'
