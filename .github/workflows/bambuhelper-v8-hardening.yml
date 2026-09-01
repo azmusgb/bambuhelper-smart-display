@@ -118,7 +118,7 @@ jobs:
           python apply_smart_home_hardening_v8_1.py --repo upstream --apply
           python apply_smart_home_standby_v8_4.py --repo upstream --apply
 
-      - name: Verify composed RC3 invariants
+      - name: Verify composed v8.4 RC1 invariants
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +166,7 @@ jobs:
 
           # Physical fixes/provenance.
           need(hub, 'const bool fullRedraw = full || lastDraw == 0;', 'System stability')
-          need(build, '#define SMART_HOME_VERSION "v8.3"', 'feature version')
+          need(build, '#define SMART_HOME_VERSION "v8.4"', 'feature version')
           need(build, '#define SMART_HOME_BUILD_LABEL "Smart Home v8.4 RC1"', 'RC3 build label')
           need(hub, 'Smart Home v8.4 RC1', 'physical RC1 identity')
           need(hub, 'drawHeader("STANDBY", "Smart Home v8.4", 0);', 'ambient Standby header')
@@ -174,7 +174,7 @@ jobs:
           need(hub, 'standbyLoadedTrayCount', 'Standby AMS summary')
           need(hub, 'minuteKey == lastMinute', 'minute redraw guard')
           need(hub, 'Only changed regions repaint', 'dirty-region Standby rendering')
-          print('RC3 composed invariants: PASS')
+          print('v8.4 RC1 composed invariants: PASS')
           PY
 
       - name: Validate browser SHA-256 helper
