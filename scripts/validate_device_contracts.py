@@ -8,7 +8,6 @@ release cannot claim OTA/discovery support when the generated sources omit it.
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 ROOT = Path("upstream")
 
@@ -38,6 +37,7 @@ def forbid(text: str, needle: str, label: str) -> None:
 web = read("src/web_server.cpp")
 app = read("web/app.js")
 settings = read("src/settings.cpp")
+ssdp = read("src/ssdp_discovery.cpp")
 
 # ---------------------------------------------------------------------------
 # Manual/device OTA contract
@@ -67,29 +67,67 @@ require(app, "X-SHA256", "browser SHA header")
 require(app, "xhr.withCredentials = true;", "authenticated OTA upload")
 require(app, "stopPolling();", "OTA polling pause")
 
-# A browser/network disconnect during reboot is not itself an OTA failure. The
-# UI should distinguish a successful upload/reboot transition from an HTTP
-# error returned before the firmware was accepted.
+# v9.1 must distinguish a completed transfer/reboot transition from a genuine
+# upload failure and expose the device's accepted/error state while still online.
+require(app, "confirmOtaAfterTransportLoss", "reboot-aware OTA confirmation")
+require(app, "uploadTransferred", "OTA transfer completion tracking")
+require(web, "handleManualOtaStatus", "manual OTA status handler")
 require_any(
-    app,
-    ("restart", "reboot", "OTA", "upload"),
-    "OTA completion/reboot handling",
+    web,
+    (
+        'SECURE_GET("/ota/manual/status", handleManualOtaStatus)',
+        'server.on("/ota/manual/status", HTTP_GET, handleManualOtaStatus)',
+    ),
+    "manual OTA status route",
 )
+require(web, 'manualOtaPhase = "accepted"', "definitive OTA acceptance state")
 
 # ---------------------------------------------------------------------------
 # Printer discovery/configuration contract
 # ---------------------------------------------------------------------------
 require(app, "'/lan/scan'", "LAN discovery endpoint")
-require(web, 'server.on("/lan/scan", HTTP_POST', "LAN discovery POST route")
-require(web, 'server.on("/lan/scan", HTTP_GET', "LAN discovery GET compatibility route")
+
+# Security hardening rewrites the raw server.on registrations to SECURE_GET /
+# SECURE_POST. Accept either representation, but require both methods because
+# POST starts a scan while GET polls the in-flight result.
+require_any(
+    web,
+    (
+        'server.on("/lan/scan", HTTP_POST',
+        'SECURE_POST("/lan/scan", handleLanScan)',
+    ),
+    "LAN discovery POST route",
+)
+require_any(
+    web,
+    (
+        'server.on("/lan/scan", HTTP_GET',
+        'SECURE_GET("/lan/scan", handleLanScan)',
+    ),
+    "LAN discovery GET compatibility route",
+)
+
 require_any(app, ("serial", "serialNumber", "serial_number"), "printer serial mapping")
 require_any(app, ("ip", "ipAddress", "ip_address"), "printer IP mapping")
 require_any(app, ("save", "verify", "connection"), "printer verification UI")
 
-# Four-slot configuration must remain represented in the settings layer.
+# Discovery itself must be Bambu-specific and preserve both passive and active
+# discovery paths. Remote-IP fallback avoids losing otherwise-valid printers
+# whose SSDP Location header is absent or malformed.
+require(ssdp, "DevName.bambu.com:", "Bambu SSDP vendor marker")
+require(ssdp, "DevModel.bambu.com:", "Bambu SSDP model marker")
+require(ssdp, "bambuMarker", "Bambu-only SSDP filtering")
+require(ssdp, "sendDiscoveryProbe", "active SSDP discovery")
+require(ssdp, "remoteIp", "SSDP remote-IP fallback")
+require(ssdp, "SSDP_SCAN_MS = 16000", "extended SSDP scan window")
+
+# Four-slot configuration must remain represented in the settings layer. The
+# historical implementation has used either explicit names or indexed slots.
 settings_lower = settings.lower()
-if not any(token in settings_lower for token in ("printer1", "printer_1", "slot1", "slot 1")):
-    raise SystemExit("MISSING printer slot 1 settings contract")
+if not any(token in settings_lower for token in (
+    "printer1", "printer_1", "slot1", "slot 1", "printerconfigs[", "printers["
+)):
+    raise SystemExit("MISSING printer slot settings contract")
 
 # Do not persist a cloud password in plaintext. This is particularly important
 # because printer discovery and cloud fallback share the same settings surface.
@@ -97,8 +135,10 @@ forbid(settings, 'prefs.putString("cl_pass", password)', "plaintext cloud passwo
 
 print("DEVICE CONTRACTS: PASS")
 print("  OTA integrity + authenticated upload: PASS")
+print("  OTA definitive acceptance + reboot recovery: PASS")
 print("  OTA abort-before-activation ordering: PASS")
 print("  LAN printer discovery routes: PASS")
+print("  Bambu-only SSDP + active discovery: PASS")
 print("  printer identity mapping: PASS")
 print("  printer slot persistence: PASS")
 print("  cloud-secret persistence guard: PASS")
