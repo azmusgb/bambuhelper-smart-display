@@ -1,0 +1,43 @@
+name: Release Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run repository release gate
+        run: python3 scripts/validate_release.py
+
+      - name: Validate shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find . -type f -name '*.sh' -not -path './.git/*' -not -path './firmware/build/*' -print0)
+          echo 'Shell syntax: PASS'
+
+      - name: Validate release metadata
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in [Path('release.json'), Path('releases/current.json')]:
+              json.loads(path.read_text(encoding='utf-8'))
+              print(f'{path}: PASS')
+          PY
