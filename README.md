@@ -1,32 +1,57 @@
 # BambuHelper Smart Display
 
-Production installer for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`) + Bambu X2D**.
+Production evolution for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)** on the BambuHelper v3.8.1 core.
 
-## Smart Home v7.2 — recommended
+## Smart Home v8.3 RC3 — physical-test candidate
 
-v7 fixed the legacy-clock navigation defect. v7.1 redesigned Workshop from physical-display feedback. **v7.2 is the display-stability pass driven by the physical-device video.**
+RC3 is the current candidate after physical WS350 testing exposed two release-blocking defects in earlier v8.3 builds:
 
-The video confirms the v7.1 layout is physically running: progress hierarchy, detailed AMS cards, X2D thermal cards, and bottom safe area. It also captures a repeating rolling redraw/pulse near 5 Hz. Inspection found Workshop was clearing the entire TFT every time the hub render loop requested a frame.
+- the System page still performed visible full-frame redraws;
+- browser-native Digest authentication produced repeated Safari/iOS sign-in prompts and interfered with the final response of manual OTA uploads.
 
-v7.2 changes:
-- Full-screen clear only when entering Workshop.
-- Dynamic Workshop repaint minimum interval: 750 ms.
-- Clean/unchanged Workshop refresh: 5 seconds.
-- Only the dynamic body is cleared between updates; header and bottom navigation remain stable.
-- Smart Home identity advances to v7.2.
-- v7.1 layout, tap cycle, printer preemption, HMS/error priority, and print-finish priority are preserved.
+RC3 keeps the v8 security work but changes the browser interaction model:
 
-**Tap cycle:** Home → Workshop → Custom → System → Printer → Home
+- **Portal-code session login:** browse to the device, enter the current 10-character portal code shown on System, then use a random RAM-only `BHSESSION` cookie for the rest of that boot.
+- No `WWW-Authenticate` / native Digest browser prompt in station mode.
+- Session cookie is `HttpOnly`, `SameSite=Strict`, RAM-only, and invalidated on reboot/logout.
+- Same-origin enforcement remains for mutating requests.
+- Manual OTA pauses background polling while the ESP32 single-client WebServer owns the upload connection.
+- OTA retains browser + device SHA-256 verification and now reports useful HTTP failure details instead of a generic `unexpected response`.
+- System full-screen clearing occurs only on page entry; normal telemetry refreshes update in place.
 
-### Validated v7.2 assets
-- Full/USB: 2,208,288 bytes · SHA-256 `ed72f08e4977edd14dc7590a129469405d81e0f565f327402ea5e5190543233a`
-- Wi-Fi OTA/app: 2,142,752 bytes · SHA-256 `3eb17d01fb980dbea82e07242bb385ea35b6035b3b57038616b0579f846a95fc`
-- Validation run: `33297286792`
-- `ws_lcd_350`: PASS
-- shared `jc3248w535` regression build: PASS
+Existing v8 hardening remains:
 
-v7.1, v7, and v6 remain available as rollback profiles.
+- insecure OTA `setInsecure()` fallback removed;
+- device auto-OTA disabled for `ws_lcd_350` pending publisher-authenticity work;
+- Bambu cloud authentication is email-code-only in the local portal;
+- Bambu account passwords are not persisted;
+- settings backups redact Wi-Fi password, printer LAN access code and cloud identity;
+- min-heap, max-block and PSRAM diagnostics are exposed on System.
 
-Production: <https://bambuhelper-smart-display.netlify.app/>
+### Validated RC3 assets
 
-The next release gate is physical comparison of v7.2 against the v7.1 video, specifically whether the visible rolling redraw/pulse is eliminated or materially reduced.
+GitHub Actions run: `33302810825`
+
+- **OTA:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin`
+  - Size: `2,140,592 bytes`
+  - SHA-256: `499a73a43dc27b0ccfea3688115bda11b0ef3d972a80ed6e9e0b0a90d97d67fc`
+- **Full / USB recovery:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin`
+  - Size: `2,206,128 bytes`
+  - SHA-256: `21adbffad9854271acb2a93b05fe6e0df7d6e24113276f1bbad7a17e46d8c737`
+- Actions artifact ZIP SHA-256: `f10a617bd9cf2628aa6f90d76e7048128fade9cb0c5f25fa23fc582dca758bca`
+
+Validation gates passed:
+
+- patch composition / RC3 invariants;
+- browser SHA-256 known-answer test;
+- exact `ws_lcd_350` PlatformIO build;
+- shared `jc3248w535` 320×480 regression build;
+- Full-image merge and packaging.
+
+The artifact was independently unpacked and re-hashed after CI; both firmware hashes match `validation-report-v8.3-rc3.txt`.
+
+**Do not merge/promote yet.** RC3 still requires physical retesting for session login, no repeated Safari prompts, System stability, successful 100% OTA + automatic reboot, printer/AMS telemetry and runtime memory stability. See [`PHYSICAL_ACCEPTANCE_V8_3.md`](PHYSICAL_ACCEPTANCE_V8_3.md).
+
+Production site remains on the currently accepted release until RC3 passes hardware acceptance:
+
+<https://bambuhelper-smart-display.netlify.app/>
