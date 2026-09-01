@@ -1,0 +1,15 @@
+{
+  "channel": "stable",
+  "version": "8.0.0-dev",
+  "name": "Waveshare Workshop OS",
+  "targets": ["ws_lcd_350"],
+  "features": [
+    "workshop-dashboard",
+    "local-control-plane",
+    "ota-ready"
+  ],
+  "validation": {
+    "firmwareBuildRequired": true,
+    "dashboardSmokeTestRequired": true
+  }
+}
