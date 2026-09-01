@@ -1,0 +1,17 @@
+{
+  "app": "Waveshare Workshop OS",
+  "navigation": [
+    "Home",
+    "Printer",
+    "Workshop",
+    "Connections",
+    "Device",
+    "System"
+  ],
+  "services": {
+    "printer": true,
+    "filament": false,
+    "updates": true,
+    "diagnostics": true
+  }
+}

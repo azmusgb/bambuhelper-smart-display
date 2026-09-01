@@ -1,0 +1,31 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for p in Path('.').rglob('*.json'):
+              try:
+                  json.loads(p.read_text())
+              except Exception as e:
+                  raise SystemExit(f'Invalid JSON: {p}: {e}')
+          print('JSON validation passed')
+          PY
+
+      - name: Check ignored build output
+        run: |
+          if git ls-files | grep -q '^firmware/build/'; then
+            echo 'firmware/build must not be tracked'
+            exit 1
+          fi

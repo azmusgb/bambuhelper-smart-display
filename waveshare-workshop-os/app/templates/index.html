@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1020">
+<title>Waveshare Workshop OS</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+<header class="topbar">
+  <div><strong>WH</strong><span>Waveshare Workshop OS</span></div>
+  <div class="live"><i></i><span id="status">Online</span><time id="clock"></time></div>
+</header>
+<nav class="nav" aria-label="Primary" data-nav>
+  <button data-route="home">Home</button><button data-route="printer">Printer</button><button data-route="workshop">Workshop</button><button data-route="connections">Connections</button><button data-route="device">Device</button><button data-route="system">System</button>
+</nav>
+<main>
+<section data-view="home">
+  <div class="hero"><div><small>LOCAL CONTROL PLANE</small><h1>Your workshop, at a glance.</h1><p>Printer status, filament, device health and workshop services in one calm local surface.</p></div><button class="primary" data-route="printer">Open printer</button></div>
+  <div class="section-head"><div><small>NOW</small><h2>Operational status</h2></div><span>Updated live</span></div>
+  <div class="grid">
+    <article class="card"><small>PRINTER</small><h3>Ready</h3><p>Bambu printer monitor</p><button data-route="printer">View printer →</button></article>
+    <article class="card"><small>FILAMENT</small><h3>Available</h3><p>Inventory service</p><button data-route="workshop">Open workshop →</button></article>
+    <article class="card"><small>DEVICE</small><h3>Healthy</h3><p>ESP32 display online</p><button data-route="device">Device health →</button></article>
+    <article class="card"><small>UPDATES</small><h3>Ready</h3><p>OTA release channel</p><button data-route="system">System →</button></article>
+  </div>
+</section>
+<section data-view="printer" hidden><div class="page"><small>PRINTER</small><h1>Printer</h1><p>Live printer and AMS controls will appear here.</p></div></section>
+<section data-view="workshop" hidden><div class="page"><small>WORKSHOP</small><h1>Workshop</h1><p>Filament inventory and workshop services.</p></div></section>
+<section data-view="connections" hidden><div class="page"><small>CONNECTIONS</small><h1>Connections</h1><p>Network and integration status.</p></div></section>
+<section data-view="device" hidden><div class="page"><small>DEVICE</small><h1>Device</h1><p>ESP32 health, display and hardware status.</p></div></section>
+<section data-view="system" hidden><div class="page"><small>SYSTEM</small><h1>System</h1><p>Updates, recovery and diagnostics.</p></div></section>
+</main>
+</div>
+<script src="/static/js/app.js" defer></script>
+</body>
+</html>

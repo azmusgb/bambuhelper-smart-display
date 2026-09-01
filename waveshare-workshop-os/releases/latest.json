@@ -1,0 +1,15 @@
+{
+  "version": "8.0.0",
+  "channel": "development",
+  "device": "ws_lcd_350",
+  "features": [
+    "local-first-dashboard",
+    "service-based-workshop-os",
+    "printer-monitoring",
+    "filament-inventory"
+  ],
+  "validation": {
+    "physical_device": "pending",
+    "firmware": "pending"
+  }
+}
