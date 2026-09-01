@@ -1,8 +1,8 @@
-name: BambuHelper ws_lcd_350 Smart Home v8.3 RC3
+name: BambuHelper ws_lcd_350 Smart Home v8.4 RC1
 
 on:
   push:
-    branches: [smart-home-v8-hardening]
+    branches: [smart-home-v8-4-standby]
     paths:
       - 'apply_smart_home_hardening_v8.py'
       - 'apply_smart_home_hardening_v8_1.py'
@@ -11,6 +11,7 @@ on:
       - 'apply_smart_home_system_stability_v8_3_rc2.py'
       - 'apply_smart_home_session_auth_v8_3_rc3.py'
       - 'apply_smart_home_release_identity_v8_3_rc3.py'
+      - 'apply_smart_home_standby_v8_4.py'
       - '.github/workflows/bambuhelper-v8-hardening.yml'
   workflow_dispatch:
 
@@ -18,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: smart-home-v8-hardening
+  group: smart-home-v8-4-standby
   cancel-in-progress: true
 
 jobs:
@@ -99,7 +100,7 @@ jobs:
           PY
           python -m py_compile apply_*.py
 
-      - name: Apply Smart Home v1-v8.3 RC3 stack
+      - name: Apply Smart Home v1-v8.4 RC1 stack
         shell: bash
         run: |
           set -euo pipefail
@@ -115,8 +116,9 @@ jobs:
           python apply_smart_home_display_stability_v7_2.py --repo upstream --apply
           python apply_smart_home_hardening_v8.py --repo upstream --apply
           python apply_smart_home_hardening_v8_1.py --repo upstream --apply
+          python apply_smart_home_standby_v8_4.py --repo upstream --apply
 
-      - name: Verify composed RC3 invariants
+      - name: Verify composed v8.4 RC1 invariants
         shell: bash
         run: |
           set -euo pipefail
@@ -164,10 +166,15 @@ jobs:
 
           # Physical fixes/provenance.
           need(hub, 'const bool fullRedraw = full || lastDraw == 0;', 'System stability')
-          need(build, '#define SMART_HOME_VERSION "v8.3"', 'feature version')
-          need(build, '#define SMART_HOME_BUILD_LABEL "Smart Home v8.3 RC3"', 'RC3 build label')
-          need(hub, 'Smart Home v8.3 RC3', 'physical RC3 identity')
-          print('RC3 composed invariants: PASS')
+          need(build, '#define SMART_HOME_VERSION "v8.4"', 'feature version')
+          need(build, '#define SMART_HOME_BUILD_LABEL "Smart Home v8.4 RC1"', 'RC3 build label')
+          need(hub, 'Smart Home v8.4 RC1', 'physical RC1 identity')
+          need(hub, 'drawHeader("STANDBY", "Smart Home v8.4", 0);', 'ambient Standby header')
+          need(hub, 'Ready to print', 'Standby readiness state')
+          need(hub, 'standbyLoadedTrayCount', 'Standby AMS summary')
+          need(hub, 'minuteKey == lastMinute', 'minute redraw guard')
+          need(hub, 'Only changed regions repaint', 'dirty-region Standby rendering')
+          print('v8.4 RC1 composed invariants: PASS')
           PY
 
       - name: Validate browser SHA-256 helper
@@ -198,22 +205,22 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v8.3 RC3 validation artifacts
+      - name: Package v8.4 RC1 validation artifacts
         shell: bash
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p v8-artifacts/source-snapshot
-          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin
-          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin
+          cp "$FULL" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.4-RC1-Full.bin
+          cp "$APP" v8-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.4-RC1-OTA.bin
           cp upstream/src/security_manager.cpp v8-artifacts/source-snapshot/security_manager.cpp
           cp upstream/src/web_server.cpp v8-artifacts/source-snapshot/web_server.cpp
           cp upstream/web/app.js v8-artifacts/source-snapshot/app.js
           cp upstream/src/smart_hub.cpp v8-artifacts/source-snapshot/smart_hub.cpp
           cp upstream/include/smart_home_build.h v8-artifacts/source-snapshot/smart_home_build.h
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v8.3 RC3 validation'
+            echo 'BambuHelper ws_lcd_350 Smart Home v8.4 RC1 validation'
             echo 'upstream_commit=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
             echo 'portal_session_auth=PASS'
             echo 'native_digest_prompt_removed=PASS'
@@ -228,16 +235,19 @@ jobs:
             echo 'ota_session_cookie=PASS'
             echo 'ws350_auto_ota_disabled=PASS'
             echo 'system_display_stability_fix=PASS'
-            echo 'build_identity_v8_3_rc3=PASS'
+            echo 'build_identity_v8_4_rc1=PASS'
+            echo 'ambient_standby_layout=PASS'
+            echo 'standby_minute_redraw_guard=PASS'
+            echo 'standby_dirty_region_rendering=PASS'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=RETEST_REQUIRED'
             sha256sum v8-artifacts/*.bin
-          } | tee v8-artifacts/validation-report-v8.3-rc3.txt
+          } | tee v8-artifacts/validation-report-v8.4-rc1.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v8.3-rc3
+          name: bambuhelper-ws_lcd_350-smart-home-v8.4-rc1
           retention-days: 14
           if-no-files-found: error
           path: v8-artifacts/
