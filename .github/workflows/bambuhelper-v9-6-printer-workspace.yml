@@ -191,7 +191,6 @@ jobs:
           cp upstream/include/smart_home_build.h v9.6-artifacts/source-snapshot/smart_home_build.h
           cp upstream/web/app.js v9.6-artifacts/source-snapshot/app.js
           cp upstream/web/app.css v9.6-artifacts/source-snapshot/app.css
-          cp upstream/web/index.htm v9.6-artifacts/source-snapshot/index.htm
           {
             echo 'BambuHelper ws_lcd_350 Smart Home v9.6 Printer Workspace RC1 validation'
             echo 'recovery_foundation=v9.4_RC3_PRESERVED'
