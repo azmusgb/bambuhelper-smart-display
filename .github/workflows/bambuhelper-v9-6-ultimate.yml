@@ -5,6 +5,7 @@ on:
     branches: [evolve/v9-6-ultimate-experience]
     paths:
       - 'apply_smart_home_ultimate_v9_6.py'
+      - 'apply_smart_home_touch_nav_v9_6_1.py'
       - 'apply_smart_home_experience_v9_5.py'
       - '.github/workflows/bambuhelper-v9-6-ultimate.yml'
       - 'scripts/validate_device_contracts.py'
@@ -87,7 +88,7 @@ jobs:
           PY
           python -m py_compile apply_*.py scripts/validate_device_contracts.py
 
-      - name: Apply complete RC3 + v9.5 + v9.6 stack
+      - name: Apply complete RC3 + v9.5 + v9.6 RC2 stack
         shell: bash
         run: |
           set -euo pipefail
@@ -113,31 +114,49 @@ jobs:
           python apply_smart_home_recovery_entry_v9_4_2.py --repo upstream --apply
           python apply_smart_home_experience_v9_5.py --repo upstream --apply
           python apply_smart_home_ultimate_v9_6.py --repo upstream --apply
+          python apply_smart_home_touch_nav_v9_6_1.py --repo upstream --apply
 
       - name: Validate inherited device contracts
         run: python scripts/validate_device_contracts.py
 
-      - name: Verify v9.6 experience and RC3 safety contracts
+      - name: Verify v9.6 RC2 experience and RC3 safety contracts
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
           hub=Path('upstream/src/smart_hub.cpp').read_text()
+          hubh=Path('upstream/src/smart_hub.h').read_text()
           app=Path('upstream/web/app.js').read_text()
           rec=Path('upstream/src/recovery_manager.cpp').read_text()
           web=Path('upstream/src/web_server.cpp').read_text()
           sec=Path('upstream/src/security_manager.cpp').read_text()
           settings=Path('upstream/src/settings.cpp').read_text()
           board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          button=Path('upstream/src/button.cpp').read_text()
+          buttonh=Path('upstream/src/button.h').read_text()
+          touchh=Path('upstream/src/button_touch_backend.h').read_text()
+          focal=Path('upstream/src/button_touch_focaltech.cpp').read_text()
+          main=Path('upstream/src/main.cpp').read_text()
           def need(body, needle, label):
               if needle not in body: raise SystemExit(f'MISSING {label}: {needle}')
           def forbid(body, needle, label):
               if needle in body: raise SystemExit(f'FORBIDDEN {label}: {needle}')
           for n in ['drawAmbientHome','tap to wake  •  local-first','g_ambientHome = true','uiWidgetSignature','DEVELOPMENT UNLOCKED','RECOVERY FOUNDATION','doc["widgets"]','"gauge"']:
               need(hub,n,'v9.6 hub')
+          for n in ['smartHubHandleTouch','SmartHub nav touch raw=','direct footer taps select pages']:
+              need(hub,n,'RC2 direct navigation')
+          need(hubh,'smartHubHandleTouch(int16_t rawX, int16_t rawY)','RC2 hub API')
           for n in ['Smart Home v9.6 Ultimate Experience Studio','Print Focus','Device Care','ccV96SetDensity']:
               need(app,n,'v9.6 browser')
+          for n in ['int16_t x;','int16_t y;','bool hasPoint;']:
+              need(touchh,n,'coordinate touch contract')
+          for n in ['FT5X06_P1_XH_REG','ft5x06ReadPoint','return {TouchEvent::None, true, x, y, true}']:
+              need(focal,n,'FT6336 point capture')
+          need(button,'buttonLastTouchPoint','button coordinate cache')
+          need(buttonh,'buttonLastTouchPoint(int16_t* x, int16_t* y)','button coordinate API')
+          for n in ['buttonLastTouchPoint(&touchX, &touchY)','smartHubHandleTouch(touchX, touchY)']:
+              need(main,n,'main direct-nav dispatch')
           for n in ['kCandidateMaxAttempts = 3','recoveryMarkWebReady','esp_ota_set_boot_partition']:
               need(rec,n,'RC3 recovery')
           for n in ['/recovery/status','/recovery/rollback','Download Settings Backup']:
@@ -146,7 +165,7 @@ jobs:
           need(settings,'buttonType = BTN_TOUCHSCREEN;','touch guard')
           forbid(web,'client.setInsecure();','TLS downgrade')
           forbid(board,'-D ENABLE_OTA_AUTO=1','unsafe auto OTA')
-          print('v9.6 Ultimate Experience + RC3 recovery contracts: PASS')
+          print('v9.6 Ultimate Experience RC2 + direct touch nav + RC3 recovery contracts: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -167,43 +186,51 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v9.6 Ultimate Experience artifacts
+      - name: Package v9.6 Ultimate Experience RC2 artifacts
         shell: bash
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p v9.6-artifacts/source-snapshot
-          cp "$FULL" v9.6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Ultimate-Experience-RC1-Full.bin
-          cp "$APP" v9.6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Ultimate-Experience-RC1-OTA.bin
+          cp "$FULL" v9.6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Ultimate-Experience-RC2-Full.bin
+          cp "$APP" v9.6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Ultimate-Experience-RC2-OTA.bin
           cp "$APP" v9.6-artifacts/WaveshareHome-firmware.bin
           cp upstream/src/smart_hub.cpp v9.6-artifacts/source-snapshot/smart_hub.cpp
+          cp upstream/src/smart_hub.h v9.6-artifacts/source-snapshot/smart_hub.h
+          cp upstream/src/main.cpp v9.6-artifacts/source-snapshot/main.cpp
           cp upstream/src/recovery_manager.cpp v9.6-artifacts/source-snapshot/recovery_manager.cpp
           cp upstream/src/web_server.cpp v9.6-artifacts/source-snapshot/web_server.cpp
           cp upstream/src/wifi_manager.cpp v9.6-artifacts/source-snapshot/wifi_manager.cpp
           cp upstream/src/security_manager.cpp v9.6-artifacts/source-snapshot/security_manager.cpp
           cp upstream/src/settings.cpp v9.6-artifacts/source-snapshot/settings.cpp
           cp upstream/src/button.cpp v9.6-artifacts/source-snapshot/button.cpp
+          cp upstream/src/button.h v9.6-artifacts/source-snapshot/button.h
+          cp upstream/src/button_touch_backend.h v9.6-artifacts/source-snapshot/button_touch_backend.h
+          cp upstream/src/button_touch_focaltech.cpp v9.6-artifacts/source-snapshot/button_touch_focaltech.cpp
           cp upstream/include/smart_home_build.h v9.6-artifacts/source-snapshot/smart_home_build.h
           cp upstream/web/app.js v9.6-artifacts/source-snapshot/app.js
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v9.6 Ultimate Experience RC1'
+            echo 'BambuHelper ws_lcd_350 Smart Home v9.6 Ultimate Experience RC2'
             echo 'ambient_standby=PASS'
             echo 'ambient_tap_to_wake=PASS'
             echo 'differential_widget_rendering=PASS'
             echo 'custom_widget_gauge_progress_status=PASS'
             echo 'browser_experience_studio=PASS'
+            echo 'ft6336_coordinate_capture=PASS'
+            echo 'direct_touch_bottom_navigation=PASS'
+            echo 'tap_cycle_fallback_preserved=PASS'
             echo 'recovery_foundation_preserved=PASS'
             echo 'portal_auth_required=NO_DEVELOPMENT_BUILD'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=REQUIRED'
             sha256sum v9.6-artifacts/*.bin
-          } | tee v9.6-artifacts/validation-report-v9.6-ultimate-experience-rc1.txt
+          } | tee v9.6-artifacts/validation-report-v9.6-ultimate-experience-rc2.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v9.6-ultimate-experience-rc1
+          name: bambuhelper-ws_lcd_350-smart-home-v9.6-ultimate-experience-rc2
           retention-days: 14
           if-no-files-found: error
           path: v9.6-artifacts/
