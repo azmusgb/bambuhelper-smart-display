@@ -117,7 +117,7 @@ jobs:
           need(hub,'"MATERIALS"','Printer to Workshop action')
 
           # 7. AMS slots expose material, coarse color identity, and remaining percent.
-          for n in ['uiFilamentColorName','remainPct','BLACK','WHITE','ORANGE','PURPLE']:
+          for n in ['uiFilamentColorName','snprintf(remain,sizeof(remain)','BLACK','WHITE','ORANGE','PURPLE']:
               need(hub,n,'AMS material identity')
 
           # 8/9. Compact More identity and non-truncating recovery health.
@@ -126,7 +126,7 @@ jobs:
           forbid(hub,'Smart Home v10.4.1 Workshop Home Hub','long physical build label')
 
           # 10. Reduce decorative accent noise while keeping strong cards distinct.
-          need(hub,'Normal cards use a quiet top accent','simplified card accents')
+          need(hub,'category accent without the old stripe+dot','simplified card accents')
 
           # Routing/actions remain complementary.
           need(hub,'setPage(SCREEN_HUB_WORKSHOP)','Printer materials routing')
