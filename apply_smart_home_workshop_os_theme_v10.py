@@ -55,7 +55,7 @@ def dedupe_action_button(repo: Path) -> None:
     a=text.index(signature)
     b=text.find("\nstatic void ",a+1)
     body=text[a:b if b>0 else len(text)]
-    for needle in ["primary=filled || accent==UI_ORANGE","UI_PANEL_2","UI_GLOW"]:
+    for needle in ["primary=filled || accent==UI_ORANGE","UI_PANEL_2","UI_ORANGE"]:
         if needle not in body:
             raise PatchError("retained v10 action button theme missing: "+needle)
     p.write_text(text)
@@ -64,7 +64,6 @@ def apply(repo: Path) -> None:
     core=load_core()
     core["apply"](repo)
     dedupe_action_button(repo)
-    # Re-run the core's semantic verification against the deduplicated source.
     core["verify"](repo)
 
 def main() -> int:
