@@ -1,0 +1,28 @@
+{
+  "release": "Smart Home v9.9 Display Experience RC1",
+  "board": "ws_lcd_350",
+  "bambuhelper_core": "v3.8.1",
+  "status": "candidate_physical_acceptance_required",
+  "pre_merge_head": "569827b0752be136e16cd23846562f6678e3bd95",
+  "workflow_run": 33663725008,
+  "artifact": {
+    "github_actions_artifact_id": 9859842358,
+    "name": "bambuhelper-ws_lcd_350-smart-home-v9.9-display-experience-rc1",
+    "archive_sha256": "efa1f9559490bebbf0e2461f5c5fa58093f161a7458ac162c6cb1aa1c31f8981"
+  },
+  "validation": {
+    "context_aware_home_states": "PASS",
+    "page_specific_visual_hierarchy": "PASS",
+    "material_slot_cards": "PASS",
+    "human_system_health": "PASS",
+    "portrait_landscape_parity": "PASS",
+    "browser_physical_parity": "PASS",
+    "shared_visual_touch_geometry": "PRESERVED",
+    "minimum_action_target_44px": "PRESERVED",
+    "safari_recovery_foundation": "PRESERVED",
+    "ft6336_reliability": "PRESERVED",
+    "ws350_build": "PASS",
+    "jc3248w535_regression": "PASS",
+    "physical_acceptance": "REQUIRED"
+  }
+}
