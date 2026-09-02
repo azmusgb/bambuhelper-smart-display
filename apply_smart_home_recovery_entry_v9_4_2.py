@@ -64,11 +64,14 @@ def apply(repo: Path) -> None:
         "recovery diagnostics rows",
     )
 
+    # Anchor on visible text rather than C++ quote escaping. The recovery page
+    # is embedded in a C++ string, so matching its escaped onclick syntax is
+    # unnecessarily brittle across patch generations.
     text = replace_once(
         text,
-        '''<button onclick=\"act('/recovery/reset-auth')\">Reset Portal Session</button><button class='danger' onclick=\"wifiReset()\">Reset Wi-Fi Only</button>''',
-        '''<button onclick=\"act('/recovery/reset-auth')\">Reset Portal Session</button><button onclick=\"location.href='/settings/export'\">Download Settings Backup</button><button class='danger' onclick=\"wifiReset()\">Reset Wi-Fi Only</button>''',
-        "recovery settings backup button",
+        "Reset Portal Session</button>",
+        "Reset Portal Session</button><a href='/settings/export'>Download Settings Backup</a>",
+        "recovery settings backup link",
     )
 
     p.write_text(text, encoding="utf-8")
