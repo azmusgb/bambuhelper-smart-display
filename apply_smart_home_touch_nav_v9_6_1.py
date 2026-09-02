@@ -262,14 +262,14 @@ static void uiBottomNav(uint8_t active, const char* nextPage) {
     anchor = '''void smartHubAdvance() {
 '''
     handler = r'''// Direct coordinate navigation for the WS350 Smart Home footer. Only the nav
-// strip consumes coordinates; taps everywhere else deliberately fall through to
-// the existing smartHubAdvance() gesture, preserving the proven interaction.
+// strip consumes coordinates; direct footer taps select pages while taps elsewhere
+// deliberately fall through to smartHubAdvance(), preserving the proven gesture.
 static bool mapSmartHubNavPoint(int16_t rawX, int16_t rawY,
                                 int16_t& screenX, int16_t& screenY) {
 #if defined(BOARD_IS_WS350)
-  // Physical acceptance of this Waveshare/FT6336 combination established that
-  // controller coordinates are 180 degrees from the portrait framebuffer.
-  // Keep the transform local to WS350 so shared 320x480 targets are unaffected.
+  // Current WS350 calibration expects controller coordinates 180 degrees from
+  // the portrait framebuffer. Serial diagnostics expose raw/mapped points so
+  // physical acceptance can verify this mapping without hiding assumptions.
   screenX = (int16_t)(tft.width() - 1 - rawX);
   screenY = (int16_t)(tft.height() - 1 - rawY);
 #else
@@ -313,8 +313,6 @@ bool smartHubHandleTouch(int16_t rawX, int16_t rawY) {
     h = repo / "src" / "smart_hub.h"
     ht = h.read_text(encoding="utf-8")
     if 'bool smartHubHandleTouch(int16_t rawX, int16_t rawY);' not in ht:
-        # Place next to the existing public page-selection API without depending
-        # on historical header ordering.
         needle = 'bool smartHubShowPage(const char* pageName);'
         if needle not in ht:
             raise PatchError("smart_hub.h: smartHubShowPage declaration not found")
@@ -363,7 +361,7 @@ def apply(repo: Path) -> None:
         repo / "src" / "button_touch_focaltech.cpp": ["ft5x06ReadPoint", "FT5X06_P1_XH_REG"],
         repo / "src" / "button.cpp": ["buttonLastTouchPoint", "lastTouchPointMs"],
         repo / "src" / "smart_hub.cpp": [
-            "smartHubHandleTouch", "SmartHub nav touch raw=",
+            "smartHubHandleTouch", "SmartHub nav touch raw=", "direct footer taps select pages",
             'static const char* labels[] = {"HOME", "PRINT", "WORK", "WIDGET", "SYSTEM"}',
             'case 1: return smartHubShowPage("printer")',
         ],
