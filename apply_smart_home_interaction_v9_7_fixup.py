@@ -2,6 +2,8 @@
 from pathlib import Path
 import argparse
 
+import apply_smart_home_secret_safe_backups_v8_2 as secret_safe_backups
+
 
 class FixupError(RuntimeError):
     pass
@@ -14,7 +16,7 @@ def replace_exactly_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def apply(repo: Path) -> None:
+def patch_smart_hub_boundaries(repo: Path) -> None:
     p = repo / "src" / "smart_hub.cpp"
     text = p.read_text(encoding="utf-8")
 
@@ -59,6 +61,38 @@ def apply(repo: Path) -> None:
     p.write_text(text, encoding="utf-8")
 
 
+def verify_secret_safe_backup(repo: Path) -> None:
+    web = (repo / "src" / "web_server.cpp").read_text(encoding="utf-8")
+    required = [
+        'doc["_secretsIncluded"] = false;',
+        'wifi["passRedacted"] = true;',
+        'p["accessCodeRedacted"] = true;',
+        'p["cloudIdentityRedacted"] = true;',
+    ]
+    forbidden = [
+        'wifi["pass"] = wifiPass;',
+        'p["accessCode"] = cfg.accessCode;',
+        'p["cloudUserId"] = cfg.cloudUserId;',
+    ]
+    for needle in required:
+        if needle not in web:
+            raise FixupError(f"v97/secret-safe-backup: missing {needle}")
+    for needle in forbidden:
+        if needle in web:
+            raise FixupError(f"v97/secret-safe-backup: secret serialization remains: {needle}")
+
+
+def apply(repo: Path) -> None:
+    patch_smart_hub_boundaries(repo)
+
+    # Recovery RC3 exposes /settings/export directly from Safe Mode. Reuse the
+    # existing v8.2 redaction policy at the *end* of the composed v9.7 stack so
+    # every v9.7 recovery backup is safe to download/share and a redacted import
+    # preserves credentials already provisioned on the device.
+    secret_safe_backups.apply(repo)
+    verify_secret_safe_backup(repo)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
@@ -67,4 +101,4 @@ if __name__ == "__main__":
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v9.7 boundary fixup applied")
+    print("Smart Home v9.7 boundary + secret-safe recovery fixup applied")
