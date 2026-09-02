@@ -23,6 +23,10 @@ jobs:
           print('JSON validation passed')
           PY
 
+      - name: Validate shell helpers
+        run: |
+          bash -n scripts/waveshare-usb.sh
+
       - name: Check ignored build output
         run: |
           if git ls-files | grep -q '^firmware/build/'; then
