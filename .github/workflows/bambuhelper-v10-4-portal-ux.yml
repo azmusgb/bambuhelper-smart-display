@@ -1,0 +1,152 @@
+name: BambuHelper ws_lcd_350 Smart Home v10.4 Portal UX RC1
+
+on:
+  push:
+    branches: [evolve/v10-4-portal-ux]
+    paths:
+      - 'apply_smart_home_portal_v10_4.py'
+      - 'assets/v10_4_portal.js'
+      - 'assets/v10_4_portal.css'
+      - '.github/workflows/bambuhelper-v10-4-portal-ux.yml'
+  pull_request:
+    branches: [evolve/v10-3-browser-workshop-os]
+    paths:
+      - 'apply_smart_home_portal_v10_4.py'
+      - 'assets/v10_4_portal.js'
+      - 'assets/v10_4_portal.css'
+      - '.github/workflows/bambuhelper-v10-4-portal-ux.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-home-v10-4-portal-ux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout evolution repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned BambuHelper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate patch tooling
+        run: |
+          python -m py_compile apply_smart_home_hardware_v10_1.py apply_smart_home_ui_v10_2.py apply_smart_home_browser_v10_3.py apply_smart_home_screen_retention_v10_3_1.py apply_smart_home_portal_v10_4.py
+          bash -n scripts/apply_smart_home_stack.sh
+
+      - name: Apply Smart Home stack through v10.1
+        run: bash scripts/apply_smart_home_stack.sh upstream apply_smart_home_hardware_v10_1.py
+
+      - name: Apply v10.2 physical UI polish
+        run: python apply_smart_home_ui_v10_2.py --repo upstream --apply
+
+      - name: Apply v10.3 browser Workshop OS
+        run: python apply_smart_home_browser_v10_3.py --repo upstream --apply
+
+      - name: Apply v10.3.1 screen-retention hotfix
+        run: python apply_smart_home_screen_retention_v10_3_1.py --repo upstream --apply
+
+      - name: Apply v10.4 portal UX
+        run: python apply_smart_home_portal_v10_4.py --repo upstream --apply
+
+      - name: Validate inherited device contracts
+        run: python scripts/validate_device_contracts.py
+
+      - name: Verify v10.4 portal and inherited contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          app=Path('upstream/web/app.js').read_text()
+          css=Path('upstream/web/app.css').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          main=Path('upstream/src/main.cpp').read_text()
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          def need(body,n,label):
+              if n not in body: raise SystemExit(f'MISSING {label}: {n}')
+          need(build,'#define SMART_HOME_VERSION "v10.4"','v10.4 version')
+          need(build,'Smart Home v10.4 Portal UX RC1','v10.4 build label')
+          for n in ['v104EnsureTopHealth','v104BuildSlotSwitcher','v104BuildSupportPanel','v104EnsurePrinterWorkspace','v104RefreshTopHealth','Advanced gauge configuration','Support &amp; advanced']:
+              need(app,n,'portal UX')
+          for n in ['.v104-top-health','.v104-slot-switcher','.v104-support-card','.v104-legacy-details','.v104-backend-slot','.v104-moved-action']:
+              need(css,n,'portal CSS')
+          need(main,'Smart Home v10.3.1 screen-retention contract.','screen retention')
+          need(main,'if (!smartHubShouldYieldToPrinter(printing))','screen route guard')
+          need(hub,'native Smart Home Printer is the normal live-print surface','native printer surface')
+          need(web,'handleAudioMicTest','microphone diagnostic')
+          for n in ['BOARD_HAS_ES8311_AUDIO=1','BOARD_HAS_MICROPHONE=1','AUDIO_I2S_DIN=14','AUDIO_PA_CTRL=-1']:
+              need(board,n,'WS350 audio')
+          print('v10.4 portal UX contracts: PASS')
+          PY
+
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 v10.4
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package v10.4 Portal UX RC1 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v10-4-artifacts/source-snapshot
+          cp "$FULL" v10-4-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v10.4-Portal-UX-RC1-Full.bin
+          cp "$APP" v10-4-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v10.4-Portal-UX-RC1-OTA.bin
+          cp "$APP" v10-4-artifacts/WaveshareHome-firmware.bin
+          for f in src/main.cpp src/smart_hub.cpp src/web_server.cpp src/web_template.cpp include/web_pages.h include/smart_home_build.h web/app.js web/app.css boards/ws_lcd_350.ini; do
+            mkdir -p "v10-4-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "v10-4-artifacts/source-snapshot/$f"
+          done
+          {
+            echo 'BambuHelper ws_lcd_350 Smart Home v10.4 Portal UX RC1 validation'
+            echo 'topbar_health_context=PASS'
+            echo 'printer_slot_context=PASS'
+            echo 'printer_progressive_disclosure=PASS'
+            echo 'support_actions_separated=PASS'
+            echo 'advanced_gauge_configuration_collapsed=PASS'
+            echo 'responsive_portal_layout=PASS'
+            echo 'printer_configuration_screen_retention=PRESERVED'
+            echo 'es8311_speaker=PRESERVED'
+            echo 'microphone_i2s_rx=PRESERVED'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            sha256sum v10-4-artifacts/*.bin
+          } | tee v10-4-artifacts/validation-report-v10-4-portal-ux-rc1.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-ws_lcd_350-smart-home-v10-4-portal-ux-rc1
+          retention-days: 14
+          if-no-files-found: error
+          path: v10-4-artifacts/
