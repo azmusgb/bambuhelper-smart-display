@@ -142,7 +142,8 @@ jobs:
           need(web,'handleAudioMicTest','microphone diagnostic')
           need(web,'recoverySha256HexArrayBuffer','Safari-safe recovery')
           need(focal,'ft6336RecoverBus','FT6336 recovery')
-          need(app,'v1041BuildHome','workshop-first browser Home preserved')
+          need(app,"var HH_WIDGET_KEY='waveshare_home_v1041';",'workshop-first browser Home module')
+          need(app,'Disable the legacy v9.5 Home injector','legacy Live Print Home duplication disabled')
 
           print('v10.5 physical Workshop OS contracts: PASS')
           PY
