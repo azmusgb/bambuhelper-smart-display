@@ -1,0 +1,168 @@
+name: BambuHelper ws_lcd_350 Smart Home v10.3 Browser Workshop OS RC1
+
+on:
+  push:
+    branches: [evolve/v10-3-browser-workshop-os]
+    paths:
+      - 'apply_smart_home_browser_v10_3.py'
+      - 'assets/v10_3_browser.css'
+      - 'assets/v10_3_browser.js'
+      - 'assets/v10_3_workshop.html'
+      - '.github/workflows/bambuhelper-v10-3-browser-workshop-os.yml'
+  pull_request:
+    branches: [evolve/v10-2-ui-polish]
+    paths:
+      - 'apply_smart_home_browser_v10_3.py'
+      - 'assets/v10_3_browser.css'
+      - 'assets/v10_3_browser.js'
+      - 'assets/v10_3_workshop.html'
+      - '.github/workflows/bambuhelper-v10-3-browser-workshop-os.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-home-v10-3-browser-workshop-os-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout evolution repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned BambuHelper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate patch tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile apply_smart_home_hardware_v10_1.py apply_smart_home_ui_v10_2.py apply_smart_home_browser_v10_3.py
+          bash -n scripts/apply_smart_home_stack.sh
+
+      - name: Apply Smart Home stack through v10.1
+        run: bash scripts/apply_smart_home_stack.sh upstream apply_smart_home_hardware_v10_1.py
+
+      - name: Apply v10.2 physical UI polish
+        run: python apply_smart_home_ui_v10_2.py --repo upstream --apply
+
+      - name: Apply v10.3 browser Workshop OS
+        run: python apply_smart_home_browser_v10_3.py --repo upstream --apply
+
+      - name: Validate inherited device contracts
+        run: python scripts/validate_device_contracts.py
+
+      - name: Verify v10.3 browser and inherited hardware contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          pages=Path('upstream/include/web_pages.h').read_text()
+          js=Path('upstream/web/app.js').read_text()
+          css=Path('upstream/web/app.css').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          template=Path('upstream/src/web_template.cpp').read_text()
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          backend=Path('upstream/src/buzzer_backend_es8311.cpp').read_text()
+          focal=Path('upstream/src/button_touch_focaltech.cpp').read_text()
+
+          def need(body, needle, label):
+              if needle not in body: raise SystemExit(f'MISSING {label}: {needle}')
+
+          need(build, '#define SMART_HOME_VERSION "v10.3"', 'v10.3 version')
+          need(build, 'Smart Home v10.3 Browser Workshop OS RC1', 'v10.3 label')
+          for n in ['<h4>Workspaces</h4>','data-section="workshop"','Display &amp; Experience','Sound &amp; Hardware','Network &amp; Updates','Power &amp; Automation']:
+              need(pages,n,'task-based portal navigation')
+          for n in ['id="sec-workshop"','AMS / FILAMENT','Loaded materials','Sound &amp; microphone']:
+              need(pages,n,'Workshop browser workspace')
+          for n in ["workshop: 'Workshop'",'function v103RefreshWorkshop','function v103ToggleWorkshopLight','v103WorkshopTimer']:
+              need(js,n,'Workshop browser behavior')
+          for n in ['Smart Home v10.3 Browser Workshop OS','.wk-layout','.wk-trays','.portal-nav-brand','--portal-max:1240px']:
+              need(css,n,'portal CSS layer')
+          for n in ['doc["chamber"]','doc["remaining"]','JsonObject ams = doc["ams"]','ams["trays"]']:
+              need(web,n,'Workshop status API')
+          need(template,'strcmp(name, "SMART_VER")','browser Smart Home version token')
+
+          # Preserve physical UI, audio/mic, touch and recovery foundations.
+          need(hub,'AMS / FILAMENT','physical Workshop AMS UI')
+          need(hub,'drawHeader("MORE","TOOLS",3)','v10.2 More UI')
+          for n in ['BOARD_HAS_ES8311_AUDIO=1','BOARD_HAS_MICROPHONE=1','AUDIO_I2S_DIN=14','AUDIO_PA_CTRL=-1']:
+              need(board,n,'WS350 audio hardware')
+          for n in ['I2S_MODE_RX','buzzerBackendMicLevel','AUDIO_PA_CTRL >= 0']:
+              need(backend,n,'ES8311/mic backend')
+          need(web,'handleAudioMicTest','microphone diagnostic')
+          need(web,'recoverySha256HexArrayBuffer','Safari-safe recovery')
+          need(focal,'ft6336RecoverBus','FT6336 recovery')
+          print('v10.3 browser Workshop OS contracts: PASS')
+          PY
+
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 v10.3
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package v10.3 Browser Workshop OS RC1 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v10-3-artifacts/source-snapshot
+          cp "$FULL" v10-3-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v10.3-Browser-Workshop-OS-RC1-Full.bin
+          cp "$APP" v10-3-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v10.3-Browser-Workshop-OS-RC1-OTA.bin
+          cp "$APP" v10-3-artifacts/WaveshareHome-firmware.bin
+          for f in boards/ws_lcd_350.ini src/buzzer.cpp src/buzzer_backend.h src/buzzer_backend_es8311.cpp src/smart_hub.cpp src/web_server.cpp src/web_template.cpp include/web_pages.h include/smart_home_build.h web/app.js web/app.css src/button_touch_focaltech.cpp src/settings.cpp; do
+            mkdir -p "v10-3-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "v10-3-artifacts/source-snapshot/$f"
+          done
+          {
+            echo 'BambuHelper ws_lcd_350 Smart Home v10.3 Browser Workshop OS RC1 validation'
+            echo 'portal_information_architecture=REORGANIZED'
+            echo 'browser_workshop_workspace=ENABLED'
+            echo 'ams_filament_browser_snapshot=ENABLED'
+            echo 'portal_css_system=UNIFIED'
+            echo 'responsive_layout=ENHANCED'
+            echo 'es8311_speaker=PRESERVED'
+            echo 'microphone_i2s_rx=PRESERVED'
+            echo 'physical_v10_2_ui=PRESERVED'
+            echo 'safari_recovery_foundation=PRESERVED'
+            echo 'ft6336_reliability=PRESERVED'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            sha256sum v10-3-artifacts/*.bin
+          } | tee v10-3-artifacts/validation-report-v10-3-browser-workshop-os-rc1.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-ws_lcd_350-smart-home-v10-3-browser-workshop-os-rc1
+          retention-days: 14
+          if-no-files-found: error
+          path: v10-3-artifacts/
