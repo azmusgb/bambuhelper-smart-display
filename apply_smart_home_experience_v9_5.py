@@ -87,7 +87,7 @@ HOME = r'''static void drawHome(bool full) {
 
   if (layoutReset) {
     tft.fillScreen(UI_BG);
-    drawHeader("HOME", "v9.5 SMOOTH", 0);
+    drawHeader("HOME", "SMOOTH UI", 0);
     uiBottomNav(0, "WORKSHOP");
     initialized = true;
     prevConfigured = configured;
@@ -320,7 +320,7 @@ WORKSHOP = r'''static void drawWorkshop(bool full) {
 
 CUSTOM = r'''static void drawCustom(bool full) {
   static bool initialized=false;
-  static bool prevHasUrl=false, prevValid=false, prevHealthy=false;
+  static bool prevHasUrl=false;
   static uint32_t prevFeedSig=0xffffffffu;
   static uint8_t prevProgress=0xff;
   static int16_t prevNozzle=-32768,prevBed=-32768;
@@ -365,7 +365,7 @@ CUSTOM = r'''static void drawCustom(bool full) {
     for(uint8_t i=0;i<4;i++){int16_t x=margin+(i%2)*(cardW+gap),y=top+(i/2)*(cardH+gap);const char* label=i<g_custom.metricCount?g_custom.metrics[i].label:"WIDGET";const char* value=i<g_custom.metricCount?g_custom.metrics[i].value:"—";uiCard(x,y,cardW,cardH,accents[i],false);tft.fillCircle(x+23,y+24,11,i==0?UI_CYAN_BG:i==1?UI_WARN_BG:i==2?UI_GREEN_BG:UI_PURP_BG);tft.fillCircle(x+23,y+24,4,accents[i]);setFont(tft,FONT_SMALL);tft.setTextDatum(TL_DATUM);tft.setTextColor(UI_DIM,UI_PANEL);tft.drawString(label&&*label?label:"WIDGET",x+43,y+14);setFont(tft,FONT_LARGE);tft.setTextColor(accents[i],UI_PANEL);char val[22];uiCopyShort(val,sizeof(val),value,17);tft.drawString(val,x+13,y+53);}
     uiCard(8,354,W-16,65,UI_BLUE,false);uiSectionLabel(18,363,"FEED STATUS",UI_BLUE);setFont(tft,FONT_SMALL);tft.setTextDatum(TL_DATUM);tft.setTextColor(UI_TEXT,UI_PANEL);const char* foot=g_custom.footer[0]?g_custom.footer:g_custom.status;char footer[48];uiCopyShort(footer,sizeof(footer),foot&&*foot?foot:"Endpoint healthy",42);tft.drawString(footer,18,389);char http[18];snprintf(http,sizeof(http),"HTTP %d",g_custom.httpCode);tft.setTextDatum(TR_DATUM);tft.setTextColor(UI_GREEN,UI_PANEL);tft.drawString(http,W-18,389);
   }
-  prevFeedSig=feedSig;prevValid=g_custom.valid;prevHealthy=g_custom.healthy;painted=true;if(painted)markFrameDirty();g_dirty=false;
+  prevFeedSig=feedSig;painted=true;if(painted)markFrameDirty();g_dirty=false;
 }
 
 '''
@@ -381,10 +381,10 @@ SYSTEM = r'''static void drawSystem(bool full) {
   const bool layoutReset=full||!initialized;
   bool painted=false;
   if(layoutReset){
-    tft.fillScreen(UI_BG);drawHeader("SYSTEM","v9.5 SMOOTH",3);uiBottomNav(3,"PRINTER");initialized=true;
+    tft.fillScreen(UI_BG);drawHeader("SYSTEM","SMOOTH UI",3);uiBottomNav(3,"PRINTER");initialized=true;
     prevRssi=999;prevIp=0xffffffffu;prevUptimeMin=0xffff;prevFreeHeap=prevMinHeap=prevMaxBlock=prevPsram=0xffff;lastMemorySample=0;painted=true;
     const int16_t W=tft.width();uiCard(8,143,W-16,72,UI_PURPLE,false);uiShield(29,178,UI_PURPLE);setFont(tft,FONT_SMALL);tft.setTextDatum(TL_DATUM);tft.setTextColor(UI_DIM,UI_PANEL);tft.drawString("PORTAL CODE",52,153);setFont(tft,FONT_LARGE);tft.setTextColor(UI_PURPLE,UI_PANEL);tft.drawString(securityPortalCode(),52,174);setFont(tft,FONT_SMALL);tft.setTextColor(UI_GREEN,UI_PANEL);tft.drawString("RAM session • rotates on reboot",52,198);
-    uiCard(8,364,W-16,67,UI_ORANGE,false);setFont(tft,FONT_SMALL);tft.setTextDatum(TL_DATUM);tft.setTextColor(UI_DIM,UI_PANEL);tft.drawString("FIRMWARE",18,374);setFont(tft,FONT_BODY);tft.setTextColor(UI_TEXT,UI_PANEL);char ver[48];snprintf(ver,sizeof(ver),"BambuHelper %s • %s",FW_VERSION,SMART_HOME_VERSION);tft.drawString(ver,18,391);setFont(tft,FONT_SMALL);tft.setTextColor(UI_ORANGE,UI_PANEL);tft.drawString("RECOVERY • SMOOTH UI • DEV",18,414);
+    uiCard(8,364,W-16,67,UI_ORANGE,false);setFont(tft,FONT_SMALL);tft.setTextDatum(TL_DATUM);tft.setTextColor(UI_DIM,UI_PANEL);tft.drawString("FIRMWARE",18,374);setFont(tft,FONT_BODY);tft.setTextColor(UI_TEXT,UI_PANEL);char ver[48];snprintf(ver,sizeof(ver),"BambuHelper %s • %s",FW_VERSION,SMART_HOME_VERSION);tft.drawString(ver,18,391);setFont(tft,FONT_SMALL);tft.setTextColor(UI_ORANGE,UI_PANEL);tft.drawString("RECOVERY • SMOOTH WIDGETS • DEV",18,414);
   }
   const int16_t W=tft.width();const bool wifiUp=WiFi.status()==WL_CONNECTED;const int rssi=wifiUp?WiFi.RSSI():-100;const uint32_t ip=wifiUp?(uint32_t)WiFi.localIP():0;const uint16_t uptimeMin=(uint16_t)(millis()/60000UL);
   if(layoutReset||wifiUp!=prevWifiUp||rssi!=prevRssi||ip!=prevIp||uptimeMin!=prevUptimeMin){
@@ -466,26 +466,19 @@ def patch_browser(repo: Path) -> None:
     if 'Smart Home v9.5 customizable browser widgets' not in css: css += BROWSER_CSS
     p.write_text(css,encoding='utf-8')
 
-def patch_build(repo: Path) -> None:
-    p=repo/'include'/'smart_home_build.h'; text=p.read_text(encoding='utf-8')
-    text=text.replace('#define SMART_HOME_VERSION "v9.4"','#define SMART_HOME_VERSION "v9.5"')
-    text=text.replace('#define SMART_HOME_PROFILE "recovery-foundation-control-plane"','#define SMART_HOME_PROFILE "smooth-widget-experience"')
-    text=text.replace('#define SMART_HOME_BUILD_LABEL "Smart Home v9.4 Recovery Foundation RC3"','#define SMART_HOME_BUILD_LABEL "Smart Home v9.5 Smooth Widgets RC1"')
-    p.write_text(text,encoding='utf-8')
-
 def apply(repo: Path) -> None:
-    patch_hub(repo);patch_browser(repo);patch_build(repo)
+    patch_hub(repo);patch_browser(repo)
     hub=(repo/'src'/'smart_hub.cpp').read_text(encoding='utf-8')
-    for need in ['v9.5 SMOOTH','uiAmsSignature','MY WIDGETS','lastMemorySample','prevHeroTextSig']:
-        if need not in hub: raise PatchError('missing v9.5 contract: '+need)
+    for need in ['SMOOTH UI','uiAmsSignature','MY WIDGETS','lastMemorySample','prevHeroTextSig']:
+        if need not in hub: raise PatchError('missing smooth-widget contract: '+need)
     app=(repo/'web'/'app.js').read_text(encoding='utf-8')
     for need in ['CC_WIDGET_KEY','Customize widgets','ccRefreshLiveWidget']:
         if need not in app: raise PatchError('missing browser widget contract: '+need)
 
 def main() -> int:
-    ap=argparse.ArgumentParser(description='Apply Smart Home v9.5 smooth widgets experience')
+    ap=argparse.ArgumentParser(description='Apply Smart Home smooth widgets experience on v9.4 RC3')
     ap.add_argument('--repo',required=True);ap.add_argument('--apply',action='store_true');args=ap.parse_args()
     if not args.apply: raise SystemExit('Pass --apply')
-    apply(Path(args.repo));print('Smart Home v9.5 smooth widgets experience applied')
+    apply(Path(args.repo));print('Smart Home smooth widgets experience applied on v9.4 RC3')
     return 0
 if __name__=='__main__': raise SystemExit(main())
