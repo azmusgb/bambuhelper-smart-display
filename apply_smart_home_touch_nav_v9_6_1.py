@@ -151,6 +151,114 @@ def patch_smart_hub(repo: Path) -> None:
     p = repo / "src" / "smart_hub.cpp"
     t = p.read_text(encoding="utf-8")
 
+    old_nav = r'''static void uiNavIcon(int16_t cx, int16_t cy, uint8_t item, uint16_t c) {
+  if (item == 0) {
+    tft.drawLine(cx - 6, cy, cx, cy - 6, c);
+    tft.drawLine(cx, cy - 6, cx + 6, cy, c);
+    tft.drawRect(cx - 5, cy, 10, 7, c);
+  } else if (item == 1) {
+    tft.drawRect(cx - 6, cy - 5, 12, 10, c);
+    tft.drawFastHLine(cx - 3, cy - 8, 6, c);
+    tft.fillCircle(cx, cy, 2, c);
+  } else if (item == 2) {
+    tft.drawRect(cx - 6, cy - 6, 12, 12, c);
+    tft.drawLine(cx - 6, cy - 6, cx + 6, cy + 6, c);
+    tft.drawLine(cx + 6, cy - 6, cx - 6, cy + 6, c);
+  } else {
+    tft.drawCircle(cx, cy, 6, c);
+    tft.fillCircle(cx, cy, 2, c);
+  }
+}
+
+static void uiBottomNav(uint8_t active, const char* nextPage) {
+  const int16_t y = tft.height() - 42;
+  const int16_t W = tft.width();
+  tft.fillRect(0, y, W, 42, UI_BG);
+  tft.drawFastHLine(8, y, W - 16, UI_BORDER);
+  static const char* labels[] = {"HOME", "WORK", "CUSTOM", "SYSTEM"};
+  const int16_t cell = W / 4;
+  for (uint8_t i = 0; i < 4; i++) {
+    int16_t x = i * cell;
+    uint16_t c = i == active ? UI_ORANGE : UI_MUTED;
+    if (i == active) {
+      tft.fillRoundRect(x + 4, y + 5, cell - 8, 32, 9, UI_WARN_BG);
+      tft.drawRoundRect(x + 4, y + 5, cell - 8, 32, 9, UI_ORANGE);
+    }
+    uiNavIcon(x + 16, y + 17, i, c);
+    setFont(tft, FONT_SMALL);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(c, i == active ? UI_WARN_BG : UI_BG);
+    tft.drawString(labels[i], x + 27, y + 18);
+  }
+  if (nextPage && *nextPage) {
+    setFont(tft, FONT_SMALL);
+    tft.setTextDatum(BR_DATUM);
+    tft.setTextColor(UI_MUTED, UI_BG);
+    // Small corner chevron is a subtle reminder that the physical screen's
+    // existing tap gesture advances pages; the nav itself is visual in RC1.
+    tft.drawString(">", W - 3, y - 3);
+  }
+}
+'''
+    new_nav = r'''static void uiNavIcon(int16_t cx, int16_t cy, uint8_t item, uint16_t c) {
+  if (item == 0) { // Home
+    tft.drawLine(cx - 6, cy, cx, cy - 6, c);
+    tft.drawLine(cx, cy - 6, cx + 6, cy, c);
+    tft.drawRect(cx - 5, cy, 10, 7, c);
+  } else if (item == 1) { // Printer
+    tft.drawRoundRect(cx - 7, cy - 6, 14, 12, 3, c);
+    tft.drawFastHLine(cx - 4, cy - 9, 8, c);
+    tft.drawFastHLine(cx - 4, cy + 9, 8, c);
+    tft.fillCircle(cx + 4, cy + 3, 2, c);
+  } else if (item == 2) { // Workshop
+    tft.drawRect(cx - 7, cy - 7, 6, 6, c);
+    tft.drawRect(cx + 1, cy - 7, 6, 6, c);
+    tft.drawRect(cx - 7, cy + 1, 6, 6, c);
+    tft.drawRect(cx + 1, cy + 1, 6, 6, c);
+  } else if (item == 3) { // Widgets
+    tft.drawRoundRect(cx - 8, cy - 7, 7, 14, 2, c);
+    tft.drawRoundRect(cx + 1, cy - 7, 7, 6, 2, c);
+    tft.drawRoundRect(cx + 1, cy + 1, 7, 6, 2, c);
+  } else { // System
+    tft.drawCircle(cx, cy, 7, c);
+    tft.fillCircle(cx, cy, 2, c);
+    tft.drawFastHLine(cx - 10, cy, 3, c);
+    tft.drawFastHLine(cx + 7, cy, 3, c);
+    tft.drawFastVLine(cx, cy - 10, 3, c);
+    tft.drawFastVLine(cx, cy + 7, 3, c);
+  }
+}
+
+static void uiBottomNav(uint8_t active, const char* nextPage) {
+  (void)nextPage;
+  const int16_t navH = 44;
+  const int16_t y = tft.height() - navH;
+  const int16_t W = tft.width();
+  tft.fillRect(0, y, W, navH, UI_BG);
+  tft.drawFastHLine(8, y, W - 16, UI_BORDER);
+  static const char* labels[] = {"HOME", "PRINT", "WORK", "WIDGET", "SYSTEM"};
+  // Existing page IDs are Home=0, Workshop=1, Custom=2, System=3. Translate
+  // them into the persistent five-destination footer, which inserts Printer.
+  const uint8_t activeTab = active == 0 ? 0 : (active == 1 ? 2 : (active == 2 ? 3 : 4));
+  const int16_t cell = W / 5; // 64px on WS350: generous one-finger hit targets.
+  for (uint8_t i = 0; i < 5; i++) {
+    int16_t x = i * cell;
+    uint16_t c = i == activeTab ? UI_ORANGE : UI_MUTED;
+    uint16_t bg = i == activeTab ? UI_WARN_BG : UI_BG;
+    if (i == activeTab) {
+      tft.fillRoundRect(x + 4, y + 3, cell - 8, navH - 7, 9, UI_WARN_BG);
+      tft.drawRoundRect(x + 4, y + 3, cell - 8, navH - 7, 9, UI_ORANGE);
+    }
+    uiNavIcon(x + cell / 2, y + 14, i, c);
+    setFont(tft, FONT_SMALL);
+    tft.setTextDatum(TC_DATUM);
+    tft.setTextColor(c, bg);
+    tft.drawString(labels[i], x + cell / 2, y + 25);
+  }
+}
+'''
+    t = replace_once(t, old_nav, new_nav, "five-destination Smart Hub footer")
+
     anchor = '''void smartHubAdvance() {
 '''
     handler = r'''// Direct coordinate navigation for the WS350 Smart Home footer. Only the nav
@@ -180,31 +288,26 @@ bool smartHubHandleTouch(int16_t rawX, int16_t rawY) {
 
   int16_t x = 0, y = 0;
   if (!mapSmartHubNavPoint(rawX, rawY, x, y)) return false;
-  const int16_t navTop = tft.height() - 42;
+  const int16_t navTop = tft.height() - 44;
   if (y < navTop) return false;
 
-  int16_t cell = tft.width() / 4;
+  int16_t cell = tft.width() / 5;
   uint8_t item = (uint8_t)(x / cell);
-  if (item > 3) item = 3;
+  if (item > 4) item = 4;
   Serial.printf("SmartHub nav touch raw=(%d,%d) mapped=(%d,%d) item=%u\n",
                 rawX, rawY, x, y, (unsigned)item);
   switch (item) {
     case 0: return smartHubShowPage("home");
-    case 1: return smartHubShowPage("workshop");
-    case 2: return smartHubShowPage("custom");
-    case 3: return smartHubShowPage("system");
+    case 1: return smartHubShowPage("printer");
+    case 2: return smartHubShowPage("workshop");
+    case 3: return smartHubShowPage("custom");
+    case 4: return smartHubShowPage("system");
     default: return false;
   }
 }
 
 '''
     t = replace_once(t, anchor, handler + anchor, "Smart Hub direct-nav handler")
-    t = replace_once(
-        t,
-        '// existing tap gesture advances pages; the nav itself is visual in RC1.',
-        '// direct footer taps select pages; taps elsewhere still advance pages.',
-        "bottom-nav interaction comment",
-    )
     p.write_text(t, encoding="utf-8")
 
     h = repo / "src" / "smart_hub.h"
@@ -259,7 +362,11 @@ def apply(repo: Path) -> None:
         repo / "src" / "button_touch_backend.h": ["int16_t x;", "bool hasPoint;"],
         repo / "src" / "button_touch_focaltech.cpp": ["ft5x06ReadPoint", "FT5X06_P1_XH_REG"],
         repo / "src" / "button.cpp": ["buttonLastTouchPoint", "lastTouchPointMs"],
-        repo / "src" / "smart_hub.cpp": ["smartHubHandleTouch", "SmartHub nav touch raw="],
+        repo / "src" / "smart_hub.cpp": [
+            "smartHubHandleTouch", "SmartHub nav touch raw=",
+            'static const char* labels[] = {"HOME", "PRINT", "WORK", "WIDGET", "SYSTEM"}',
+            'case 1: return smartHubShowPage("printer")',
+        ],
         repo / "src" / "main.cpp": ["buttonLastTouchPoint(&touchX, &touchY)", "smartHubHandleTouch(touchX, touchY)"],
     }
     for path, needles in contracts.items():
