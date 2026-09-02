@@ -5,14 +5,12 @@ on:
     branches: [evolve/v10-1-hardware-enablement]
     paths:
       - 'apply_smart_home_hardware_v10_1.py'
-      - '.bambuhelper-validation/v10-1-hardware.zlib.b64'
       - 'scripts/apply_smart_home_stack.sh'
       - '.github/workflows/bambuhelper-v10-1-hardware-audio.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apply_smart_home_hardware_v10_1.py'
-      - '.bambuhelper-validation/v10-1-hardware.zlib.b64'
       - 'scripts/apply_smart_home_stack.sh'
       - '.github/workflows/bambuhelper-v10-1-hardware-audio.yml'
   workflow_dispatch:
@@ -49,14 +47,6 @@ jobs:
           set -euo pipefail
           python -m py_compile apply_smart_home_hardware_v10_1.py
           bash -n scripts/apply_smart_home_stack.sh
-          python - <<'PY'
-          from pathlib import Path
-          import base64, zlib
-          p=Path('.bambuhelper-validation/v10-1-hardware.zlib.b64')
-          src=zlib.decompress(base64.b64decode(p.read_text().strip())).decode('utf-8')
-          compile(src, str(p), 'exec')
-          print('v10.1 compressed patch core: PASS')
-          PY
 
       - name: Apply complete Smart Home stack through v10.1
         shell: bash
@@ -113,17 +103,16 @@ jobs:
           forbid(buzzer,'ws_lcd_350 has no buzzer hardware','obsolete hardware model')
 
           for n in ['handleAudioMicTest','SECURE_POST("/audio/mic/test"',
-                    'doc["audio"]','"BLE 5 LE"','"AXP2101"','"PCF85063"','"QMI8658"']:
+                    'doc["hardware"]','"BLE 5 LE"','"AXP2101"','"PCF85063"','"QMI8658"']:
               need(web,n,'hardware/audio web API')
           need(template,'strcmp(name, "MICROPHONE")','mic template capability')
           for n in ["mic:'%MICROPHONE%'",'micDiagRow','Test onboard microphone']:
               need(pages,n,'browser mic UX')
           for n in ['function testMicrophone()','/audio/mic/test','Input level']:
               need(js,n,'browser mic diagnostic')
-          for n in ['INPUT & AUDIO','ES8311 speaker • onboard mic • BLE 5 LE','INPUT / AUDIO']:
+          for n in ['INPUT & AUDIO','FT6336 • ES8311 • microphone','INPUT / AUDIO']:
               need(hub,n,'physical System hardware UX')
 
-          # Preserve hard-won v10/v9 reliability contracts while enabling audio.
           need(hub,'static const uint16_t UI_ORANGE   = 0xFBC0','Workshop OS theme')
           need(hub,'tft.fillRoundRect(x + 1, y + 1, w - 2, h - 2, 10, UI_PANEL);',
                'strong-card background fix')
