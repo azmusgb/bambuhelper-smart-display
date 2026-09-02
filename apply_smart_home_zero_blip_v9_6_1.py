@@ -14,6 +14,33 @@ def replace_once(text: str, old: str, new: str, name: str) -> str:
     return text.replace(old, new, 1)
 
 
+def patch_display_header(repo: Path) -> None:
+    """Pre-seed v9.7 Hub states without depending on enum line formatting.
+
+    Historical Smart Home patch layers have emitted both one-entry-per-line and
+    compact enum formatting. v9.7 needs two additional states, and inserting
+    them here lets the later interaction patch remain deterministic regardless
+    of which historical representation produced display_ui.h.
+    """
+    p = repo / "src" / "display_ui.h"
+    text = p.read_text(encoding="utf-8")
+    if "SCREEN_HUB_PRINTER" in text:
+        return
+    needle = "SCREEN_HUB_SYSTEM"
+    count = text.count(needle)
+    if count != 1:
+        raise PatchError(
+            f"display/header-v97-states: expected exactly 1 {needle}, found {count}"
+        )
+    pos = text.find(needle) + len(needle)
+    text = (
+        text[:pos]
+        + ", SCREEN_HUB_PRINTER, SCREEN_HUB_MORE"
+        + text[pos:]
+    )
+    p.write_text(text, encoding="utf-8")
+
+
 def patch_smart_hub(repo: Path) -> None:
     p = repo / "src" / "smart_hub.cpp"
     text = p.read_text(encoding="utf-8")
@@ -191,6 +218,7 @@ def patch_display_ui(repo: Path) -> None:
 
 
 def apply(repo: Path) -> None:
+    patch_display_header(repo)
     patch_smart_hub(repo)
     patch_display_ui(repo)
 
