@@ -8,6 +8,30 @@ Validated Full SHA-256: `0c6152c476961b7f40f84409b60224e434e00983d485d3fc23b3f4b
 
 Automated CI is green. This checklist is the remaining hardware acceptance gate before broad OTA promotion.
 
+## 0. Mac USB / serial baseline
+
+Do not assume a fixed `/dev/cu.usbmodem####` name. macOS can assign a different port after reconnects or resets.
+
+From the repository root:
+
+```bash
+bash scripts/waveshare-usb.sh list
+bash scripts/waveshare-usb.sh port
+```
+
+For live diagnostics:
+
+```bash
+bash scripts/waveshare-usb.sh monitor
+```
+
+The helper matches the Espressif USB JTAG/serial VID:PID and therefore follows the same board across macOS port renumbering. If multiple matching boards are connected, set `WAVESHARE_USB_SERIAL` to the intended board serial rather than selecting a port by number.
+
+- [ ] Helper finds exactly one intended Waveshare device.
+- [ ] Serial monitor opens on the detected port.
+- [ ] Pressing RST produces boot output in the monitor.
+- [ ] No test or recovery procedure depends on a hard-coded `/dev/cu.usbmodem####` value.
+
 ## 1. Boot / recovery baseline
 
 - [ ] Normal boot completes without a boot loop.
@@ -153,6 +177,7 @@ Run for at least 30 minutes, preferably during an active print.
 Record:
 
 ```text
+USB/serial baseline: PASS / FAIL
 Boot/recovery: PASS / FAIL
 Direct touch navigation: PASS / FAIL
 Zero-blip transitions: PASS / FAIL
