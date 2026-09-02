@@ -6,6 +6,7 @@ on:
     paths:
       - 'apply_smart_home_ultimate_v9_6.py'
       - 'apply_smart_home_touch_nav_v9_6_1.py'
+      - 'apply_smart_home_touch_nav_compat_v9_6_2.py'
       - 'apply_smart_home_experience_v9_5.py'
       - '.github/workflows/bambuhelper-v9-6-ultimate.yml'
       - 'scripts/validate_device_contracts.py'
@@ -115,6 +116,7 @@ jobs:
           python apply_smart_home_experience_v9_5.py --repo upstream --apply
           python apply_smart_home_ultimate_v9_6.py --repo upstream --apply
           python apply_smart_home_touch_nav_v9_6_1.py --repo upstream --apply
+          python apply_smart_home_touch_nav_compat_v9_6_2.py --repo upstream --apply
 
       - name: Validate inherited device contracts
         run: python scripts/validate_device_contracts.py
@@ -144,7 +146,7 @@ jobs:
               if needle in body: raise SystemExit(f'FORBIDDEN {label}: {needle}')
           for n in ['drawAmbientHome','tap to wake  •  local-first','g_ambientHome = true','uiWidgetSignature','DEVELOPMENT UNLOCKED','RECOVERY FOUNDATION','doc["widgets"]','"gauge"']:
               need(hub,n,'v9.6 hub')
-          for n in ['smartHubHandleTouch','SmartHub nav touch raw=','direct footer taps select pages']:
+          for n in ['smartHubHandleTouch','SmartHub nav touch raw=','direct footer taps select pages','"HOME", "PRINT", "WORK", "WIDGET", "SYSTEM"','smartHubShowPage("printer")']:
               need(hub,n,'RC2 direct navigation')
           need(hubh,'smartHubHandleTouch(int16_t rawX, int16_t rawY)','RC2 hub API')
           for n in ['Smart Home v9.6 Ultimate Experience Studio','Print Focus','Device Care','ccV96SetDensity']:
@@ -155,8 +157,8 @@ jobs:
               need(focal,n,'FT6336 point capture')
           need(button,'buttonLastTouchPoint','button coordinate cache')
           need(buttonh,'buttonLastTouchPoint(int16_t* x, int16_t* y)','button coordinate API')
-          for n in ['buttonLastTouchPoint(&touchX, &touchY)','smartHubHandleTouch(touchX, touchY)']:
-              need(main,n,'main direct-nav dispatch')
+          for n in ['#if defined(BOARD_IS_WS350)','buttonLastTouchPoint(&touchX, &touchY)','smartHubHandleTouch(touchX, touchY)','Coordinate-aware direct navigation is intentionally WS350-only']:
+              need(main,n,'WS350-scoped direct-nav dispatch')
           for n in ['kCandidateMaxAttempts = 3','recoveryMarkWebReady','esp_ota_set_boot_partition']:
               need(rec,n,'RC3 recovery')
           for n in ['/recovery/status','/recovery/rollback','Download Settings Backup']:
@@ -165,7 +167,7 @@ jobs:
           need(settings,'buttonType = BTN_TOUCHSCREEN;','touch guard')
           forbid(web,'client.setInsecure();','TLS downgrade')
           forbid(board,'-D ENABLE_OTA_AUTO=1','unsafe auto OTA')
-          print('v9.6 Ultimate Experience RC2 + direct touch nav + RC3 recovery contracts: PASS')
+          print('v9.6 Ultimate Experience RC2 + WS350 direct touch nav + shared-target compatibility + RC3 recovery contracts: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -219,6 +221,8 @@ jobs:
             echo 'browser_experience_studio=PASS'
             echo 'ft6336_coordinate_capture=PASS'
             echo 'direct_touch_bottom_navigation=PASS'
+            echo 'five_destination_footer=PASS'
+            echo 'shared_target_touch_compatibility=PASS'
             echo 'tap_cycle_fallback_preserved=PASS'
             echo 'recovery_foundation_preserved=PASS'
             echo 'portal_auth_required=NO_DEVELOPMENT_BUILD'
