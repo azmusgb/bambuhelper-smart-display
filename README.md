@@ -128,6 +128,51 @@ The final composed v9.7 source verifies that `/settings/export` is safe to expos
 - cloud identity is omitted/redacted;
 - restoring a redacted backup preserves credentials already provisioned on the device.
 
+## Mac USB auto-detection
+
+Do **not** hard-code macOS device names such as `/dev/cu.usbmodem101`. macOS may renumber the same board after reconnects, resets, hub changes, or reboots.
+
+The repo includes [`scripts/waveshare-usb.sh`](scripts/waveshare-usb.sh), which identifies the board from the USB JTAG/serial VID:PID (`303A:1001`) and then returns the current `/dev/cu.*` path.
+
+Detect the current port:
+
+```bash
+PORT="$(bash scripts/waveshare-usb.sh port)"
+echo "$PORT"
+```
+
+Open the serial monitor without knowing the port number:
+
+```bash
+bash scripts/waveshare-usb.sh monitor
+```
+
+Inspect all serial devices when diagnosing USB problems:
+
+```bash
+bash scripts/waveshare-usb.sh list
+```
+
+If more than one matching Espressif USB device is attached, the helper refuses to guess. Select the intended board using its serial from `platformio device list`:
+
+```bash
+WAVESHARE_USB_SERIAL='<board-serial>' \
+  bash scripts/waveshare-usb.sh monitor
+```
+
+The same resolved port can be reused for a deliberate USB flash:
+
+```bash
+PORT="$(bash scripts/waveshare-usb.sh port)"
+python -m esptool \
+  --chip esp32s3 \
+  --port "$PORT" \
+  --baud 460800 \
+  write-flash 0x0 <Full-firmware.bin>
+```
+
+Only a **Full** firmware image belongs at flash offset `0x0`. Recovery-page uploads must continue to use the application firmware (`WaveshareHome-firmware.bin`), never `Full.bin`.
+
 ## Automated validation
 
 Exact pre-merge head: `5825602f6a56c7b274df6744e3c87c23ccc9be6e`
