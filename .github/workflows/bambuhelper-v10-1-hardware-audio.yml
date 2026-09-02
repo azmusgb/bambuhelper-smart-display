@@ -1,0 +1,197 @@
+name: BambuHelper ws_lcd_350 Smart Home v10.1 Hardware + Audio RC1
+
+on:
+  push:
+    branches: [evolve/v10-1-hardware-enablement]
+    paths:
+      - 'apply_smart_home_hardware_v10_1.py'
+      - '.bambuhelper-validation/v10-1-hardware.zlib.b64'
+      - 'scripts/apply_smart_home_stack.sh'
+      - '.github/workflows/bambuhelper-v10-1-hardware-audio.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apply_smart_home_hardware_v10_1.py'
+      - '.bambuhelper-validation/v10-1-hardware.zlib.b64'
+      - 'scripts/apply_smart_home_stack.sh'
+      - '.github/workflows/bambuhelper-v10-1-hardware-audio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-home-v10-1-hardware-audio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout evolution repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned BambuHelper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate patch tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile apply_smart_home_hardware_v10_1.py
+          bash -n scripts/apply_smart_home_stack.sh
+          python - <<'PY'
+          from pathlib import Path
+          import base64, zlib
+          p=Path('.bambuhelper-validation/v10-1-hardware.zlib.b64')
+          src=zlib.decompress(base64.b64decode(p.read_text().strip())).decode('utf-8')
+          compile(src, str(p), 'exec')
+          print('v10.1 compressed patch core: PASS')
+          PY
+
+      - name: Apply complete Smart Home stack through v10.1
+        shell: bash
+        run: bash scripts/apply_smart_home_stack.sh upstream apply_smart_home_hardware_v10_1.py
+
+      - name: Validate inherited device contracts
+        run: python scripts/validate_device_contracts.py
+
+      - name: Verify v10.1 hardware and audio contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          backend=Path('upstream/src/buzzer_backend_es8311.cpp').read_text()
+          buzzer=Path('upstream/src/buzzer.cpp').read_text()
+          header=Path('upstream/src/buzzer_backend.h').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          template=Path('upstream/src/web_template.cpp').read_text()
+          pages=Path('upstream/include/web_pages.h').read_text()
+          js=Path('upstream/web/app.js').read_text()
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          focal=Path('upstream/src/button_touch_focaltech.cpp').read_text()
+
+          def need(body, needle, label):
+              if needle not in body:
+                  raise SystemExit(f'MISSING {label}: {needle}')
+          def forbid(body, needle, label):
+              if needle in body:
+                  raise SystemExit(f'FORBIDDEN {label}: {needle}')
+
+          need(build, '#define SMART_HOME_VERSION "v10.1"', 'v10.1 version')
+          need(build, 'Smart Home v10.1 Hardware + Audio RC1', 'v10.1 label')
+
+          expected_flags=[
+              'BOARD_HAS_ES8311_AUDIO=1','BOARD_HAS_MICROPHONE=1',
+              'AUDIO_I2C_ADDR=0x18','AUDIO_I2C_SDA=8','AUDIO_I2C_SCL=7',
+              'AUDIO_I2S_PORT=0','AUDIO_I2S_MCLK=12','AUDIO_I2S_BCLK=13',
+              'AUDIO_I2S_LRC=15','AUDIO_I2S_DIN=14','AUDIO_I2S_DOUT=16',
+              'AUDIO_PA_CTRL=-1','BOARD_HAS_BLE5=1','BOARD_HAS_AXP2101_HW=1',
+              'BOARD_HAS_PCF85063_HW=1','BOARD_HAS_QMI8658_HW=1','BOARD_HAS_TF_HW=1']
+          for n in expected_flags:
+              need(board,n,'WS350 hardware map')
+
+          for n in ['I2S_MODE_RX','pins.data_in_num   = AUDIO_I2S_DIN',
+                    'buzzerBackendMicLevel','AUDIO_PA_CTRL >= 0']:
+              need(backend,n,'full-duplex ES8311 backend')
+          need(header,'buzzerBackendMicLevel','mic backend API')
+          need(buzzer,'BOARD_IS_WS350) && !defined(BOARD_HAS_ES8311_AUDIO)',
+               'WS350 legacy GPIO guard')
+          forbid(buzzer,'ws_lcd_350 has no buzzer hardware','obsolete hardware model')
+
+          for n in ['handleAudioMicTest','SECURE_POST("/audio/mic/test"',
+                    'doc["audio"]','"BLE 5 LE"','"AXP2101"','"PCF85063"','"QMI8658"']:
+              need(web,n,'hardware/audio web API')
+          need(template,'strcmp(name, "MICROPHONE")','mic template capability')
+          for n in ["mic:'%MICROPHONE%'",'micDiagRow','Test onboard microphone']:
+              need(pages,n,'browser mic UX')
+          for n in ['function testMicrophone()','/audio/mic/test','Input level']:
+              need(js,n,'browser mic diagnostic')
+          for n in ['INPUT & AUDIO','ES8311 speaker • onboard mic • BLE 5 LE','INPUT / AUDIO']:
+              need(hub,n,'physical System hardware UX')
+
+          # Preserve hard-won v10/v9 reliability contracts while enabling audio.
+          need(hub,'static const uint16_t UI_ORANGE   = 0xFBC0','Workshop OS theme')
+          need(hub,'tft.fillRoundRect(x + 1, y + 1, w - 2, h - 2, 10, UI_PANEL);',
+               'strong-card background fix')
+          need(focal,'ft6336RecoverBus','FT6336 recovery')
+          need(web,'recoverySha256HexArrayBuffer','Safari-safe recovery')
+          print('v10.1 hardware/audio contracts: PASS')
+          PY
+
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 with ES8311 and microphone RX
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package v10.1 Hardware + Audio RC1 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v10-1-artifacts/source-snapshot
+          cp "$FULL" v10-1-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v10.1-Hardware-Audio-RC1-Full.bin
+          cp "$APP" v10-1-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v10.1-Hardware-Audio-RC1-OTA.bin
+          cp "$APP" v10-1-artifacts/WaveshareHome-firmware.bin
+          for f in \
+            boards/ws_lcd_350.ini \
+            src/buzzer.cpp src/buzzer_backend.h src/buzzer_backend_es8311.cpp \
+            src/smart_hub.cpp src/web_server.cpp src/web_template.cpp \
+            include/web_pages.h include/smart_home_build.h web/app.js web/app.css \
+            src/button_touch_focaltech.cpp src/settings.cpp; do
+            mkdir -p "v10-1-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "v10-1-artifacts/source-snapshot/$f"
+          done
+          {
+            echo 'BambuHelper ws_lcd_350 Smart Home v10.1 Hardware + Audio RC1 validation'
+            echo 'ws350_hardware_model=CORRECTED'
+            echo 'es8311_speaker=ENABLED'
+            echo 'es8311_pa_gpio=NONE_AS_VENDOR_DESIGN'
+            echo 'microphone_i2s_rx=ENABLED'
+            echo 'microphone_browser_diagnostic=ENABLED'
+            echo 'ble5_capability=SURFACED_NOT_PROVISIONING_YET'
+            echo 'axp2101_pcf85063_qmi8658_tf=CAPABILITY_METADATA_ONLY'
+            echo 'workshop_os_theme=PRESERVED'
+            echo 'printer_configuration_retention=PRESERVED'
+            echo 'responsive_touch_geometry=PRESERVED'
+            echo 'safari_recovery_foundation=PRESERVED'
+            echo 'ft6336_reliability=PRESERVED'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            echo 'physical_audio_mic_acceptance=REQUIRED'
+            sha256sum v10-1-artifacts/*.bin
+          } | tee v10-1-artifacts/validation-report-v10-1-hardware-audio-rc1.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-ws_lcd_350-smart-home-v10-1-hardware-audio-rc1
+          retention-days: 14
+          if-no-files-found: error
+          path: v10-1-artifacts/
