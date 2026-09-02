@@ -7,6 +7,7 @@ on:
       - 'apply_smart_home_recovery_v9_4.py'
       - 'apply_smart_home_recovery_hardening_v9_4_1.py'
       - 'apply_smart_home_recovery_entry_v9_4_2.py'
+      - 'apply_smart_home_experience_v9_5.py'
       - 'apply_smart_home_dev_unlock_v9_3.py'
       - 'scripts/validate_device_contracts.py'
       - '.github/workflows/bambuhelper-v9-4-recovery-foundation.yml'
@@ -16,6 +17,7 @@ on:
       - 'apply_smart_home_recovery_v9_4.py'
       - 'apply_smart_home_recovery_hardening_v9_4_1.py'
       - 'apply_smart_home_recovery_entry_v9_4_2.py'
+      - 'apply_smart_home_experience_v9_5.py'
       - 'apply_smart_home_dev_unlock_v9_3.py'
       - 'scripts/validate_device_contracts.py'
       - '.github/workflows/bambuhelper-v9-4-recovery-foundation.yml'
@@ -97,7 +99,7 @@ jobs:
           PY
           python -m py_compile apply_*.py scripts/validate_device_contracts.py
 
-      - name: Apply complete v9.4 recovery RC3 stack
+      - name: Apply complete v9.4 recovery + v9.5 experience stack
         shell: bash
         run: |
           set -euo pipefail
@@ -121,6 +123,7 @@ jobs:
           python apply_smart_home_recovery_v9_4.py --repo upstream --apply
           python apply_smart_home_recovery_hardening_v9_4_1.py --repo upstream --apply
           python apply_smart_home_recovery_entry_v9_4_2.py --repo upstream --apply
+          python apply_smart_home_experience_v9_5.py --repo upstream --apply
 
       - name: Validate inherited OTA and printer contracts
         run: python scripts/validate_device_contracts.py
@@ -195,6 +198,7 @@ jobs:
           cp upstream/src/web_server.cpp v9.4-artifacts/source-snapshot/web_server.cpp
           cp upstream/src/wifi_manager.cpp v9.4-artifacts/source-snapshot/wifi_manager.cpp
           cp upstream/src/security_manager.cpp v9.4-artifacts/source-snapshot/security_manager.cpp
+          cp upstream/src/smart_hub.cpp v9.4-artifacts/source-snapshot/smart_hub.cpp
           cp upstream/include/smart_home_build.h v9.4-artifacts/source-snapshot/smart_home_build.h
           cp upstream/web/app.js v9.4-artifacts/source-snapshot/app.js
           {
