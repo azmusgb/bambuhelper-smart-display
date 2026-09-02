@@ -277,21 +277,13 @@ def patch_web(repo: Path) -> None:
   String json;
 """
     text = replace_once(text, status, status_new, "status hardware capabilities")
-    buz = """static void handleBuzzerTest() {
-  uint8_t snd = 0;
-  if (server.hasArg("sound")) snd = server.arg("sound").toInt();
-  if (snd <= 2) buzzerPlay((BuzzerEvent)snd);
-  else if (snd == 4) buzzerPlay(BUZZ_BED_COOLDOWN);
-  server.send(200, "application/json", "{\"status\":\"ok\"}");
-}
-"""
-    mic = buz + """
-
+    handler_anchor = '\n// Parse an "#rrggbb" or "rrggbb" form value into 0xRRGGBB, falling back to the\n'
+    mic_handler = """
 static void handleAudioMicTest() {
 #if defined(BOARD_HAS_MICROPHONE)
   int level = buzzerBackendMicLevel(350);
   if (level < 0) {
-    server.send(503, "application/json", "{\"status\":\"error\",\"message\":\"microphone unavailable\"}");
+    server.send(503, "application/json", "{\\"status\\":\\"error\\",\\"message\\":\\"microphone unavailable\\"}");
     return;
   }
   JsonDocument doc;
@@ -302,11 +294,11 @@ static void handleAudioMicTest() {
   serializeJson(doc, json);
   server.send(200, "application/json", json);
 #else
-  server.send(404, "application/json", "{\"status\":\"error\",\"message\":\"microphone not present\"}");
+  server.send(404, "application/json", "{\\"status\\":\\"error\\",\\"message\\":\\"microphone not present\\"}");
 #endif
 }
 """
-    text = replace_once(text, buz, mic, "microphone endpoint")
+    text = replace_once(text, handler_anchor, mic_handler + handler_anchor, "microphone endpoint")
     text = replace_once(text, '  SECURE_POST("/buzzer/test", handleBuzzerTest);\n', '  SECURE_POST("/buzzer/test", handleBuzzerTest);\n  SECURE_POST("/audio/mic/test", handleAudioMicTest);\n', "microphone route")
     save(repo, rel, text)
 
