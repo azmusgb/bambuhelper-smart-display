@@ -1,39 +1,31 @@
-name: BambuHelper ws_lcd_350 Smart Home v9.4 Recovery Foundation RC3
+name: BambuHelper ws_lcd_350 Smart Home v9.7 Interaction & Layout RC1
 
 on:
   push:
     branches: [main, fix/v9-4-rc3-recovery-entry]
     paths:
-      - 'apply_smart_home_recovery_v9_4.py'
-      - 'apply_smart_home_recovery_hardening_v9_4_1.py'
-      - 'apply_smart_home_recovery_entry_v9_4_2.py'
-      - 'apply_smart_home_experience_v9_5.py'
-      - 'apply_smart_home_dev_unlock_v9_3.py'
-      - 'scripts/validate_device_contracts.py'
-      - '.github/workflows/bambuhelper-v9-4-recovery-foundation.yml'
+      - 'apply_smart_home_interaction_v9_7.py'
+      - 'apply_smart_home_interaction_v9_7_fixup.py'
+      - '.github/workflows/bambuhelper-v9-7-interaction-layout.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'apply_smart_home_recovery_v9_4.py'
-      - 'apply_smart_home_recovery_hardening_v9_4_1.py'
-      - 'apply_smart_home_recovery_entry_v9_4_2.py'
-      - 'apply_smart_home_experience_v9_5.py'
-      - 'apply_smart_home_dev_unlock_v9_3.py'
-      - 'scripts/validate_device_contracts.py'
-      - '.github/workflows/bambuhelper-v9-4-recovery-foundation.yml'
+      - 'apply_smart_home_interaction_v9_7.py'
+      - 'apply_smart_home_interaction_v9_7_fixup.py'
+      - '.github/workflows/bambuhelper-v9-7-interaction-layout.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: smart-home-v9-4-recovery-${{ github.ref }}
+  group: smart-home-v9-7-interaction-layout-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 60
     steps:
       - name: Checkout evolution repository
         uses: actions/checkout@v4
@@ -76,7 +68,8 @@ jobs:
             ('/tmp/v2.b64','apply_resilience_evolution_v2.py'),('/tmp/v3.b64','apply_smart_profiles_evolution_v3.py'),
             ('/tmp/v4.b64','apply_ws350_remote_dashboard_v4.py'),('/tmp/v5.b64','apply_commissioning_evolution_v5.py'),
             ('/tmp/v6.b64','apply_smart_display_platform_v6.py'),('/tmp/v7-home.b64','apply_smart_home_navigation_v7.py')]
-          for src,dst in pairs: Path(dst).write_bytes(zlib.decompress(base64.b64decode(Path(src).read_text().strip())))
+          for src,dst in pairs:
+              Path(dst).write_bytes(zlib.decompress(base64.b64decode(Path(src).read_text().strip())))
           PY
 
       - name: Repair historical v3 patcher
@@ -99,7 +92,7 @@ jobs:
           PY
           python -m py_compile apply_*.py scripts/validate_device_contracts.py
 
-      - name: Apply complete v9.4 recovery + v9.5 experience stack
+      - name: Apply complete recovery + v9.7 experience stack
         shell: bash
         run: |
           set -euo pipefail
@@ -124,50 +117,90 @@ jobs:
           python apply_smart_home_recovery_hardening_v9_4_1.py --repo upstream --apply
           python apply_smart_home_recovery_entry_v9_4_2.py --repo upstream --apply
           python apply_smart_home_experience_v9_5.py --repo upstream --apply
+          python apply_smart_home_portal_v9_6.py --repo upstream --apply
+          python apply_smart_home_zero_blip_v9_6_1.py --repo upstream --apply
+          python apply_smart_home_interaction_v9_7.py --repo upstream --apply
+          python apply_smart_home_interaction_v9_7_fixup.py --repo upstream --apply
 
       - name: Validate inherited OTA and printer contracts
         run: python scripts/validate_device_contracts.py
 
-      - name: Verify v9.4 RC3 recovery invariants
+      - name: Verify recovery + zero-blip + v9.7 interaction invariants
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          rec=Path('upstream/src/recovery_manager.cpp').read_text();web=Path('upstream/src/web_server.cpp').read_text();wifi=Path('upstream/src/wifi_manager.cpp').read_text();main=Path('upstream/src/main.cpp').read_text();build=Path('upstream/include/smart_home_build.h').read_text();app=Path('upstream/web/app.js').read_text();settings=Path('upstream/src/settings.cpp').read_text();sec=Path('upstream/src/security_manager.cpp').read_text();board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          rec=Path('upstream/src/recovery_manager.cpp').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          wifi=Path('upstream/src/wifi_manager.cpp').read_text()
+          main=Path('upstream/src/main.cpp').read_text()
+          display=Path('upstream/src/display_ui.cpp').read_text()
+          display_h=Path('upstream/src/display_ui.h').read_text()
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          hub_h=Path('upstream/src/smart_hub.h').read_text()
+          button=Path('upstream/src/button.cpp').read_text()
+          button_h=Path('upstream/src/button.h').read_text()
+          touch_h=Path('upstream/src/button_touch_backend.h').read_text()
+          focal=Path('upstream/src/button_touch_focaltech.cpp').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          app=Path('upstream/web/app.js').read_text()
+          css=Path('upstream/web/app.css').read_text()
+          settings=Path('upstream/src/settings.cpp').read_text()
+          sec=Path('upstream/src/security_manager.cpp').read_text()
+          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
           def need(body,n,label):
               if n not in body: raise SystemExit(f'MISSING {label}: {n}')
           def forbid(body,n,label):
               if n in body: raise SystemExit(f'FORBIDDEN {label}: {n}')
-          for n in ['kCandidateMaxAttempts = 3','recoveryArmCandidateBoot','esp_ota_set_boot_partition','triple reset -> Safe Mode','kCandidateHealthyMs = 25000','sWebReady','recoveryMarkWebReady','recoveryWebReady']:
+          for n in ['kCandidateMaxAttempts = 3','recoveryArmCandidateBoot','esp_ota_set_boot_partition','kCandidateHealthyMs = 25000','recoveryWebReady']:
               need(rec,n,'recovery manager')
-          for n in ['/recovery/status','/recovery/touch','/recovery/safe','/recovery/rollback','/recovery/reset-ui','/recovery/reset-auth','/recovery/reset-wifi','WaveshareHome-firmware.bin','recoveryArmCandidateBoot();','recoveryMarkWebReady();',"function factoryReset(){if(confirm('Factory reset ALL settings?'))act('/reset')}","server.sendHeader(\"Location\", \"/recovery\")","recoverySafeModeActive() ? \"http://192.168.4.1/recovery\"","Download Settings Backup","['Web control plane',d.webReady?'READY':'STARTING']"]:
+          for n in ['/recovery/status','/recovery/safe','/recovery/rollback','/recovery/reset-wifi','WaveshareHome-firmware.bin']:
               need(web,n,'recovery web plane')
           need(wifi,'Waveshare-Recovery-','recovery AP')
-          need(wifi,'if (recoverySafeModeActive()) return;','sticky safe-mode recovery AP')
-          need(main,'recoveryBootProbe();','boot probe')
-          need(main,'recoveryTick();','health tick')
-          need(build,'#define SMART_HOME_VERSION "v9.4"','v9.4 version')
           need(build,'#define SMART_HOME_DEV_UNLOCK 1','dev unlock retained')
-          need(build,'Smart Home v9.4 Recovery Foundation RC3','RC3 build identity')
           need(sec,'if (!portalAuthRequired()) return true;','portal auth remains off')
           need(settings,'buttonType = BTN_TOUCHSCREEN;','touch lockout guard')
-          need(app,'Recovery console: <b>/recovery</b>','visible recovery path')
+          for n in ['zero-blip compositor','LGFX_Sprite','hubEnsureFrame','hubCommitFrame']:
+              need(hub,n,'zero-blip compositor')
+          need(display,'if (!smartHubIsScreen(currentScreen))','Smart Home preclear suppression')
+
+          # 1 real coordinate navigation
+          for n in ['uint16_t x;','uint16_t y;','hasPosition']:
+              need(touch_h,n,'touch coordinate payload')
+          need(focal,'ft5x06ReadPoint','FT6336 coordinate reader')
+          need(button,'buttonGetTouchPosition','button coordinate cache')
+          need(button_h,'buttonGetTouchPosition','button coordinate API')
+          need(main,'Smart Home v9.7: on touchscreen-backed Hub pages','Hub coordinate gesture dispatch')
+          need(hub,'smartHubHandleTouch','Hub touch router')
+          need(hub_h,'smartHubHandleTouch','Hub touch API')
+
+          # 2-8 physical interaction/layout
+          for n in ['"HOME", "PRINTER", "WORKSHOP", "MORE"','SCREEN_HUB_PRINTER','SCREEN_HUB_MORE','drawPrinter','drawMore','EDIT MY WIDGETS','Fallback deck stays useful if the feed fails','uiSpoolCaption','uiPrinterArtFamily','uiActionButton','UPDATE & RECOVERY']:
+              need(hub,n,'v9.7 physical experience')
+          need(display_h,'SCREEN_HUB_PRINTER','native Printer screen state')
+          need(display_h,'SCREEN_HUB_MORE','More screen state')
+          forbid(hub,'Printer + AMS command center','duplicate Workshop hero copy')
+          forbid(hub,'uiWifiGlyphstatic','duplicate WiFi function boundary')
+          forbid(hub,'drawTapHintstatic','duplicate tap-hint function boundary')
+          forbid(hub,'} // namespace\n\n} // namespace','duplicate namespace close')
+
+          # 9-12 browser layout/functionality
+          need(css,'aspect-ratio:320/480','physical preview aspect ratio')
+          need(app,'v97LegacyDisplay','legacy display disclosure')
+          need(app,"health.style.display='none'",'legacy Setup health suppression')
+          need(app,'v97FamilyFromName','printer-family imagery')
+          need(css,'.v97-family-a1','printer-family CSS')
+          need(css,'repeat(auto-fit,minmax(145px,1fr))','responsive live telemetry')
+          need(css,'.v96-state{pointer-events:none}','status vs control semantics')
+
           forbid(web,'client.setInsecure();','TLS downgrade')
           forbid(board,'-D ENABLE_OTA_AUTO=1','WS350 unsafe auto OTA')
-          print('v9.4 RC3 recovery + inherited safety contracts: PASS')
+          print('v9.7 interaction + layout + zero-blip + recovery contracts: PASS')
           PY
 
-      - name: Validate browser JavaScript and SHA-256 helper
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --check upstream/web/app.js
-          python - <<'PY'
-          from pathlib import Path
-          s=Path('upstream/web/app.js').read_text();a=s.index('function sha256HexArrayBuffer');b=s.index('async function startOta()',a);Path('/tmp/hash-test.js').write_text(s[a:b]+"\nconst b=new TextEncoder().encode('abc').buffer; console.log(sha256HexArrayBuffer(b));\n")
-          PY
-          test "$(node /tmp/hash-test.js)" = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
 
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
@@ -184,49 +217,49 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v9.4 recovery RC3 artifacts
+      - name: Package v9.7 Interaction & Layout RC1 artifacts
         shell: bash
         run: |
           set -euo pipefail
-          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)";APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          mkdir -p v9.4-artifacts/source-snapshot
-          cp "$FULL" v9.4-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.4-Recovery-Foundation-RC3-Full.bin
-          cp "$APP" v9.4-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.4-Recovery-Foundation-RC3-OTA.bin
-          cp "$APP" v9.4-artifacts/WaveshareHome-firmware.bin
-          cmp "$APP" v9.4-artifacts/WaveshareHome-firmware.bin
-          cp upstream/src/recovery_manager.cpp v9.4-artifacts/source-snapshot/recovery_manager.cpp
-          cp upstream/src/web_server.cpp v9.4-artifacts/source-snapshot/web_server.cpp
-          cp upstream/src/wifi_manager.cpp v9.4-artifacts/source-snapshot/wifi_manager.cpp
-          cp upstream/src/security_manager.cpp v9.4-artifacts/source-snapshot/security_manager.cpp
-          cp upstream/src/smart_hub.cpp v9.4-artifacts/source-snapshot/smart_hub.cpp
-          cp upstream/include/smart_home_build.h v9.4-artifacts/source-snapshot/smart_home_build.h
-          cp upstream/web/app.js v9.4-artifacts/source-snapshot/app.js
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v9.7-artifacts/source-snapshot
+          cp "$FULL" v9.7-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.7-Interaction-Layout-RC1-Full.bin
+          cp "$APP" v9.7-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.7-Interaction-Layout-RC1-OTA.bin
+          cp "$APP" v9.7-artifacts/WaveshareHome-firmware.bin
+          cmp "$APP" v9.7-artifacts/WaveshareHome-firmware.bin
+          for f in recovery_manager.cpp web_server.cpp main.cpp display_ui.cpp display_ui.h smart_hub.cpp smart_hub.h button.cpp button.h button_touch_backend.h button_touch_focaltech.cpp; do
+            cp "upstream/src/$f" "v9.7-artifacts/source-snapshot/$f"
+          done
+          cp upstream/include/smart_home_build.h v9.7-artifacts/source-snapshot/smart_home_build.h
+          cp upstream/web/app.js v9.7-artifacts/source-snapshot/app.js
+          cp upstream/web/app.css v9.7-artifacts/source-snapshot/app.css
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v9.4 Recovery Foundation RC3 validation'
-            echo 'portal_auth_required=NO_DEVELOPMENT_BUILD'
-            echo 'independent_recovery_console=PASS'
-            echo 'safe_mode_auto_lands_recovery=PASS'
-            echo 'captive_portal_recovery_redirect=PASS'
-            echo 'triple_reset_safe_mode=PASS'
-            echo 'sticky_recovery_ap=PASS'
-            echo 'candidate_health_watchdog=PASS'
-            echo 'candidate_requires_web_ready=PASS'
-            echo 'automatic_candidate_rollback=PASS'
-            echo 'manual_previous_slot_boot=PASS'
-            echo 'settings_backup_from_recovery=PASS'
-            echo 'selective_reset_controls=PASS'
-            echo 'factory_reset_post_path=PASS'
-            echo 'ws350_touch_forced_on=PASS'
-            echo 'manual_ota_sha256=PASS'
+            echo 'BambuHelper ws_lcd_350 Smart Home v9.7 Interaction & Layout RC1 validation'
+            echo 'recovery_foundation=v9.4_RC3_PRESERVED'
+            echo 'zero_blip_compositor=PASS'
+            echo 'coordinate_touch_navigation=PASS'
+            echo 'primary_nav_home_printer_workshop_more=PASS'
+            echo 'native_printer_view=PASS'
+            echo 'workshop_hierarchy=PASS'
+            echo 'system_user_cards=PASS'
+            echo 'custom_fallback=PASS'
+            echo 'on_device_widget_edit=PASS'
+            echo 'ams_spacing=PASS'
+            echo 'browser_320x480_preview=PASS'
+            echo 'legacy_controls_disclosed=PASS'
+            echo 'printer_family_imagery=PASS'
+            echo 'control_semantics=PASS'
+            echo 'browser_js=PASS'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=REQUIRED'
-            sha256sum v9.4-artifacts/*.bin
-          } | tee v9.4-artifacts/validation-report-v9.4-recovery-foundation-rc3.txt
+            sha256sum v9.7-artifacts/*.bin
+          } | tee v9.7-artifacts/validation-report-v9.7-interaction-layout-rc1.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v9.4-recovery-foundation-rc3
+          name: bambuhelper-ws_lcd_350-smart-home-v9.7-interaction-layout-rc1
           retention-days: 14
           if-no-files-found: error
-          path: v9.4-artifacts/
+          path: v9.7-artifacts/

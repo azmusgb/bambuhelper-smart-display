@@ -2,56 +2,94 @@
 
 Production evolution for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)** on the BambuHelper v3.8.1 core.
 
-## Smart Home v8.3 RC3 — physical-test candidate
+## Current candidate: Smart Home v9.6.1 Zero-Blip RC2
 
-RC3 is the current candidate after physical WS350 testing exposed two release-blocking defects in earlier v8.3 builds:
+The current development candidate combines the **v9.4 RC3 recovery foundation**, the **v9.6 Printer Workspace**, and a new **v9.6.1 PSRAM framebuffer compositor** for Smart Home page transitions.
 
-- the System page still performed visible full-frame redraws;
-- browser-native Digest authentication produced repeated Safari/iOS sign-in prompts and interfered with the final response of manual OTA uploads.
+### Why RC2 exists
 
-RC3 keeps the v8 security work but changes the browser interaction model:
+v9.6 RC1 passed automated validation but **failed physical acceptance**: the WS350 still showed visible blank/repaint blipping when changing Smart Home pages.
 
-- **Portal-code session login:** browse to the device, enter the current 10-character portal code shown on System, then use a random RAM-only `BHSESSION` cookie for the rest of that boot.
-- No `WWW-Authenticate` / native Digest browser prompt in station mode.
-- Session cookie is `HttpOnly`, `SameSite=Strict`, RAM-only, and invalidated on reboot/logout.
-- Same-origin enforcement remains for mutating requests.
-- Manual OTA pauses background polling while the ESP32 single-client WebServer owns the upload connection.
-- OTA retains browser + device SHA-256 verification and now reports useful HTTP failure details instead of a generic `unexpected response`.
-- System full-screen clearing occurs only on page entry; normal telemetry refreshes update in place.
+The root cause was below the v9.5 page-level partial-render code. BambuHelper's global display loop cleared the physical panel on every screen change before the Smart Home renderer ran. Reducing periodic redraw frequency could not eliminate a blank frame that had already been exposed by the upstream transition path.
 
-Existing v8 hardening remains:
+RC2 changes that architecture:
 
-- insecure OTA `setInsecure()` fallback removed;
-- device auto-OTA disabled for `ws_lcd_350` pending publisher-authenticity work;
-- Bambu cloud authentication is email-code-only in the local portal;
-- Bambu account passwords are not persisted;
-- settings backups redact Wi-Fi password, printer LAN access code and cloud identity;
-- min-heap, max-block and PSRAM diagnostics are exposed on System.
+- Smart Home pages render into a 16-bit **PSRAM `LGFX_Sprite`** first.
+- The existing page stays visible while the replacement page is composed off-screen.
+- The completed frame is pushed to the ST7796 only after composition finishes.
+- The upstream physical `fillScreen()` pre-clear is suppressed when entering Smart Home pages.
+- Live Smart Home updates retain dirty/incremental behavior so unchanged data does not force an unnecessary commit.
 
-### Validated RC3 assets
+The primary RC2 physical test is therefore **Home → Workshop → Custom → System → Home** with no blank/intermediate frame.
 
-GitHub Actions run: `33302810825`
+### Printer Workspace
 
-- **OTA:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin`
-  - Size: `2,140,592 bytes`
-  - SHA-256: `499a73a43dc27b0ccfea3688115bda11b0ef3d972a80ed6e9e0b0a90d97d67fc`
-- **Full / USB recovery:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin`
-  - Size: `2,206,128 bytes`
-  - SHA-256: `21adbffad9854271acb2a93b05fe6e0df7d6e24113276f1bbad7a17e46d8c737`
-- Actions artifact ZIP SHA-256: `f10a617bd9cf2628aa6f90d76e7048128fade9cb0c5f25fa23fc582dca758bca`
+The v9.6 Printer experience remains organized around:
 
-Validation gates passed:
+- **Overview** — printer hero, connection state, progress, temperatures, layer, Wi-Fi and health actions.
+- **Connection** — LAN / Cloud identity and setup.
+- **Display** — touchscreen preview, presets and Widget Library.
+- **Automation** — chamber-light behavior as readable event rules.
+- **Advanced** — original low-level controls remain available.
 
-- patch composition / RC3 invariants;
-- browser SHA-256 known-answer test;
+The Widget Library edits the same physical gauge-slot configuration used by the Waveshare display, keeping browser preview and physical layout on one model.
+
+### Recovery and anti-lockout foundation
+
+v9.6.1 preserves the validated v9.4 RC3 recovery work:
+
+- Safe Mode `/` lands on `/recovery`;
+- captive-portal recovery routing;
+- triple-reset Safe Mode entry;
+- sticky `Waveshare-Recovery-*` access point;
+- candidate health watchdog and web-ready promotion gate;
+- automatic candidate rollback;
+- previous-slot boot;
+- selective reset controls;
+- application-only recovery OTA;
+- WS350 touchscreen lockout guard.
+
+Portal-code authentication remains intentionally disabled in this development candidate so the previous portal lockout failure is not reintroduced.
+
+## Validation
+
+GitHub Actions run: **33641404096**
+
+Validated build head: `1ec8d190be91705f7f0d4bcdfc03ba30b13219eb`
+
+Passed gates:
+
+- complete patch composition;
+- inherited printer / OTA contracts;
+- v9.4 RC3 recovery invariants;
+- PSRAM Smart Home compositor invariant;
+- Smart Home physical pre-clear suppression invariant;
+- dirty-only frame commit invariant;
+- browser JavaScript syntax;
 - exact `ws_lcd_350` PlatformIO build;
 - shared `jc3248w535` 320×480 regression build;
-- Full-image merge and packaging.
+- Full-image merge;
+- artifact packaging and upload.
 
-The artifact was independently unpacked and re-hashed after CI; both firmware hashes match `validation-report-v8.3-rc3.txt`.
+### Validated artifacts
 
-**Do not merge/promote yet.** RC3 still requires physical retesting for session login, no repeated Safari prompts, System stability, successful 100% OTA + automatic reboot, printer/AMS telemetry and runtime memory stability. See [`PHYSICAL_ACCEPTANCE_V8_3.md`](PHYSICAL_ACCEPTANCE_V8_3.md).
+- **OTA:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6.1-Zero-Blip-RC2-OTA.bin`
+  - SHA-256: `c290bb942662023de00cd622b90a85945af3c08a6d3bf31976ecebb25eefe760`
+- **Full / USB recovery:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6.1-Zero-Blip-RC2-Full.bin`
+  - SHA-256: `c19f6e7f144d4ee9b172ee84d56f4a2beed8587148cde6e7fcb5ce446fba6dd0`
+- **Recovery OTA alias:** `WaveshareHome-firmware.bin`
+  - SHA-256: `c290bb942662023de00cd622b90a85945af3c08a6d3bf31976ecebb25eefe760`
 
-Production site remains on the currently accepted release until RC3 passes hardware acceptance:
+Persistent provenance is stored in [`releases/v9.6.1-zero-blip-rc2/`](releases/v9.6.1-zero-blip-rc2/).
+
+## Release status
+
+**Do not merge/promote yet.** RC1 is rejected for visible blipping. RC2 is the current physical-test candidate.
+
+First verify repeated Smart Home-to-Smart Home transitions. A blip that occurs only when crossing into or out of the legacy Printer renderer should be recorded separately because that boundary is not yet fully framebuffer-composited.
+
+See [`PHYSICAL_ACCEPTANCE_V9_6_1.md`](PHYSICAL_ACCEPTANCE_V9_6_1.md).
+
+Production site remains on the currently accepted release until the candidate passes hardware acceptance:
 
 <https://bambuhelper-smart-display.netlify.app/>
