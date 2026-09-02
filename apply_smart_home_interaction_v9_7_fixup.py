@@ -2,8 +2,6 @@
 from pathlib import Path
 import argparse
 
-import apply_smart_home_secret_safe_backups_v8_2 as secret_safe_backups
-
 
 class FixupError(RuntimeError):
     pass
@@ -62,12 +60,22 @@ def patch_smart_hub_boundaries(repo: Path) -> None:
 
 
 def verify_secret_safe_backup(repo: Path) -> None:
+    # The composed v8.3+ stack already carries the v8.2 redaction semantics.
+    # Recovery RC3 exposes /settings/export directly, so verify those semantics
+    # at the final v9.7 source shape rather than attempting to apply the older
+    # patch a second time.
     web = (repo / "src" / "web_server.cpp").read_text(encoding="utf-8")
     required = [
         'doc["_secretsIncluded"] = false;',
+        'wifi["pass"] = "";',
         'wifi["passRedacted"] = true;',
+        'p["accessCode"] = "";',
         'p["accessCodeRedacted"] = true;',
+        'p["cloudUserId"] = "";',
         'p["cloudIdentityRedacted"] = true;',
+        "importedPass[0] != '\\0'",
+        "importedCode[0] != '\\0'",
+        "importedUser[0] != '\\0'",
     ]
     forbidden = [
         'wifi["pass"] = wifiPass;',
@@ -84,12 +92,6 @@ def verify_secret_safe_backup(repo: Path) -> None:
 
 def apply(repo: Path) -> None:
     patch_smart_hub_boundaries(repo)
-
-    # Recovery RC3 exposes /settings/export directly from Safe Mode. Reuse the
-    # existing v8.2 redaction policy at the *end* of the composed v9.7 stack so
-    # every v9.7 recovery backup is safe to download/share and a redacted import
-    # preserves credentials already provisioned on the device.
-    secret_safe_backups.apply(repo)
     verify_secret_safe_backup(repo)
 
 
@@ -101,4 +103,4 @@ if __name__ == "__main__":
     if not args.apply:
         raise SystemExit("Pass --apply")
     apply(Path(args.repo))
-    print("Smart Home v9.7 boundary + secret-safe recovery fixup applied")
+    print("Smart Home v9.7 boundary + secret-safe recovery verification applied")
