@@ -2,56 +2,87 @@
 
 Production evolution for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)** on the BambuHelper v3.8.1 core.
 
-## Smart Home v8.3 RC3 — physical-test candidate
+## Current candidate: Smart Home v9.6 Printer Workspace RC1
 
-RC3 is the current candidate after physical WS350 testing exposed two release-blocking defects in earlier v8.3 builds:
+The current development candidate combines the **v9.4 RC3 recovery foundation**, the **v9.5 smooth-render device experience**, and the **v9.6 Printer Workspace** browser redesign.
 
-- the System page still performed visible full-frame redraws;
-- browser-native Digest authentication produced repeated Safari/iOS sign-in prompts and interfered with the final response of manual OTA uploads.
+### What v9.6 changes
 
-RC3 keeps the v8 security work but changes the browser interaction model:
+The Printer experience is now organized around the jobs users actually perform:
 
-- **Portal-code session login:** browse to the device, enter the current 10-character portal code shown on System, then use a random RAM-only `BHSESSION` cookie for the rest of that boot.
-- No `WWW-Authenticate` / native Digest browser prompt in station mode.
-- Session cookie is `HttpOnly`, `SameSite=Strict`, RAM-only, and invalidated on reboot/logout.
-- Same-origin enforcement remains for mutating requests.
-- Manual OTA pauses background polling while the ESP32 single-client WebServer owns the upload connection.
-- OTA retains browser + device SHA-256 verification and now reports useful HTTP failure details instead of a generic `unexpected response`.
-- System full-screen clearing occurs only on page entry; normal telemetry refreshes update in place.
+- **Overview** — printer hero, connection state, progress, temperatures, layer, Wi-Fi and health actions.
+- **Connection** — LAN / Cloud identity and connection setup without unrelated display controls mixed in.
+- **Display** — touchscreen preview, display presets and the Widget Library.
+- **Automation** — chamber-light behavior expressed as readable event rules.
+- **Advanced** — original low-level controls remain available so capability is not lost.
 
-Existing v8 hardening remains:
+The **Widget Library** edits the same physical gauge-slot configuration used by the Waveshare display. Browser preview and device layout therefore use one configuration model instead of diverging into separate systems.
 
-- insecure OTA `setInsecure()` fallback removed;
-- device auto-OTA disabled for `ws_lcd_350` pending publisher-authenticity work;
-- Bambu cloud authentication is email-code-only in the local portal;
-- Bambu account passwords are not persisted;
-- settings backups redact Wi-Fi password, printer LAN access code and cloud identity;
-- min-heap, max-block and PSRAM diagnostics are exposed on System.
+Other v9.6 UX improvements include:
 
-### Validated RC3 assets
+- visual printer and AMS presentation;
+- actionable disconnected / setup states;
+- one-tap Remote Status, Thermal & Fans, AMS Overview and X2D display presets;
+- sticky **Unsaved changes / Save / Discard** behavior;
+- clearer separation between everyday controls and advanced configuration.
 
-GitHub Actions run: `33302810825`
+### Smooth-render device experience
 
-- **OTA:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-OTA.bin`
-  - Size: `2,140,592 bytes`
-  - SHA-256: `499a73a43dc27b0ccfea3688115bda11b0ef3d972a80ed6e9e0b0a90d97d67fc`
-- **Full / USB recovery:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v8.3-RC3-Full.bin`
-  - Size: `2,206,128 bytes`
-  - SHA-256: `21adbffad9854271acb2a93b05fe6e0df7d6e24113276f1bbad7a17e46d8c737`
-- Actions artifact ZIP SHA-256: `f10a617bd9cf2628aa6f90d76e7048128fade9cb0c5f25fa23fc582dca758bca`
+The v9.5 layer reduces visible redraws and screen blipping by updating live regions incrementally instead of repainting entire pages whenever possible.
 
-Validation gates passed:
+Home, Workshop, Custom and System retain live printer, AMS, Wi-Fi and system telemetry while avoiding unnecessary full-frame refreshes.
 
-- patch composition / RC3 invariants;
-- browser SHA-256 known-answer test;
+### Recovery and anti-lockout foundation
+
+v9.6 preserves the validated v9.4 RC3 recovery work:
+
+- Safe Mode `/` automatically lands on `/recovery`;
+- captive-portal recovery routing;
+- triple-reset Safe Mode entry;
+- sticky `Waveshare-Recovery-*` access point;
+- candidate health watchdog and web-ready promotion gate;
+- automatic candidate rollback;
+- previous-slot boot;
+- selective reset controls;
+- application-only recovery OTA;
+- WS350 touchscreen lockout guard.
+
+Portal-code authentication remains intentionally disabled in this development candidate so the previous portal lockout failure is not reintroduced before a replacement authentication design is physically validated.
+
+## Validation
+
+GitHub Actions run: **33638721743**
+
+Validated code head: `574bbd5cbc4ad30648e5af03af893da37976ff4e`
+
+Passed gates:
+
+- inherited printer / OTA contracts;
+- v9.4 RC3 recovery invariants;
+- v9.6 Printer Workspace invariants;
+- browser JavaScript syntax;
 - exact `ws_lcd_350` PlatformIO build;
 - shared `jc3248w535` 320×480 regression build;
-- Full-image merge and packaging.
+- Full-image merge;
+- artifact packaging and upload.
 
-The artifact was independently unpacked and re-hashed after CI; both firmware hashes match `validation-report-v8.3-rc3.txt`.
+### Validated artifacts
 
-**Do not merge/promote yet.** RC3 still requires physical retesting for session login, no repeated Safari prompts, System stability, successful 100% OTA + automatic reboot, printer/AMS telemetry and runtime memory stability. See [`PHYSICAL_ACCEPTANCE_V8_3.md`](PHYSICAL_ACCEPTANCE_V8_3.md).
+- **OTA:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Printer-Workspace-RC1-OTA.bin`
+  - SHA-256: `2acd8c73b0d9f76fa4a78a4dc6ea47a361cd022eb2906eb449b61ca813c397f4`
+- **Full / USB recovery:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Printer-Workspace-RC1-Full.bin`
+  - SHA-256: `fee08462c80d4c10a5fd748a2ba2a1f274106b44b36415265bbbc88c441246f3`
+- **Recovery OTA alias:** `WaveshareHome-firmware.bin`
+  - SHA-256: `2acd8c73b0d9f76fa4a78a4dc6ea47a361cd022eb2906eb449b61ca813c397f4`
 
-Production site remains on the currently accepted release until RC3 passes hardware acceptance:
+## Release status
+
+**Do not merge/promote yet.** Automated validation is green, but v9.6 RC1 still requires physical WS350 acceptance.
+
+Verify normal boot, touchscreen operation, Printer Workspace behavior, touchscreen-preview/widget synchronization, browser control plane, recovery console, OTA/reboot behavior and absence of portal-code lockout or critical regressions.
+
+See [`PHYSICAL_ACCEPTANCE_V9_6.md`](PHYSICAL_ACCEPTANCE_V9_6.md).
+
+Production site remains on the currently accepted release until the candidate passes hardware acceptance:
 
 <https://bambuhelper-smart-display.netlify.app/>
