@@ -5,11 +5,13 @@ on:
     branches: [main, fix/v9-4-rc3-recovery-entry]
     paths:
       - 'apply_smart_home_interaction_v9_7.py'
+      - 'apply_smart_home_interaction_v9_7_fixup.py'
       - '.github/workflows/bambuhelper-v9-7-interaction-layout.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apply_smart_home_interaction_v9_7.py'
+      - 'apply_smart_home_interaction_v9_7_fixup.py'
       - '.github/workflows/bambuhelper-v9-7-interaction-layout.yml'
   workflow_dispatch:
 
@@ -118,6 +120,7 @@ jobs:
           python apply_smart_home_portal_v9_6.py --repo upstream --apply
           python apply_smart_home_zero_blip_v9_6_1.py --repo upstream --apply
           python apply_smart_home_interaction_v9_7.py --repo upstream --apply
+          python apply_smart_home_interaction_v9_7_fixup.py --repo upstream --apply
 
       - name: Validate inherited OTA and printer contracts
         run: python scripts/validate_device_contracts.py
@@ -178,6 +181,9 @@ jobs:
           need(display_h,'SCREEN_HUB_PRINTER','native Printer screen state')
           need(display_h,'SCREEN_HUB_MORE','More screen state')
           forbid(hub,'Printer + AMS command center','duplicate Workshop hero copy')
+          forbid(hub,'uiWifiGlyphstatic','duplicate WiFi function boundary')
+          forbid(hub,'drawTapHintstatic','duplicate tap-hint function boundary')
+          forbid(hub,'} // namespace\n\n} // namespace','duplicate namespace close')
 
           # 9-12 browser layout/functionality
           need(css,'aspect-ratio:320/480','physical preview aspect ratio')
