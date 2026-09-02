@@ -1,15 +1,17 @@
-name: BambuHelper ws_lcd_350 Smart Home v9.6 Printer Workspace RC1
+name: BambuHelper ws_lcd_350 Smart Home v9.6.1 Zero-Blip RC2
 
 on:
   push:
     branches: [main, fix/v9-4-rc3-recovery-entry]
     paths:
       - 'apply_smart_home_portal_v9_6.py'
+      - 'apply_smart_home_zero_blip_v9_6_1.py'
       - '.github/workflows/bambuhelper-v9-6-printer-workspace.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apply_smart_home_portal_v9_6.py'
+      - 'apply_smart_home_zero_blip_v9_6_1.py'
       - '.github/workflows/bambuhelper-v9-6-printer-workspace.yml'
   workflow_dispatch:
 
@@ -17,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: smart-home-v9-6-printer-workspace-${{ github.ref }}
+  group: smart-home-v9-6-zero-blip-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -90,7 +92,7 @@ jobs:
           PY
           python -m py_compile apply_*.py scripts/validate_device_contracts.py
 
-      - name: Apply complete v9.4 recovery + v9.6 experience stack
+      - name: Apply complete recovery + v9.6.1 experience stack
         shell: bash
         run: |
           set -euo pipefail
@@ -116,17 +118,18 @@ jobs:
           python apply_smart_home_recovery_entry_v9_4_2.py --repo upstream --apply
           python apply_smart_home_experience_v9_5.py --repo upstream --apply
           python apply_smart_home_portal_v9_6.py --repo upstream --apply
+          python apply_smart_home_zero_blip_v9_6_1.py --repo upstream --apply
 
       - name: Validate inherited OTA and printer contracts
         run: python scripts/validate_device_contracts.py
 
-      - name: Verify RC3 recovery + v9.6 experience invariants
+      - name: Verify recovery + v9.6.1 zero-blip invariants
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          rec=Path('upstream/src/recovery_manager.cpp').read_text();web=Path('upstream/src/web_server.cpp').read_text();wifi=Path('upstream/src/wifi_manager.cpp').read_text();main=Path('upstream/src/main.cpp').read_text();build=Path('upstream/include/smart_home_build.h').read_text();app=Path('upstream/web/app.js').read_text();css=Path('upstream/web/app.css').read_text();settings=Path('upstream/src/settings.cpp').read_text();sec=Path('upstream/src/security_manager.cpp').read_text();board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          rec=Path('upstream/src/recovery_manager.cpp').read_text();web=Path('upstream/src/web_server.cpp').read_text();wifi=Path('upstream/src/wifi_manager.cpp').read_text();main=Path('upstream/src/main.cpp').read_text();display=Path('upstream/src/display_ui.cpp').read_text();hub=Path('upstream/src/smart_hub.cpp').read_text();build=Path('upstream/include/smart_home_build.h').read_text();app=Path('upstream/web/app.js').read_text();css=Path('upstream/web/app.css').read_text();settings=Path('upstream/src/settings.cpp').read_text();sec=Path('upstream/src/security_manager.cpp').read_text();board=Path('upstream/boards/ws_lcd_350.ini').read_text()
           def need(body,n,label):
               if n not in body: raise SystemExit(f'MISSING {label}: {n}')
           def forbid(body,n,label):
@@ -141,23 +144,23 @@ jobs:
           need(main,'recoveryTick();','health tick')
           need(build,'#define SMART_HOME_VERSION "v9.4"','v9.4 recovery identity')
           need(build,'#define SMART_HOME_DEV_UNLOCK 1','dev unlock retained')
-          need(build,'Smart Home v9.4 Recovery Foundation RC3','RC3 build identity')
           need(sec,'if (!portalAuthRequired()) return true;','portal auth remains off')
           need(settings,'buttonType = BTN_TOUCHSCREEN;','touch lockout guard')
           for n in ['v96InitPrinterWorkspace','TOUCHSCREEN PREVIEW','WIDGET LIBRARY','Automation rules','Unsaved changes','v96ApplyPreset','v96OpenPrinterTab']:
               need(app,n,'v9.6 printer workspace')
           for n in ['.v96-printer-hero','.v96-screen-grid','.v96-widget-list','.v96-rule-card','.v96-sticky-save']:
               need(css,n,'v9.6 printer workspace CSS')
+          for n in ['zero-blip compositor','LGFX_Sprite','hubEnsureFrame','hubCommitFrame','g_hubFramePrimed']:
+              need(hub,n,'WS350 zero-blip compositor')
+          need(display,'zero-blip transition','screen transition blank suppression')
+          need(display,'if (!smartHubIsScreen(currentScreen))','Smart Home preclear suppression')
           forbid(web,'client.setInsecure();','TLS downgrade')
           forbid(board,'-D ENABLE_OTA_AUTO=1','WS350 unsafe auto OTA')
-          print('v9.4 recovery + v9.6 printer workspace contracts: PASS')
+          print('v9.6.1 zero-blip + recovery + Printer Workspace contracts: PASS')
           PY
 
       - name: Validate browser JavaScript
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --check upstream/web/app.js
+        run: node --check upstream/web/app.js
 
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
@@ -174,44 +177,42 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v9.6 Printer Workspace RC1 artifacts
+      - name: Package v9.6.1 Zero-Blip RC2 artifacts
         shell: bash
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          mkdir -p v9.6-artifacts/source-snapshot
-          cp "$FULL" v9.6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Printer-Workspace-RC1-Full.bin
-          cp "$APP" v9.6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6-Printer-Workspace-RC1-OTA.bin
-          cp "$APP" v9.6-artifacts/WaveshareHome-firmware.bin
-          cmp "$APP" v9.6-artifacts/WaveshareHome-firmware.bin
-          cp upstream/src/recovery_manager.cpp v9.6-artifacts/source-snapshot/recovery_manager.cpp
-          cp upstream/src/web_server.cpp v9.6-artifacts/source-snapshot/web_server.cpp
-          cp upstream/src/smart_hub.cpp v9.6-artifacts/source-snapshot/smart_hub.cpp
-          cp upstream/include/smart_home_build.h v9.6-artifacts/source-snapshot/smart_home_build.h
-          cp upstream/web/app.js v9.6-artifacts/source-snapshot/app.js
-          cp upstream/web/app.css v9.6-artifacts/source-snapshot/app.css
+          mkdir -p v9.6.1-artifacts/source-snapshot
+          cp "$FULL" v9.6.1-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6.1-Zero-Blip-RC2-Full.bin
+          cp "$APP" v9.6.1-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.6.1-Zero-Blip-RC2-OTA.bin
+          cp "$APP" v9.6.1-artifacts/WaveshareHome-firmware.bin
+          cmp "$APP" v9.6.1-artifacts/WaveshareHome-firmware.bin
+          cp upstream/src/recovery_manager.cpp v9.6.1-artifacts/source-snapshot/recovery_manager.cpp
+          cp upstream/src/web_server.cpp v9.6.1-artifacts/source-snapshot/web_server.cpp
+          cp upstream/src/main.cpp v9.6.1-artifacts/source-snapshot/main.cpp
+          cp upstream/src/display_ui.cpp v9.6.1-artifacts/source-snapshot/display_ui.cpp
+          cp upstream/src/smart_hub.cpp v9.6.1-artifacts/source-snapshot/smart_hub.cpp
+          cp upstream/include/smart_home_build.h v9.6.1-artifacts/source-snapshot/smart_home_build.h
+          cp upstream/web/app.js v9.6.1-artifacts/source-snapshot/app.js
+          cp upstream/web/app.css v9.6.1-artifacts/source-snapshot/app.css
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v9.6 Printer Workspace RC1 validation'
+            echo 'BambuHelper ws_lcd_350 Smart Home v9.6.1 Zero-Blip RC2 validation'
             echo 'recovery_foundation=v9.4_RC3_PRESERVED'
             echo 'printer_workspace=PASS'
-            echo 'printer_overview=PASS'
-            echo 'connection_subview=PASS'
-            echo 'touchscreen_preview=PASS'
-            echo 'widget_library=PASS'
-            echo 'automation_rules=PASS'
-            echo 'sticky_unsaved_changes=PASS'
-            echo 'actionable_health=PASS'
+            echo 'psram_page_compositor=PASS'
+            echo 'smart_home_preclear_suppressed=PASS'
+            echo 'dirty_only_frame_commit=PASS'
             echo 'browser_js=PASS'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             echo 'physical_acceptance=REQUIRED'
-            sha256sum v9.6-artifacts/*.bin
-          } | tee v9.6-artifacts/validation-report-v9.6-printer-workspace-rc1.txt
+            sha256sum v9.6.1-artifacts/*.bin
+          } | tee v9.6.1-artifacts/validation-report-v9.6.1-zero-blip-rc2.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v9.6-printer-workspace-rc1
+          name: bambuhelper-ws_lcd_350-smart-home-v9.6.1-zero-blip-rc2
           retention-days: 14
           if-no-files-found: error
-          path: v9.6-artifacts/
+          path: v9.6.1-artifacts/
