@@ -278,9 +278,13 @@ def patch_recovery_status(repo: Path) -> None:
 def patch_identity(repo: Path) -> None:
     p = repo / "include" / "smart_home_build.h"
     text = p.read_text(encoding="utf-8")
-    text = replace_once(text, '#define SMART_HOME_VERSION "v9.7"\n', '#define SMART_HOME_VERSION "v9.7.1"\n', "version")
-    text = replace_once(text, '#define SMART_HOME_PROFILE "interaction-layout-control-plane"\n', '#define SMART_HOME_PROFILE "interaction-layout-touch-reliability"\n', "profile")
-    text = replace_once(text, '#define SMART_HOME_BUILD_LABEL "Smart Home v9.7 Interaction & Layout RC1"\n', '#define SMART_HOME_BUILD_LABEL "Smart Home v9.7.1 Touch Reliability RC2"\n', "build label")
+    # The v9.7 interaction stack historically preserved the v9.4 recovery
+    # provenance macros even though the interaction/layout code was newer. The
+    # hardware regression investigation exposed that stale identity directly in
+    # /recovery/status. v9.7.1 makes the composed firmware identity truthful.
+    text = replace_once(text, '#define SMART_HOME_VERSION "v9.4"\n', '#define SMART_HOME_VERSION "v9.7.1"\n', "version")
+    text = replace_once(text, '#define SMART_HOME_PROFILE "recovery-foundation-control-plane"\n', '#define SMART_HOME_PROFILE "interaction-layout-touch-reliability"\n', "profile")
+    text = replace_once(text, '#define SMART_HOME_BUILD_LABEL "Smart Home v9.4 Recovery Foundation RC3"\n', '#define SMART_HOME_BUILD_LABEL "Smart Home v9.7.1 Touch Reliability RC2"\n', "build label")
     p.write_text(text, encoding="utf-8")
 
 
