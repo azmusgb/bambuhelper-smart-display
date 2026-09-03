@@ -1,5 +1,6 @@
 name: BambuHelper ws_lcd_350 Smart Home v11.1 Calm Workshop OS RC1
 
+# Exact-head candidate gate for the calm appliance pass.
 on:
   push:
     branches: [evolve/v11-1-calm-workshop-os]
