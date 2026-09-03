@@ -1,0 +1,169 @@
+name: Workshop OS v11.18 — Visual Capture RC1
+
+on:
+  pull_request:
+    branches: [evolve/v11-17-power-automation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v11-18-visual-capture-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout evolution repository
+
+      - name: Checkout pinned BambuHelper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate v11.18 tooling
+        run: |
+          python -m py_compile apply_smart_home_visual_capture_v11_18.py
+          zsh -n scripts/capture-ws350-views.zsh
+          bash -n scripts/apply_workshop_os_v11_18.sh
+
+      - name: Apply Workshop OS stack through v11.18
+        run: bash scripts/apply_workshop_os_v11_18.sh upstream
+
+      - name: Validate inherited device contracts
+        run: python scripts/validate_device_contracts.py
+
+      - name: Verify v11.18 visual-capture contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          build = Path('upstream/include/smart_home_build.h').read_text()
+          hub = Path('upstream/src/smart_hub.cpp').read_text()
+          web = Path('upstream/src/web_server.cpp').read_text()
+          mqtt = Path('upstream/src/bambu_mqtt.cpp').read_text()
+          app = Path('upstream/web/app.js').read_text()
+
+          def need(body, needle, label):
+              if needle not in body:
+                  raise SystemExit(f'MISSING {label}: {needle}')
+
+          for n in [
+              '#define SMART_HOME_VERSION "v11.18"',
+              '#define SMART_HOME_PROFILE "visual-capture"',
+              'Smart Home v11.18 Visual Capture RC1',
+          ]:
+              need(build, n, 'identity')
+
+          for n in [
+              '#include "led.h"',
+              'hubPowerConfigPlug',
+              'PLUG ENABLED',
+              'AUTO OFF',
+              'display-signals',
+              'system-network',
+              'hardware-auto-off',
+              'smartHubCapturePrepare',
+              'smartHubCaptureRgbRow',
+              'g_hubFrame->readPixel',
+          ]:
+              need(hub, n, 'physical capture')
+
+          for n in [
+              'handleHubViews',
+              'handleHubFramePpm',
+              'SECURE_GET("/hub/views", handleHubViews)',
+              'SECURE_GET("/hub/frame.ppm", handleHubFramePpm)',
+              'X-BambuHelper-Capture',
+              'image/x-portable-pixmap',
+              'handlePrinterPowerStatus',
+              'handlePrinterPower',
+              'POWER OFF DURING PRINT',
+          ]:
+              need(web, n, 'web capture / guarded power')
+
+          for n in ['DROPPED: MQTT offline', 'if (!st.connected) return false']:
+              need(mqtt, n, 'fail-closed printer control')
+          for n in ['v117StateFresh', 'V117_STALE_MS=10000']:
+              need(app, n, 'live-state integrity')
+
+          catalog_ids = re.findall(r'\\"id\\":\\"([^\\"]+)\\"', web)
+          expected = [
+              'home','printer','workshop','more','custom','system','tools',
+              'display-quick','display-schedule','display-behavior','display-visual',
+              'display-clock','display-alerts','display-signals','system-network',
+              'hardware-sound','hardware-cooldown','hardware-led','hardware-finish',
+              'hardware-error','hardware-power','hardware-auto-off'
+          ]
+          if catalog_ids != expected:
+              raise SystemExit(f'capture catalog mismatch: {catalog_ids!r}')
+          print('v11.18 Visual Capture contracts: PASS (22 views)')
+          PY
+
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 v11.18
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package v11.18 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v11-18-artifacts/source-snapshot v11-18-artifacts/tools
+          cp "$FULL" v11-18-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.18-Visual-Capture-RC1-Full.bin
+          cp "$APP" v11-18-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.18-Visual-Capture-RC1-OTA.bin
+          cp "$APP" v11-18-artifacts/WaveshareHome-firmware.bin
+          cp scripts/capture-ws350-views.zsh v11-18-artifacts/tools/capture-ws350-views.zsh
+          cp apply_smart_home_visual_capture_v11_18.py v11-18-artifacts/tools/apply_smart_home_visual_capture_v11_18.py
+          for f in include/web_pages.h include/smart_home_build.h web/app.js web/app.css src/web_server.cpp src/bambu_mqtt.cpp src/smart_hub.cpp src/settings.cpp src/display_ui.h src/tasmota.cpp; do
+            mkdir -p "v11-18-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "v11-18-artifacts/source-snapshot/$f"
+          done
+          {
+            echo 'BambuHelper ws_lcd_350 Smart Home v11.18 Visual Capture RC1 validation'
+            echo 'visual_capture_catalog=22_VIEWS'
+            echo 'frame_source=LCD_PSRAM_SPRITE'
+            echo 'capture_format=PPM_RGB888'
+            echo 'capture_routes=AUTHENTICATED'
+            echo 'deep_view_selection=PASS'
+            echo 'power_automation=PRESERVED'
+            echo 'guarded_power_control=PRESERVED'
+            echo 'fail_closed_printer_commands=PRESERVED'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            echo 'physical_acceptance=REQUIRED'
+            sha256sum v11-18-artifacts/*.bin
+          } | tee v11-18-artifacts/validation-report-v11-18-visual-capture-rc1.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-ws_lcd_350-smart-home-v11-18-visual-capture-rc1
+          retention-days: 14
+          if-no-files-found: error
+          path: v11-18-artifacts/
