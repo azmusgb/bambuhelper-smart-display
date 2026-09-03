@@ -45,7 +45,13 @@ def patch(root:Path):
       'include/smart_home_build.h':['SMART_HOME_VERSION "v11.6"','workshop-command-center'],
       'include/web_pages.h':['class="section wk116"','wk116-control-strip','wk116-dock','wk116PowerBtn'],
       'web/app.css':['Smart Home v11.6 Workshop Command Center','.wk116-grid','.wk116-control-strip'],
-      'web/app.js':['v116PauseResume','v116TogglePower','v116RenderTrays',"v116Post('/printer/control'", "v116Post('/printer/power'"],
+      'web/app.js':[
+        'v116PauseResume','v116TogglePower','v116RenderTrays',
+        "v116Post('/printer/control'", "v116Post('/printer/power'",
+        'v116WorkshopSlot','v116StatusSeq','v116PowerSeq','v116PowerState.slot',
+        "v116SetConnectionState(false,false,'SYNCING')",
+        'slot!==v116CurrentSlot()','v116WorkshopSlot!==slot'
+      ],
     }
     for rel,needles in checks.items():
       body=load(root,rel)
