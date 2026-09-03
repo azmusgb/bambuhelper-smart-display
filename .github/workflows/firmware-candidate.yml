@@ -1,8 +1,6 @@
 name: Workshop OS Candidate — v11.5 Printer Power RC1
 
 on:
-  push:
-    branches: [evolve/v11-5-printer-power]
   pull_request:
     branches: [main]
     paths:
@@ -17,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: workshop-os-candidate-${{ github.ref }}
+  group: workshop-os-candidate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
