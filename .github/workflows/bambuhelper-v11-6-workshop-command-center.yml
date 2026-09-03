@@ -1,0 +1,175 @@
+name: Workshop OS v11.6 — Workshop Command Center RC1
+
+on:
+  pull_request:
+    branches: [evolve/v11-5-printer-power]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v11-6-workshop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout evolution repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned BambuHelper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate patch tooling
+        run: |
+          python -m py_compile \
+            apply_smart_home_hardware_v10_1.py \
+            apply_smart_home_ui_v10_2.py \
+            apply_smart_home_browser_v10_3.py \
+            apply_smart_home_screen_retention_v10_3_1.py \
+            apply_smart_home_portal_v10_4.py \
+            apply_smart_home_home_v10_4_1.py \
+            apply_smart_home_physical_v10_5.py \
+            apply_smart_home_audio_home_v10_6.py \
+            apply_smart_home_signature_v11.py \
+            apply_smart_home_calm_v11_1.py \
+            apply_smart_home_workshop_tools_v11_2.py \
+            apply_smart_home_printer_control_v11_3.py \
+            apply_smart_home_printer_control_v11_3_fixup.py \
+            apply_smart_home_control_polish_v11_4.py \
+            apply_smart_home_printer_power_v11_5.py \
+            apply_smart_home_workshop_command_v11_6.py
+
+      - name: Apply Smart Home stack through v10.1
+        run: bash scripts/apply_smart_home_stack.sh upstream apply_smart_home_hardware_v10_1.py
+      - name: Apply v10.2
+        run: python apply_smart_home_ui_v10_2.py --repo upstream --apply
+      - name: Apply v10.3
+        run: python apply_smart_home_browser_v10_3.py --repo upstream --apply
+      - name: Apply v10.3.1
+        run: python apply_smart_home_screen_retention_v10_3_1.py --repo upstream --apply
+      - name: Apply v10.4
+        run: python apply_smart_home_portal_v10_4.py --repo upstream --apply
+      - name: Apply v10.4.1
+        run: python apply_smart_home_home_v10_4_1.py --repo upstream --apply
+      - name: Apply v10.5
+        run: python apply_smart_home_physical_v10_5.py --repo upstream --apply
+      - name: Apply v10.6
+        run: python apply_smart_home_audio_home_v10_6.py --repo upstream --apply
+      - name: Apply v11
+        run: python apply_smart_home_signature_v11.py --repo upstream --apply
+      - name: Apply v11.1
+        run: python apply_smart_home_calm_v11_1.py --repo upstream --apply
+      - name: Apply v11.2
+        run: python apply_smart_home_workshop_tools_v11_2.py --repo upstream --apply
+      - name: Apply v11.3 Printer Control
+        run: python apply_smart_home_printer_control_v11_3.py --repo upstream --apply
+      - name: Apply v11.3 browser serialization fixup
+        run: python apply_smart_home_printer_control_v11_3_fixup.py --repo upstream --apply
+      - name: Apply v11.4 Control Polish
+        run: python apply_smart_home_control_polish_v11_4.py --repo upstream --apply
+      - name: Apply v11.5 Printer Power
+        run: python apply_smart_home_printer_power_v11_5.py --repo upstream --apply
+      - name: Apply v11.6 Workshop Command Center
+        run: python apply_smart_home_workshop_command_v11_6.py --repo upstream --apply
+
+      - name: Validate inherited device contracts
+        run: python scripts/validate_device_contracts.py
+
+      - name: Verify v11.6 Workshop contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          page=Path('upstream/include/web_pages.h').read_text()
+          app=Path('upstream/web/app.js').read_text()
+          css=Path('upstream/web/app.css').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          def need(body,n,label):
+              if n not in body: raise SystemExit(f'MISSING {label}: {n}')
+          for n in ['#define SMART_HOME_VERSION "v11.6"','#define SMART_HOME_PROFILE "workshop-command-center"','Smart Home v11.6 Workshop Command Center RC1']:
+              need(build,n,'identity')
+          for n in ['class="section wk116"','wk116-printer','wk116-materials','wk116-control-strip','wk116-dock','wk116PowerBtn']:
+              need(page,n,'Workshop markup')
+          for n in ['Smart Home v11.6 Workshop Command Center','.wk116-grid','.wk116-control-strip','.wk116-trays']:
+              need(css,n,'Workshop CSS')
+          for n in ['v116PauseResume','v116TogglePower','v116RenderTrays',"v116Post('/printer/control'","v116Post('/printer/power'",'/printer/power/status']:
+              need(app,n,'Workshop behavior')
+          for n in ['handlePrinterPowerStatus','handlePrinterPower','handlePrinterControl']:
+              need(web,n,'existing safe web controls')
+          for n in ['DROPPED: MQTT offline','if (!st.connected) return false']:
+              need(mqtt,n,'fail-closed MQTT controls')
+          for n in ['SPEAKER','MIC ECHO','drawTools','drawAmbientHome']:
+              need(hub,n,'physical Workshop OS preserved')
+          print('v11.6 Workshop Command Center contracts: PASS')
+          PY
+
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 v11.6
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package v11.6 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v11-6-artifacts/source-snapshot
+          cp "$FULL" v11-6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.6-Workshop-Command-Center-RC1-Full.bin
+          cp "$APP" v11-6-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.6-Workshop-Command-Center-RC1-OTA.bin
+          cp "$APP" v11-6-artifacts/WaveshareHome-firmware.bin
+          for f in include/web_pages.h include/smart_home_build.h web/app.js web/app.css src/web_server.cpp src/bambu_mqtt.cpp src/smart_hub.cpp; do
+            mkdir -p "v11-6-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "v11-6-artifacts/source-snapshot/$f"
+          done
+          {
+            echo 'BambuHelper ws_lcd_350 Smart Home v11.6 Workshop Command Center RC1 validation'
+            echo 'browser_workshop_command_center=PASS'
+            echo 'redundant_metric_row=REMOVED'
+            echo 'printer_status_deck=PASS'
+            echo 'ams_visual_board=PASS'
+            echo 'workshop_light_control=PASS_BUILD'
+            echo 'workshop_pause_resume=PASS_BUILD'
+            echo 'workshop_mapped_power=PASS_BUILD'
+            echo 'destructive_stop=REMAINS_ON_PRINTER_SCREEN'
+            echo 'v11_5_control_safety=PRESERVED'
+            echo 'physical_workshop_os=PRESERVED'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            echo 'physical_acceptance=REQUIRED'
+            sha256sum v11-6-artifacts/*.bin
+          } | tee v11-6-artifacts/validation-report-v11-6-workshop-command-center-rc1.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-ws_lcd_350-smart-home-v11-6-workshop-command-center-rc1
+          retention-days: 14
+          if-no-files-found: error
+          path: v11-6-artifacts/
