@@ -1,0 +1,196 @@
+name: BambuHelper ws_lcd_350 Smart Home v11.2 Workshop Tools RC1
+
+on:
+  push:
+    branches: [evolve/v11-2-workshop-tools]
+    paths:
+      - 'apply_smart_home_workshop_tools_v11_2.py'
+      - '.bambuhelper-validation/v11_2_workshop_tools_verified.zlib.b64'
+      - '.github/workflows/bambuhelper-v11-2-workshop-tools.yml'
+  pull_request:
+    branches: [evolve/v11-1-calm-workshop-os]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-home-v11-2-workshop-tools-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout evolution repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned BambuHelper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate patch tooling
+        run: |
+          python -m py_compile \
+            apply_smart_home_hardware_v10_1.py \
+            apply_smart_home_ui_v10_2.py \
+            apply_smart_home_browser_v10_3.py \
+            apply_smart_home_screen_retention_v10_3_1.py \
+            apply_smart_home_portal_v10_4.py \
+            apply_smart_home_home_v10_4_1.py \
+            apply_smart_home_physical_v10_5.py \
+            apply_smart_home_audio_home_v10_6.py \
+            apply_smart_home_signature_v11.py \
+            apply_smart_home_calm_v11_1.py \
+            apply_smart_home_workshop_tools_v11_2.py
+          bash -n scripts/apply_smart_home_stack.sh
+
+      - name: Apply Smart Home stack through v10.1
+        run: bash scripts/apply_smart_home_stack.sh upstream apply_smart_home_hardware_v10_1.py
+      - name: Apply v10.2 physical UI polish
+        run: python apply_smart_home_ui_v10_2.py --repo upstream --apply
+      - name: Apply v10.3 browser Workshop OS
+        run: python apply_smart_home_browser_v10_3.py --repo upstream --apply
+      - name: Apply v10.3.1 screen retention
+        run: python apply_smart_home_screen_retention_v10_3_1.py --repo upstream --apply
+      - name: Apply v10.4 portal UX
+        run: python apply_smart_home_portal_v10_4.py --repo upstream --apply
+      - name: Apply v10.4.1 workshop-first browser Home
+        run: python apply_smart_home_home_v10_4_1.py --repo upstream --apply
+      - name: Apply v10.5 Physical Workshop OS
+        run: python apply_smart_home_physical_v10_5.py --repo upstream --apply
+      - name: Apply v10.6 Audio + Home
+        run: python apply_smart_home_audio_home_v10_6.py --repo upstream --apply
+      - name: Apply v11 Signature Workshop OS
+        run: python apply_smart_home_signature_v11.py --repo upstream --apply
+      - name: Apply v11.1 Calm Workshop OS
+        run: python apply_smart_home_calm_v11_1.py --repo upstream --apply
+      - name: Apply v11.2 Workshop Tools
+        run: python apply_smart_home_workshop_tools_v11_2.py --repo upstream --apply
+
+      - name: Validate inherited device contracts
+        run: python scripts/validate_device_contracts.py
+
+      - name: Verify v11.2 Workshop Tools and inherited contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          app=Path('upstream/web/app.js').read_text()
+          css=Path('upstream/web/app.css').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
+          main=Path('upstream/src/main.cpp').read_text()
+          focal=Path('upstream/src/button_touch_focaltech.cpp').read_text()
+          backend=Path('upstream/src/buzzer_backend_es8311.cpp').read_text()
+
+          def need(body,n,label):
+              if n not in body: raise SystemExit(f'MISSING {label}: {n}')
+          def forbid(body,n,label):
+              if n in body: raise SystemExit(f'FORBIDDEN {label}: {n}')
+
+          for n in ['#define SMART_HOME_VERSION "v11.2"','#define SMART_HOME_PROFILE "workshop-tools"','Smart Home v11.2 Workshop Tools RC1']:
+              need(build,n,'v11.2 identity')
+
+          for n in ['g_timerPresets[4]','hubToolsPresetRect','hubToolsActionRect','drawTools','WORKSHOP TIMER','TIMER COMPLETE','smartHubStartWorkshopTimer','smartHubWorkshopTimerRemaining']:
+              need(hub,n,'Workshop Tools physical experience')
+          for n in ['"CUSTOM","SYSTEM","EDIT","TOOLS"','"Timers, notes & legacy"','"CLASSIC"']:
+              need(hub,n,'Tools launcher / explicit legacy escape')
+          forbid(hub,'const char* titles[4]={"CUSTOM","SYSTEM","EDIT","CLASSIC"}','top-level Classic launcher')
+
+          for n in ['p.getUShort("timer1", legacyTimer)','p.getUShort("timer2", 15)','p.getUShort("timer3", 30)','p.getUShort("timer4", 60)']:
+              need(hub,n,'four timer preset persistence')
+          for n in ['/hub/timer/status','/hub/timer/start','/hub/timer/cancel','timerPresets','timer1','timer4']:
+              need(web,n,'browser timer API')
+          for n in ['v112Timer1','v112Timer4','v112StartPreset','v112CancelTimer','HOME, STANDBY & TOOLS','Save Workshop Experience']:
+              need(app,n,'browser Workshop Tools editor')
+          forbid(app,'CLASSIC DETAILS','stale legacy preview action')
+          need(css,'Smart Home v11.2 Workshop Tools','Workshop Tools browser CSS')
+
+          for n in ['g_experienceAccent','g_ambientEnabled','g_workshopNote','drawAmbientHome']:
+              need(hub,n,'v11.1 calm/personal experience')
+          for n in ['/hub/experience','handleHubExperienceGet','handleHubExperienceSave']:
+              need(web,n,'v11.1 experience API')
+          for n in ['Event sounds','Quiet from','Quiet until']:
+              need(app,n,'v11.1 audio personalization')
+
+          for n in ['SPEAKER','MIC ECHO','EVENTS ON','EVENTS OFF']:
+              need(hub,n,'Audio Lab')
+          for n in ['buzzerBackendMicEcho','MALLOC_CAP_SPIRAM']:
+              need(backend,n,'mic echo backend')
+          for n in ['BOARD_HAS_ES8311_AUDIO=1','BOARD_HAS_MICROPHONE=1','AUDIO_I2S_DIN=14','AUDIO_PA_CTRL=-1']:
+              need(board,n,'WS350 audio hardware')
+          need(main,'if (!smartHubShouldYieldToPrinter(printing))','screen retention')
+          need(web,'recoverySha256HexArrayBuffer','Safari-safe recovery')
+          need(focal,'ft6336RecoverBus','FT6336 recovery')
+          print('v11.2 Workshop Tools contracts: PASS')
+          PY
+
+      - name: Validate browser JavaScript
+        run: node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 v11.2
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package v11.2 Workshop Tools RC1 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          mkdir -p v11-2-artifacts/source-snapshot
+          cp "$FULL" v11-2-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.2-Workshop-Tools-RC1-Full.bin
+          cp "$APP" v11-2-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.2-Workshop-Tools-RC1-OTA.bin
+          cp "$APP" v11-2-artifacts/WaveshareHome-firmware.bin
+          for f in src/main.cpp src/smart_hub.cpp src/settings.cpp src/web_server.cpp src/buzzer.cpp src/buzzer_backend.h src/buzzer_backend_es8311.cpp src/button_touch_focaltech.cpp include/smart_home_build.h web/app.js web/app.css boards/ws_lcd_350.ini; do
+            mkdir -p "v11-2-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "v11-2-artifacts/source-snapshot/$f"
+          done
+          {
+            echo 'BambuHelper ws_lcd_350 Smart Home v11.2 Workshop Tools RC1 validation'
+            echo 'dedicated_tools_surface=PASS'
+            echo 'four_timer_presets=PASS'
+            echo 'live_timer_browser_controls=PASS'
+            echo 'timer_complete_home_priority=PASS'
+            echo 'classic_nested_under_tools=PASS'
+            echo 'v11_1_personalization=PRESERVED'
+            echo 'event_sounds=PRESERVED'
+            echo 'speaker_self_test=PRESERVED'
+            echo 'microphone_echo=PRESERVED'
+            echo 'printer_screen_retention=PRESERVED'
+            echo 'ft6336_reliability=PRESERVED'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            echo 'physical_acceptance=REQUIRED'
+            sha256sum v11-2-artifacts/*.bin
+          } | tee v11-2-artifacts/validation-report-v11-2-workshop-tools-rc1.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambuhelper-ws_lcd_350-smart-home-v11-2-workshop-tools-rc1
+          retention-days: 14
+          if-no-files-found: error
+          path: v11-2-artifacts/
