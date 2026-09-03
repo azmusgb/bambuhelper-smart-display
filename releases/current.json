@@ -1,32 +1,29 @@
 {
-  "channel": "candidate",
-  "version": "11.5.0-rc1",
+  "channel": "accepted-source",
+  "version": "11.19.1",
   "name": "Waveshare Workshop OS",
   "targets": ["ws_lcd_350"],
-  "production": {
-    "sourceBranch": "main",
-    "sourceLine": "Smart Home v10",
-    "downloadChannel": "production-rc-v7.2"
+  "source": {
+    "branch": "main",
+    "acceptedFirmwareCommit": "f52641b74ca482514684616dad6a341d6447f0f0",
+    "name": "Workshop OS v11.19.1 Physical Fit RC2",
+    "physicalAcceptance": "passed",
+    "acceptedAt": "2026-09-03",
+    "acceptanceEvidence": "22-view WS350 framebuffer capture + exact-final-head CI"
   },
-  "candidate": {
-    "branch": "evolve/v11-5-printer-power",
-    "pullRequest": 39,
-    "name": "Smart Home v11.5 Printer Power RC1",
-    "physicalAcceptanceRequired": true,
-    "features": [
-      "calm-workshop-home",
-      "materials-first-ams",
-      "workshop-tools-and-timers",
-      "speaker-and-mic-echo",
-      "printer-light-control",
-      "pause-resume-stop",
-      "mapped-printer-power"
-    ]
+  "download": {
+    "channel": "production-rc-v7.2",
+    "version": "7.2",
+    "rollbackVersion": "7.1",
+    "note": "Static installer remains intentionally conservative and is promoted separately from the accepted source line."
   },
+  "candidate": null,
   "validation": {
-    "exactHeadCiRequired": true,
-    "ws350BuildRequired": true,
-    "shared320x480RegressionRequired": true,
-    "physicalAcceptanceRequired": true
+    "exactHeadCi": "passed",
+    "ws350Build": "passed",
+    "shared320x480Regression": "passed",
+    "browserJavaScript": "passed",
+    "renderedFit": "passed",
+    "physicalAcceptance": "passed"
   }
 }
