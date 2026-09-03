@@ -1,233 +1,87 @@
-# BambuHelper Smart Display
+# BambuHelper Smart Display — Waveshare Workshop OS
 
-Production evolution for **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)** on the BambuHelper v3.8.1 core.
+Local-first Workshop OS for the **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)**, built on the BambuHelper v3.8.1 core.
 
-## Current line: Smart Home v9.7 Interaction & Layout RC1
+## Release model
 
-Smart Home v9.7 is the canonical merged firmware line. It combines:
+This repository deliberately separates the accepted download channel from firmware still awaiting physical-device acceptance:
 
-- **v9.4 RC3 recovery foundation** — Safe Mode, recovery AP, rollback and anti-lockout;
-- **v9.6 Printer Workspace** — Overview / Connection / Display / Automation / Advanced;
-- **v9.6.1 zero-blip compositor** — PSRAM-backed complete-frame Smart Home page transitions;
-- **v9.7 Interaction & Layout** — direct coordinate touch navigation, native Printer/More screens, on-device widget editing and the revised physical/browser layout.
+| Line | Status | Purpose |
+| --- | --- | --- |
+| `release.json` / Netlify | **Accepted download channel: Smart Home v7.2** | Integrity-checked production/rollback firmware currently served by the static installer. |
+| `main` | **Accepted source line: Smart Home v10** | Latest promoted source baseline. |
+| PR #39 / `evolve/v11-5-printer-power` | **Current candidate: Smart Home v11.5 Printer Power RC1** | Complete v11 Workshop OS evolution; CI-green and awaiting final physical acceptance before promotion. |
 
-PR **#17** was merged after exact-head CI passed. Superseded PRs **#11** and **#18** were closed without merging duplicate/conflicting history. The useful ambient/preset ideas from #18 are preserved in **#19** for v9.8.
+Do not infer that the oldest number is the newest code. The static download channel is intentionally conservative until a candidate has passed physical acceptance.
 
-## Physical interaction model
+## Current candidate — Smart Home v11.5
 
-The WS350 now uses real FT6336 touch coordinates rather than treating the whole display as a single “next page” button.
+v11.5 turns the display into a guarded workshop control surface while preserving the local-first design.
 
-Primary navigation is a persistent 48 px direct-touch footer:
+### Physical experience
 
-**Home · Printer · Workshop · More**
+- calm Workshop Home with adaptive state hero;
+- materials-first AMS / filament rail with color, type and remaining percentage;
+- dedicated Printer, Workshop, Tools, More and ambient/standby experiences;
+- Workshop note and configurable timers;
+- ES8311 speaker self-test, event sounds and onboard microphone **MIC ECHO**;
+- chamber-light control;
+- state-aware **Pause / Resume**;
+- long-press guarded **Stop**;
+- mapped smart-plug **Printer Power** with the existing hold-to-confirm safety modal;
+- stronger warning before power-off during an active print.
 
-### Home
-Glanceable operational state:
+### Browser control plane
 
-- selected printer and job;
-- progress / ETA / layer;
-- nozzle, bed, chamber and fan telemetry;
-- AMS / filament state;
-- Wi-Fi and attention state.
+The browser UI mirrors the physical-device model and includes printer-scoped Light, Pause/Resume, Stop and mapped Power controls. Destructive actions require explicit confirmation, and v11.4+ commands fail closed if connectivity disappears before publish.
 
-### Printer
-Native Smart Home printer workspace:
+### Safety and reliability preserved
 
-- job and progress;
-- printer-family-aware illustration;
-- live thermal telemetry;
-- AMS state;
-- chamber-light action;
-- bridge to the full classic BambuHelper printer detail surface.
+The current stack retains:
 
-### Workshop
-Action-oriented workshop view:
+- FT6336 touch recovery and coordinate navigation;
+- printer-screen retention while printing;
+- OTA candidate/rollback protections;
+- Safari-safe recovery hashing;
+- settings persistence;
+- secret-safe settings export;
+- WS350 ES8311 audio + microphone support;
+- `jc3248w535` shared 320×480 regression compatibility.
 
-- print summary;
-- environment;
-- material / AMS;
-- quick actions.
+Speed/fan command controls remain intentionally deferred until the pinned BambuHelper backend has an equally proven command path.
 
-The redundant Workshop hero/title treatment from older builds is removed.
+## Validation
 
-### More
-Secondary destinations and configuration:
+The current candidate is reconstructed from the pinned upstream BambuHelper baseline and every evolution patch. Its exact-head workflow verifies device contracts, browser JavaScript, the native `ws_lcd_350` PlatformIO build, the shared 320×480 regression build, Full-image merge and OTA packaging.
 
-- Custom dashboard;
-- System;
-- Edit Widgets;
-- Classic Printer;
-- device / recovery status.
+Current candidate PR: **#39** (`evolve/v11-5-printer-power`).
 
-## Custom widgets
+The final promotion gate is **physical acceptance** on the real WS350: display/touch behavior, Speaker, MIC ECHO, Light, Pause/Resume, guarded Stop, mapped Power, recovery and configuration retention.
 
-The physical device has a persistent four-widget fallback deck stored in Smart Hub NVS. Available built-in widgets include:
+## Repository layout
 
-- Progress
-- Nozzle
-- Bed
-- Chamber
-- Wi-Fi
-- AMS
-- Layer
-- ETA
-- Fan
-- Uptime
+- `apply_smart_home_*.py` — deterministic evolution patches used by CI. These are source inputs, not generated artifacts.
+- `.bambuhelper-validation/` — verified compressed patch payloads required by selected loaders. Keep these under source control.
+- `.github/workflows/bambuhelper-v11-5-printer-power.yml` — current candidate hardware/release gate.
+- `.github/workflows/validate.yml` — repository syntax/hygiene validation.
+- `.github/workflows/release-gate.yml` — main-branch release metadata gate.
+- `.github/workflows/release-main.yml` — accepted static OTA portal integrity validation.
+- `docs/archive/` — historical physical-acceptance and roadmap documents.
+- `releases/` — persistent release provenance/metadata.
+- `firmware/` — binaries still required by the accepted Netlify download channel. New candidate binaries should normally remain GitHub Actions artifacts until promoted.
+- `scripts/waveshare-usb.sh` — safe Mac USB/JTAG serial auto-detection helper.
 
-Long-press **Custom** to enter on-device edit mode, then tap a tile to cycle its widget. The fallback remains useful when an external Custom feed is unavailable.
+## Firmware installation rule
 
-## Display stability / zero-blip architecture
+For a normal device OTA/recovery-page update, use the **application image** (`WaveshareHome-firmware.bin` / named OTA image).
 
-Smart Home pages render into a 16-bit PSRAM `LGFX_Sprite` before being committed to the physical ST7796 panel.
+Only a **Full** image belongs at flash offset `0x0` during an intentional USB recovery/full flash.
 
-- The previous page remains visible while the next page is composed.
-- The upstream physical `fillScreen()` pre-clear is suppressed for Smart Home transitions.
-- Completed frames are pushed only after composition.
-- Live telemetry retains dirty/incremental updates so unchanged regions do not repaint unnecessarily.
+## Development policy
 
-This foundation from v9.6.1 remains underneath v9.7.
-
-## Browser Printer Workspace
-
-Printer configuration is organized as:
-
-- **Overview** — printer hero, connection, progress, temperatures, layer, Wi-Fi and actionable health;
-- **Connection** — LAN / Cloud identity and setup;
-- **Display** — true 320:480 touchscreen preview, presets and Widget Library;
-- **Automation** — chamber-light behavior as readable event rules;
-- **Advanced** — original low-level controls remain available.
-
-The browser preview now enforces the physical display's **320:480 (2:3)** aspect ratio. Original Remote Monitor Profile / Gauge Layout controls are retained under **Advanced display configuration** rather than competing with the visual editor. Legacy Setup Health is hidden when the modern workspace is active.
-
-Printer imagery adapts for enclosed X/P-style machines, A1 / A1 mini, and H2 / dual-nozzle-style configurations.
-
-## Recovery and anti-lockout
-
-v9.7 preserves the v9.4 RC3 recovery foundation:
-
-- Safe Mode `/` lands on `/recovery`;
-- captive-portal recovery routing;
-- triple-reset Safe Mode entry;
-- sticky `Waveshare-Recovery-*` access point;
-- candidate health watchdog and web-ready promotion gate;
-- automatic candidate rollback;
-- previous-slot boot;
-- selective reset controls;
-- application-only recovery OTA;
-- WS350 touchscreen lockout guard.
-
-Portal-code authentication remains intentionally disabled in this development line so the previous portal-lockout failure is not reintroduced.
-
-### Settings-backup security
-
-The final composed v9.7 source verifies that `/settings/export` is safe to expose from recovery:
-
-- `_secretsIncluded=false`;
-- Wi-Fi password is omitted/redacted;
-- printer LAN access code is omitted/redacted;
-- cloud identity is omitted/redacted;
-- restoring a redacted backup preserves credentials already provisioned on the device.
-
-## Mac USB auto-detection
-
-Do **not** hard-code macOS device names such as `/dev/cu.usbmodem101`. macOS may renumber the same board after reconnects, resets, hub changes, or reboots.
-
-The repo includes [`scripts/waveshare-usb.sh`](scripts/waveshare-usb.sh), which identifies the board from the USB JTAG/serial VID:PID (`303A:1001`) and then returns the current `/dev/cu.*` path.
-
-Detect the current port:
-
-```bash
-PORT="$(bash scripts/waveshare-usb.sh port)"
-echo "$PORT"
-```
-
-Open the serial monitor without knowing the port number:
-
-```bash
-bash scripts/waveshare-usb.sh monitor
-```
-
-Inspect all serial devices when diagnosing USB problems:
-
-```bash
-bash scripts/waveshare-usb.sh list
-```
-
-If more than one matching Espressif USB device is attached, the helper refuses to guess. Select the intended board using its serial from `platformio device list`:
-
-```bash
-WAVESHARE_USB_SERIAL='<board-serial>' \
-  bash scripts/waveshare-usb.sh monitor
-```
-
-The same resolved port can be reused for a deliberate USB flash:
-
-```bash
-PORT="$(bash scripts/waveshare-usb.sh port)"
-python -m esptool \
-  --chip esp32s3 \
-  --port "$PORT" \
-  --baud 460800 \
-  write-flash 0x0 <Full-firmware.bin>
-```
-
-Only a **Full** firmware image belongs at flash offset `0x0`. Recovery-page uploads must continue to use the application firmware (`WaveshareHome-firmware.bin`), never `Full.bin`.
-
-## Automated validation
-
-Exact pre-merge head: `5825602f6a56c7b274df6744e3c87c23ccc9be6e`
-
-Merge commit: `239b2ea26b57e456cb7ef4c424b361de3d8d55e3`
-
-GitHub Actions v9.7 run: **33647474577**
-
-Passed:
-
-- full v1 → v9.7 patch composition;
-- inherited OTA / printer contracts;
-- secret-safe recovery-export verification;
-- v9.4 RC3 recovery invariants;
-- v9.6.1 zero-blip compositor invariants;
-- FT6336 coordinate-navigation contracts;
-- Home / Printer / Workshop / More interaction contracts;
-- native Printer / More views;
-- Custom fallback and on-device widget editing;
-- AMS spacing and printer-family imagery checks;
-- browser 320:480 preview / legacy-control disclosure / control semantics;
-- browser JavaScript syntax;
-- exact `ws_lcd_350` PlatformIO build;
-- shared `jc3248w535` 320×480 regression build;
-- Full-image merge;
-- artifact packaging and upload.
-
-The v9.4 RC3 and v9.6.1 compatibility workflows also passed on the final pre-merge head.
-
-## Validated artifacts
-
-- **OTA:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.7-Interaction-Layout-RC1-OTA.bin`
-  - SHA-256: `c27c6c1407fcb18d47394b1f1fa87d86b4881c8541b2a5266d1b0a271fc4d673`
-- **Full / USB recovery:** `BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v9.7-Interaction-Layout-RC1-Full.bin`
-  - SHA-256: `0c6152c476961b7f40f84409b60224e434e00983d485d3fc23b3f4b653649173`
-- **Recovery OTA alias:** `WaveshareHome-firmware.bin`
-  - SHA-256: `c27c6c1407fcb18d47394b1f1fa87d86b4881c8541b2a5266d1b0a271fc4d673`
-
-Persistent provenance is stored in [`releases/v9.7-interaction-layout-rc1/`](releases/v9.7-interaction-layout-rc1/).
-
-## Release status
-
-**Merged to `main`; physical acceptance still required before broad OTA promotion.**
-
-The highest-priority physical checks are:
-
-1. FT6336 coordinate orientation and direct footer targets;
-2. repeated Home ↔ Printer ↔ Workshop ↔ More transitions with no visible blank/intermediate frame;
-3. Custom long-press edit mode and persistence after reboot;
-4. native Printer telemetry / light action;
-5. recovery page / rollback / settings persistence;
-6. 30+ minute soak without freezes, spontaneous reboot or worsening visual corruption.
-
-See [`PHYSICAL_ACCEPTANCE_V9_7.md`](PHYSICAL_ACCEPTANCE_V9_7.md).
-
-Production site remains on the currently accepted firmware until v9.7 completes physical acceptance:
-
-<https://bambuhelper-smart-display.netlify.app/>
+1. One current release-candidate PR targets `main`.
+2. Superseded RC PRs are closed rather than left as competing active releases.
+3. Generated build output belongs in Actions artifacts, not the repository root.
+4. Historical validation/acceptance material is archived under `docs/` or `releases/`.
+5. A candidate is not promoted to `main` solely because CI is green when a physical acceptance gate is still outstanding.
+6. Do not add speculative Bambu commands. Control features must have a proven backend path and explicit safety semantics.
