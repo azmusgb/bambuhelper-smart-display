@@ -1,12 +1,12 @@
 name: BambuHelper ws_lcd_350 Smart Home v11.1 Calm Workshop OS RC1
 
-# Final exact-head candidate gate for the calm appliance pass.
+# Clean exact-head candidate gate for the calm appliance pass.
 on:
   push:
     branches: [evolve/v11-1-calm-workshop-os]
     paths:
       - 'apply_smart_home_calm_v11_1.py'
-      - '.bambuhelper-validation/v11_1_calm.zlib.b64'
+      - '.bambuhelper-validation/v11_1_calm_verified.zlib.b64'
       - '.github/workflows/bambuhelper-v11-1-calm-workshop-os.yml'
   pull_request:
     branches: [evolve/v11-signature-workshop-os]
