@@ -10,6 +10,18 @@ on:
       - 'app.js'
       - 'firmware/**'
       - 'releases/production-rc-v7.2/validation-report.txt'
+      - 'scripts/validate_release.py'
+      - '.github/workflows/release-main.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'release.json'
+      - 'build.py'
+      - 'index.html'
+      - 'app.js'
+      - 'firmware/**'
+      - 'releases/production-rc-v7.2/validation-report.txt'
+      - 'scripts/validate_release.py'
       - '.github/workflows/release-main.yml'
   workflow_dispatch:
 
@@ -21,46 +33,74 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate installer and every preserved firmware asset
+
+      - name: Validate repository release policy
+        run: python3 scripts/validate_release.py
+
+      - name: Validate installer and retained firmware assets
         shell: bash
         run: |
           set -euo pipefail
           node --check app.js
           python3 build.py
           python3 - <<'PY'
-          import hashlib,json
+          import hashlib, json
           from pathlib import Path
-          r=json.loads(Path('release.json').read_text())
-          assert r['release']=='production-rc-v7.2'
-          assert r['sourceCommit']=='8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
-          assert r['board']['id']=='ws_lcd_350'
+
+          r = json.loads(Path('release.json').read_text())
+          assert r['release'] == 'production-rc-v7.2'
+          assert r['sourceCommit'] == '8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
+          assert r['board']['id'] == 'ws_lcd_350'
           assert r['profiles']['smart-home-v7.2']['recommended'] is True
-          expected={
-            'smart-home-v7.2':(2208288,'ed72f08e4977edd14dc7590a129469405d81e0f565f327402ea5e5190543233a'),
-            'smart-home-v7.1':(2208400,'9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb'),
-            'smart-home-v7':(2207472,'c659d4acfd3c6642baa789d6d7b64a9b77173a2f92be90a90fa71b48d4dbbfc7'),
-            'smart-display-v6':(2207040,'82265502dac6b93356ee2ab3d7c4edcaad47bdd7584be85d24ddef348166d5ac')}
-          assert set(r['profiles'])==set(expected)
-          for pid,(size,sha) in expected.items():
-            p=r['profiles'][pid]
-            assert p['size']==size and p['sha256']==sha
-            raw=Path(p['file']).read_bytes()
-            assert len(raw)==size and hashlib.sha256(raw).hexdigest()==sha
-            pub=(Path('dist')/p['file']).read_bytes()
-            assert hashlib.sha256(pub).hexdigest()==sha
-            print(pid,'Full PASS',sha)
-          ota_expected={
-            'smart-home-v7.2':(2142752,'3eb17d01fb980dbea82e07242bb385ea35b6035b3b57038616b0579f846a95fc'),
-            'smart-home-v7.1':(2142864,'938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c')}
-          for pid,(size,sha) in ota_expected.items():
-            p=r['profiles'][pid]
-            assert p['otaSize']==size and p['otaSha256']==sha
-            raw=Path(p['otaFile']).read_bytes()
-            assert len(raw)==size and hashlib.sha256(raw).hexdigest()==sha
-            pub=(Path('dist')/p['otaFile']).read_bytes()
-            assert hashlib.sha256(pub).hexdigest()==sha
-            print(pid,'OTA PASS',sha)
+          assert r['profiles']['smart-home-v7.1']['recommended'] is False
+
+          full_expected = {
+              'smart-home-v7.2': (
+                  2208288,
+                  'ed72f08e4977edd14dc7590a129469405d81e0f565f327402ea5e5190543233a',
+              ),
+              'smart-home-v7.1': (
+                  2208400,
+                  '9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb',
+              ),
+          }
+          assert set(r['profiles']) == set(full_expected)
+
+          for pid, (size, sha) in full_expected.items():
+              p = r['profiles'][pid]
+              assert p['size'] == size and p['sha256'] == sha
+              raw = Path(p['file']).read_bytes()
+              assert len(raw) == size and hashlib.sha256(raw).hexdigest() == sha
+              published = (Path('dist') / p['file']).read_bytes()
+              assert hashlib.sha256(published).hexdigest() == sha
+              print(pid, 'Full PASS', sha)
+
+          ota_expected = {
+              'smart-home-v7.2': (
+                  2142752,
+                  '3eb17d01fb980dbea82e07242bb385ea35b6035b3b57038616b0579f846a95fc',
+              ),
+              'smart-home-v7.1': (
+                  2142864,
+                  '938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c',
+              ),
+          }
+          for pid, (size, sha) in ota_expected.items():
+              p = r['profiles'][pid]
+              assert p['otaSize'] == size and p['otaSha256'] == sha
+              raw = Path(p['otaFile']).read_bytes()
+              assert len(raw) == size and hashlib.sha256(raw).hexdigest() == sha
+              published = (Path('dist') / p['otaFile']).read_bytes()
+              assert hashlib.sha256(published).hexdigest() == sha
+              print(pid, 'OTA PASS', sha)
+
+          source_bins = sorted(Path('firmware').glob('*.bin'))
+          dist_bins = sorted((Path('dist') / 'firmware').glob('*.bin'))
+          assert len(source_bins) == 4, source_bins
+          assert len(dist_bins) == 4, dist_bins
+          print('Firmware retention PASS: exactly 4 source + 4 published binaries')
           PY
+
           REPORT='releases/production-rc-v7.2/validation-report.txt'
           grep -Fq 'workshop_full_screen_clear_only_on_entry=PASS' "$REPORT"
           grep -Fq 'workshop_dynamic_redraw_min_interval_ms=750' "$REPORT"
