@@ -121,7 +121,7 @@ jobs:
           for n in ['BLACK','WHITE','ORANGE','PURPLE']:
               need(hub,n,'material color identity')
 
-          for n in ['SPEAKER TEST','MIC ECHO','EVENTS ON','EVENTS OFF','hubSystemActionRect(2)','saveBuzzerSettings()']:
+          for n in ['uiActionButton(speakerBtn,"SPEAKER",UI_AMBER)','MIC ECHO','EVENTS ON','EVENTS OFF','hubSystemActionRect(2)','saveBuzzerSettings()']:
               need(hub,n,'Audio Lab/event sound control')
           need(settings,'prefs.getBool("buz_on", true)','WS350 event sounds default on')
           for n in ['buzzerBackendMicEcho','MALLOC_CAP_SPIRAM']:
