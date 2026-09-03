@@ -38,14 +38,17 @@ jobs:
           bash -n scripts/apply_workshop_os_v11_19_1.sh
           bash -n scripts/capture-ws350-views.zsh
 
-      - name: Apply Workshop OS stack through v11.19.1
-        run: bash scripts/apply_workshop_os_v11_19_1.sh upstream
+      - name: Reconstruct validated v11.19 baseline
+        run: bash scripts/apply_workshop_os_v11_19.sh upstream
 
-      - name: Validate inherited device contracts
+      - name: Validate inherited device contracts at v11.19 boundary
         run: python scripts/validate_device_contracts.py
 
-      - name: Validate inherited v11.19 visual contracts
+      - name: Validate complete v11.19 visual baseline before RC2 delta
         run: python scripts/validate_visual_contracts_v11_19.py upstream
+
+      - name: Apply v11.19.1 physical-fit delta
+        run: python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
 
       - name: Validate v11.19.1 rendered-fit contracts
         run: python scripts/validate_rendered_fit_v11_19_1.py upstream
@@ -127,6 +130,7 @@ jobs:
           {
             echo 'BambuHelper ws_lcd_350 Smart Home v11.19.1 Physical Fit RC2 validation'
             echo 'release_scope=PHYSICAL_FIT_ONLY'
+            echo 'v11_19_baseline_contracts=PASS_BEFORE_DELTA'
             echo 'workshop_loaded_state=AMS_IDLE_FITS'
             echo 'system_events_action=EVENTS_FITS'
             echo 'known_v11_19_overflow_strings=ABSENT'
