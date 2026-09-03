@@ -34,7 +34,7 @@ jobs:
       - name: Validate v11.18 tooling
         run: |
           python -m py_compile apply_smart_home_visual_capture_v11_18.py
-          zsh -n scripts/capture-ws350-views.zsh
+          bash -n scripts/capture-ws350-views.zsh
           bash -n scripts/apply_workshop_os_v11_18.sh
 
       - name: Apply Workshop OS stack through v11.18
