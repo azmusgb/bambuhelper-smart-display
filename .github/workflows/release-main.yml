@@ -1,4 +1,4 @@
-name: Validate production Smart Home release
+name: Validate accepted OTA portal (v7.2)
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - 'index.html'
       - 'app.js'
       - 'firmware/**'
-      - 'validation-report-v7.2.txt'
+      - 'releases/production-rc-v7.2/validation-report.txt'
       - '.github/workflows/release-main.yml'
   workflow_dispatch:
 
@@ -61,14 +61,15 @@ jobs:
             assert hashlib.sha256(pub).hexdigest()==sha
             print(pid,'OTA PASS',sha)
           PY
-          grep -Fq 'workshop_full_screen_clear_only_on_entry=PASS' validation-report-v7.2.txt
-          grep -Fq 'workshop_dynamic_redraw_min_interval_ms=750' validation-report-v7.2.txt
-          grep -Fq 'workshop_clean_idle_refresh_ms=5000' validation-report-v7.2.txt
-          grep -Fq 'header_footer_preserved_between_updates=PASS' validation-report-v7.2.txt
-          grep -Fq 'smart_home_identity=v7.2' validation-report-v7.2.txt
-          grep -Fq 'shared_layout_regression=jc3248w535_passed' validation-report-v7.2.txt
+          REPORT='releases/production-rc-v7.2/validation-report.txt'
+          grep -Fq 'workshop_full_screen_clear_only_on_entry=PASS' "$REPORT"
+          grep -Fq 'workshop_dynamic_redraw_min_interval_ms=750' "$REPORT"
+          grep -Fq 'workshop_clean_idle_refresh_ms=5000' "$REPORT"
+          grep -Fq 'header_footer_preserved_between_updates=PASS' "$REPORT"
+          grep -Fq 'smart_home_identity=v7.2' "$REPORT"
+          grep -Fq 'shared_layout_regression=jc3248w535_passed' "$REPORT"
           grep -Fq "EXPECTED_RELEASE='production-rc-v7.2'" app.js
           grep -Fq "selectedProfile='smart-home-v7.2'" app.js
           grep -Fq 'Smart Home v7.2 — recommended' index.html
           grep -Fq 'Smart Home v7.2 OTA' index.html
-          echo 'production-rc-v7.2 contract: PASS'
+          echo 'accepted production-rc-v7.2 portal contract: PASS'

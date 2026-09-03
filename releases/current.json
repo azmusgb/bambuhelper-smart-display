@@ -1,15 +1,32 @@
 {
-  "channel": "stable",
-  "version": "8.0.0-dev",
+  "channel": "candidate",
+  "version": "11.5.0-rc1",
   "name": "Waveshare Workshop OS",
   "targets": ["ws_lcd_350"],
-  "features": [
-    "workshop-dashboard",
-    "local-control-plane",
-    "ota-ready"
-  ],
+  "production": {
+    "sourceBranch": "main",
+    "sourceLine": "Smart Home v10",
+    "downloadChannel": "production-rc-v7.2"
+  },
+  "candidate": {
+    "branch": "evolve/v11-5-printer-power",
+    "pullRequest": 39,
+    "name": "Smart Home v11.5 Printer Power RC1",
+    "physicalAcceptanceRequired": true,
+    "features": [
+      "calm-workshop-home",
+      "materials-first-ams",
+      "workshop-tools-and-timers",
+      "speaker-and-mic-echo",
+      "printer-light-control",
+      "pause-resume-stop",
+      "mapped-printer-power"
+    ]
+  },
   "validation": {
-    "firmwareBuildRequired": true,
-    "dashboardSmokeTestRequired": true
+    "exactHeadCiRequired": true,
+    "ws350BuildRequired": true,
+    "shared320x480RegressionRequired": true,
+    "physicalAcceptanceRequired": true
   }
 }
