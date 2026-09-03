@@ -7,7 +7,7 @@ on:
       - 'apply_smart_home_printer_power_v11_5.py'
       - '.github/workflows/bambuhelper-v11-5-printer-power.yml'
   pull_request:
-    branches: [evolve/v11-4-control-polish]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
