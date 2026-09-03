@@ -1,6 +1,6 @@
 # Workshop OS v11.19.1 — Physical Fit RC2
 
-This release is intentionally limited to the two remaining physical text-fit defects found by the real v11.19 22-view WS350 framebuffer capture.
+This release was intentionally limited to the two remaining physical text-fit defects found by the real v11.19 22-view WS350 framebuffer capture.
 
 ## Corrections
 
@@ -22,6 +22,8 @@ This release is intentionally limited to the two remaining physical text-fit def
 - v11.17 fail-closed printer controls and stale-state behavior
 - existing smart-plug slot mapping
 
-No new feature family is introduced.
+No new feature family was introduced.
 
-`physical_acceptance=REQUIRED`: recapture all 22 WS350 views after flashing RC2 before promotion.
+## Acceptance
+
+**PASSED — 2026-09-03.** RC2 was recaptured across all 22 authenticated WS350 views, validated against the rendered-fit contracts, rebuilt on the native `ws_lcd_350` and shared `jc3248w535` targets, and promoted to `main` as the accepted v11.19.1 source line.
