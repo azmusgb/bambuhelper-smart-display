@@ -3,6 +3,14 @@ name: Workshop OS Candidate — v11.5 Printer Power RC1
 on:
   push:
     branches: [evolve/v11-5-printer-power]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/firmware-candidate.yml'
+      - 'apply_smart_home_*.py'
+      - '.bambuhelper-validation/**'
+      - 'assets/**'
+      - 'scripts/apply_smart_home_stack.sh'
   workflow_dispatch:
 
 permissions:
