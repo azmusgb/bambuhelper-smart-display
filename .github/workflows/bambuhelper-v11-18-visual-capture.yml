@@ -98,7 +98,7 @@ jobs:
           for n in ['v117StateFresh', 'V117_STALE_MS=10000']:
               need(app, n, 'live-state integrity')
 
-          catalog_ids = re.findall(r'\\"id\\":\\"([^\\"]+)\\"', web)
+          catalog_ids = re.findall(r'"id":"([^"]+)"', web)
           expected = [
               'home','printer','workshop','more','custom','system','tools',
               'display-quick','display-schedule','display-behavior','display-visual',
