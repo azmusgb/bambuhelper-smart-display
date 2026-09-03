@@ -1,9 +1,16 @@
 /* Smart Home v11.6 Workshop Command Center */
-var v116PowerState={available:false,online:false,on:false,printing:false,busy:false};
+var v116PowerState={slot:-1,available:false,online:false,on:false,printing:false,busy:false};
+var v116WorkshopSlot=-1;
+var v116StatusSeq=0;
+var v116PowerSeq=0;
 
 function v116Set(id,text){
   var e=document.getElementById(id);
   if(e)e.textContent=text==null?'—':String(text);
+}
+function v116CurrentSlot(){
+  var n=Number(window.currentSlot||0);
+  return Number.isFinite(n)&&n>=0?Math.floor(n):0;
 }
 function v116Finite(value,fallback){
   var n=Number(value);
@@ -57,15 +64,16 @@ function v116Feedback(text,bad){
   e.textContent=text||'';
   e.style.color=bad?'var(--danger)':'var(--text-dim)';
 }
-function v116SetConnectionState(connected,configured){
+function v116SetConnectionState(connected,configured,label){
   var chip=document.getElementById('wk116Connection');
   if(!chip)return;
   chip.className='wk116-live-chip '+(connected?'ok':(configured?'bad':'warn'));
-  chip.textContent=connected?'LOCAL · LIVE':(configured?'OFFLINE':'SETUP');
+  chip.textContent=label||(connected?'LOCAL · LIVE':(configured?'OFFLINE':'SETUP'));
 }
 function v116DisableControls(){
   var ids=['wkLightBtn','wk116PauseBtn','wk116PowerBtn'];
   ids.forEach(function(id){var b=document.getElementById(id);if(b)b.disabled=true});
+  v116PowerState.slot=-1;
   v116PowerState.available=false;
   v116PowerState.online=false;
   v116PowerState.busy=false;
@@ -117,17 +125,19 @@ function v116RenderTrays(ams){
     deck.appendChild(card);
   });
 }
-function v116RefreshPower(d){
+function v116RefreshPower(d,slot){
   var b=document.getElementById('wk116PowerBtn');
   if(!b)return;
-  var slot=Number(window.currentSlot||0);
+  slot=slot==null?v116CurrentSlot():slot;
+  var seq=++v116PowerSeq;
   fetch('/printer/power/status?slot='+slot+'&_='+Date.now(),{cache:'no-store'}).then(function(r){
     return r.json().catch(function(){return {}}).then(function(p){
       if(!r.ok)throw new Error(p.message||('HTTP '+r.status));
       return p;
     });
   }).then(function(p){
-    if(slot!==Number(window.currentSlot||0))return;
+    if(seq!==v116PowerSeq||slot!==v116CurrentSlot()||slot!==v116WorkshopSlot)return;
+    v116PowerState.slot=slot;
     v116PowerState.available=!!p.available;
     v116PowerState.online=!!p.online;
     v116PowerState.on=!!p.on;
@@ -136,6 +146,8 @@ function v116RefreshPower(d){
     v116Set('wk116PowerLabel',!p.available?'Power not mapped':(p.on?'Power off':'Power on'));
     v116Set('wk116PowerHint',!p.available?'Map a smart plug in Power':(!p.online?'Plug offline':(p.on?'Printer outlet is on':'Printer outlet is off')));
   }).catch(function(){
+    if(seq!==v116PowerSeq||slot!==v116CurrentSlot()||slot!==v116WorkshopSlot)return;
+    v116PowerState.slot=-1;
     v116PowerState.available=false;
     v116PowerState.online=false;
     v116PowerState.busy=false;
@@ -147,13 +159,21 @@ function v116RefreshPower(d){
 function v103RefreshWorkshop(manual){
   var root=document.getElementById('sec-workshop');
   if(!root)return;
-  var slot=Number(window.currentSlot||0);
+  var slot=v116CurrentSlot();
+  var seq=++v116StatusSeq;
+  if(slot!==v116WorkshopSlot){
+    v103WorkshopData={};
+    v116DisableControls();
+    v116Set('wkUpdated','Syncing selected printer…');
+    v116SetConnectionState(false,false,'SYNCING');
+  }
   fetch('/status?slot='+slot+'&_='+Date.now(),{cache:'no-store'}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
     return r.json();
   }).then(function(d){
-    if(slot!==Number(window.currentSlot||0))return;
+    if(seq!==v116StatusSeq||slot!==v116CurrentSlot())return;
     d=d||{};
+    v116WorkshopSlot=slot;
     v103WorkshopData=d;
     var connected=!!d.connected;
     var p=v116Percent(d.progress);
@@ -212,9 +232,11 @@ function v103RefreshWorkshop(manual){
     var spool=document.getElementById('wkLoadedSpool');
     if(spool)spool.style.setProperty('--spool-color',v116SafeColor(active&&active.color,'#59636e'));
     v116RenderTrays(ams);
-    v116RefreshPower(d);
+    v116RefreshPower(d,slot);
     if(manual)v116Feedback('Workshop refreshed');
   }).catch(function(err){
+    if(seq!==v116StatusSeq||slot!==v116CurrentSlot())return;
+    v116WorkshopSlot=-1;
     v103WorkshopData={};
     v116DisableControls();
     v116Set('wkState','UNAVAILABLE');
@@ -226,35 +248,42 @@ function v103RefreshWorkshop(manual){
   });
 }
 function v103ToggleWorkshopLight(){
+  var slot=v116CurrentSlot();
   var d=v103WorkshopData||{},b=document.getElementById('wkLightBtn');
-  if(!d.connected||!b)return;
+  if(v116WorkshopSlot!==slot||!d.connected||!b)return;
   b.disabled=true;
   v116Feedback(d.lightState===1?'Turning chamber light off…':'Turning chamber light on…');
-  v116Post('/light/set',{slot:Number(window.currentSlot||0),mode:d.lightState===1?'off':'on'}).then(function(){
+  v116Post('/light/set',{slot:slot,mode:d.lightState===1?'off':'on'}).then(function(){
+    if(slot!==v116CurrentSlot())return;
     v116Feedback('Light command sent');
-    setTimeout(function(){v103RefreshWorkshop(false)},500);
+    setTimeout(function(){if(slot===v116CurrentSlot())v103RefreshWorkshop(false)},500);
   }).catch(function(e){
+    if(slot!==v116CurrentSlot())return;
     v116Feedback(e.message||'Light command failed',true);
     b.disabled=false;
   });
 }
 function v116PauseResume(){
+  var slot=v116CurrentSlot();
   var d=v103WorkshopData||{},b=document.getElementById('wk116PauseBtn');
-  if(!d.connected||!v116IsPrinting(d)||!b)return;
+  if(v116WorkshopSlot!==slot||!d.connected||!v116IsPrinting(d)||!b)return;
   var cmd=v116IsPaused(d)?'resume':'pause';
   b.disabled=true;
   v116Feedback(cmd==='resume'?'Resuming print…':'Pausing print…');
-  v116Post('/printer/control',{slot:Number(window.currentSlot||0),command:cmd}).then(function(){
+  v116Post('/printer/control',{slot:slot,command:cmd}).then(function(){
+    if(slot!==v116CurrentSlot())return;
     v116Feedback((cmd==='resume'?'Resume':'Pause')+' command sent');
-    setTimeout(function(){v103RefreshWorkshop(false)},650);
+    setTimeout(function(){if(slot===v116CurrentSlot())v103RefreshWorkshop(false)},650);
   }).catch(function(e){
+    if(slot!==v116CurrentSlot())return;
     v116Feedback(e.message||'Printer command failed',true);
     b.disabled=false;
   });
 }
 function v116TogglePower(){
+  var slot=v116CurrentSlot();
   var st=v116PowerState,b=document.getElementById('wk116PowerBtn');
-  if(!b||!st.available||!st.online||st.busy)return;
+  if(!b||st.slot!==slot||v116WorkshopSlot!==slot||!st.available||!st.online||st.busy)return;
   var desired=!st.on,token='';
   if(!desired){
     var msg=st.printing?'A print is active. Cutting power can damage the print. Power off anyway?':'Power off the mapped printer outlet?';
@@ -264,11 +293,13 @@ function v116TogglePower(){
   st.busy=true;
   b.disabled=true;
   v116Feedback(desired?'Powering printer on…':'Powering printer off…');
-  v116Post('/printer/power',{slot:Number(window.currentSlot||0),on:desired?1:0,confirm:token}).then(function(){
+  v116Post('/printer/power',{slot:slot,on:desired?1:0,confirm:token}).then(function(){
+    if(slot!==v116CurrentSlot())return;
     v116Feedback(desired?'Printer power on command complete':'Printer power off command complete');
     st.busy=false;
-    setTimeout(function(){v103RefreshWorkshop(false)},700);
+    setTimeout(function(){if(slot===v116CurrentSlot())v103RefreshWorkshop(false)},700);
   }).catch(function(e){
+    if(slot!==v116CurrentSlot())return;
     st.busy=false;
     b.disabled=false;
     v116Feedback(e.message||'Power command failed',true);
