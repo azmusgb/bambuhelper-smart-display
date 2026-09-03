@@ -5,6 +5,7 @@ on:
     branches: [evolve/v11-3-printer-control]
     paths:
       - 'apply_smart_home_printer_control_v11_3.py'
+      - 'apply_smart_home_printer_control_v11_3_fixup.py'
       - '.github/workflows/bambuhelper-v11-3-printer-control.yml'
   pull_request:
     branches: [evolve/v11-2-workshop-tools]
@@ -50,7 +51,8 @@ jobs:
             apply_smart_home_signature_v11.py \
             apply_smart_home_calm_v11_1.py \
             apply_smart_home_workshop_tools_v11_2.py \
-            apply_smart_home_printer_control_v11_3.py
+            apply_smart_home_printer_control_v11_3.py \
+            apply_smart_home_printer_control_v11_3_fixup.py
           bash -n scripts/apply_smart_home_stack.sh
 
       - name: Apply Smart Home stack through v10.1
@@ -77,6 +79,8 @@ jobs:
         run: python apply_smart_home_workshop_tools_v11_2.py --repo upstream --apply
       - name: Apply v11.3 Printer Control
         run: python apply_smart_home_printer_control_v11_3.py --repo upstream --apply
+      - name: Apply v11.3 browser serialization fixup
+        run: python apply_smart_home_printer_control_v11_3_fixup.py --repo upstream --apply
 
       - name: Validate inherited device contracts
         run: python scripts/validate_device_contracts.py
@@ -101,32 +105,25 @@ jobs:
 
           def need(body,n,label):
               if n not in body: raise SystemExit(f'MISSING {label}: {n}')
-          def forbid(body,n,label):
-              if n in body: raise SystemExit(f'FORBIDDEN {label}: {n}')
 
           for n in ['#define SMART_HOME_VERSION "v11.3"','#define SMART_HOME_PROFILE "printer-control"','Smart Home v11.3 Printer Control RC1']:
               need(build,n,'v11.3 identity')
-
           for n in ['PRINTER_CTRL_PAUSE','PRINTER_CTRL_RESUME','PRINTER_CTRL_STOP','requestPrinterControlCommand']:
               need(mqtth,n,'printer command API')
           for n in ['g_printerCtrlReq','sendPrinterControl','"pause"','"resume"','"stop"','printer control %s']:
               need(mqtt,n,'deferred MQTT printer command path')
           need(mqtt,'conns[i].mqtt && conns[i].mqtt->connected()','MQTT-context command drain')
-
           for n in ['"LIGHT OFF":"LIGHT ON"','paused?"RESUME":"PAUSE"','"MATERIALS"','"HOLD STOP"']:
               need(hub,n,'physical Printer control surface')
           need(hub,'active&&longPress','guarded physical stop')
           need(hub,'requestPrinterControlCommand(slot,paused?PRINTER_CTRL_RESUME:PRINTER_CTRL_PAUSE)','state-aware pause/resume')
           need(hub,'requestPrinterControlCommand(slot,PRINTER_CTRL_STOP)','physical stop command')
-
           for n in ['handlePrinterControl','/printer/control','stop confirmation required','command not valid for current printer state']:
               need(web,n,'authenticated printer control API')
           need(web,'server.arg("confirm")!="STOP"','web stop confirmation token')
           for n in ['v113PrinterControl','Turn light on','Pause print','Resume print','Stop print','window.confirm','/printer/control']:
               need(app,n,'browser printer remote')
           need(css,'Smart Home v11.3 Printer Control','browser control styling')
-
-          # Preserve the proven v11.2 experience and hardware safety stack.
           for n in ['g_timerPresets[4]','drawTools','TIMER COMPLETE','drawAmbientHome']:
               need(hub,n,'v11.2/v11.1 experience')
           for n in ['SPEAKER','MIC ECHO','EVENTS ON','EVENTS OFF']:
