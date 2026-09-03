@@ -4,72 +4,91 @@ Local-first Workshop OS for the **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`
 
 ## Release model
 
-This repository deliberately separates the accepted download channel from firmware still awaiting physical-device acceptance:
+The repository separates the accepted **source line** from the intentionally conservative static firmware download channel:
 
-| Line | Status | Purpose |
+| Surface | Current state | Purpose |
 | --- | --- | --- |
-| `release.json` / Netlify | **Accepted download channel: Smart Home v7.2** | Integrity-checked production/rollback firmware currently served by the static installer. |
-| `main` | **Accepted source line: Smart Home v10** | Latest promoted source baseline. |
-| PR #39 / `evolve/v11-5-printer-power` | **Current candidate: Smart Home v11.5 Printer Power RC1** | Complete v11 Workshop OS evolution; CI-green and awaiting final physical acceptance before promotion. |
+| `main` | **Workshop OS v11.19.1 — physically accepted** | Authoritative accepted source line. |
+| `release.json` / Netlify | **Smart Home v7.2** | Integrity-checked static download channel. |
+| rollback download | **Smart Home v7.1** | Single immediate rollback retained for recovery safety. |
+| active candidate | **None** | New firmware work should open one candidate PR to `main`. |
 
-Do not infer that the oldest number is the newest code. The static download channel is intentionally conservative until a candidate has passed physical acceptance.
+The source line and static installer are intentionally independent. A newer accepted source does not silently replace the conservative download channel.
 
-## Current candidate — Smart Home v11.5
+## Accepted source — Workshop OS v11.19.1
 
-v11.5 turns the display into a guarded workshop control surface while preserving the local-first design.
+v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the authenticated 22-view WS350 framebuffer acceptance pass.
 
-### Physical experience
+### Workshop experience
 
-- calm Workshop Home with adaptive state hero;
-- materials-first AMS / filament rail with color, type and remaining percentage;
-- dedicated Printer, Workshop, Tools, More and ambient/standby experiences;
+- calm adaptive Home and ambient/standby experience;
+- materials-first AMS / filament presentation;
+- Printer, Workshop, Tools, More and System surfaces;
 - Workshop note and configurable timers;
-- ES8311 speaker self-test, event sounds and onboard microphone **MIC ECHO**;
-- chamber-light control;
-- state-aware **Pause / Resume**;
-- long-press guarded **Stop**;
-- mapped smart-plug **Printer Power** with the existing hold-to-confirm safety modal;
-- stronger warning before power-off during an active print.
+- live-state freshness/stale handling;
+- network, audio and LED essentials;
+- printer HMS/attention presentation;
+- authenticated 22-view framebuffer capture for physical UI review.
 
-### Browser control plane
+### Guarded controls
 
-The browser UI mirrors the physical-device model and includes printer-scoped Light, Pause/Resume, Stop and mapped Power controls. Destructive actions require explicit confirmation, and v11.4+ commands fail closed if connectivity disappears before publish.
+- chamber light;
+- state-aware Pause / Resume;
+- long-press guarded Stop;
+- mapped smart-plug Printer Power;
+- power automation / auto-off safeguards;
+- fail-closed command behavior when MQTT connectivity disappears.
 
-### Safety and reliability preserved
+Speed/fan commands remain intentionally absent until there is an equally proven backend path and explicit safety contract.
 
-The current stack retains:
+### Hardware and recovery
 
-- FT6336 touch recovery and coordinate navigation;
-- printer-screen retention while printing;
-- OTA candidate/rollback protections;
-- Safari-safe recovery hashing;
+- FT6336 touch recovery;
+- ES8311 speaker and onboard microphone / MIC ECHO;
 - settings persistence;
-- secret-safe settings export;
-- WS350 ES8311 audio + microphone support;
-- `jc3248w535` shared 320×480 regression compatibility.
+- printer-screen retention;
+- Safari-safe recovery hashing;
+- OTA candidate/rollback protections;
+- `ws_lcd_350` native build and `jc3248w535` shared 320×480 regression compatibility.
 
-Speed/fan command controls remain intentionally deferred until the pinned BambuHelper backend has an equally proven command path.
+The v11.19.1 physical-fit delta specifically replaces clipped Workshop/System strings with forms that fit the real 320×480 panel while preserving the v11.19 behavior contract.
 
-## Validation
+## Validation model
 
-The current candidate is reconstructed from the pinned upstream BambuHelper baseline and every evolution patch. Its exact-head workflow verifies device contracts, browser JavaScript, the native `ws_lcd_350` PlatformIO build, the shared 320×480 regression build, Full-image merge and OTA packaging.
+Firmware is reconstructed deterministically from a pinned upstream BambuHelper baseline plus the incremental `apply_smart_home_*.py` evolution stack. The stable firmware gate validates:
 
-Current candidate PR: **#39** (`evolve/v11-5-printer-power`).
+1. patch/tooling reconstruction;
+2. inherited device contracts;
+3. v11.19 visual correctness;
+4. v11.19.1 rendered-fit contracts;
+5. browser JavaScript;
+6. native `ws_lcd_350` PlatformIO build;
+7. shared `jc3248w535` regression build;
+8. Full-image merge and OTA artifact packaging.
 
-The final promotion gate is **physical acceptance** on the real WS350: display/touch behavior, Speaker, MIC ECHO, Light, Pause/Resume, guarded Stop, mapped Power, recovery and configuration retention.
+The accepted v11.19.1 source was promoted only after those gates and the real-device 22-view physical acceptance passed.
 
 ## Repository layout
 
-- `apply_smart_home_*.py` — deterministic evolution patches used by CI. These are source inputs, not generated artifacts.
-- `.bambuhelper-validation/` — verified compressed patch payloads required by selected loaders. Keep these under source control.
-- `.github/workflows/firmware-candidate.yml` — stable current-candidate hardware/release gate; update it in place for each RC instead of adding version-named workflow files.
-- `.github/workflows/validate.yml` — repository syntax/hygiene validation.
-- `.github/workflows/release-gate.yml` — main-branch release metadata gate.
-- `.github/workflows/release-main.yml` — accepted static OTA portal integrity validation.
-- `docs/archive/` — historical physical-acceptance and roadmap documents.
-- `releases/` — persistent release provenance/metadata.
-- `firmware/` — binaries still required by the accepted Netlify download channel. New candidate binaries should normally remain GitHub Actions artifacts until promoted.
+- `apply_smart_home_*.py` — deterministic firmware evolution inputs; **not generated debris**.
+- `.bambuhelper-validation/` — verified compressed patch payloads required by selected loaders.
+- `.github/workflows/firmware-candidate.yml` — the single reusable firmware/hardware gate. Update this file in place for the next candidate rather than adding version-named workflows.
+- `.github/workflows/validate.yml` — repository validation.
+- `.github/workflows/release-gate.yml` — release/source metadata gate.
+- `.github/workflows/release-main.yml` — static OTA portal integrity gate.
+- `docs/` — current architecture/acceptance policy and current-version evidence.
+- `docs/archive/` — superseded engineering/acceptance documentation.
+- `releases/` — current release state and accepted download provenance.
+- `releases/archive/` — historical RC manifests/reports retained for provenance, not active release discovery.
+- `firmware/` — only the accepted v7.2 Full+OTA pair and immediate v7.1 rollback Full+OTA pair.
+- `scripts/capture-ws350-views.zsh` — authenticated real-device framebuffer capture helper.
 - `scripts/waveshare-usb.sh` — safe Mac USB/JTAG serial auto-detection helper.
+
+## Upstream policy
+
+Workshop OS remains deliberately pinned to BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` for reproducibility. Upstream has advanced beyond that pin; see `docs/UPSTREAM_SYNC.md`.
+
+Do **not** silently repin an accepted source line. Upstream synchronization is its own candidate with full reconstruction, dual-target CI, overlap review and physical acceptance.
 
 ## Firmware installation rule
 
@@ -79,10 +98,11 @@ Only a **Full** image belongs at flash offset `0x0` during an intentional USB re
 
 ## Development policy
 
-1. One current release-candidate PR targets `main`.
-2. Superseded RC PRs are closed rather than left as competing active releases.
-3. Generated build output belongs in Actions artifacts, not the repository root.
-4. Historical validation/acceptance material is archived under `docs/` or `releases/`.
-5. A candidate is not promoted to `main` solely because CI is green when a physical acceptance gate is still outstanding.
-6. Do not add speculative Bambu commands. Control features must have a proven backend path and explicit safety semantics.
-7. Keep one stable `.github/workflows/firmware-candidate.yml`; update it for the active candidate rather than accumulating per-version workflow files.
+1. Maintain one active firmware candidate PR to `main` at a time.
+2. Keep one stable `.github/workflows/firmware-candidate.yml`; do not accumulate per-version workflow files.
+3. Keep generated PlatformIO output, local ZIPs, temporary artifacts and ad-hoc validation reports out of source control.
+4. Candidate binaries belong in GitHub Actions artifacts until intentionally promoted to the static download channel.
+5. Preserve historical provenance under `docs/archive/` and `releases/archive/`, not in the active root/release namespace.
+6. Retain only the accepted static firmware pair plus one immediate rollback pair as tracked binaries.
+7. Do not promote a hardware-facing candidate on CI alone when physical acceptance is required.
+8. Do not add speculative Bambu commands; controls require a proven backend path and explicit safety semantics.

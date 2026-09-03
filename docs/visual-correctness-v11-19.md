@@ -1,6 +1,6 @@
 # Workshop OS v11.19 — Visual Correctness RC1
 
-This release is intentionally constrained to physical UI correctness discovered by the deterministic v11.18 22-view capture baseline. It adds no new feature family.
+This release was intentionally constrained to physical UI correctness discovered by the deterministic v11.18 22-view capture baseline. It added no new feature family.
 
 ## Scope
 
@@ -22,4 +22,7 @@ This release is intentionally constrained to physical UI correctness discovered 
 - No change to smart-plug slot mapping.
 - No change to portal/input boundaries for Wi-Fi credentials, static addressing, plug IP/type/outlet, LED wiring, or arbitrary text.
 - v11.18 authenticated framebuffer capture remains installed for physical recapture and visual comparison.
-- Physical acceptance remains required before promotion/merge.
+
+## Acceptance lineage
+
+v11.19 required physical acceptance at RC time. Its remaining two real-panel fit defects were corrected by v11.19.1 Physical Fit RC2. The combined v11.19 + v11.19.1 visual baseline subsequently passed the full 22-view WS350 acceptance and was promoted to `main` on 2026-09-03.

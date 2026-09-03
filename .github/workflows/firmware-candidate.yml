@@ -1,4 +1,4 @@
-name: Workshop OS Candidate — v11.5 Printer Power RC1
+name: Workshop OS Firmware Gate — accepted v11.19.1 baseline
 
 on:
   pull_request:
@@ -8,14 +8,17 @@ on:
       - 'apply_smart_home_*.py'
       - '.bambuhelper-validation/**'
       - 'assets/**'
-      - 'scripts/apply_smart_home_stack.sh'
+      - 'scripts/apply_*.sh'
+      - 'scripts/validate_*.py'
+      - 'docs/physical-*.md'
+      - 'docs/visual-*.md'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: workshop-os-candidate-${{ github.event.pull_request.number || github.ref }}
+  group: workshop-os-firmware-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,8 +26,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - name: Checkout evolution repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        name: Checkout Workshop OS repository
 
       - name: Checkout pinned BambuHelper baseline
         uses: actions/checkout@v4
@@ -37,115 +40,67 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Validate patch tooling
+      - name: Validate accepted-baseline tooling
         run: |
-          python -m py_compile \
-            apply_smart_home_hardware_v10_1.py \
-            apply_smart_home_ui_v10_2.py \
-            apply_smart_home_browser_v10_3.py \
-            apply_smart_home_screen_retention_v10_3_1.py \
-            apply_smart_home_portal_v10_4.py \
-            apply_smart_home_home_v10_4_1.py \
-            apply_smart_home_physical_v10_5.py \
-            apply_smart_home_audio_home_v10_6.py \
-            apply_smart_home_signature_v11.py \
-            apply_smart_home_calm_v11_1.py \
-            apply_smart_home_workshop_tools_v11_2.py \
-            apply_smart_home_printer_control_v11_3.py \
-            apply_smart_home_printer_control_v11_3_fixup.py \
-            apply_smart_home_control_polish_v11_4.py \
-            apply_smart_home_printer_power_v11_5.py
-          bash -n scripts/apply_smart_home_stack.sh
+          python -m py_compile apply_smart_home_physical_fit_v11_19_1.py
+          python -m py_compile scripts/validate_device_contracts.py
+          python -m py_compile scripts/validate_visual_contracts_v11_19.py
+          python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
+          bash -n scripts/apply_workshop_os_v11_19.sh
+          bash -n scripts/apply_workshop_os_v11_19_1.sh
+          bash -n scripts/capture-ws350-views.zsh
 
-      - name: Apply Smart Home stack through v10.1
-        run: bash scripts/apply_smart_home_stack.sh upstream apply_smart_home_hardware_v10_1.py
-      - name: Apply v10.2
-        run: python apply_smart_home_ui_v10_2.py --repo upstream --apply
-      - name: Apply v10.3
-        run: python apply_smart_home_browser_v10_3.py --repo upstream --apply
-      - name: Apply v10.3.1
-        run: python apply_smart_home_screen_retention_v10_3_1.py --repo upstream --apply
-      - name: Apply v10.4
-        run: python apply_smart_home_portal_v10_4.py --repo upstream --apply
-      - name: Apply v10.4.1
-        run: python apply_smart_home_home_v10_4_1.py --repo upstream --apply
-      - name: Apply v10.5
-        run: python apply_smart_home_physical_v10_5.py --repo upstream --apply
-      - name: Apply v10.6
-        run: python apply_smart_home_audio_home_v10_6.py --repo upstream --apply
-      - name: Apply v11
-        run: python apply_smart_home_signature_v11.py --repo upstream --apply
-      - name: Apply v11.1
-        run: python apply_smart_home_calm_v11_1.py --repo upstream --apply
-      - name: Apply v11.2
-        run: python apply_smart_home_workshop_tools_v11_2.py --repo upstream --apply
-      - name: Apply v11.3 Printer Control
-        run: python apply_smart_home_printer_control_v11_3.py --repo upstream --apply
-      - name: Apply v11.3 browser serialization fixup
-        run: python apply_smart_home_printer_control_v11_3_fixup.py --repo upstream --apply
-      - name: Apply v11.4 Control Polish
-        run: python apply_smart_home_control_polish_v11_4.py --repo upstream --apply
-      - name: Apply v11.5 Printer Power
-        run: python apply_smart_home_printer_power_v11_5.py --repo upstream --apply
+      - name: Reconstruct accepted v11.19 baseline
+        run: bash scripts/apply_workshop_os_v11_19.sh upstream
 
-      - name: Validate inherited device contracts
+      - name: Validate inherited device contracts at v11.19 boundary
         run: python scripts/validate_device_contracts.py
 
-      - name: Verify v11.5 printer-power contracts
-        shell: bash
+      - name: Validate complete v11.19 visual baseline
+        run: python scripts/validate_visual_contracts_v11_19.py upstream
+
+      - name: Apply accepted v11.19.1 physical-fit delta
+        run: python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
+
+      - name: Validate v11.19.1 rendered-fit contracts
+        run: python scripts/validate_rendered_fit_v11_19_1.py upstream
+
+      - name: Verify accepted safety and capture invariants
         run: |
-          set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          hub=Path('upstream/src/smart_hub.cpp').read_text()
-          main=Path('upstream/src/main.cpp').read_text()
-          dh=Path('upstream/src/display_ui.h').read_text()
-          web=Path('upstream/src/web_server.cpp').read_text()
-          app=Path('upstream/web/app.js').read_text()
-          css=Path('upstream/web/app.css').read_text()
-          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
-          mqtth=Path('upstream/src/bambu_mqtt.h').read_text()
-          build=Path('upstream/include/smart_home_build.h').read_text()
-          board=Path('upstream/boards/ws_lcd_350.ini').read_text()
-          focal=Path('upstream/src/button_touch_focaltech.cpp').read_text()
-          backend=Path('upstream/src/buzzer_backend_es8311.cpp').read_text()
 
-          def need(body,n,label):
-              if n not in body: raise SystemExit(f'MISSING {label}: {n}')
-          def forbid(body,n,label):
-              if n in body: raise SystemExit(f'FORBIDDEN {label}: {n}')
+          hub = Path('upstream/src/smart_hub.cpp').read_text()
+          web = Path('upstream/src/web_server.cpp').read_text()
+          mqtt = Path('upstream/src/bambu_mqtt.cpp').read_text()
+          app = Path('upstream/web/app.js').read_text()
+          tasmota = Path('upstream/src/tasmota.cpp').read_text()
+          build = Path('upstream/include/smart_home_build.h').read_text()
 
-          for n in ['#define SMART_HOME_VERSION "v11.5"','#define SMART_HOME_PROFILE "printer-power"','Smart Home v11.5 Printer Power RC1']:
-              need(build,n,'v11.5 identity')
+          def need(body, needle, label):
+              if needle not in body:
+                  raise SystemExit(f'MISSING {label}: {needle}')
 
-          need(dh,'powerConfirmOpenForSlot','guarded physical power entry')
-          for n in ['bool powerConfirmOpenForSlot(uint8_t slot)','tasmotaControlPlugForSlot(slot)','tasmotaSettings[plug].enabled','openPowerConfirm(slot)']:
-              need(main,n,'reuse existing power-confirm modal')
-          for n in ['#include "tasmota.h"','POWER OFF','POWER ON','POWER ?','NO POWER','powerConfirmOpenForSlot(rotState.displayIndex)','for(uint8_t i=0;i<4;i++)if(hubToolsActionRect(i).contains(x,y))']:
-              need(hub,n,'physical Tools power control')
-
-          for n in ['handlePrinterPowerStatus','handlePrinterPower','/printer/power/status','/printer/power','POWER OFF DURING PRINT','power-off confirmation required','tasmotaControlPlugForSlot(slot)','tasmotaSetPower(plug,on)']:
-              need(web,n,'printer-scoped web power API')
-          for n in ['v115Power','v115RefreshPower','v115PrinterPower','Power not mapped','Power plug offline','POWER OFF DURING PRINT']:
-              need(app,n,'browser printer power remote')
-          need(css,'Smart Home v11.5 Printer Power','browser power styling')
-
-          for n in ['DROPPED: MQTT offline','if (!st.connected) return false','PRINTER_CTRL_PAUSE && (!active || paused)','PRINTER_CTRL_RESUME && !paused','PRINTER_CTRL_STOP && !active']:
-              need(mqtt,n,'v11.4 fail-closed printer commands')
-          for n in ['PRINTER_CTRL_PAUSE','PRINTER_CTRL_RESUME','PRINTER_CTRL_STOP','requestPrinterControlCommand']:
-              need(mqtth,n,'v11.3 printer controls')
-          for n in ['SPEAKER','MIC ECHO','EVENTS ON','EVENTS OFF','drawTools','drawAmbientHome']:
-              need(hub,n,'Workshop OS experience')
-          for n in ['buzzerBackendMicEcho','MALLOC_CAP_SPIRAM']:
-              need(backend,n,'audio/mic backend')
-          for n in ['BOARD_HAS_ES8311_AUDIO=1','BOARD_HAS_MICROPHONE=1','AUDIO_I2S_DIN=14']:
-              need(board,n,'WS350 hardware')
-          need(web,'recoverySha256HexArrayBuffer','Safari-safe recovery')
-          need(focal,'ft6336RecoverBus','FT6336 recovery')
-
-          forbid(mqtth,'PRINTER_CTRL_SPEED','unvalidated speed control')
-          forbid(mqtth,'PRINTER_CTRL_FAN','unvalidated fan control')
-          print('v11.5 Printer Power contracts: PASS')
+          for n in ['SMART_HOME_VERSION "v11.19.1"', 'Smart Home v11.19.1 Physical Fit RC2']:
+              need(build, n, 'accepted release identity')
+          for n in ['DROPPED: MQTT offline', 'if (!st.connected) return false']:
+              need(mqtt, n, 'fail-closed printer control')
+          for n in ['v117StateFresh', 'V117_STALE_MS=10000']:
+              need(app, n, 'live-state integrity')
+          for n in ['visiblePlugForSlot', 'TASMOTA_PLUG_COUNT']:
+              need(tasmota, n, 'smart-plug slot mapping')
+          for n in ['smartHubCapturePrepare', 'smartHubCaptureRgbRow', 'g_hubFrame->readPixel']:
+              need(hub, n, 'physical framebuffer capture')
+          for n in [
+              'SECURE_GET("/hub/views", handleHubViews)',
+              'SECURE_GET("/hub/frame.ppm", handleHubFramePpm)',
+              'SECURE_POST("/hub/show", handleHubShow)',
+          ]:
+              need(web, n, 'authenticated visual capture')
+          for forbidden in ['requestSpeedCommand', 'requestFanCommand']:
+              if forbidden in hub or forbidden in web or forbidden in mqtt:
+                  raise SystemExit(f'forbidden speculative printer command introduced: {forbidden}')
+          print('Accepted v11.19.1 safety/capture invariants: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -154,7 +109,7 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
 
-      - name: Build WS350 v11.5
+      - name: Build WS350 accepted baseline
         working-directory: upstream
         run: pio run -e ws_lcd_350
 
@@ -166,42 +121,42 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.5 Printer Power RC1 artifacts
+      - name: Package accepted-baseline verification artifacts
         shell: bash
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          mkdir -p v11-5-artifacts/source-snapshot
-          cp "$FULL" v11-5-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.5-Printer-Power-RC1-Full.bin
-          cp "$APP" v11-5-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.5-Printer-Power-RC1-OTA.bin
-          cp "$APP" v11-5-artifacts/WaveshareHome-firmware.bin
-          for f in src/main.cpp src/display_ui.h src/smart_hub.cpp src/settings.cpp src/web_server.cpp src/bambu_mqtt.cpp src/bambu_mqtt.h src/buzzer.cpp src/buzzer_backend.h src/buzzer_backend_es8311.cpp src/button_touch_focaltech.cpp include/tasmota.h include/smart_home_build.h web/app.js web/app.css boards/ws_lcd_350.ini; do
-            mkdir -p "v11-5-artifacts/source-snapshot/$(dirname "$f")"
-            cp "upstream/$f" "v11-5-artifacts/source-snapshot/$f"
+          mkdir -p firmware-gate-artifacts/source-snapshot firmware-gate-artifacts/tools firmware-gate-artifacts/docs
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.19.1-Physical-Fit-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.19.1-Physical-Fit-OTA.bin
+          cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
+          cp scripts/capture-ws350-views.zsh firmware-gate-artifacts/tools/capture-ws350-views.zsh
+          cp apply_smart_home_physical_fit_v11_19_1.py firmware-gate-artifacts/tools/apply_smart_home_physical_fit_v11_19_1.py
+          cp scripts/validate_rendered_fit_v11_19_1.py firmware-gate-artifacts/tools/validate_rendered_fit_v11_19_1.py
+          cp docs/physical-fit-v11-19-1.md firmware-gate-artifacts/docs/physical-fit-v11-19-1.md
+          for f in include/web_pages.h include/smart_home_build.h web/app.js web/app.css src/web_server.cpp src/bambu_mqtt.cpp src/smart_hub.cpp src/settings.cpp src/display_ui.h src/tasmota.cpp src/security_manager.cpp include/security_manager.h; do
+            mkdir -p "firmware-gate-artifacts/source-snapshot/$(dirname "$f")"
+            cp "upstream/$f" "firmware-gate-artifacts/source-snapshot/$f"
           done
           {
-            echo 'BambuHelper ws_lcd_350 Smart Home v11.5 Printer Power RC1 validation'
-            echo 'physical_printer_power=PASS'
-            echo 'existing_hold_confirm_modal=REUSED'
-            echo 'printing_poweroff_warning=PASS'
-            echo 'printer_scoped_power_mapping=PASS'
-            echo 'browser_printer_power=PASS'
-            echo 'v11_4_fail_closed_controls=PRESERVED'
-            echo 'speed_fan_controls=DEFERRED_UNTIL_PROVEN'
-            echo 'speaker_self_test=PRESERVED'
-            echo 'microphone_echo=PRESERVED'
-            echo 'printer_screen_retention=PRESERVED'
-            echo 'ft6336_reliability=PRESERVED'
+            echo 'Workshop OS accepted v11.19.1 baseline verification'
+            echo 'source_line=ACCEPTED'
+            echo 'physical_acceptance=PASSED_PREVIOUSLY'
+            echo 'v11_19_visual_correctness=PASS'
+            echo 'v11_19_1_rendered_fit=PASS'
+            echo 'guarded_power_control=PRESERVED'
+            echo 'fail_closed_printer_commands=PRESERVED'
+            echo 'smart_plug_slot_mapping=PRESERVED'
+            echo 'capture_routes=AUTHENTICATED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
-            echo 'physical_acceptance=REQUIRED'
-            sha256sum v11-5-artifacts/*.bin
-          } | tee v11-5-artifacts/validation-report-v11-5-printer-power-rc1.txt
+            sha256sum firmware-gate-artifacts/*.bin
+          } | tee firmware-gate-artifacts/validation-report.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bambuhelper-ws_lcd_350-smart-home-v11-5-printer-power-rc1
+          name: workshop-os-firmware-gate-v11-19-1
           retention-days: 14
           if-no-files-found: error
-          path: v11-5-artifacts/
+          path: firmware-gate-artifacts/
