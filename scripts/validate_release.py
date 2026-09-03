@@ -107,6 +107,10 @@ def main() -> int:
         )
     if any(name.startswith("bambuhelper-v") for name in workflows):
         fail("version-named firmware workflow present; use firmware-candidate.yml")
+    for name in sorted(ALLOWED_WORKFLOWS):
+        workflow_text = (workflows_dir / name).read_text(encoding="utf-8")
+        if "permissions:\n  contents: read" not in workflow_text:
+            fail(f"workflow must declare least-privilege contents: read permissions: {name}")
 
     parsed: dict[str, dict] = {}
     for rel in (Path("release.json"), Path("releases/current.json")):
@@ -163,6 +167,7 @@ def main() -> int:
     print("Static download channel: v7.2 Full + OTA")
     print("Immediate rollback channel: v7.1 Full + OTA")
     print("Firmware workflows: one reusable candidate gate + three repository/release gates")
+    print("Workflow permissions: explicit contents: read on all workflows")
     print("Governance contract: SECURITY + CONTRIBUTING + release/control-safety docs + PR template present")
     return 0
 
