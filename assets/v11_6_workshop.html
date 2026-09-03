@@ -16,17 +16,17 @@
     <section class="wk116-printer" aria-label="Printer status and quick controls">
       <div class="wk116-printer-head">
         <div class="wk116-state">
-          <span id="wkDot"></span>
+          <span id="wkDot" aria-hidden="true"></span>
           <div><small>PRINTER</small><strong id="wkState">Checking…</strong><span id="wkUpdated">Reading printer state</span></div>
         </div>
-        <span class="wk116-live-chip" id="wk116Connection">LOCAL</span>
+        <span class="wk116-live-chip warn" id="wk116Connection">LOCAL</span>
       </div>
 
       <div class="wk116-job">
         <div><small id="wkProgressSub">CURRENT JOB</small><strong id="wk116Job">Waiting for printer</strong></div>
         <strong class="wk116-percent" id="wkProgress">—</strong>
       </div>
-      <div class="wk116-progress" aria-hidden="true"><span id="wk116ProgressBar"></span></div>
+      <div class="wk116-progress" role="progressbar" aria-label="Print progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Checking printer state"><span id="wk116ProgressBar"></span></div>
 
       <div class="wk116-telemetry">
         <div><small>TIME LEFT</small><strong id="wkRemaining">—</strong></div>
@@ -36,16 +36,16 @@
 
       <div class="wk116-control-strip">
         <button type="button" class="wk116-control" id="wkLightBtn" onclick="v103ToggleWorkshopLight()">
-          <span class="wk116-control-icon">☼</span><span><strong id="wk116LightLabel">Light</strong><small id="wkLightState">Reading…</small></span>
+          <span class="wk116-control-icon" aria-hidden="true">☼</span><span><strong id="wk116LightLabel">Light</strong><small id="wkLightState">Reading…</small></span>
         </button>
         <button type="button" class="wk116-control" id="wk116PauseBtn" onclick="v116PauseResume()" disabled>
-          <span class="wk116-control-icon">Ⅱ</span><span><strong id="wk116PauseLabel">Pause</strong><small id="wk116PauseHint">No active print</small></span>
+          <span class="wk116-control-icon" aria-hidden="true">Ⅱ</span><span><strong id="wk116PauseLabel">Pause</strong><small id="wk116PauseHint">No active print</small></span>
         </button>
         <button type="button" class="wk116-control" id="wk116PowerBtn" onclick="v116TogglePower()" disabled>
-          <span class="wk116-control-icon">⌁</span><span><strong id="wk116PowerLabel">Printer power</strong><small id="wk116PowerHint">Checking mapping…</small></span>
+          <span class="wk116-control-icon" aria-hidden="true">⌁</span><span><strong id="wk116PowerLabel">Printer power</strong><small id="wk116PowerHint">Checking mapping…</small></span>
         </button>
       </div>
-      <div class="wk116-feedback" id="wk116Feedback" aria-live="polite"></div>
+      <div class="wk116-feedback" id="wk116Feedback" role="status" aria-live="polite" aria-atomic="true"></div>
     </section>
 
     <section class="wk116-materials" aria-label="AMS and loaded materials">
@@ -54,10 +54,10 @@
         <span class="wk-chip" id="wkAmsState">Checking…</span>
       </div>
       <div class="wk116-active" id="wkLoaded">
-        <span class="wk-spool" id="wkLoadedSpool"></span>
-        <div><small>ACTIVE MATERIAL</small><strong id="wkLoadedName">None loaded</strong><span id="wkLoadedDetail">Waiting for AMS data</span></div>
+        <span class="wk-spool" id="wkLoadedSpool" aria-hidden="true"></span>
+        <div><small id="wkLoadedEyebrow">MATERIAL STATUS</small><strong id="wkLoadedName">Checking materials</strong><span id="wkLoadedDetail">Waiting for AMS data</span></div>
       </div>
-      <div class="wk116-trays" id="wkTrays"><div class="wk-empty">Reading AMS slots…</div></div>
+      <div class="wk116-trays" id="wkTrays" aria-live="polite"><div class="wk-empty">Reading AMS slots…</div></div>
     </section>
   </div>
 
@@ -68,4 +68,3 @@
     <button type="button" onclick="location.href='/recovery'"><span>Recovery</span><small>Rollback &amp; repair</small></button>
   </nav>
 </div>
-
