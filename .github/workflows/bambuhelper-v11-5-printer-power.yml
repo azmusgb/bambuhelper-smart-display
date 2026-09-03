@@ -3,9 +3,6 @@ name: BambuHelper ws_lcd_350 Smart Home v11.5 Printer Power RC1
 on:
   push:
     branches: [evolve/v11-5-printer-power]
-    paths:
-      - 'apply_smart_home_printer_power_v11_5.py'
-      - '.github/workflows/bambuhelper-v11-5-printer-power.yml'
   pull_request:
     branches: [main]
   workflow_dispatch:
