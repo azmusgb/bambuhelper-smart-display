@@ -1,17 +1,15 @@
-name: BambuHelper ws_lcd_350 Smart Home v11.5 Printer Power RC1
+name: Workshop OS Candidate — v11.5 Printer Power RC1
 
 on:
   push:
     branches: [evolve/v11-5-printer-power]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: smart-home-v11-5-printer-power-${{ github.ref }}
+  group: workshop-os-candidate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

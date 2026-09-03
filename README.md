@@ -62,7 +62,7 @@ The final promotion gate is **physical acceptance** on the real WS350: display/t
 
 - `apply_smart_home_*.py` — deterministic evolution patches used by CI. These are source inputs, not generated artifacts.
 - `.bambuhelper-validation/` — verified compressed patch payloads required by selected loaders. Keep these under source control.
-- `.github/workflows/bambuhelper-v11-5-printer-power.yml` — current candidate hardware/release gate.
+- `.github/workflows/firmware-candidate.yml` — stable current-candidate hardware/release gate; update it in place for each RC instead of adding version-named workflow files.
 - `.github/workflows/validate.yml` — repository syntax/hygiene validation.
 - `.github/workflows/release-gate.yml` — main-branch release metadata gate.
 - `.github/workflows/release-main.yml` — accepted static OTA portal integrity validation.
@@ -85,3 +85,4 @@ Only a **Full** image belongs at flash offset `0x0` during an intentional USB re
 4. Historical validation/acceptance material is archived under `docs/` or `releases/`.
 5. A candidate is not promoted to `main` solely because CI is green when a physical acceptance gate is still outstanding.
 6. Do not add speculative Bambu commands. Control features must have a proven backend path and explicit safety semantics.
+7. Keep one stable `.github/workflows/firmware-candidate.yml`; update it for the active candidate rather than accumulating per-version workflow files.
