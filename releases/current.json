@@ -2,7 +2,9 @@
   "channel": "accepted-source",
   "version": "11.19.1",
   "name": "Waveshare Workshop OS",
-  "targets": ["ws_lcd_350"],
+  "targets": [
+    "ws_lcd_350"
+  ],
   "source": {
     "branch": "main",
     "acceptedFirmwareCommit": "f52641b74ca482514684616dad6a341d6447f0f0",
@@ -12,10 +14,10 @@
     "acceptanceEvidence": "22-view WS350 framebuffer capture + exact-final-head CI"
   },
   "download": {
-    "channel": "production-rc-v7.2",
-    "version": "7.2",
-    "rollbackVersion": "7.1",
-    "note": "Static installer remains intentionally conservative and is promoted separately from the accepted source line."
+    "channel": "production-workshop-os-v11.19.1",
+    "version": "11.19.1",
+    "rollbackVersion": "7.2",
+    "note": "Static installer promoted to the physically accepted Workshop OS v11.19.1 artifact pair; Smart Home v7.2 is retained as the single immediate rollback."
   },
   "candidate": null,
   "mainState": {

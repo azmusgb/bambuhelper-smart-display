@@ -10,8 +10,8 @@ The repository separates the **physically accepted source baseline**, the code c
 | --- | --- | --- |
 | accepted source baseline | **Workshop OS v11.19.1 — physically accepted** | Last source version accepted on real WS350 hardware. |
 | `main` | **Workshop OS v11.20 Portal Auth RC1 — merged, physical acceptance pending** | Current repository code. It does **not** supersede the accepted v11.19.1 hardware baseline until physical authentication acceptance passes. |
-| `release.json` / Netlify | **Smart Home v7.2** | Integrity-checked static download channel. |
-| rollback download | **Smart Home v7.1** | Single immediate rollback retained for recovery safety. |
+| `release.json` / Netlify | **Workshop OS v11.19.1 — physically accepted** | Integrity-checked static installer channel. |
+| rollback download | **Smart Home v7.2** | Single immediate rollback retained for recovery safety. |
 | active candidate | **None** | There is currently no open firmware-candidate PR. |
 
 The accepted source baseline, current `main` state, active candidate and static installer are intentionally independent. A merge does not by itself constitute physical acceptance, and a newer accepted source does not silently replace the conservative download channel.
@@ -110,7 +110,7 @@ See `NOTICE.md` for exact upstream attribution and the boundary between Workshop
 - `docs/archive/` — superseded engineering/acceptance documentation.
 - `releases/` — current release state and accepted download provenance.
 - `releases/archive/` — historical RC manifests/reports retained for provenance, not active release discovery.
-- `firmware/` — only the accepted v7.2 Full+OTA pair and immediate v7.1 rollback Full+OTA pair.
+- `firmware/` — only the accepted Workshop OS v11.19.1 Full+OTA pair and immediate Smart Home v7.2 rollback Full+OTA pair.
 - `scripts/capture-ws350-views.zsh` — authenticated real-device framebuffer capture helper.
 - `scripts/waveshare-usb.sh` — safe Mac USB/JTAG serial auto-detection helper.
 

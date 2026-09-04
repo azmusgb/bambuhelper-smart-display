@@ -1,5 +1,5 @@
 {
-  "release": "production-rc-v7.2",
+  "release": "production-workshop-os-v11.19.1",
   "sourceCommit": "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4",
   "board": {
     "id": "ws_lcd_350",
@@ -11,9 +11,21 @@
     "psram": "8 MB"
   },
   "profiles": {
-    "smart-home-v7.2": {
-      "label": "Smart Home v7.2",
+    "workshop-os-v11.19.1": {
+      "label": "Workshop OS v11.19.1 — recommended",
       "recommended": true,
+      "version": "BambuHelper v3.8.1 + Workshop OS v11.19.1 Physical Fit RC2",
+      "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-Full.bin",
+      "size": 2360944,
+      "sha256": "f49f695f08966a8c1cf5822e1357d03793a1aac634540d8b3a290d891468343b",
+      "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-OTA.bin",
+      "otaSize": 2295408,
+      "otaSha256": "f0fc73b65eb39623b5f8e6f8f7564d844d06021ebcb7887d5fc67a6df9e2073e",
+      "description": "Physically accepted Workshop OS download channel."
+    },
+    "smart-home-v7.2": {
+      "label": "Smart Home v7.2 (rollback)",
+      "recommended": false,
       "version": "BambuHelper v3.8.1 + Smart Home v7.2 Display Stability",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin",
       "size": 2208288,
@@ -21,18 +33,6 @@
       "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin",
       "otaSize": 2142752,
       "otaSha256": "3eb17d01fb980dbea82e07242bb385ea35b6035b3b57038616b0579f846a95fc",
-      "description": "Accepted production download channel."
-    },
-    "smart-home-v7.1": {
-      "label": "Smart Home v7.1 (rollback)",
-      "recommended": false,
-      "version": "BambuHelper v3.8.1 + Smart Home v7.1 UX",
-      "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin",
-      "size": 2208400,
-      "sha256": "9f1cd4c103caad2378e2ff35e9562047030a8830ac2985e3ff9ab75f162b73fb",
-      "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin",
-      "otaSize": 2142864,
-      "otaSha256": "938e0764453b875f5770fa74c64805ea82f721581da0c84dce56db736050037c",
       "description": "Single immediate rollback retained for recovery safety."
     }
   }
