@@ -1,0 +1,99 @@
+name: One-time delete superseded evolution branches
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify every evolution branch is contained in main, then delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --prune
+          branches=(
+            evolve/v9-2-smart-printer-ux
+            evolve/v9-3-dev-unlocked
+            evolve/v9-4-recovery-foundation
+            evolve/v9-6-ultimate-experience
+            evolve/v9-8-unified-display-system
+            evolve/v9-9-display-experience
+            evolve/v10-1-hardware-enablement
+            evolve/v10-2-ui-polish
+            evolve/v10-3-browser-workshop-os
+            evolve/v10-4-portal-ux
+            evolve/v10-5-physical-workshop-os
+            evolve/v10-6-audio-home
+            evolve/v10-workshop-os-theme
+            evolve/v11-1-calm-workshop-os
+            evolve/v11-2-workshop-tools
+            evolve/v11-3-printer-control
+            evolve/v11-4-control-polish
+            evolve/v11-5-printer-power
+            evolve/v11-6-workshop-command-center
+            evolve/v11-7-live-state-integrity
+            evolve/v11-8-display-experience
+            evolve/v11-9-display-schedule
+            evolve/v11-10-display-behavior
+            evolve/v11-11-display-visual
+            evolve/v11-12-clock-experience
+            evolve/v11-13-alerts-hms
+            evolve/v11-14-network-essentials
+            evolve/v11-15-audio-essentials
+            evolve/v11-16-led-essentials
+            evolve/v11-17-power-automation
+            evolve/v11-18-visual-capture
+            evolve/v11-19-visual-correctness
+            evolve/v11-19-1-physical-fit
+            evolve/v11-signature-workshop-os
+          )
+          unsafe=0
+          existing=()
+          for b in "${branches[@]}"; do
+            if git show-ref --verify --quiet "refs/remotes/origin/$b"; then
+              existing+=("$b")
+              if git merge-base --is-ancestor "refs/remotes/origin/$b" refs/remotes/origin/main; then
+                echo "SAFE: $b is contained in main"
+              else
+                echo "UNSAFE: $b contains work not in main" >&2
+                unsafe=1
+              fi
+            else
+              echo "ALREADY ABSENT: $b"
+            fi
+          done
+          if (( unsafe != 0 )); then
+            echo 'Refusing cleanup: at least one evolution branch is not contained in main.' >&2
+            exit 1
+          fi
+          for b in "${existing[@]}"; do
+            git push origin --delete "$b"
+          done
+          remaining="$(git ls-remote --heads origin 'refs/heads/evolve/*')"
+          if [[ -n "$remaining" ]]; then
+            echo 'Unexpected evolve/* branches remain:' >&2
+            echo "$remaining" >&2
+            exit 1
+          fi
+          echo "Evolution branch cleanup: PASS (${#existing[@]} deleted)"
+      - name: Remove one-time workflow and maintenance branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/delete-evolution-branches-once.yml
+          git commit -m "Remove completed one-time branch cleanup workflow"
+          git push origin HEAD:main
+          git push origin --delete maintenance/delete-evolution-branches || true
