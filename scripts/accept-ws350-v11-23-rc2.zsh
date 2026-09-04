@@ -142,15 +142,26 @@ print('STAGED-NO-APPLY + DISCARD: PASS')
 PY
 
 echo
-echo "[4/5] ROTATION + TOUCH"
-echo "On the WS350 open Display -> Extras."
-echo "HOLD the Rotation control once, confirm the orientation changes and touch targets"
-echo "remain aligned, then continue guarded rotations until the original orientation returns."
-printf "Did touch remain correctly aligned while rotated? [y/N]: "
+echo "[4/5] ROTATION PREVIEW + GUARDED COMMIT + TOUCH"
+echo "On the WS350 open Display -> Extras and TAP the ROTATION card."
+echo "A dedicated ROTATION preview should open; the physical orientation must not change."
+echo "Use NEXT once. PREVIEW should change while CURRENT and the physical orientation stay unchanged."
+echo "Short-tap HOLD TO COMMIT ROTATION once. It must NOT commit."
+printf "Did preview/short-tap leave the physical orientation unchanged? [y/N]: "
+read -r PREVIEW_OK
+case "$PREVIEW_OK" in
+  y|Y|yes|YES) ;;
+  *) echo "FAIL: rotation preview/short-tap guard not confirmed"; exit 1 ;;
+esac
+
+echo "Now HOLD TO COMMIT ROTATION deliberately."
+echo "Confirm the screen rotates and touch targets remain aligned."
+echo "Repeat the preview/commit flow as needed until the original rotation is restored."
+printf "Did touch remain correctly aligned and was the original rotation restored? [y/N]: "
 read -r TOUCH_OK
 case "$TOUCH_OK" in
   y|Y|yes|YES) ;;
-  *) echo "FAIL: touch alignment not confirmed"; exit 1 ;;
+  *) echo "FAIL: touch alignment/restoration not confirmed"; exit 1 ;;
 esac
 fetch_settings "$CHECK"
 python3 - "$BASELINE" "$CHECK" <<'PY'
@@ -159,7 +170,7 @@ a=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2]))
 av=a['display'].get('rotation'); bv=b['display'].get('rotation')
 if av != bv:
     raise SystemExit(f'FAIL: rotation not restored: R{av} -> R{bv}')
-print(f'ROTATION + TOUCH + RESTORE: PASS (R{bv})')
+print(f'ROTATION PREVIEW + GUARD + TOUCH + RESTORE: PASS (R{bv})')
 PY
 
 echo
@@ -183,4 +194,5 @@ echo "============================================================"
 echo "Portal code: NOT REQUIRED"
 echo "Printer commands sent: NONE"
 echo "Network Apply executed: NO"
+echo "Rotation commit: GUARDED PREVIEW FLOW"
 echo "All tested persisted settings: RESTORED"
