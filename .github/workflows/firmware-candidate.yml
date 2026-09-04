@@ -46,9 +46,10 @@ jobs:
               '.github/workflows/firmware-candidate.yml', 'README.md', 'SECURITY.md',
               'releases/current.json', 'apply_smart_home_*.py', '.bambuhelper-validation/**',
               'assets/**', 'scripts/apply_*.sh', 'scripts/validate_*.py',
-              'scripts/capture-ws350-views.zsh', 'docs/physical-*.md', 'docs/visual-*.md',
-              'docs/portal-auth-*.md', 'docs/display-expert-*.md', 'docs/network-*.md',
-              'docs/touch-*.md', 'docs/settings-capability-registry/**'
+              'scripts/capture-ws350-views.zsh', 'scripts/accept-ws350-v11-23-rc2.zsh',
+              'docs/physical-*.md', 'docs/visual-*.md', 'docs/portal-auth-*.md',
+              'docs/display-expert-*.md', 'docs/network-*.md', 'docs/touch-*.md',
+              'docs/settings-capability-registry/**'
           )
           changed=[p.strip() for p in Path('/tmp/changed.txt').read_text().splitlines() if p.strip()]
           matched=[p for p in changed if any(fnmatch.fnmatchcase(p, pat) for pat in patterns)]
@@ -79,6 +80,7 @@ jobs:
 
       - name: Validate candidate tooling
         run: |
+          set -euo pipefail
           python -m py_compile apply_smart_home_physical_fit_v11_19_1.py
           python -m py_compile apply_smart_home_portal_auth_v11_20.py
           python -m py_compile apply_smart_home_display_expert_v11_22.py
@@ -95,6 +97,17 @@ jobs:
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
           bash -n scripts/capture-ws350-views.zsh
+          bash -n scripts/accept-ws350-v11-23-rc2.zsh
+
+          for helper in scripts/capture-ws350-views.zsh scripts/accept-ws350-v11-23-rc2.zsh; do
+            if grep -Eq 'Portal code:|portal-code-fallback|code@-|/login' "$helper"; then
+              echo "RC2 helper unexpectedly contains portal-code authentication: $helper" >&2
+              exit 1
+            fi
+          done
+          grep -q 'NO PORTAL CODE' scripts/capture-ws350-views.zsh
+          grep -q 'Portal code: NOT REQUIRED' scripts/accept-ws350-v11-23-rc2.zsh
+          echo 'RC2 helper no-code contract: PASS'
 
       - name: Reconstruct accepted v11.19 baseline
         run: bash scripts/apply_workshop_os_v11_19.sh upstream
@@ -182,6 +195,7 @@ jobs:
           cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC2-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp scripts/capture-ws350-views.zsh firmware-gate-artifacts/tools/
+          cp scripts/accept-ws350-v11-23-rc2.zsh firmware-gate-artifacts/tools/
           cp apply_smart_home_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
           cp apply_smart_home_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
@@ -202,6 +216,8 @@ jobs:
             echo 'static_network_editor=STAGED_ATOMIC'
             echo 'display_rotation=GUARDED_HOLD'
             echo 'normal_wifi_portal_code=TEMPORARILY_BYPASSED'
+            echo 'capture_auth=NO_CODE_ONLY'
+            echo 'acceptance_auth=NO_CODE_ONLY'
             echo 'same_origin_mutation_guard=PRESERVED'
             echo 'ap_recovery_boundaries=PRESERVED'
             echo 'capture_views=32'
