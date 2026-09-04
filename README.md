@@ -76,6 +76,14 @@ The accepted v11.19.1 source was promoted only after those gates and the real-de
 - `docs/RELEASE_PROCESS.md` — accepted-source, candidate and static-download promotion lifecycle.
 - `.github/pull_request_template.md` — safety/acceptance checklist for every PR.
 
+## License and attribution
+
+Original Workshop OS contributions in this repository are provided under the **MIT License** in `LICENSE`.
+
+Workshop OS is a derived project built on **Keralots/BambuHelper**. The accepted v11.19.1 source is based on upstream commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4`; BambuHelper's README at that commit declares the project **MIT**. The upstream repository does not publish a project-level root `LICENSE` or project-level copyright notice at that baseline, so this repository does not invent one.
+
+See `NOTICE.md` for exact upstream attribution and the boundary between Workshop OS contributions, upstream-derived material and third-party notices. Third-party components retain their original license and attribution requirements.
+
 ## Repository layout
 
 - `apply_smart_home_*.py` — deterministic firmware evolution inputs; **not generated debris**.
