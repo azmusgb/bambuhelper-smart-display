@@ -11,6 +11,8 @@ CATALOG="$OUT/views.json"
 chmod 600 "$COOKIE" "$LOGIN_BODY"
 
 cleanup() {
+  stty echo 2>/dev/null || true
+  unset CODE 2>/dev/null || true
   rm -f "$COOKIE" "$LOGIN_BODY"
 }
 trap cleanup EXIT INT TERM
