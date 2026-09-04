@@ -24,7 +24,7 @@
     "name": "Workshop OS v11.23 Network Locale Layout RC2",
     "branch": "feature/v11-23-network-locale-layout",
     "pullRequest": 76,
-    "purpose": "Elevate the WS350 touch experience with explicit large controls, visible staged-state and Back/Discard/Apply actions, remove hidden hold-to-reverse gestures, preserve guarded rotation/network commit semantics, and temporarily bypass the normal-Wi-Fi portal-code challenge while retaining same-origin mutation protection and AP/recovery boundaries.",
+    "purpose": "Elevate the WS350 touch experience with explicit large controls, 52-60 px primary reference targets where layout permits, visible staged-state and Back/Discard/Apply actions, remove hidden hold-to-reverse gestures, move rotation into a dedicated staged preview plus guarded hold-commit flow, preserve the 32-view capture catalog, and temporarily bypass the normal-Wi-Fi portal-code challenge while retaining same-origin mutation protection and AP/recovery boundaries.",
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
@@ -46,7 +46,10 @@
     "candidate": {
       "networkLocaleLayoutContracts": "required",
       "touchUxContracts": "required",
+      "physicalTouchFinalizationContracts": "required",
+      "rotationPreviewGuard": "required",
       "normalWifiPortalCode": "temporarily-bypassed",
+      "helperAuthMode": "no-code-only",
       "sameOriginMutationProtection": "required",
       "apRecoveryBoundaries": "required",
       "settingsParity": "required",
