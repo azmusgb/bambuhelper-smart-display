@@ -4,28 +4,31 @@ Local-first Workshop OS for the **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`
 
 ## Release model
 
-The repository separates the accepted **source line** from the intentionally conservative static firmware download channel:
+The repository separates the **physically accepted source baseline**, the code currently present on `main`, and the intentionally conservative static firmware download channel:
 
 | Surface | Current state | Purpose |
 | --- | --- | --- |
-| `main` | **Workshop OS v11.19.1 — physically accepted** | Authoritative accepted source line. |
+| accepted source baseline | **Workshop OS v11.19.1 — physically accepted** | Last source version accepted on real WS350 hardware. |
+| `main` | **Workshop OS v11.20 Portal Auth RC1 — merged, physical acceptance pending** | Current repository code. It does **not** supersede the accepted v11.19.1 hardware baseline until physical authentication acceptance passes. |
 | `release.json` / Netlify | **Smart Home v7.2** | Integrity-checked static download channel. |
 | rollback download | **Smart Home v7.1** | Single immediate rollback retained for recovery safety. |
-| active candidate | **Workshop OS v11.20 Portal Auth RC1 — PR #67** | Restores normal-LAN portal authentication; physical acceptance required before promotion. |
+| active candidate | **None** | There is currently no open firmware-candidate PR. |
 
-The source line, active candidate and static installer are intentionally independent. A newer candidate or accepted source does not silently replace the conservative download channel.
+The accepted source baseline, current `main` state, active candidate and static installer are intentionally independent. A merge does not by itself constitute physical acceptance, and a newer accepted source does not silently replace the conservative download channel.
 
-## Active candidate — Workshop OS v11.20 Portal Auth RC1
+## Current `main` delta — Workshop OS v11.20 Portal Auth RC1
 
-PR **#67** is the single current firmware candidate to `main`. It removes the accepted v11.19.1 development-auth bypass and restores the existing rotating portal-code + boot-scoped cookie session for normal LAN access while preserving the independently accessible Recovery AP path.
+PR **#67** has been merged into `main`. v11.20 removes the accepted v11.19.1 development-auth bypass and restores the rotating portal-code + boot-scoped cookie session for normal LAN access while preserving the independently accessible Recovery AP path.
 
-The candidate is intentionally **not accepted yet**. Promotion requires exact-head CI plus physical WS350 verification of login, wrong-code rejection, logout/reboot session invalidation, authenticated controls/OTA, Recovery AP access, touch behavior, printer settings and the accepted v11.19.1 physical-fit baseline.
+The v11.20 code has passed exact-head CI, the native WS350 build, the shared 320×480 regression build, browser JavaScript validation and portal-auth contract validation. **Physical WS350 authentication acceptance is still pending**, so v11.19.1 remains the accepted hardware baseline.
+
+Physical acceptance for v11.20 should verify login, wrong-code rejection, logout/reboot session invalidation, authenticated controls/OTA, Recovery AP access, touch behavior, printer settings, framebuffer capture authentication/redaction and preservation of the accepted v11.19.1 physical-fit baseline.
 
 No speculative printer-control surface is added by v11.20; Light, Pause/Resume, guarded Stop, mapped Printer Power and fail-closed MQTT behavior are inherited unchanged.
 
-## Accepted source — Workshop OS v11.19.1
+## Accepted source baseline — Workshop OS v11.19.1
 
-v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the 22-view WS350 framebuffer acceptance pass.
+v11.19.1 is the physically accepted **Physical Fit RC2** baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the 22-view WS350 framebuffer acceptance pass.
 
 ### Workshop experience
 
@@ -69,13 +72,13 @@ Firmware is reconstructed deterministically from a pinned upstream BambuHelper b
 2. inherited device contracts;
 3. accepted v11.19 visual correctness;
 4. accepted v11.19.1 rendered-fit contracts;
-5. candidate-specific contracts when a candidate is active;
+5. candidate/current-delta-specific contracts when applicable;
 6. browser JavaScript;
 7. native `ws_lcd_350` PlatformIO build;
 8. shared `jc3248w535` regression build;
 9. Full-image merge and OTA artifact packaging.
 
-The accepted v11.19.1 source was promoted only after those gates and the real-device 22-view physical acceptance passed. v11.20 must pass its own physical authentication acceptance before promotion.
+The accepted v11.19.1 baseline was promoted only after those gates and the real-device 22-view physical acceptance passed. The v11.20 code now on `main` still requires its own real-device authentication acceptance before it can replace that baseline in release metadata.
 
 ## Governance and safety
 
@@ -85,11 +88,13 @@ The accepted v11.19.1 source was promoted only after those gates and the real-de
 - `docs/RELEASE_PROCESS.md` — accepted-source, candidate and static-download promotion lifecycle.
 - `.github/pull_request_template.md` — safety/acceptance checklist for every PR.
 
+`main` should be protected in GitHub so firmware-facing changes require pull requests and successful repository/release/firmware checks before merge. Physical acceptance remains a human hardware gate and must be recorded separately from CI.
+
 ## License and attribution
 
 Original Workshop OS contributions in this repository are provided under the **MIT License** in `LICENSE`.
 
-Workshop OS is a derived project built on **Keralots/BambuHelper**. The accepted v11.19.1 source is based on upstream commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4`; BambuHelper's README at that commit declares the project **MIT**. The upstream repository does not publish a project-level root `LICENSE` or project-level copyright notice at that baseline, so this repository does not invent one.
+Workshop OS is a derived project built on **Keralots/BambuHelper**. The accepted v11.19.1 baseline is based on upstream commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4`; BambuHelper's README at that commit declares the project **MIT**. The upstream repository does not publish a project-level root `LICENSE` or project-level copyright notice at that baseline, so this repository does not invent one.
 
 See `NOTICE.md` for exact upstream attribution and the boundary between Workshop OS contributions, upstream-derived material and third-party notices. Third-party components retain their original license and attribution requirements.
 
@@ -123,11 +128,11 @@ Only a **Full** image belongs at flash offset `0x0` during an intentional USB re
 
 ## Development policy
 
-1. Maintain one active firmware candidate PR to `main` at a time.
+1. Maintain at most one active firmware candidate PR to `main` at a time.
 2. Keep one stable `.github/workflows/firmware-candidate.yml`; do not accumulate per-version workflow files.
 3. Keep generated PlatformIO output, local ZIPs, temporary artifacts and ad-hoc validation reports out of source control.
 4. Candidate binaries belong in GitHub Actions artifacts until intentionally promoted to the static download channel.
 5. Preserve historical provenance under `docs/archive/` and `releases/archive/`, not in the active root/release namespace.
 6. Retain only the accepted static firmware pair plus one immediate rollback pair as tracked binaries.
-7. Do not promote a hardware-facing candidate on CI alone when physical acceptance is required.
+7. Do not treat a merge or green CI as physical acceptance when a hardware-facing change still requires real-device verification.
 8. Do not add speculative Bambu commands; controls require a proven backend path and explicit safety semantics.

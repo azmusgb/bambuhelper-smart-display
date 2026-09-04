@@ -1,18 +1,19 @@
 # Release Process
 
-Workshop OS deliberately separates **accepted source**, **active candidate**, and **static firmware download** state. Do not collapse these into one ambiguous version label.
+Workshop OS deliberately separates **accepted source baseline**, **current `main` state**, **active candidate**, and **static firmware download** state. Do not collapse these into one ambiguous version label.
 
-## 1. Accepted source
+## 1. Accepted source baseline
 
-`main` is the authoritative accepted source line. `releases/current.json` records:
+`releases/current.json` records the last firmware source that passed required real-device acceptance:
 
 - accepted Workshop OS version;
 - the firmware commit that was physically accepted;
 - acceptance state/evidence;
 - whether an active candidate exists;
+- any unaccepted firmware delta already present on `main`;
 - the separately managed static download channel.
 
-A documentation/hygiene commit after acceptance does not change the accepted firmware commit when the reconstructed firmware tree is unchanged.
+The accepted firmware commit is the hardware baseline even when later documentation commits—or, exceptionally, an unaccepted firmware delta—exist on `main`.
 
 ## 2. Candidate creation
 
@@ -43,21 +44,35 @@ Failures in a contract gate are release blockers until explained and intentional
 
 ## 4. Physical acceptance
 
-Changes that can affect the real panel, touch, speaker/microphone, recovery, printer commands, smart-plug power, settings persistence, or other hardware behavior require real-device acceptance.
+Changes that can affect the real panel, touch, speaker/microphone, recovery, authentication, printer commands, smart-plug power, settings persistence, or other hardware behavior require real-device acceptance.
 
-Visual releases should use the authenticated WS350 framebuffer capture workflow and compare the complete required view set. Control changes must exercise the affected command in a disposable/safe scenario and confirm guard behavior as well as success behavior.
+Visual releases should use the authenticated WS350 framebuffer capture workflow and compare the complete required view set. Control changes must exercise the affected command in a disposable/safe scenario and confirm guard behavior as well as success behavior. Authentication changes must verify correct-code login, wrong-code rejection, logout/reboot invalidation, protected controls/OTA and Recovery AP access.
 
 Record physical acceptance in the PR and current-version evidence doc before promotion.
 
 ## 5. Source promotion
 
-Merge the accepted candidate to `main` only after required CI and physical gates are green. Then update `releases/current.json` so:
+The normal rule is: merge the accepted candidate to `main` only after required CI and physical gates are green. Then update `releases/current.json` so:
 
 - `channel` is `accepted-source`;
 - `version` is the accepted source version;
 - `source.acceptedFirmwareCommit` identifies the physically accepted firmware commit;
-- `physicalAcceptance` is `passed`;
+- `source.physicalAcceptance` is `passed`;
 - `candidate` is `null` until a new formal candidate exists.
+
+### Merged-but-unaccepted exception
+
+If a hardware-facing candidate is merged before physical acceptance, **do not relabel it as accepted**. Immediately make repository state explicit:
+
+- keep the last physically accepted version/commit in `source`;
+- set `candidate` to `null` if there is no longer an open candidate PR;
+- record the code currently present on `main` in `mainState` with `status: merged-unaccepted`;
+- record the originating PR/branch and exact merge commit;
+- record CI results separately from `physicalAcceptance: pending`;
+- do not promote its binaries into `release.json` / Netlify;
+- complete physical acceptance or intentionally revert the unaccepted delta.
+
+This is an exception/recovery state, not a normal promotion path.
 
 ## 6. Static download promotion
 
@@ -72,10 +87,23 @@ When intentionally promoting the download channel:
 5. remove older tracked binary generations in the same maintenance change;
 6. run the static portal integrity gate.
 
-## 7. Upstream synchronization
+## 7. Repository protection
+
+`main` should use GitHub branch protection/rulesets so repository policy is enforced by the platform rather than documentation alone. Recommended minimums:
+
+- require a pull request before merging;
+- require successful `Validate` and `Release Gate` checks;
+- for firmware-facing PRs, also require the reusable Workshop OS firmware gate;
+- require branches to be up to date before merge;
+- block force pushes and branch deletion;
+- do not allow bypass of required checks for routine firmware promotion.
+
+Physical acceptance remains a human hardware gate. Record it explicitly; CI cannot prove it.
+
+## 8. Upstream synchronization
 
 Repinning BambuHelper is its own candidate. Follow `docs/UPSTREAM_SYNC.md`; never mix a silent upstream repin into an unrelated feature or cleanup PR.
 
-## 8. Emergency recovery
+## 9. Emergency recovery
 
 Recovery actions may temporarily bypass normal release cadence, but they do not erase the audit trail. Record what was flashed, why, the exact binary/hash when available, and restore the accepted metadata/workflow state after the emergency.
