@@ -108,7 +108,7 @@ def patch_network_geometry(hub: str) -> str:
     hub=replace_exact(hub,
         'hubRc2HitRef(x,y,360,270,110,40)',
         'hubRc2HitRef(x,y,360,258,110,52)',
-        'network Next hit geometry',1)
+        'network Next hit geometry',2)
     hub=replace_exact(hub,
         'hubRc2ButtonRef(360,270,110,40,"REVIEW >",UI_BLUE);',
         'hubRc2ButtonRef(360,258,110,52,"REVIEW >",UI_BLUE);',
