@@ -11,13 +11,21 @@ The repository separates the accepted **source line** from the intentionally con
 | `main` | **Workshop OS v11.19.1 — physically accepted** | Authoritative accepted source line. |
 | `release.json` / Netlify | **Smart Home v7.2** | Integrity-checked static download channel. |
 | rollback download | **Smart Home v7.1** | Single immediate rollback retained for recovery safety. |
-| active candidate | **None** | New firmware work should open one candidate PR to `main`. |
+| active candidate | **Workshop OS v11.20 Portal Auth RC1 — PR #67** | Restores normal-LAN portal authentication; physical acceptance required before promotion. |
 
-The source line and static installer are intentionally independent. A newer accepted source does not silently replace the conservative download channel.
+The source line, active candidate and static installer are intentionally independent. A newer candidate or accepted source does not silently replace the conservative download channel.
+
+## Active candidate — Workshop OS v11.20 Portal Auth RC1
+
+PR **#67** is the single current firmware candidate to `main`. It removes the accepted v11.19.1 development-auth bypass and restores the existing rotating portal-code + boot-scoped cookie session for normal LAN access while preserving the independently accessible Recovery AP path.
+
+The candidate is intentionally **not accepted yet**. Promotion requires exact-head CI plus physical WS350 verification of login, wrong-code rejection, logout/reboot session invalidation, authenticated controls/OTA, Recovery AP access, touch behavior, printer settings and the accepted v11.19.1 physical-fit baseline.
+
+No speculative printer-control surface is added by v11.20; Light, Pause/Resume, guarded Stop, mapped Printer Power and fail-closed MQTT behavior are inherited unchanged.
 
 ## Accepted source — Workshop OS v11.19.1
 
-v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the authenticated 22-view WS350 framebuffer acceptance pass.
+v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the 22-view WS350 framebuffer acceptance pass.
 
 ### Workshop experience
 
@@ -28,7 +36,7 @@ v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It pre
 - live-state freshness/stale handling;
 - network, audio and LED essentials;
 - printer HMS/attention presentation;
-- authenticated 22-view framebuffer capture for physical UI review.
+- 22-view framebuffer capture for physical UI review.
 
 ### Guarded controls
 
@@ -55,18 +63,19 @@ The v11.19.1 physical-fit delta specifically replaces clipped Workshop/System st
 
 ## Validation model
 
-Firmware is reconstructed deterministically from a pinned upstream BambuHelper baseline plus the incremental `apply_smart_home_*.py` evolution stack. The stable firmware gate validates:
+Firmware is reconstructed deterministically from a pinned upstream BambuHelper baseline plus the incremental `apply_smart_home_*.py` evolution stack. The reusable firmware gate validates:
 
 1. patch/tooling reconstruction;
 2. inherited device contracts;
-3. v11.19 visual correctness;
-4. v11.19.1 rendered-fit contracts;
-5. browser JavaScript;
-6. native `ws_lcd_350` PlatformIO build;
-7. shared `jc3248w535` regression build;
-8. Full-image merge and OTA artifact packaging.
+3. accepted v11.19 visual correctness;
+4. accepted v11.19.1 rendered-fit contracts;
+5. candidate-specific contracts when a candidate is active;
+6. browser JavaScript;
+7. native `ws_lcd_350` PlatformIO build;
+8. shared `jc3248w535` regression build;
+9. Full-image merge and OTA artifact packaging.
 
-The accepted v11.19.1 source was promoted only after those gates and the real-device 22-view physical acceptance passed.
+The accepted v11.19.1 source was promoted only after those gates and the real-device 22-view physical acceptance passed. v11.20 must pass its own physical authentication acceptance before promotion.
 
 ## Governance and safety
 
