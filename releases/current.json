@@ -17,22 +17,35 @@
     "rollbackVersion": "7.1",
     "note": "Static installer remains intentionally conservative and is promoted separately from the accepted source line."
   },
-  "candidate": {
+  "candidate": null,
+  "mainState": {
     "version": "11.20",
-    "branch": "security/v11-20-portal-auth",
-    "pullRequest": 67,
+    "commit": "748119d8a364604b6845748abd9e58fa646dfeaf",
     "name": "Workshop OS v11.20 Portal Auth RC1",
-    "status": "physical-acceptance-required",
+    "status": "merged-unaccepted",
+    "originatingPullRequest": 67,
+    "originatingBranch": "security/v11-20-portal-auth",
     "purpose": "Restore rotating portal-code and boot-scoped session authentication for normal LAN access while preserving independent Recovery AP access.",
-    "exactHeadCi": "required",
-    "physicalAcceptance": "required"
+    "exactHeadCi": "passed",
+    "physicalAcceptance": "pending",
+    "note": "v11.20 code is present on main but does not replace the physically accepted v11.19.1 baseline until real-device authentication acceptance passes."
   },
   "validation": {
-    "exactHeadCi": "passed",
-    "ws350Build": "passed",
-    "shared320x480Regression": "passed",
-    "browserJavaScript": "passed",
-    "renderedFit": "passed",
-    "physicalAcceptance": "passed"
+    "acceptedSource": {
+      "exactHeadCi": "passed",
+      "ws350Build": "passed",
+      "shared320x480Regression": "passed",
+      "browserJavaScript": "passed",
+      "renderedFit": "passed",
+      "physicalAcceptance": "passed"
+    },
+    "mainState": {
+      "exactHeadCi": "passed",
+      "ws350Build": "passed",
+      "shared320x480Regression": "passed",
+      "browserJavaScript": "passed",
+      "portalAuthContracts": "passed",
+      "physicalAcceptance": "pending"
+    }
   }
 }
