@@ -28,10 +28,15 @@ ALLOWED_WORKFLOWS = {
 
 REQUIRED = [
     Path("README.md"),
+    Path("SECURITY.md"),
+    Path("CONTRIBUTING.md"),
     Path("release.json"),
     Path("releases/current.json"),
     Path("docs/REPOSITORY_HYGIENE.md"),
     Path("docs/UPSTREAM_SYNC.md"),
+    Path("docs/RELEASE_PROCESS.md"),
+    Path("docs/CONTROL_SAFETY.md"),
+    Path(".github/pull_request_template.md"),
     Path(".github/workflows/firmware-candidate.yml"),
     Path(".github/workflows/validate.yml"),
     PRODUCTION_FULL,
@@ -46,6 +51,12 @@ FORBIDDEN_PREFIXES = (
     "waveshare-workshop-os/",
 )
 FORBIDDEN_PATHS = {"web/os.config.json"}
+FORBIDDEN_SECRET_FILENAMES = {
+    ".env",
+    "id_rsa",
+    "id_ed25519",
+}
+FORBIDDEN_SECRET_SUFFIXES = {".pem", ".p12", ".pfx", ".key"}
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -70,6 +81,10 @@ def main() -> int:
             fail(f"forbidden superseded content is present: {rel}")
         if path.parent == ROOT and path.name.startswith("validation-report"):
             fail(f"ad-hoc validation report is present in repository root: {rel}")
+        if path.name in FORBIDDEN_SECRET_FILENAMES or path.suffix.lower() in FORBIDDEN_SECRET_SUFFIXES:
+            fail(f"secret/private-key style file must not be tracked: {rel}")
+        if path.name.startswith(".env.") and path.name != ".env.example":
+            fail(f"environment secret file must not be tracked: {rel}")
         if rel.startswith("firmware/") and rel.endswith(".bin"):
             tracked_firmware.add(rel)
             if rel not in ALLOWED_FIRMWARE:
@@ -92,6 +107,10 @@ def main() -> int:
         )
     if any(name.startswith("bambuhelper-v") for name in workflows):
         fail("version-named firmware workflow present; use firmware-candidate.yml")
+    for name in sorted(ALLOWED_WORKFLOWS):
+        workflow_text = (workflows_dir / name).read_text(encoding="utf-8")
+        if "permissions:\n  contents: read" not in workflow_text:
+            fail(f"workflow must declare least-privilege contents: read permissions: {name}")
 
     parsed: dict[str, dict] = {}
     for rel in (Path("release.json"), Path("releases/current.json")):
@@ -148,6 +167,8 @@ def main() -> int:
     print("Static download channel: v7.2 Full + OTA")
     print("Immediate rollback channel: v7.1 Full + OTA")
     print("Firmware workflows: one reusable candidate gate + three repository/release gates")
+    print("Workflow permissions: explicit contents: read on all workflows")
+    print("Governance contract: SECURITY + CONTRIBUTING + release/control-safety docs + PR template present")
     return 0
 
 

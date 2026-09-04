@@ -68,6 +68,14 @@ Firmware is reconstructed deterministically from a pinned upstream BambuHelper b
 
 The accepted v11.19.1 source was promoted only after those gates and the real-device 22-view physical acceptance passed.
 
+## Governance and safety
+
+- `SECURITY.md` — security reporting and sensitive-data handling for a hardware-control project.
+- `CONTRIBUTING.md` — contribution rules, validation tiers and repository boundaries.
+- `docs/CONTROL_SAFETY.md` — fail-closed printer/power command contract.
+- `docs/RELEASE_PROCESS.md` — accepted-source, candidate and static-download promotion lifecycle.
+- `.github/pull_request_template.md` — safety/acceptance checklist for every PR.
+
 ## Repository layout
 
 - `apply_smart_home_*.py` — deterministic firmware evolution inputs; **not generated debris**.
