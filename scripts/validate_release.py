@@ -40,6 +40,7 @@ REQUIRED = [
     Path("docs/UPSTREAM_SYNC.md"),
     Path("docs/RELEASE_PROCESS.md"),
     Path("docs/CONTROL_SAFETY.md"),
+    Path("scripts/capture-ws350-views.zsh"),
     Path(".github/pull_request_template.md"),
     Path(".github/workflows/firmware-candidate.yml"),
     Path(".github/workflows/validate.yml"),
@@ -115,6 +116,35 @@ def validate_candidate(candidate: object, readme_text: str) -> str:
     return f"{version} / PR #{pr_number} / {branch}"
 
 
+def validate_capture_security() -> None:
+    """Keep physical acceptance bundles useful without preserving live credentials."""
+    capture = (ROOT / "scripts" / "capture-ws350-views.zsh").read_text(encoding="utf-8")
+    required_markers = [
+        "stty -echo",
+        "unset CODE",
+        "view_id == 'system'",
+        "Refusing unverified System redaction geometry",
+        "x0, y0, x1, y1 = 330, 196, 468, 230",
+        "src.write_bytes(header + rgb)",
+        'python3 "$OUT/ppm_to_png.py" "$PPM" "$PNG" "$ID"',
+        "SECURITY-NOTE.txt",
+        "System portal-code line: REDACTED in retained PPM + PNG",
+    ]
+    for marker in required_markers:
+        if marker not in capture:
+            fail(f"visual capture credential-safety contract missing: {marker}")
+
+    forbidden_markers = [
+        'echo "$CODE"',
+        'echo $CODE',
+        'printf "%s\\n" "$CODE"',
+        "set -x",
+    ]
+    for marker in forbidden_markers:
+        if marker in capture:
+            fail(f"visual capture helper may disclose portal credential: {marker}")
+
+
 def main() -> int:
     for rel in REQUIRED:
         if not (ROOT / rel).is_file():
@@ -171,6 +201,8 @@ def main() -> int:
         workflow_text = (workflows_dir / name).read_text(encoding="utf-8")
         if "permissions:\n  contents: read" not in workflow_text:
             fail(f"workflow must declare least-privilege contents: read permissions: {name}")
+
+    validate_capture_security()
 
     parsed: dict[str, dict] = {}
     for rel in (Path("release.json"), Path("releases/current.json")):
@@ -229,6 +261,7 @@ def main() -> int:
     print(f"Active candidate: {candidate_summary}")
     print("Static download channel: v7.2 Full + OTA")
     print("Immediate rollback channel: v7.1 Full + OTA")
+    print("Visual capture credential redaction: REQUIRED")
     print("Firmware workflows: one reusable candidate gate + three repository/release gates")
     print("Workflow permissions: explicit contents: read on all workflows")
     print("Governance contract: SECURITY + CONTRIBUTING + release/control-safety docs + PR template present")
