@@ -8,7 +8,7 @@ dist.mkdir()
 for name in ['index.html','styles.css','app.js','release.json']:
     shutil.copy2(root/name,dist/name)
 release=json.loads((root/'release.json').read_text())
-assert release['release']=='production-rc-v7.2'
+assert release['release']=='production-workshop-os-v11.19.1'
 assert release['board']['id']=='ws_lcd_350'
 def publish(path,size,sha,label):
     raw=(root/path).read_bytes(); actual=hashlib.sha256(raw).hexdigest()
