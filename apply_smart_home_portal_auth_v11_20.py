@@ -37,6 +37,12 @@ def patch_security(repo: Path) -> None:
     text = replace_once(text, '#include "smart_home_build.h"\n', '', "remove dev build include")
     text = replace_once(
         text,
+        '#include "wifi_manager.h"\n',
+        '#include "wifi_manager.h"\n#include "recovery_manager.h"\n',
+        "recovery-aware auth policy",
+    )
+    text = replace_once(
+        text,
         '  Serial.printf("Portal code: %s\\n", g_portalCode);\n',
         '',
         "remove portal-code serial disclosure",
@@ -56,7 +62,7 @@ def patch_security(repo: Path) -> None:
     text = replace_once(
         text,
         '''bool securitySessionValid(WebServer& server) {\n  if (isAPMode()) return true;\n  if (!portalAuthRequired()) return true;\n  ensureInitialized();\n  return cookieMatches(server);\n}\n''',
-        '''bool securitySessionValid(WebServer& server) {\n  // Recovery AP remains independently accessible. Normal LAN access requires\n  // the current boot-scoped portal-code session.\n  if (isAPMode()) return true;\n  ensureInitialized();\n  return cookieMatches(server);\n}\n''',
+        '''bool securitySessionValid(WebServer& server) {\n  // A session cookie is a session cookie on both STA and AP. Recovery/setup\n  // exceptions are scoped per-route in securityAuthorize(), not by globally\n  // trusting every request merely because the radio is in AP mode.\n  ensureInitialized();\n  return cookieMatches(server);\n}\n''',
         "session auth enforcement",
     )
     text = replace_once(
@@ -64,6 +70,13 @@ def patch_security(repo: Path) -> None:
         '''  // Development phase: the WS350 portal stays open on the trusted LAN so a\n  // display/input regression cannot strand the owner behind a one-time code.\n  // Mutating browser requests still keep same-origin protection.\n  if (!portalAuthRequired()) {\n    if (mutating && !sameOrigin(server)) {\n      server.send(403, "application/json",\n          "{\\\"status\\\":\\\"error\\\",\\\"message\\\":\\\"Rejected by Smart Home same-origin protection.\\\"}");\n      return false;\n    }\n    return true;\n  }\n\n''',
         '',
         "remove dev authorization bypass",
+    )
+
+    text = replace_once(
+        text,
+        '''bool securityAuthorize(WebServer& server, bool mutating) {\n  if (isAPMode()) return true;\n  ensureInitialized();\n''',
+        '''static bool apPublicRouteAllowed(WebServer& server) {\n  if (!isAPMode()) return false;\n\n  const String uri = server.uri();\n\n  // Captive setup AP: expose only what is necessary to join Wi-Fi and render\n  // the local setup surface. A fallback into AP mode must never turn the\n  // known-default AP password into an implicit printer-admin credential.\n  if (uri == "/" || uri == "/save/wifi" ||\n      uri == "/app.css" || uri == "/app.js") {\n    return true;\n  }\n\n  // Recovery actions are unauthenticated only in deliberate Recovery Safe\n  // Mode, which requires a physical recovery transition. Ordinary AP fallback\n  // does not expose these routes. Settings export remains authenticated because\n  // it can contain printer access codes and other secrets.\n  if (recoverySafeModeActive()) {\n    if (uri == "/recovery" || uri.startsWith("/recovery/") ||\n        uri == "/ota/upload" || uri == "/reset") {\n      return true;\n    }\n  }\n\n  return false;\n}\n\nbool securityAuthorize(WebServer& server, bool mutating) {\n  ensureInitialized();\n\n  if (apPublicRouteAllowed(server)) {\n    // Even rescue/setup mutations keep the browser provenance guard.\n    if (mutating && !sameOrigin(server)) {\n      server.send(403, "application/json",\n          "{\\\"status\\\":\\\"error\\\",\\\"message\\\":\\\"Rejected by Workshop OS same-origin protection.\\\"}");\n      return false;\n    }\n    return true;\n  }\n''',
+        "scope AP authorization",
     )
     p.write_text(text, encoding="utf-8")
 
@@ -131,6 +144,13 @@ setTimeout(v1120Ws350Safety, 0);
 def patch_recovery(repo: Path) -> None:
     p = repo / "src" / "web_server.cpp"
     text = p.read_text(encoding="utf-8")
+
+    # Portal-code login remains available on AP too. Independent recovery routes\n    # do not require it in Recovery Safe Mode, but authenticated AP access is\n    # available for protected surfaces when the physical code can be read.\n    ap_login_redirect = '''  if (isAPMode()) {\n    server.sendHeader("Location", "/");\n    server.send(303, "text/plain", "Setup mode");\n    return;\n  }\n'''
+    count = text.count(ap_login_redirect)
+    if count != 2:
+        raise PatchError(f"AP login redirect: expected exactly 2 matches, found {count}")
+    text = text.replace(ap_login_redirect, "", 2)
+
     text = replace_once(
         text,
         'server.on("/recovery", HTTP_GET, handleRecoveryPage);',
@@ -140,7 +160,7 @@ def patch_recovery(repo: Path) -> None:
     text = replace_once(
         text,
         "<div class='sub'>Smart Home independent recovery plane. This page does not depend on the normal portal JavaScript.</div>",
-        "<div class='sub'>Workshop OS independent recovery plane. On normal LAN, access uses your portal-code session; Recovery AP remains independently accessible.</div>",
+        "<div class='sub'>Workshop OS independent recovery plane. On normal LAN, access uses your portal-code session; deliberate Recovery Safe Mode AP remains independently accessible.</div>",
         "recovery auth guidance",
     )
     text = replace_once(
