@@ -25,7 +25,7 @@ No speculative printer-control surface is added by v11.20; Light, Pause/Resume, 
 
 ## Accepted source — Workshop OS v11.19.1
 
-v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the authenticated 22-view WS350 framebuffer acceptance pass.
+v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It preserves the complete Workshop OS feature stack and closes the final text-fit defects found by the 22-view WS350 framebuffer acceptance pass.
 
 ### Workshop experience
 
@@ -36,7 +36,7 @@ v11.19.1 is the physically accepted **Physical Fit RC2** source baseline. It pre
 - live-state freshness/stale handling;
 - network, audio and LED essentials;
 - printer HMS/attention presentation;
-- authenticated 22-view framebuffer capture for physical UI review.
+- 22-view framebuffer capture for physical UI review.
 
 ### Guarded controls
 
