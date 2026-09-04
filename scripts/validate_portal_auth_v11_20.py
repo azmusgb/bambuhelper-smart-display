@@ -47,14 +47,20 @@ def main() -> int:
         "if (!cookieMatches(server))",
         "if (mutating && !sameOrigin(server))",
         'server.sendHeader("Location", "/login")',
+        "Workshop OS portal session security enabled",
+        "constexpr size_t kSessionTokenLen = 32",
+        "constantTimeEqual",
+        "; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400",
+        "memset(g_sessionToken, 0, sizeof(g_sessionToken));",
     ]:
-        need(security, marker, "LAN session enforcement")
+        need(security, marker, "LAN session enforcement/hardening")
     for marker in [
         "portalAuthRequired",
         "Development phase: the WS350 portal stays open",
         "SMART_HOME_DEV_UNLOCK",
+        "Smart Home v8.3 RC3 portal session security enabled",
     ]:
-        forbid(security, marker, "development auth bypass")
+        forbid(security, marker, "development/stale auth surface")
     for marker in [
         'Serial.printf("Portal code:',
         'Serial.print(g_portalCode',
@@ -105,7 +111,9 @@ def main() -> int:
 
     print("Workshop OS v11.20 portal authentication contracts: PASS")
     print("LAN portal authentication: REQUIRED")
+    print("Boot-scoped 128-bit session token + HttpOnly/SameSite cookie: REQUIRED")
     print("Portal credential in serial logs: FORBIDDEN")
+    print("Stale development/release auth identity: FORBIDDEN")
     print("Normal-LAN Recovery page authentication: REQUIRED")
     print("Recovery AP auth bypass: PRESERVED")
     print("WS350 physical touch safety: PRESERVED")
