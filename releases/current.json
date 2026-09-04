@@ -1,46 +1,26 @@
 {
   "channel": "accepted-source",
-  "version": "11.19.1",
+  "version": "11.22",
   "name": "Waveshare Workshop OS",
   "targets": [
     "ws_lcd_350"
   ],
   "source": {
     "branch": "main",
-    "acceptedFirmwareCommit": "f52641b74ca482514684616dad6a341d6447f0f0",
-    "name": "Workshop OS v11.19.1 Physical Fit RC2",
+    "acceptedFirmwareCommit": "b6ff19e8617a8cceb380ea3c3621c54ea0048f11",
+    "name": "Workshop OS v11.22 Display Expert RC1",
     "physicalAcceptance": "passed",
-    "acceptedAt": "2026-09-03",
-    "acceptanceEvidence": "22-view WS350 framebuffer capture + exact-final-head CI"
+    "acceptedAt": "2026-09-04",
+    "acceptanceEvidence": "Exact-head CI + healthy WS350 read-only interrogation + complete 29-view credential-safe framebuffer capture"
   },
   "download": {
     "channel": "production-workshop-os-v11.19.1",
     "version": "11.19.1",
     "rollbackVersion": "7.2",
-    "note": "Static installer promoted to the physically accepted Workshop OS v11.19.1 artifact pair; Smart Home v7.2 is retained as the single immediate rollback."
+    "note": "Accepted source has advanced to v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": {
-    "version": "11.22",
-    "branch": "feature/v11-22-display-expert",
-    "name": "Workshop OS v11.22 Display Expert RC1",
-    "purpose": "Move safe visually dense display settings onto physical WS350 expert surfaces while preserving the inherited v11.20 authentication boundary, fixed safety-state colors, and portal-only text/secret inputs.",
-    "pullRequest": 74,
-    "status": "physical-acceptance-required",
-    "exactHeadCi": "required",
-    "physicalAcceptance": "required"
-  },
-  "mainState": {
-    "version": "11.20",
-    "commit": "748119d8a364604b6845748abd9e58fa646dfeaf",
-    "name": "Workshop OS v11.20 Portal Auth RC1",
-    "status": "merged-unaccepted",
-    "originatingPullRequest": 67,
-    "originatingBranch": "security/v11-20-portal-auth",
-    "purpose": "Restore rotating portal-code and boot-scoped session authentication for normal LAN access while preserving independent Recovery AP access.",
-    "exactHeadCi": "passed",
-    "physicalAcceptance": "pending",
-    "note": "v11.20 code is present on main but does not replace the physically accepted v11.19.1 baseline until real-device authentication acceptance passes."
-  },
+  "candidate": null,
+  "mainState": null,
   "validation": {
     "acceptedSource": {
       "exactHeadCi": "passed",
@@ -48,15 +28,15 @@
       "shared320x480Regression": "passed",
       "browserJavaScript": "passed",
       "renderedFit": "passed",
+      "portalAuthContracts": "passed",
+      "displayExpertContracts": "passed",
+      "settingsParity": "passed",
+      "framebufferViews": 29,
       "physicalAcceptance": "passed"
     },
-    "mainState": {
-      "exactHeadCi": "passed",
-      "ws350Build": "passed",
-      "shared320x480Regression": "passed",
-      "browserJavaScript": "passed",
-      "portalAuthContracts": "passed",
-      "physicalAcceptance": "pending"
+    "staticDownload": {
+      "version": "11.19.1",
+      "status": "retained-conservative-channel"
     }
   }
 }
