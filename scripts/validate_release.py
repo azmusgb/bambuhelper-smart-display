@@ -12,6 +12,7 @@ PRODUCTION_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v
 PRODUCTION_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin")
 ROLLBACK_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin")
 ROLLBACK_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin")
+UPSTREAM_BASELINE = "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4"
 
 ALLOWED_FIRMWARE = {
     PRODUCTION_FULL.as_posix(),
@@ -28,6 +29,8 @@ ALLOWED_WORKFLOWS = {
 
 REQUIRED = [
     Path("README.md"),
+    Path("LICENSE"),
+    Path("NOTICE.md"),
     Path("SECURITY.md"),
     Path("CONTRIBUTING.md"),
     Path("release.json"),
@@ -69,6 +72,16 @@ def main() -> int:
     for rel in REQUIRED:
         if not (ROOT / rel).is_file():
             fail(f"missing required repository asset: {rel}")
+
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    if not license_text.startswith("MIT License\n"):
+        fail("top-level LICENSE must contain the MIT license text")
+
+    notice_text = (ROOT / "NOTICE.md").read_text(encoding="utf-8")
+    if "Keralots/BambuHelper" not in notice_text or UPSTREAM_BASELINE not in notice_text:
+        fail("NOTICE.md must identify Keralots/BambuHelper and the accepted upstream baseline")
+    if "does not invent" not in notice_text:
+        fail("NOTICE.md must preserve the no-invented-upstream-copyright boundary")
 
     tracked_firmware: set[str] = set()
     for path in ROOT.rglob("*"):
@@ -169,6 +182,7 @@ def main() -> int:
     print("Firmware workflows: one reusable candidate gate + three repository/release gates")
     print("Workflow permissions: explicit contents: read on all workflows")
     print("Governance contract: SECURITY + CONTRIBUTING + release/control-safety docs + PR template present")
+    print("License contract: MIT Workshop OS contributions + explicit upstream/third-party NOTICE present")
     return 0
 
 
