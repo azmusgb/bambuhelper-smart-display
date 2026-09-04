@@ -116,6 +116,41 @@ def validate_candidate(candidate: object, readme_text: str) -> str:
     return f"{version} / PR #{pr_number} / {branch}"
 
 
+def validate_main_state(main_state: object, readme_text: str) -> str:
+    """Validate the exceptional state where newer firmware is on main but not physically accepted."""
+    if main_state is None:
+        return "none"
+    if not isinstance(main_state, dict):
+        fail("mainState must be null or an object")
+
+    version = require_nonempty_string(main_state, "version", "mainState")
+    commit = require_nonempty_string(main_state, "commit", "mainState")
+    name = require_nonempty_string(main_state, "name", "mainState")
+    branch = require_nonempty_string(main_state, "originatingBranch", "mainState")
+    require_nonempty_string(main_state, "purpose", "mainState")
+
+    if not SHA40.fullmatch(commit):
+        fail("mainState.commit must be a 40-character lowercase SHA")
+    if main_state.get("status") != "merged-unaccepted":
+        fail("mainState.status must be merged-unaccepted while it differs from the accepted hardware baseline")
+    if main_state.get("exactHeadCi") != "passed":
+        fail("mainState.exactHeadCi must record passed before merged-unaccepted state is documented")
+    if main_state.get("physicalAcceptance") != "pending":
+        fail("mainState.physicalAcceptance must remain pending until real-device acceptance completes")
+
+    pr_number = main_state.get("originatingPullRequest")
+    if not isinstance(pr_number, int) or isinstance(pr_number, bool) or pr_number <= 0:
+        fail("mainState.originatingPullRequest must be a positive integer")
+    if branch == "main":
+        fail("mainState.originatingBranch must identify the source branch, not main")
+
+    for marker in (name, "merged, physical acceptance pending", "v11.19.1"):
+        if marker not in readme_text:
+            fail(f"README must explain merged-unaccepted main state; missing marker: {marker}")
+
+    return f"{version} / PR #{pr_number} / physical acceptance pending"
+
+
 def validate_capture_security() -> None:
     """Keep physical acceptance bundles useful without preserving live credentials."""
     capture = (ROOT / "scripts" / "capture-ws350-views.zsh").read_text(encoding="utf-8")
@@ -165,6 +200,31 @@ def validate_capture_security() -> None:
     for marker in forbidden_markers:
         if marker in capture:
             fail(f"visual capture helper may disclose sensitive/environment-specific configuration: {marker}")
+
+
+def validate_stable_merge_gate(workflows_dir: Path) -> None:
+    """Ensure branch protection can require one firmware-aware check on every PR."""
+    workflow = (workflows_dir / "firmware-candidate.yml").read_text(encoding="utf-8")
+
+    required_markers = [
+        "pull_request:\n    branches: [main]",
+        "scope:\n    name: Classify Firmware Scope",
+        "outputs:\n      firmware: ${{ steps.classify.outputs.firmware }}",
+        "validate:\n    name: Native Firmware Validation",
+        "needs: scope",
+        "if: needs.scope.outputs.firmware == 'true'",
+        "merge-gate:\n    name: Merge Gate",
+        "needs: [scope, validate]",
+        "if: always()",
+        "Native firmware validation required:",
+    ]
+    for marker in required_markers:
+        if marker not in workflow:
+            fail(f"stable Merge Gate contract missing from firmware-candidate.yml: {marker}")
+
+    pull_request_header = workflow.split("workflow_dispatch:", 1)[0]
+    if "\n    paths:\n" in pull_request_header or "\n    paths-ignore:\n" in pull_request_header:
+        fail("firmware-candidate.yml pull_request trigger must be present on every PR to main; scope inside the workflow instead")
 
 
 def main() -> int:
@@ -224,6 +284,7 @@ def main() -> int:
         if "permissions:\n  contents: read" not in workflow_text:
             fail(f"workflow must declare least-privilege contents: read permissions: {name}")
 
+    validate_stable_merge_gate(workflows_dir)
     validate_capture_security()
 
     parsed: dict[str, dict] = {}
@@ -263,6 +324,7 @@ def main() -> int:
 
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
     candidate_summary = validate_candidate(manifest.get("candidate"), readme_text)
+    main_state_summary = validate_main_state(manifest.get("mainState"), readme_text)
 
     download = manifest.get("download") or {}
     if download.get("channel") != "production-workshop-os-v11.19.1":
@@ -287,7 +349,8 @@ def main() -> int:
     print("Raw framebuffer retention: FORBIDDEN; 0600 temporary file only")
     print("Capture environment-specific default host: FORBIDDEN")
     print("Capture config/settings secret export: FORBIDDEN")
-    print("Firmware workflows: one reusable candidate gate + three repository/release gates")
+    print("Firmware workflows: one reusable path-aware gate + three repository/release gates")
+    print("Stable Merge Gate check: REQUIRED ON EVERY PR; native build conditional on firmware-sensitive paths")
     print("Workflow permissions: explicit contents: read on all workflows")
     print("Governance contract: SECURITY + CONTRIBUTING + release/control-safety docs + PR template present")
     print("License contract: MIT Workshop OS contributions + explicit upstream/third-party NOTICE present")
