@@ -120,7 +120,10 @@ def validate_capture_security() -> None:
     """Keep physical acceptance bundles useful without preserving live credentials."""
     capture = (ROOT / "scripts" / "capture-ws350-views.zsh").read_text(encoding="utf-8")
     required_markers = [
+        'echo "Usage: $0 <device-host-or-ip>"',
+        'HOST="$1"',
         "stty -echo",
+        "stty echo 2>/dev/null || true",
         "chmod 600 \"$COOKIE\" \"$LOGIN_BODY\"",
         "--data-urlencode 'code@-'",
         "unset CODE",
@@ -139,6 +142,7 @@ def validate_capture_security() -> None:
             fail(f"visual capture credential-safety contract missing: {marker}")
 
     forbidden_markers = [
+        "10.0.0.124",
         '--data-urlencode "code=$CODE"',
         'echo "$CODE"',
         'echo $CODE',
@@ -149,7 +153,7 @@ def validate_capture_security() -> None:
     ]
     for marker in forbidden_markers:
         if marker in capture:
-            fail(f"visual capture helper may disclose sensitive configuration: {marker}")
+            fail(f"visual capture helper may disclose sensitive/environment-specific configuration: {marker}")
 
 
 def main() -> int:
@@ -269,6 +273,7 @@ def main() -> int:
     print("Static download channel: v7.2 Full + OTA")
     print("Immediate rollback channel: v7.1 Full + OTA")
     print("Visual capture credential redaction: REQUIRED")
+    print("Capture environment-specific default host: FORBIDDEN")
     print("Capture config/settings secret export: FORBIDDEN")
     print("Firmware workflows: one reusable candidate gate + three repository/release gates")
     print("Workflow permissions: explicit contents: read on all workflows")
