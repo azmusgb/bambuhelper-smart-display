@@ -1,7 +1,11 @@
 #!/bin/zsh
 set -euo pipefail
 
-HOST="${1:-10.0.0.124}"
+if [ "$#" -lt 1 ]; then
+  echo "Usage: $0 <device-host-or-ip>"
+  exit 2
+fi
+HOST="$1"
 BASE="http://$HOST"
 STAMP="$(date '+%Y%m%d-%H%M%S')"
 OUT="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP"
