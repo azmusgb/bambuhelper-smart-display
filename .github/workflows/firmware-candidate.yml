@@ -87,6 +87,7 @@ jobs:
           python -m py_compile apply_smart_home_network_locale_layout_v11_23.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize.py
+          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
@@ -95,6 +96,7 @@ jobs:
           python -m py_compile scripts/validate_network_locale_layout_v11_23.py
           python -m py_compile scripts/validate_touch_ux_v11_23_rc2.py
           python -m py_compile scripts/validate_touch_ux_v11_23_rc2_finalize.py
+          python -m py_compile scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
@@ -141,6 +143,10 @@ jobs:
         run: python apply_smart_home_touch_ux_v11_23_rc2_finalize.py --repo upstream --apply
       - name: Validate v11.23 RC2 physical touch finalization
         run: python scripts/validate_touch_ux_v11_23_rc2_finalize.py upstream
+      - name: Apply v11.23 RC2 guarded-action feedback
+        run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
+      - name: Validate v11.23 RC2 guarded-action feedback
+        run: python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
       - name: Validate settings parity against reconstructed v11.23 RC2 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
@@ -205,9 +211,11 @@ jobs:
           cp apply_smart_home_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
           cp apply_smart_home_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp apply_smart_home_touch_ux_v11_23_rc2_finalize.py firmware-gate-artifacts/tools/
+          cp apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py firmware-gate-artifacts/tools/
           cp scripts/validate_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
           cp scripts/validate_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_touch_ux_v11_23_rc2_finalize.py firmware-gate-artifacts/tools/
+          cp scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py firmware-gate-artifacts/tools/
           cp scripts/validate_settings_parity.py firmware-gate-artifacts/tools/
           cp docs/physical-settings-parity.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
@@ -224,6 +232,8 @@ jobs:
             echo 'timezone_physical_expert=ENABLED'
             echo 'static_network_editor=STAGED_ATOMIC'
             echo 'display_rotation=DEDICATED_PREVIEW_GUARDED_HOLD_COMMIT'
+            echo 'guarded_hold_progress=5_SEGMENTS_650MS'
+            echo 'active_print_network_warning=ENABLED_DISPLAY_RESTART_ONLY'
             echo 'normal_wifi_portal_code=TEMPORARILY_BYPASSED'
             echo 'capture_auth=NO_CODE_ONLY'
             echo 'acceptance_auth=NO_CODE_ONLY'
