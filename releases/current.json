@@ -23,17 +23,11 @@
     "version": "11.23",
     "name": "Workshop OS v11.23 Network Locale Layout RC1",
     "branch": "feature/v11-23-network-locale-layout",
-    "status": "ci-and-physical-acceptance-required",
-    "acceptedBaseline": "11.22",
-    "physicalAcceptance": "pending",
-    "plannedFramebufferViews": 32,
-    "scope": [
-      "physical timezone selection",
-      "staged DHCP/static configuration",
-      "segmented IP/gateway/subnet/DNS entry",
-      "guarded display rotation",
-      "network expert acceptance views"
-    ]
+    "pullRequest": 76,
+    "purpose": "Add physical expert timezone, staged atomic DHCP/static configuration, segmented IPv4 entry, guarded display rotation, and expanded network acceptance views without moving credentials or hostname onto the touchscreen.",
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required"
   },
   "mainState": null,
   "validation": {
@@ -50,13 +44,10 @@
       "physicalAcceptance": "passed"
     },
     "candidate": {
-      "exactHeadCi": "pending",
-      "ws350Build": "pending",
-      "shared320x480Regression": "pending",
-      "networkLocaleLayoutContracts": "pending",
-      "settingsParity": "pending",
+      "networkLocaleLayoutContracts": "required",
+      "settingsParity": "required",
       "framebufferViews": 32,
-      "physicalAcceptance": "pending"
+      "physicalAcceptance": "required"
     },
     "staticDownload": {
       "version": "11.19.1",
