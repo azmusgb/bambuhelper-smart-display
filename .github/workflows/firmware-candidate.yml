@@ -1,4 +1,4 @@
-name: Workshop OS Firmware Gate — v11.23 Network Locale Layout RC1
+name: Workshop OS Firmware Gate — v11.23 Network Locale Layout RC2
 
 on:
   pull_request:
@@ -48,7 +48,7 @@ jobs:
               'assets/**', 'scripts/apply_*.sh', 'scripts/validate_*.py',
               'scripts/capture-ws350-views.zsh', 'docs/physical-*.md', 'docs/visual-*.md',
               'docs/portal-auth-*.md', 'docs/display-expert-*.md', 'docs/network-*.md',
-              'docs/settings-capability-registry/**'
+              'docs/touch-*.md', 'docs/settings-capability-registry/**'
           )
           changed=[p.strip() for p in Path('/tmp/changed.txt').read_text().splitlines() if p.strip()]
           matched=[p for p in changed if any(fnmatch.fnmatchcase(p, pat) for pat in patterns)]
@@ -83,12 +83,14 @@ jobs:
           python -m py_compile apply_smart_home_portal_auth_v11_20.py
           python -m py_compile apply_smart_home_display_expert_v11_22.py
           python -m py_compile apply_smart_home_network_locale_layout_v11_23.py
+          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
           python -m py_compile scripts/validate_portal_auth_v11_20.py
           python -m py_compile scripts/validate_display_expert_v11_22.py
           python -m py_compile scripts/validate_network_locale_layout_v11_23.py
+          python -m py_compile scripts/validate_touch_ux_v11_23_rc2.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
@@ -106,20 +108,24 @@ jobs:
         run: python scripts/validate_rendered_fit_v11_19_1.py upstream
       - name: Apply v11.20 Portal Auth
         run: python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
-      - name: Validate v11.20 portal authentication
+      - name: Validate v11.20 portal authentication baseline
         run: python scripts/validate_portal_auth_v11_20.py upstream
       - name: Apply v11.22 Display Expert
         run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
       - name: Validate v11.22 Display Expert
         run: python scripts/validate_display_expert_v11_22.py upstream
-      - name: Apply v11.23 Network Locale Layout Expert
+      - name: Apply v11.23 Network Locale Layout Expert RC1 base
         run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
-      - name: Validate v11.23 Network Locale Layout contracts
+      - name: Validate v11.23 RC1 base contract
         run: python scripts/validate_network_locale_layout_v11_23.py upstream
-      - name: Validate settings parity against reconstructed v11.23 source
+      - name: Apply v11.23 RC2 touch UX and temporary trusted-LAN mode
+        run: python apply_smart_home_touch_ux_v11_23_rc2.py --repo upstream --apply
+      - name: Validate v11.23 RC2 touch UX / LAN-open contract
+        run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
+      - name: Validate settings parity against reconstructed v11.23 RC2 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Verify inherited safety after v11.23 delta
+      - name: Verify inherited safety after v11.23 RC2 delta
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -127,22 +133,33 @@ jobs:
           web=Path('upstream/src/web_server.cpp').read_text()
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           build=Path('upstream/include/smart_home_build.h').read_text()
-          for needle in ['SMART_HOME_VERSION "v11.23"','Smart Home v11.23 Network Locale Layout RC1']:
+          security=Path('upstream/src/security_manager.cpp').read_text()
+          for needle in [
+              'SMART_HOME_VERSION "v11.23"',
+              'Smart Home v11.23 Network Locale Layout RC2',
+              '#define WORKSHOP_OS_TEMP_LAN_OPEN 1',
+          ]:
               assert needle in build, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
-          for needle in ['SECURE_GET("/hub/views", handleHubViews)','SECURE_GET("/hub/frame.ppm", handleHubFramePpm)','SECURE_POST("/hub/show", handleHubShow)']:
+          for needle in [
+              'SECURE_GET("/hub/views", handleHubViews)',
+              'SECURE_GET("/hub/frame.ppm", handleHubFramePpm)',
+              'SECURE_POST("/hub/show", handleHubShow)',
+          ]:
               assert needle in web, needle
+          assert 'if (mutating && !sameOrigin(server))' in security
+          assert 'if (isAPMode()) return true;' not in security
           for forbidden in ['requestSpeedCommand','requestFanCommand']:
               assert forbidden not in hub and forbidden not in web and forbidden not in mqtt, forbidden
-          print('v11.23 inherited safety: PASS')
+          print('v11.23 RC2 inherited safety: PASS')
           PY
 
       - name: Validate browser JavaScript
         run: node --check upstream/web/app.js
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
-      - name: Build WS350 v11.23
+      - name: Build WS350 v11.23 RC2
         working-directory: upstream
         run: pio run -e ws_lcd_350
       - name: Regression build shared 320x480 target
@@ -152,7 +169,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.23 Network Locale Layout RC1 artifacts
+      - name: Package v11.23 Network Locale Layout RC2 artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -161,25 +178,32 @@ jobs:
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p firmware-gate-artifacts/tools firmware-gate-artifacts/docs
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC1-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC1-OTA.bin
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC2-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC2-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp scripts/capture-ws350-views.zsh firmware-gate-artifacts/tools/
           cp apply_smart_home_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
+          cp apply_smart_home_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
+          cp scripts/validate_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_settings_parity.py firmware-gate-artifacts/tools/
           cp docs/physical-settings-parity.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
           cp -R docs/settings-capability-registry firmware-gate-artifacts/docs/settings-capability-registry
           {
-            echo 'Workshop OS v11.23 Network Locale Layout RC1'
+            echo 'Workshop OS v11.23 Network Locale Layout RC2'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
             echo 'source_line=CANDIDATE'
             echo 'physical_acceptance=REQUIRED'
             echo 'accepted_v11_22=PRESERVED'
+            echo 'touch_ux=EXPLICIT_CONTROLS'
+            echo 'hidden_hold_reverse=REMOVED'
             echo 'timezone_physical_expert=ENABLED'
             echo 'static_network_editor=STAGED_ATOMIC'
             echo 'display_rotation=GUARDED_HOLD'
+            echo 'normal_wifi_portal_code=TEMPORARILY_BYPASSED'
+            echo 'same_origin_mutation_guard=PRESERVED'
+            echo 'ap_recovery_boundaries=PRESERVED'
             echo 'capture_views=32'
             echo 'wifi_credentials=PORTAL_INPUT'
             echo 'hostname=PORTAL_INPUT'
@@ -190,7 +214,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-23-network-locale-layout-rc1
+          name: workshop-os-v11-23-network-locale-layout-rc2
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
@@ -212,7 +236,7 @@ jobs:
           [[ "$SCOPE_RESULT" == "success" ]] || exit 1
           if [[ "$FIRMWARE_REQUIRED" == "true" ]]; then
             [[ "$FIRMWARE_RESULT" == "success" ]] || exit 1
-            echo 'Merge Gate: PASS — full native v11.23 validation completed.'
+            echo 'Merge Gate: PASS — full native v11.23 RC2 validation completed.'
           else
             [[ "$FIRMWARE_RESULT" == "skipped" ]] || exit 1
             echo 'Merge Gate: PASS — native validation correctly skipped.'
