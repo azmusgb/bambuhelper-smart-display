@@ -122,19 +122,28 @@ def validate_capture_security() -> None:
     required_markers = [
         'echo "Usage: $0 <device-host-or-ip>"',
         'HOST="$1"',
+        'RAW_PPM="$(mktemp -t bambu-capture-frame)"',
         "stty -echo",
         "stty echo 2>/dev/null || true",
-        "chmod 600 \"$COOKIE\" \"$LOGIN_BODY\"",
+        'chmod 600 "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"',
+        'rm -f "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"',
+        "trap cleanup EXIT",
+        "trap 'exit 130' INT",
+        "trap 'exit 143' TERM",
         "--data-urlencode 'code@-'",
         "unset CODE",
         "Deliberately do not capture /printer/config or settings exports",
+        "ppm_dst = Path(sys.argv[2])",
+        "png_dst = Path(sys.argv[3])",
         "view_id == 'system'",
         "Refusing unverified System redaction geometry",
         "x0, y0, x1, y1 = 330, 196, 468, 230",
-        "src.write_bytes(header + rgb)",
-        'python3 "$OUT/ppm_to_png.py" "$PPM" "$PNG" "$ID"',
+        "ppm_dst.write_bytes(header + rgb)",
+        'curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$RAW_PPM"',
+        'python3 "$OUT/ppm_to_png.py" "$RAW_PPM" "$PPM" "$PNG" "$ID"',
+        ': > "$RAW_PPM"',
         "SECURITY-NOTE.txt",
-        "System portal-code line: REDACTED in retained PPM + PNG",
+        "Raw framebuffer: TEMPORARY 0600 ONLY",
         "Printer configuration/settings exports: EXCLUDED",
     ]
     for marker in required_markers:
@@ -149,6 +158,8 @@ def validate_capture_security() -> None:
         'printf "%s\\n" "$CODE"',
         '"$BASE/printer/config?slot=0"',
         '"$BASE/settings/export"',
+        '"$BASE/hub/frame.ppm" -o "$PPM"',
+        "src.write_bytes(header + rgb)",
         "set -x",
     ]
     for marker in forbidden_markers:
@@ -272,7 +283,8 @@ def main() -> int:
     print(f"Active candidate: {candidate_summary}")
     print("Static download channel: v7.2 Full + OTA")
     print("Immediate rollback channel: v7.1 Full + OTA")
-    print("Visual capture credential redaction: REQUIRED")
+    print("Visual capture credential redaction: REQUIRED BEFORE RETENTION")
+    print("Raw framebuffer retention: FORBIDDEN; 0600 temporary file only")
     print("Capture environment-specific default host: FORBIDDEN")
     print("Capture config/settings secret export: FORBIDDEN")
     print("Firmware workflows: one reusable candidate gate + three repository/release gates")
