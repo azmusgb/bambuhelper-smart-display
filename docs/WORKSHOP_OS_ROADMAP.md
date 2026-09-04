@@ -9,7 +9,7 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 - **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA (intentionally conservative until a separate binary-channel promotion).
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
 - **Repository governance:** protected `main` with stable path-aware `merge-gate`; force pushes and deletion blocked.
-- **Active firmware candidate:** none.
+- **Active firmware candidate:** Workshop OS **v11.23 Network / Locale / Layout Expert RC1** on `feature/v11-23-network-locale-layout`; physical acceptance required before promotion.
 
 `releases/current.json` remains authoritative. Green CI alone is not physical acceptance.
 
@@ -27,7 +27,7 @@ Inherited into v11.22 and accepted as part of the current source line:
 
 ## Completed — v11.21 Settings Parity Audit
 
-The WS350 browser/device configuration contract is now machine-enforced:
+The WS350 browser/device configuration contract is machine-enforced:
 
 - registry under `docs/settings-capability-registry/`;
 - `PHYSICAL`, `PHYSICAL-EXPERT`, `PORTAL-INPUT`, and `BOARD-N/A` classifications;
@@ -49,29 +49,37 @@ Implemented:
 - Clock Info toggle;
 - AMS Tray Types presentation.
 
-Gauge Labels remain portal input because they are free text. Display Rotation remains deferred.
+Gauge Labels remain portal input because they are free text.
 
-## Priority 1 — v11.23 Network / Locale / Layout Expert
+## Active candidate — v11.23 Network / Locale / Layout Expert
 
-Next recommended firmware evolution:
+Candidate implementation moves the remaining safe network/locale/layout expert settings onto the WS350 without introducing an on-device keyboard or secret entry.
 
-- timezone;
-- coordinated DHCP/static mode;
-- segmented IP / gateway / subnet / DNS entry;
-- guarded display rotation;
-- printer rotation/split policy;
-- deeper network diagnostics where real capability evidence exists.
+Implemented in the candidate:
+
+- timezone selection using the existing timezone database and POSIX TZ strings;
+- four-page Network Expert flow: Essentials, Time & Locale, Address Edit, Review;
+- staged coordinated DHCP/static configuration;
+- segmented numeric IP / gateway / subnet / DNS editing;
+- atomic hold-to-apply network save followed by reboot;
+- live DHCP values as the initial edit seed when stored static values are unavailable;
+- guarded hold-only display rotation;
+- authenticated capture catalog expanded from 29 to at least 32 views for the new Network Expert surfaces.
 
 Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
-### v11.23 design constraints
+### v11.23 acceptance constraints
 
-- network configuration must remain atomic: no partially-applied static configuration;
-- display rotation must be guarded and recoverable if the selected geometry breaks touch/display orientation;
-- no secret/free-text keyboard work should be introduced just to satisfy parity;
-- preserve v11.22's 29-view visual acceptance catalog and add new views only when they materially improve acceptance coverage.
+- no partially-applied static configuration;
+- no network settings are changed until the explicit Review hold-to-apply action;
+- static apply requires nonzero IP, gateway, and subnet;
+- display rotation is hold-only and must be recoverable;
+- the accepted physical-capture orientation remains rotation 3 for credential-redaction geometry;
+- no secret/free-text keyboard work is introduced;
+- inherited v11.22 portal-auth, control-safety, recovery, and visual contracts remain intact;
+- physical acceptance requires exact-head CI, WS350 + shared-target builds, read-only interrogation, and a credential-safe capture pass.
 
-## Priority 2 — v11.24 Printer / Workshop / Power Configuration
+## Next — v11.24 Printer / Workshop / Power Configuration
 
 - light start/finish/failure automation and off delay;
 - printer connection mode and region;
@@ -82,7 +90,7 @@ Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
 Printer identity/access credentials, custom dashboard URL, Workshop note, and plug IP/hostname remain portal input.
 
-## Priority 3 — v11.25 Deeper Waveshare hardware use
+## v11.25 — Deeper Waveshare hardware use
 
 Capability-gated opportunities:
 
@@ -96,7 +104,7 @@ Capability-gated opportunities:
 
 Peripheral failure must degrade gracefully and never block printer operation.
 
-## Priority 4 — v11.26 Reliability / soak release
+## v11.26 — Reliability / soak release
 
 No major UX feature family. Focus on:
 
