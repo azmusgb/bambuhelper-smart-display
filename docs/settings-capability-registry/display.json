@@ -91,11 +91,10 @@
     {
       "id": "display.rotation",
       "classification": "PHYSICAL-EXPERT",
-      "implementedOnDevice": false,
-      "surface": "Display → Expert → Layout",
+      "implementedOnDevice": true,
+      "surface": "Display → Expert → Extras → Rotation",
       "browserBindings": [{"route": "/apply", "keys": ["rotation"]}],
-      "reason": "Rotation changes touch mapping and requires guarded expert handling with recovery semantics.",
-      "plannedRelease": "v11.23"
+      "physicalEvidence": ["\"ROTATION\"", "Hold to rotate clockwise", "dispSettings.rotation=(uint8_t)((dispSettings.rotation+1U)%4U)"]
     },
     {
       "id": "display.gauge-colors",
