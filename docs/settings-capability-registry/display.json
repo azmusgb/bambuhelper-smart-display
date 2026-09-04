@@ -94,7 +94,7 @@
       "implementedOnDevice": true,
       "surface": "Display → Expert → Extras → Rotation",
       "browserBindings": [{"route": "/apply", "keys": ["rotation"]}],
-      "physicalEvidence": ["\"ROTATION\"", "Hold to rotate clockwise", "dispSettings.rotation=(uint8_t)((dispSettings.rotation+1U)%4U)"]
+      "physicalEvidence": ["\"ROTATION\"", "HOLD TO ROTATE CLOCKWISE", "dispSettings.rotation=(uint8_t)((dispSettings.rotation+1U)%4U)"]
     },
     {
       "id": "display.gauge-colors",
