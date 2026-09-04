@@ -4,92 +4,74 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 
 ## Current release state
 
-The repository deliberately separates **physically accepted hardware state**, **code present on `main`**, and **static distribution**.
-
-- **Physically accepted hardware baseline:** Workshop OS **v11.19.1 Physical Fit RC2**.
-- **Current code on `main`:** Workshop OS **v11.20 Portal Auth RC1** plus the merged **v11.21 Settings Parity Audit**. v11.21 adds registry/CI enforcement only; it does not replace the pending real-device v11.20 authentication acceptance gate.
-- **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA.
+- **Physically accepted hardware/source baseline:** Workshop OS **v11.22 Display Expert RC1**.
+- **Current code on `main`:** Workshop OS **v11.22 Display Expert RC1** — accepted.
+- **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA (intentionally conservative until a separate binary-channel promotion).
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
-- **Repository governance:** `main` is protected and requires the stable path-aware `merge-gate` status; force pushes and deletion are blocked.
-- **Active development candidate:** **v11.22 Display Expert RC1** on `feature/v11-22-display-expert`. This is a hardware-facing UI/settings candidate and therefore requires real WS350 acceptance before promotion.
+- **Repository governance:** protected `main` with stable path-aware `merge-gate`; force pushes and deletion blocked.
+- **Active firmware candidate:** none.
 
-`releases/current.json` remains authoritative for accepted source, `main` state, and static download channel. A merge or green CI does not by itself replace the physically accepted hardware baseline.
+`releases/current.json` remains authoritative. Green CI alone is not physical acceptance.
 
-## Priority 0 — physically accept or reject v11.20 Portal Auth
+## Completed — v11.20 Portal Auth
 
-v11.20 is already present on `main`. Real-device authentication evidence remains a prerequisite for promoting any descendant firmware candidate.
+Inherited into v11.22 and accepted as part of the current source line:
 
-Required checks:
+- rotating 10-character portal code;
+- boot-scoped authenticated session;
+- protected normal-LAN admin/recovery surfaces;
+- independent recovery-safe-mode path;
+- authenticated framebuffer capture;
+- no development-auth bypass;
+- credential-safe retained capture artifacts.
 
-- normal-LAN browser redirects to custom `/login`;
-- wrong portal code rejected / current System-screen code accepted;
-- portal code absent from ordinary Serial output;
-- logout invalidates the session;
-- reboot invalidates the prior boot-scoped session;
-- authenticated Light / Pause / Resume / Stop / Power and OTA remain functional;
-- signed-out normal-LAN `/recovery` requires authentication;
-- authenticated normal-LAN Recovery works;
-- ordinary setup/fallback AP exposes onboarding essentials without anonymous privileged controls;
-- portal-code login works on AP where protected access is required;
-- deliberate Recovery Safe Mode exposes only intended recovery/status/actions + OTA/reset surfaces;
-- touch, printer settings, display fit, speaker/MIC ECHO, and accepted v11.19.1 behavior remain intact;
-- retained framebuffer/capture artifacts redact the System credential line and retain no secrets.
+## Completed — v11.21 Settings Parity Audit
 
-If these pass, update release metadata so the inherited v11.20 security delta is physically accepted. If they fail materially, keep v11.19.1 accepted and fix/revert before any later candidate can promote.
+The WS350 browser/device configuration contract is now machine-enforced:
 
-## Priority 1 — v11.21 Settings Parity Audit — COMPLETE
-
-Merged to `main`.
-
-The repository now has:
-
-- version-controlled WS350 capability registry under `docs/settings-capability-registry/`;
-- every tracked writable browser setting classified as `PHYSICAL`, `PHYSICAL-EXPERT`, `PORTAL-INPUT`, or `BOARD-N/A`;
-- explicit inventory of non-setting POST command/auth/recovery routes;
-- static registry validation in normal `Validate`;
-- reconstructed-source route/key/evidence validation in the firmware gate;
+- registry under `docs/settings-capability-registry/`;
+- `PHYSICAL`, `PHYSICAL-EXPERT`, `PORTAL-INPUT`, and `BOARD-N/A` classifications;
 - browser route/key drift detection;
-- physical-evidence checks for settings claimed as implemented physically.
+- implementation evidence checks for physical settings;
+- reusable reconstructed-source parity validation in CI.
 
-v11.22 tightens this contract so implemented `PHYSICAL-EXPERT` entries also require source evidence and the reconstructed-source validator advances with v11.20+ candidates rather than being frozen to one version string.
+## Completed — v11.22 Display Expert
 
-## Priority 2 — v11.22 Display Expert RC1 — ACTIVE
+Physically accepted on the WS350 with complete 29-view capture and healthy device interrogation.
 
-Move the remaining safe, visually dense display configuration onto a deeper WS350 expert surface while preserving portal boundaries for text/secrets and preserving fixed safety-state colors.
-
-Candidate scope:
+Implemented:
 
 - curated theme palettes and clock colors;
-- gauge color editor for all existing gauge groups;
-- gauge full-scale ranges;
+- gauge colors and full-scale ranges;
 - gauge smoothing / warning threshold / warning color;
 - glow mode/style/duration/color;
-- 8-slot / 9-slot layout modes and split presentation settings;
-- clock-info toggle;
-- AMS tray-type presentation;
-- seven new deterministic capture views, expanding the physical visual catalog from 22 to 29.
+- extended gauge layout / split presentation;
+- Clock Info toggle;
+- AMS Tray Types presentation.
 
-Explicit boundaries:
+Gauge Labels remain portal input because they are free text. Display Rotation remains deferred.
 
-- custom gauge labels remain `PORTAL-INPUT`;
-- display rotation remains v11.23 because it changes touch mapping;
-- no speculative speed/fan/temperature/AMS printer commands;
-- no change to accepted-source/static-installer metadata until physical promotion criteria are met.
+## Priority 1 — v11.23 Network / Locale / Layout Expert
 
-Promotion requires both inherited v11.20 authentication acceptance and v11.22 Display Expert real-device acceptance.
-
-## Priority 3 — v11.23 Network / Locale / Layout Expert
+Next recommended firmware evolution:
 
 - timezone;
 - coordinated DHCP/static mode;
 - segmented IP / gateway / subnet / DNS entry;
-- guarded display rotation with touch-remap recovery semantics;
-- deeper printer rotation policy;
-- deeper network diagnostics where capability evidence exists.
+- guarded display rotation;
+- printer rotation/split policy;
+- deeper network diagnostics where real capability evidence exists.
 
-Wi-Fi credentials and hostname remain portal input.
+Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
-## Priority 4 — v11.24 Printer / Workshop / Power Configuration
+### v11.23 design constraints
+
+- network configuration must remain atomic: no partially-applied static configuration;
+- display rotation must be guarded and recoverable if the selected geometry breaks touch/display orientation;
+- no secret/free-text keyboard work should be introduced just to satisfy parity;
+- preserve v11.22's 29-view visual acceptance catalog and add new views only when they materially improve acceptance coverage.
+
+## Priority 2 — v11.24 Printer / Workshop / Power Configuration
 
 - light start/finish/failure automation and off delay;
 - printer connection mode and region;
@@ -98,27 +80,27 @@ Wi-Fi credentials and hostname remain portal input.
 - plug type/outlet selection;
 - power currency/tariff.
 
-Text/secrets such as printer identity/access credentials, dashboard URL/note, and plug IP remain portal input.
+Printer identity/access credentials, custom dashboard URL, Workshop note, and plug IP/hostname remain portal input.
 
-## Priority 5 — v11.25 Deeper Waveshare hardware use
+## Priority 3 — v11.25 Deeper Waveshare hardware use
 
 Capability-gated opportunities:
 
-- AXP2101 power telemetry;
-- PCF85063 RTC fallback;
-- QMI8658 motion/orientation behavior;
-- richer ES8311 notification controls;
-- microSD diagnostics/history/export;
-- panel-life-aware backlight and sleep policies;
-- wiring-sensitive buzzer/LED expert controls.
+1. AXP2101 power telemetry;
+2. PCF85063 RTC fallback;
+3. microSD diagnostics/history/export;
+4. QMI8658 motion/orientation behavior;
+5. richer ES8311 notification controls;
+6. panel-life-aware backlight/sleep policies;
+7. wiring-sensitive buzzer/LED expert controls.
 
 Peripheral failure must degrade gracefully and never block printer operation.
 
-## Priority 6 — v11.26 Reliability / soak release
+## Priority 4 — v11.26 Reliability / soak release
 
 No major UX feature family. Focus on:
 
-- 24/48/72-hour soak and memory trend testing;
+- 24/48/72-hour soak and memory trends;
 - Wi-Fi/printer reconnect behavior;
 - malformed/slow payload handling;
 - brownout/interrupted-save behavior;
@@ -150,6 +132,6 @@ Every future release must preserve:
 - no secrets in source, logs, backups, captures, or artifacts;
 - deterministic reconstruction from a pinned upstream baseline;
 - native WS350 plus shared-target CI;
-- real-device acceptance whenever touch, display, audio, recovery, authentication, or control behavior can change.
+- real-device acceptance whenever touch, display, audio, recovery, authentication, network, or control behavior can change.
 
 Quality gates and physical evidence — not planned version numbers — determine promotion.
