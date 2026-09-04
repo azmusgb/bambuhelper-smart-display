@@ -9,12 +9,20 @@ The repository separates the **physically accepted source baseline**, the code c
 | Surface | Current state | Purpose |
 | --- | --- | --- |
 | accepted source baseline | **Workshop OS v11.19.1 — physically accepted** | Last source version accepted on real WS350 hardware. |
-| `main` | **Workshop OS v11.20 Portal Auth RC1 — merged, physical acceptance pending** | Current repository code. It does **not** supersede the accepted v11.19.1 hardware baseline until physical authentication acceptance passes. |
+| `main` | **Workshop OS v11.20 Portal Auth RC1 — merged, physical acceptance pending** | Current repository code plus the merged v11.21 parity contract. It does **not** supersede the accepted v11.19.1 hardware baseline until physical authentication acceptance passes. |
 | `release.json` / Netlify | **Workshop OS v11.19.1 — physically accepted** | Integrity-checked static installer channel. |
 | rollback download | **Smart Home v7.2** | Single immediate rollback retained for recovery safety. |
-| active candidate | **None** | There is currently no open firmware-candidate PR. |
+| active candidate | **Workshop OS v11.22 Display Expert RC1 — PR #74** | Hardware-facing Display Expert candidate; CI and real-device acceptance are required before promotion. |
 
 The accepted source baseline, current `main` state, active candidate and static installer are intentionally independent. A merge does not by itself constitute physical acceptance, and a newer accepted source does not silently replace the conservative download channel.
+
+## Active candidate — Workshop OS v11.22 Display Expert RC1
+
+PR **#74** evolves the current code line into a physical Display Expert candidate. It adds seven expert Display pages for curated theme/clock colors, gauge colors and scales, gauge smoothing/warning behavior, edge glow, extended layout/split controls, Clock Info and AMS Tray Types. The Display Experience becomes 14 pages and the deterministic authenticated capture catalog expands from 22 to 29 views.
+
+Intentional boundaries remain strict: Gauge Labels stay portal-only because they require free-text input; Display Rotation remains deferred to v11.23 because it changes touch mapping; Wi-Fi credentials/hostname remain portal input; no speculative speed/fan/temperature/AMS printer command is added.
+
+v11.22 inherits the v11.20 authentication delta. Therefore promotion requires **both** real-device v11.20 authentication acceptance and v11.22 Display Expert physical acceptance. Green CI alone does not replace the accepted v11.19.1 baseline.
 
 ## Current `main` delta — Workshop OS v11.20 Portal Auth RC1
 
@@ -72,13 +80,15 @@ Firmware is reconstructed deterministically from a pinned upstream BambuHelper b
 2. inherited device contracts;
 3. accepted v11.19 visual correctness;
 4. accepted v11.19.1 rendered-fit contracts;
-5. candidate/current-delta-specific contracts when applicable;
-6. browser JavaScript;
-7. native `ws_lcd_350` PlatformIO build;
-8. shared `jc3248w535` regression build;
-9. Full-image merge and OTA artifact packaging.
+5. v11.20 portal-auth contracts;
+6. active-candidate contracts such as v11.22 Display Expert;
+7. machine-enforced settings parity against reconstructed candidate source;
+8. browser JavaScript;
+9. native `ws_lcd_350` PlatformIO build;
+10. shared `jc3248w535` regression build;
+11. Full-image merge and OTA artifact packaging.
 
-The accepted v11.19.1 baseline was promoted only after those gates and the real-device 22-view physical acceptance passed. The v11.20 code now on `main` still requires its own real-device authentication acceptance before it can replace that baseline in release metadata.
+The accepted v11.19.1 baseline was promoted only after those gates and the real-device 22-view physical acceptance passed. The v11.20 code now on `main` still requires its own real-device authentication acceptance, and v11.22 additionally requires its 29-view/settings physical acceptance before either can replace that baseline in release metadata.
 
 ## Governance and safety
 
@@ -88,7 +98,7 @@ The accepted v11.19.1 baseline was promoted only after those gates and the real-
 - `docs/RELEASE_PROCESS.md` — accepted-source, candidate and static-download promotion lifecycle.
 - `.github/pull_request_template.md` — safety/acceptance checklist for every PR.
 
-`main` should be protected in GitHub so firmware-facing changes require pull requests and successful repository/release/firmware checks before merge. Physical acceptance remains a human hardware gate and must be recorded separately from CI.
+`main` is protected so firmware-facing changes require pull requests and successful repository/release/firmware checks before merge. Physical acceptance remains a human hardware gate and must be recorded separately from CI.
 
 ## License and attribution
 

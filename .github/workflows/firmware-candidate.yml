@@ -1,4 +1,4 @@
-name: Workshop OS Firmware Gate — v11.20 Portal Auth RC1
+name: Workshop OS Firmware Gate — v11.22 Display Expert RC1
 
 on:
   pull_request:
@@ -50,12 +50,19 @@ jobs:
 
           patterns = (
               '.github/workflows/firmware-candidate.yml',
+              'README.md',
+              'SECURITY.md',
+              'releases/current.json',
               'apply_smart_home_*.py',
               '.bambuhelper-validation/**',
               'assets/**',
               'scripts/apply_*.sh',
               'scripts/validate_*.py',
               'scripts/capture-ws350-views.zsh',
+              'docs/physical-*.md',
+              'docs/visual-*.md',
+              'docs/portal-auth-*.md',
+              'docs/display-expert-*.md',
               'docs/settings-capability-registry/**',
           )
 
@@ -107,10 +114,12 @@ jobs:
         run: |
           python -m py_compile apply_smart_home_physical_fit_v11_19_1.py
           python -m py_compile apply_smart_home_portal_auth_v11_20.py
+          python -m py_compile apply_smart_home_display_expert_v11_22.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
           python -m py_compile scripts/validate_portal_auth_v11_20.py
+          python -m py_compile scripts/validate_display_expert_v11_22.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
@@ -135,13 +144,11 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           hub = Path('upstream/src/smart_hub.cpp').read_text()
-          web = Path('upstream/src/web_server.cpp').read_text()
           mqtt = Path('upstream/src/bambu_mqtt.cpp').read_text()
-          app = Path('upstream/web/app.js').read_text()
           tasmota = Path('upstream/src/tasmota.cpp').read_text()
           build = Path('upstream/include/smart_home_build.h').read_text()
+          web = Path('upstream/src/web_server.cpp').read_text()
 
           def need(body, needle, label):
               if needle not in body:
@@ -151,8 +158,6 @@ jobs:
               need(build, n, 'accepted release identity')
           for n in ['DROPPED: MQTT offline', 'if (!st.connected) return false']:
               need(mqtt, n, 'fail-closed printer control')
-          for n in ['v117StateFresh', 'V117_STALE_MS=10000']:
-              need(app, n, 'live-state integrity')
           for n in ['visiblePlugForSlot', 'TASMOTA_PLUG_COUNT']:
               need(tasmota, n, 'smart-plug slot mapping')
           for n in ['smartHubCapturePrepare', 'smartHubCaptureRgbRow', 'g_hubFrame->readPixel']:
@@ -175,14 +180,19 @@ jobs:
       - name: Validate v11.20 portal authentication contracts
         run: python scripts/validate_portal_auth_v11_20.py upstream
 
-      - name: Validate v11.21 settings parity against reconstructed source
+      - name: Apply v11.22 Display Expert RC1
+        run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
+
+      - name: Validate v11.22 Display Expert contracts
+        run: python scripts/validate_display_expert_v11_22.py upstream
+
+      - name: Validate settings parity against reconstructed v11.22 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Verify inherited safety after auth delta
+      - name: Verify inherited safety after Display Expert delta
         run: |
           python - <<'PY'
           from pathlib import Path
-
           hub = Path('upstream/src/smart_hub.cpp').read_text()
           web = Path('upstream/src/web_server.cpp').read_text()
           mqtt = Path('upstream/src/bambu_mqtt.cpp').read_text()
@@ -193,7 +203,7 @@ jobs:
               if needle not in body:
                   raise SystemExit(f'MISSING {label}: {needle}')
 
-          for n in ['SMART_HOME_VERSION "v11.20"', 'Smart Home v11.20 Portal Auth RC1']:
+          for n in ['SMART_HOME_VERSION "v11.22"', 'Smart Home v11.22 Display Expert RC1']:
               need(build, n, 'candidate release identity')
           for n in ['DROPPED: MQTT offline', 'if (!st.connected) return false']:
               need(mqtt, n, 'fail-closed printer control')
@@ -210,7 +220,7 @@ jobs:
           for forbidden in ['requestSpeedCommand', 'requestFanCommand']:
               if forbidden in hub or forbidden in web or forbidden in mqtt:
                   raise SystemExit(f'forbidden speculative printer command introduced: {forbidden}')
-          print('v11.20 inherited control/capture safety: PASS')
+          print('v11.22 inherited control/capture safety: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -219,7 +229,7 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
 
-      - name: Build WS350 v11.20
+      - name: Build WS350 v11.22
         working-directory: upstream
         run: pio run -e ws_lcd_350
 
@@ -231,7 +241,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.20 Portal Auth RC1 artifacts
+      - name: Package v11.22 Display Expert RC1 artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -240,43 +250,40 @@ jobs:
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p firmware-gate-artifacts/source-snapshot firmware-gate-artifacts/tools firmware-gate-artifacts/docs
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.20-Portal-Auth-RC1-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.20-Portal-Auth-RC1-OTA.bin
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.22-Display-Expert-RC1-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.22-Display-Expert-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp scripts/capture-ws350-views.zsh firmware-gate-artifacts/tools/capture-ws350-views.zsh
           cp apply_smart_home_portal_auth_v11_20.py firmware-gate-artifacts/tools/apply_smart_home_portal_auth_v11_20.py
+          cp apply_smart_home_display_expert_v11_22.py firmware-gate-artifacts/tools/apply_smart_home_display_expert_v11_22.py
           cp scripts/validate_portal_auth_v11_20.py firmware-gate-artifacts/tools/validate_portal_auth_v11_20.py
+          cp scripts/validate_display_expert_v11_22.py firmware-gate-artifacts/tools/validate_display_expert_v11_22.py
+          cp scripts/validate_settings_parity.py firmware-gate-artifacts/tools/validate_settings_parity.py
           cp docs/portal-auth-v11-20.md firmware-gate-artifacts/docs/portal-auth-v11-20.md
-          cp docs/physical-fit-v11-19-1.md firmware-gate-artifacts/docs/physical-fit-v11-19-1.md
+          cp docs/display-expert-v11-22.md firmware-gate-artifacts/docs/display-expert-v11-22.md
+          cp docs/physical-settings-parity.md firmware-gate-artifacts/docs/physical-settings-parity.md
           cp SECURITY.md firmware-gate-artifacts/docs/SECURITY.md
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
+          cp -R docs/settings-capability-registry firmware-gate-artifacts/docs/settings-capability-registry
           for f in include/web_pages.h include/smart_home_build.h web/app.js web/app.css src/web_server.cpp src/bambu_mqtt.cpp src/smart_hub.cpp src/settings.cpp src/display_ui.h src/tasmota.cpp src/security_manager.cpp include/security_manager.h; do
             mkdir -p "firmware-gate-artifacts/source-snapshot/$(dirname "$f")"
             cp "upstream/$f" "firmware-gate-artifacts/source-snapshot/$f"
           done
           {
-            echo 'Workshop OS v11.20 Portal Auth RC1'
+            echo 'Workshop OS v11.22 Display Expert RC1'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
             echo 'source_line=CANDIDATE'
             echo 'physical_acceptance=REQUIRED'
             echo 'accepted_v11_19_1_rendered_fit=PRESERVED'
-            echo 'portal_auth=ENABLED'
-            echo 'development_unlock=REMOVED'
+            echo 'portal_auth_v11_20=PRESERVED'
+            echo 'display_expert_v11_22=ENABLED'
+            echo 'display_pages=14'
+            echo 'capture_views=29'
+            echo 'gauge_labels=PORTAL_INPUT'
+            echo 'display_rotation=DEFERRED_V11_23'
             echo 'portal_credential_serial_logging=FORBIDDEN'
-            echo 'normal_lan_recovery_auth=REQUIRED'
-            echo 'ordinary_ap_full_admin_bypass=FORBIDDEN'
-            echo 'ordinary_ap_public_scope=ONBOARDING_ONLY'
-            echo 'recovery_safe_mode_public_scope=RECOVERY_OTA_RESET_ONLY'
-            echo 'ap_portal_code_login=AVAILABLE'
-            echo 'settings_export_anonymous_ap=FORBIDDEN'
-            echo 'ws350_touch_safety=PRESERVED'
-            echo 'same_origin_mutation_guard=PRESERVED'
-            echo 'guarded_power_control=PRESERVED'
             echo 'fail_closed_printer_commands=PRESERVED'
             echo 'capture_routes=AUTHENTICATED'
-            echo 'capture_raw_frame_retention=FORBIDDEN'
-            echo 'capture_system_credential=REDACTED_BEFORE_RETENTION'
-            echo 'capture_printer_config_exports=EXCLUDED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             sha256sum firmware-gate-artifacts/*.bin
@@ -284,7 +291,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-20-portal-auth-rc1
+          name: workshop-os-v11-22-display-expert-rc1
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/

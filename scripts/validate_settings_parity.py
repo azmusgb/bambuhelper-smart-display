@@ -66,6 +66,15 @@ def function_body(text: str, name: str) -> str:
     return text[m.end(): i - 1]
 
 
+def require_physical_evidence(item: dict, sid: str) -> None:
+    evidence = item.get("physicalEvidence")
+    if not isinstance(evidence, list) or not evidence:
+        raise ContractError(f"{sid}: implemented physical setting requires physicalEvidence")
+    for marker in evidence:
+        if not isinstance(marker, str) or not marker:
+            raise ContractError(f"{sid}: physicalEvidence markers must be non-empty strings")
+
+
 def validate_static(data: dict) -> None:
     if data.get("schemaVersion") != 1:
         raise ContractError("schemaVersion must be 1")
@@ -113,11 +122,11 @@ def validate_static(data: dict) -> None:
         if cls == "PHYSICAL":
             if not implemented:
                 raise ContractError(f"{sid}: PHYSICAL must be implementedOnDevice=true")
-            evidence = item.get("physicalEvidence")
-            if not isinstance(evidence, list) or not evidence:
-                raise ContractError(f"{sid}: PHYSICAL requires physicalEvidence")
+            require_physical_evidence(item, sid)
         elif cls == "PHYSICAL-EXPERT":
-            if not implemented:
+            if implemented:
+                require_physical_evidence(item, sid)
+            else:
                 if not item.get("plannedRelease"):
                     raise ContractError(
                         f"{sid}: unimplemented PHYSICAL-EXPERT requires plannedRelease"
@@ -225,6 +234,13 @@ def route_setting_keys(web: str, route: str, handler: str) -> set[str]:
     return direct_arg_keys(body)
 
 
+def parse_build_version(build: str) -> tuple[int, int, int]:
+    m = re.search(r'SMART_HOME_VERSION\s+"v(\d+)\.(\d+)(?:\.(\d+))?"', build)
+    if not m:
+        raise ContractError("reconstructed source does not expose SMART_HOME_VERSION")
+    return int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+
+
 def validate_against_source(data: dict, repo: Path) -> None:
     web_path = repo / "src" / "web_server.cpp"
     hub_path = repo / "src" / "smart_hub.cpp"
@@ -237,8 +253,11 @@ def validate_against_source(data: dict, repo: Path) -> None:
     hub = hub_path.read_text(encoding="utf-8", errors="replace")
     build = build_path.read_text(encoding="utf-8", errors="replace")
 
-    if 'SMART_HOME_VERSION "v11.20"' not in build:
-        raise ContractError("settings parity audit currently expects reconstructed v11.20 source")
+    version = parse_build_version(build)
+    if version < (11, 20, 0):
+        raise ContractError(
+            f"settings parity audit expects reconstructed v11.20+ source, got v{version[0]}.{version[1]}.{version[2]}"
+        )
 
     post_routes = parse_post_routes(web)
     actual_routes = set(post_routes)
@@ -277,7 +296,9 @@ def validate_against_source(data: dict, repo: Path) -> None:
             )
 
     for item in data["settings"]:
-        if item["classification"] != "PHYSICAL":
+        if not item.get("implementedOnDevice"):
+            continue
+        if item["classification"] not in {"PHYSICAL", "PHYSICAL-EXPERT"}:
             continue
         for marker in item["physicalEvidence"]:
             if marker not in hub:
@@ -287,7 +308,8 @@ def validate_against_source(data: dict, repo: Path) -> None:
 
     print(
         "Settings parity reconstructed-source contract: PASS "
-        f"({len(setting_routes)} settings routes, {len(non_setting_routes)} non-setting POST routes)"
+        f"(v{version[0]}.{version[1]}.{version[2]}, "
+        f"{len(setting_routes)} settings routes, {len(non_setting_routes)} non-setting POST routes)"
     )
 
 

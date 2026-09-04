@@ -7,17 +7,17 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 The repository deliberately separates **physically accepted hardware state**, **code present on `main`**, and **static distribution**.
 
 - **Physically accepted hardware baseline:** Workshop OS **v11.19.1 Physical Fit RC2**.
-- **Current code on `main`:** Workshop OS **v11.20 Portal Auth RC1** — merged and CI-clean, but real-device authentication acceptance is still pending.
+- **Current code on `main`:** Workshop OS **v11.20 Portal Auth RC1** plus the merged **v11.21 Settings Parity Audit**. v11.21 adds registry/CI enforcement only; it does not replace the pending real-device v11.20 authentication acceptance gate.
 - **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA.
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
 - **Repository governance:** `main` is protected and requires the stable path-aware `merge-gate` status; force pushes and deletion are blocked.
-- **Active development work:** **v11.21 Settings Parity Audit** on `feature/v11-21-settings-parity-audit`. This is a registry/CI audit, not a new firmware behavior delta, and must not replace the physical v11.20 acceptance gate.
+- **Active development candidate:** **v11.22 Display Expert RC1** on `feature/v11-22-display-expert`. This is a hardware-facing UI/settings candidate and therefore requires real WS350 acceptance before promotion.
 
 `releases/current.json` remains authoritative for accepted source, `main` state, and static download channel. A merge or green CI does not by itself replace the physically accepted hardware baseline.
 
 ## Priority 0 — physically accept or reject v11.20 Portal Auth
 
-v11.20 is already present on `main`. The next release action is real-device validation, not another merge.
+v11.20 is already present on `main`. Real-device authentication evidence remains a prerequisite for promoting any descendant firmware candidate.
 
 Required checks:
 
@@ -35,46 +35,56 @@ Required checks:
 - touch, printer settings, display fit, speaker/MIC ECHO, and accepted v11.19.1 behavior remain intact;
 - retained framebuffer/capture artifacts redact the System credential line and retain no secrets.
 
-If these pass, update release metadata so v11.20 becomes the accepted source baseline. If they fail materially, keep v11.19.1 accepted and fix or revert the v11.20 delta.
+If these pass, update release metadata so the inherited v11.20 security delta is physically accepted. If they fail materially, keep v11.19.1 accepted and fix/revert before any later candidate can promote.
 
-## Priority 1 — v11.21 Settings Parity Audit
+## Priority 1 — v11.21 Settings Parity Audit — COMPLETE
 
-Make browser/device configuration parity machine-enforced before adding another feature family.
+Merged to `main`.
 
-Implemented on the v11.21 branch:
+The repository now has:
 
 - version-controlled WS350 capability registry under `docs/settings-capability-registry/`;
 - every tracked writable browser setting classified as `PHYSICAL`, `PHYSICAL-EXPERT`, `PORTAL-INPUT`, or `BOARD-N/A`;
-- explicit inventory of non-setting POST command/auth/recovery routes so new mutations cannot hide in the web surface;
+- explicit inventory of non-setting POST command/auth/recovery routes;
 - static registry validation in normal `Validate`;
-- reconstructed-source validation in the Workshop OS firmware gate;
+- reconstructed-source route/key/evidence validation in the firmware gate;
 - browser route/key drift detection;
-- physical-evidence checks for settings claimed as `PHYSICAL`;
-- stale `PHYSICAL-NEXT` documentation retired.
+- physical-evidence checks for settings claimed as implemented physically.
 
-The v11.21 audit may be reviewed and CI-validated while v11.20 physical acceptance is pending, but it should not be promoted as a new physically accepted firmware release because it intentionally introduces no device firmware behavior change.
+v11.22 tightens this contract so implemented `PHYSICAL-EXPERT` entries also require source evidence and the reconstructed-source validator advances with v11.20+ candidates rather than being frozen to one version string.
 
-## Priority 2 — v11.22 Display Expert
+## Priority 2 — v11.22 Display Expert RC1 — ACTIVE
 
-Complete visually dense but safe physical settings:
+Move the remaining safe, visually dense display configuration onto a deeper WS350 expert surface while preserving portal boundaries for text/secrets and preserving fixed safety-state colors.
+
+Candidate scope:
 
 - curated theme palettes and clock colors;
-- gauge colors and full-scale ranges;
+- gauge color editor for all existing gauge groups;
+- gauge full-scale ranges;
 - gauge smoothing / warning threshold / warning color;
 - glow mode/style/duration/color;
-- gauge layout and extended slot modes;
+- 8-slot / 9-slot layout modes and split presentation settings;
 - clock-info toggle;
-- AMS tray-type presentation.
+- AMS tray-type presentation;
+- seven new deterministic capture views, expanding the physical visual catalog from 22 to 29.
 
-Custom gauge labels remain portal input unless an intentional on-device keyboard is added.
+Explicit boundaries:
+
+- custom gauge labels remain `PORTAL-INPUT`;
+- display rotation remains v11.23 because it changes touch mapping;
+- no speculative speed/fan/temperature/AMS printer commands;
+- no change to accepted-source/static-installer metadata until physical promotion criteria are met.
+
+Promotion requires both inherited v11.20 authentication acceptance and v11.22 Display Expert real-device acceptance.
 
 ## Priority 3 — v11.23 Network / Locale / Layout Expert
 
 - timezone;
 - coordinated DHCP/static mode;
 - segmented IP / gateway / subnet / DNS entry;
-- guarded display rotation;
-- printer rotation/split policy;
+- guarded display rotation with touch-remap recovery semantics;
+- deeper printer rotation policy;
 - deeper network diagnostics where capability evidence exists.
 
 Wi-Fi credentials and hostname remain portal input.

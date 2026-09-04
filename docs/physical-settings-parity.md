@@ -2,32 +2,33 @@
 
 This document is the human-readable contract for moving BambuHelper / Workshop OS configuration onto the WS350 touchscreen without turning the normal Home / Printer / Workshop surfaces into an expert settings form.
 
-The **machine-authoritative inventory** now lives under [`docs/settings-capability-registry/`](settings-capability-registry/). `scripts/validate_settings_parity.py` validates that registry statically on every normal `Validate` run and, in the firmware gate, compares it against the fully reconstructed v11.20 `web_server.cpp` mutation surface and physical `smart_hub.cpp` evidence.
+The **machine-authoritative inventory** lives under [`docs/settings-capability-registry/`](settings-capability-registry/). `scripts/validate_settings_parity.py` validates that registry statically on every normal `Validate` run and, in the firmware gate, compares it against the fully reconstructed browser mutation surface and physical `smart_hub.cpp` evidence.
 
 ## Classification contract
 
 Every writable browser setting applicable to WS350 must be classified as exactly one of:
 
-- **PHYSICAL** — directly editable on the WS350 today.
-- **PHYSICAL-EXPERT** — applicable to WS350 and assigned to a deeper physical expert surface; an unimplemented entry must have a planned release and explicit reason.
-- **PORTAL-INPUT** — intentionally remains in the local portal because it requires free text, secrets, URLs, or a keyboard-quality input experience.
-- **BOARD-N/A** — not applicable to WS350 hardware/build shape and must not be surfaced as though it were.
+- **PHYSICAL** — directly editable on the WS350 normal settings surfaces.
+- **PHYSICAL-EXPERT** — directly editable on a deeper physical expert surface, or explicitly planned there with a reason and release target.
+- **PORTAL-INPUT** — intentionally remains in the local portal because it requires free text, secrets, URLs, or keyboard-quality input.
+- **BOARD-N/A** — not applicable to the WS350 hardware/build shape.
 
-The old `PHYSICAL-NEXT` state is retired. Future work is represented explicitly as `PHYSICAL-EXPERT` + `implementedOnDevice=false` + `plannedRelease`.
+`PHYSICAL-NEXT` is retired. CI now requires source evidence for both implemented **PHYSICAL** and implemented **PHYSICAL-EXPERT** claims.
 
-## What CI now enforces
+## What CI enforces
 
-The v11.21 parity validator fails when:
+The parity validator fails when:
 
-1. a browser POST mutation route appears without being classified as a settings route or explicitly documented non-setting command/auth/recovery route;
+1. a browser POST mutation route appears without classification as a settings route or documented non-setting command/auth/recovery route;
 2. a writable field appears or disappears from a tracked settings route without a registry update;
 3. a logical setting has an invalid or duplicate classification/binding;
-4. `PHYSICAL` is claimed without physical implementation evidence in reconstructed `smart_hub.cpp`;
-5. `PHYSICAL-EXPERT`, `PORTAL-INPUT`, or `BOARD-N/A` lacks the required planning/reason evidence.
+4. an implemented physical or physical-expert setting lacks implementation evidence in reconstructed `smart_hub.cpp`;
+5. an unimplemented physical-expert setting lacks an explicit reason and planned release;
+6. a portal-input or board-not-applicable entry violates its boundary.
 
-This turns parity from a prose checklist into a regression contract.
+The reconstructed-source check accepts Workshop OS v11.20 and later so the same registry contract advances with new candidate layers.
 
-## Already PHYSICAL on WS350
+## Existing PHYSICAL surfaces
 
 ### Display
 
@@ -51,7 +52,7 @@ This turns parity from a prose checklist into a regression contract.
 
 ### Alerts, locale, and network essentials
 
-- HMS / alert controls exposed by the Alerts and Signals pages
+- HMS / alert controls exposed by Alerts and Signals
 - 12/24-hour time
 - date format
 - Show IP at startup
@@ -85,36 +86,87 @@ This turns parity from a prose checklist into a regression contract.
 
 Printer commands remain fail-closed and selected-printer scoped. Unproven speed/fan/temperature/AMS payloads remain intentionally absent.
 
-## v11.22 — Display Expert
+## v11.22 Display Expert RC1
 
-Planned `PHYSICAL-EXPERT` work:
+The v11.22 candidate implements the previously planned display-expert family as seven additional physical pages under **Display**. The capture catalog expands from **22 to 29 deterministic views**.
 
-- curated theme palettes and clock colors;
-- gauge colors;
-- gauge full-scale values;
-- gauge smoothing and warning threshold/color;
-- glow mode/style/duration/color;
-- gauge layout / extended slot modes;
-- clock-info toggle;
-- AMS tray-type presentation.
+### Theme
 
-Custom gauge labels remain **PORTAL-INPUT** because they are free text.
+- curated palettes: Factory, Workshop, Ocean, Mono;
+- independent curated clock time color;
+- independent curated clock date color;
+- one-tap factory palette reset.
+
+Theme presets mutate only already-authoritative user-configurable theme fields. Alarm semantics remain fixed: ERROR red, PAUSED/CANCELED yellow, and other safety-state colors are not converted into theme choices.
+
+### Gauge Colors
+
+- select any of the 12 existing gauge color groups;
+- edit arc color;
+- edit label color;
+- edit value color;
+- long press moves backward through the curated palette.
+
+### Gauge Scales
+
+- nozzle: 100–400 °C presets;
+- bed: 40–150 °C presets;
+- chamber: 30–120 °C presets;
+- power: 100–5000 W presets.
+
+These use the existing persisted scale fields and remain within the upstream-supported ranges.
+
+### Gauge Behavior
+
+- smoothing: Off / Slow / Normal / Fast;
+- warning threshold: Off or 50–100% presets;
+- warning color: curated palette;
+- restore gauge behavior defaults.
+
+### Edge Glow
+
+- mode: Off / Single / Rainbow;
+- style: Sweep / Pulse / Storm;
+- duration: Burst / Until Dismissed / Reminder;
+- single-color accent selection.
+
+### Layout
+
+- 8-slot landscape mode;
+- 9-slot portrait mode;
+- split view;
+- force split.
+
+### Extras
+
+- Clock Info toggle;
+- AMS Tray Types toggle;
+- explicit read-only reminder that Gauge Labels remain **PORTAL-INPUT**;
+- explicit read-only reminder that Display Rotation is deferred to **v11.23**.
+
+## Intentional v11.22 boundaries
+
+- **Gauge labels stay PORTAL-INPUT.** They are arbitrary UTF-8 free text and there is no on-device keyboard.
+- **Display rotation stays unimplemented physically until v11.23.** Rotation changes touch mapping and needs a guarded remap/rollback flow.
+- **Wi-Fi credentials and hostname remain PORTAL-INPUT.**
+- **No printer command family is added.** Speed/fan/temperature/AMS command payloads remain absent unless independently evidenced and safety-reviewed.
+- v11.22 is a hardware-facing UI/settings change, so green CI does **not** make it physically accepted.
 
 ## v11.23 — Network / Locale / Layout Expert
 
-Planned `PHYSICAL-EXPERT` work:
+Planned physical-expert work:
 
 - timezone;
 - coordinated DHCP/static mode;
 - IP / gateway / subnet / DNS segmented entry;
 - guarded display rotation;
-- printer rotation/split policy.
+- printer rotation policy and deeper network diagnostics.
 
 Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
 ## v11.24 — Printer / Workshop / Power Configuration
 
-Planned `PHYSICAL-EXPERT` work:
+Planned physical-expert work:
 
 - light start/finish/failure automation and off delay;
 - printer connection mode and region;
