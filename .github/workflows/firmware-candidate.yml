@@ -56,6 +56,7 @@ jobs:
               'scripts/apply_*.sh',
               'scripts/validate_*.py',
               'scripts/capture-ws350-views.zsh',
+              'docs/settings-capability-registry/**',
           )
 
           changed = [
@@ -110,6 +111,7 @@ jobs:
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
           python -m py_compile scripts/validate_portal_auth_v11_20.py
+          python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
           bash -n scripts/capture-ws350-views.zsh
@@ -172,6 +174,9 @@ jobs:
 
       - name: Validate v11.20 portal authentication contracts
         run: python scripts/validate_portal_auth_v11_20.py upstream
+
+      - name: Validate v11.21 settings parity against reconstructed source
+        run: python scripts/validate_settings_parity.py --repo upstream
 
       - name: Verify inherited safety after auth delta
         run: |
