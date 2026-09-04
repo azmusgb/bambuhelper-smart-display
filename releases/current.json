@@ -17,16 +17,7 @@
     "rollbackVersion": "7.1",
     "note": "Static installer remains intentionally conservative and is promoted separately from the accepted source line."
   },
-  "candidate": {
-    "version": "11.20",
-    "branch": "security/v11-20-portal-auth",
-    "pullRequest": 67,
-    "name": "Workshop OS v11.20 Portal Auth RC1",
-    "status": "physical-acceptance-required",
-    "purpose": "Restore rotating portal-code and boot-scoped session authentication for normal LAN access while preserving independent Recovery AP access.",
-    "exactHeadCi": "required",
-    "physicalAcceptance": "required"
-  },
+  "candidate": null,
   "validation": {
     "exactHeadCi": "passed",
     "ws350Build": "passed",
