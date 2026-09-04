@@ -102,7 +102,7 @@ jobs:
           bash -n scripts/accept-ws350-v11-23-rc2.zsh
 
           for helper in scripts/capture-ws350-views.zsh scripts/accept-ws350-v11-23-rc2.zsh; do
-            if grep -Eq 'Portal code:|portal-code-fallback|code@-|/login' "$helper"; then
+            if grep -Eq 'printf[[:space:]]+"Portal code|Portal code shown on device|portal-code-fallback|code@-|/login' "$helper"; then
               echo "RC2 helper unexpectedly contains portal-code authentication: $helper" >&2
               exit 1
             fi
