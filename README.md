@@ -12,9 +12,27 @@ The repository deliberately separates the **physically accepted source baseline*
 | `main` | **Workshop OS v11.22 Display Expert RC1 — accepted** | PR #74 merged after exact-head CI and real-device acceptance. |
 | `release.json` / Netlify | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative static installer retained until its binary-channel promotion is performed separately. |
 | static rollback download | **Smart Home v7.2** | Current static-channel rollback while v11.19.1 remains the published installer. |
-| active candidate | **None** | No firmware candidate is currently open. |
+| active candidate | **Workshop OS v11.23 Network Locale Layout RC1 — PR #76** | Hardware candidate; exact-head CI and physical WS350 acceptance are required before promotion. |
 
 A merge is not physical acceptance by itself. `releases/current.json` is authoritative for accepted source, candidate state, `main` state, and the static download channel.
+
+## Active candidate — Workshop OS v11.23 Network Locale Layout RC1
+
+PR **#76** evolves the accepted v11.22 source line into a guarded physical Network / Locale / Layout Expert candidate.
+
+Candidate scope:
+
+- physical timezone selection using the existing supported timezone database;
+- coordinated DHCP/static mode;
+- segmented IP / gateway / subnet / DNS editing staged on-device;
+- no network mutation until the Review page is deliberately held to apply;
+- restart after an accepted network commit so addressing changes are applied coherently;
+- guarded hold-only display rotation;
+- three additional authenticated framebuffer views for Time & Locale, Address Edit, and Network Review;
+- Wi-Fi credentials and hostname remain portal-only;
+- no speculative speed, fan, temperature, or AMS printer commands.
+
+The candidate is **not accepted** until exact-head CI and real-device network/touch/display acceptance pass. v11.22 remains the authoritative physically accepted source baseline.
 
 ## Accepted source — Workshop OS v11.22 Display Expert RC1
 
@@ -32,43 +50,25 @@ Acceptance evidence includes:
 
 ### v11.22 Display Expert
 
-The physical Display Experience now includes 14 pages, adding expert surfaces for:
+The physical Display Experience includes 14 pages, with expert surfaces for curated theme palettes, clock colors, gauge colors/scales/behavior, glow, layout, Clock Info, and AMS Tray Types.
 
-- curated theme palettes and clock colors;
-- gauge arc/label/value colors;
-- nozzle, bed, chamber, and power full-scale values;
-- gauge smoothing and warning threshold/color;
-- glow mode/style/duration/color;
-- 8-slot landscape, 9-slot portrait, and split presentation;
-- Clock Info and AMS Tray Types.
-
-Free-text Gauge Labels remain portal-only. Guarded display rotation remains assigned to v11.23.
+Free-text Gauge Labels remain portal-only.
 
 ### Inherited safety and security
 
-v11.22 preserves the v11.20 rotating portal-code and boot-scoped session boundary plus the accepted v11.19.1 control and recovery behavior. Printer control remains selected-printer scoped and fail-closed. Chamber Light, Pause/Resume, guarded Stop, and mapped Printer Power retain their established safeguards.
+The candidate preserves the v11.20 rotating portal-code and boot-scoped session boundary plus the accepted v11.19.1 control and recovery behavior. Printer control remains selected-printer scoped and fail-closed. Chamber Light, Pause/Resume, guarded Stop, and mapped Printer Power retain their established safeguards.
 
 Speed, fan, temperature, AMS, or other printer commands are not added without a proven backend path and explicit safety semantics.
 
 ## Static installer
 
-The static installer intentionally remains **Workshop OS v11.19.1 Physical Fit RC2** for the moment, with **Smart Home v7.2** as its rollback. Accepted source and static distribution are independent release surfaces; advancing accepted source does not silently rewrite the published binary channel.
+The static installer intentionally remains **Workshop OS v11.19.1 Physical Fit RC2**, with **Smart Home v7.2** as rollback. Accepted source and static distribution are independent release surfaces.
 
 For a normal existing-device update, use the application/OTA image. A Full image belongs only at flash offset `0x0` during intentional USB recovery/full flash.
 
 ## Validation model
 
-Firmware is reconstructed deterministically from pinned upstream BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the versioned `apply_smart_home_*.py` evolution stack. The reusable firmware gate validates:
-
-1. deterministic reconstruction and candidate tooling;
-2. inherited device and control contracts;
-3. accepted visual/rendered-fit boundaries;
-4. portal-auth contracts;
-5. candidate-specific behavior contracts;
-6. browser JavaScript;
-7. native `ws_lcd_350` build;
-8. shared `jc3248w535` regression build;
-9. Full/OTA artifact generation and provenance.
+Firmware is reconstructed deterministically from pinned upstream BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the versioned `apply_smart_home_*.py` evolution stack. The reusable firmware gate validates deterministic reconstruction, inherited safety/security, candidate-specific contracts, settings parity, browser JavaScript, native `ws_lcd_350`, shared `jc3248w535`, and Full/OTA artifact provenance.
 
 `docs/settings-capability-registry/` is the machine-authoritative WS350 browser/device settings parity inventory.
 
