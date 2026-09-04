@@ -43,6 +43,12 @@ def patch_security(repo: Path) -> None:
     )
     text = replace_once(
         text,
+        '  Serial.println("Smart Home v8.3 RC3 portal session security enabled");\n',
+        '  Serial.println("Workshop OS portal session security enabled");\n',
+        "refresh portal security serial identity",
+    )
+    text = replace_once(
+        text,
         '''static bool portalAuthRequired() {\n#if defined(BOARD_IS_WS350) && defined(SMART_HOME_DEV_UNLOCK) && SMART_HOME_DEV_UNLOCK\n  return false;\n#else\n  return true;\n#endif\n}\n\n''',
         '',
         "remove dev auth policy",
