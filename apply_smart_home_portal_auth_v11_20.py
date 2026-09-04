@@ -121,8 +121,14 @@ def patch_recovery(repo: Path) -> None:
     text = p.read_text(encoding="utf-8")
     text = replace_once(
         text,
+        'server.on("/recovery", HTTP_GET, handleRecoveryPage);',
+        'SECURE_GET("/recovery", handleRecoveryPage);',
+        "normal-LAN recovery page authentication",
+    )
+    text = replace_once(
+        text,
         "<div class='sub'>Smart Home independent recovery plane. This page does not depend on the normal portal JavaScript.</div>",
-        "<div class='sub'>Workshop OS independent recovery plane. On normal LAN, actions use your portal-code session; Recovery AP remains independently accessible.</div>",
+        "<div class='sub'>Workshop OS independent recovery plane. On normal LAN, access uses your portal-code session; Recovery AP remains independently accessible.</div>",
         "recovery auth guidance",
     )
     text = replace_once(
