@@ -55,6 +55,12 @@ def main() -> int:
         "SMART_HOME_DEV_UNLOCK",
     ]:
         forbid(security, marker, "development auth bypass")
+    for marker in [
+        'Serial.printf("Portal code:',
+        'Serial.print(g_portalCode',
+        'Serial.println(g_portalCode',
+    ]:
+        forbid(security, marker, "portal credential disclosure to serial logs")
 
     for marker in [
         'server.on("/login", HTTP_GET, handlePortalLoginPage)',
@@ -99,6 +105,7 @@ def main() -> int:
 
     print("Workshop OS v11.20 portal authentication contracts: PASS")
     print("LAN portal authentication: REQUIRED")
+    print("Portal credential in serial logs: FORBIDDEN")
     print("Normal-LAN Recovery page authentication: REQUIRED")
     print("Recovery AP auth bypass: PRESERVED")
     print("WS350 physical touch safety: PRESERVED")
