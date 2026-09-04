@@ -8,6 +8,7 @@ OUT="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP"
 COOKIE="$(mktemp -t bambu-capture-cookie)"
 LOGIN_BODY="$(mktemp -t bambu-capture-login)"
 CATALOG="$OUT/views.json"
+chmod 600 "$COOKIE" "$LOGIN_BODY"
 
 cleanup() {
   rm -f "$COOKIE" "$LOGIN_BODY"
@@ -28,8 +29,10 @@ if [ "${#CODE}" -ne 10 ]; then
   exit 1
 fi
 
-HTTP="$({ curl -sS -X POST -c "$COOKIE" -o "$LOGIN_BODY" -w '%{http_code}' \
-  --data-urlencode "code=$CODE" "$BASE/login"; } || true)"
+# Feed the credential over stdin rather than a curl command-line argument so it
+# is not exposed through process inspection while login is in flight.
+HTTP="$({ printf '%s' "$CODE" | curl -sS -X POST -c "$COOKIE" -o "$LOGIN_BODY" -w '%{http_code}' \
+  --data-urlencode 'code@-' "$BASE/login"; } || true)"
 if [ "$HTTP" != "303" ]; then
   echo "LOGIN FAILED - HTTP $HTTP"
   cat "$LOGIN_BODY" 2>/dev/null || true
@@ -45,7 +48,8 @@ echo "LOGIN OK"
 curl -fsS -b "$COOKIE" "$BASE/recovery/status" > "$OUT/state/recovery-status.json"
 curl -fsS -b "$COOKIE" "$BASE/hardware/health?slot=0" > "$OUT/state/hardware-health.json"
 curl -fsS -b "$COOKIE" "$BASE/status?slot=0" > "$OUT/state/printer-status-slot0.json"
-curl -fsS -b "$COOKIE" "$BASE/printer/config?slot=0" > "$OUT/state/printer-config-slot0.json"
+# Deliberately do not capture /printer/config or settings exports: those data
+# models can contain printer access codes and other configuration secrets.
 curl -fsS -b "$COOKIE" "$BASE/power/stats" > "$OUT/state/power-stats.json"
 curl -fsS -b "$COOKIE" "$BASE/hub/views" > "$CATALOG"
 
@@ -166,8 +170,10 @@ rm -f "$OUT/view-list.tsv"
 
 cat > "$OUT/SECURITY-NOTE.txt" <<'EOF'
 The System framebuffer's live portal-code line was redacted automatically before
-both PPM and PNG retention. The portal credential is not intended to appear in
-this capture bundle. Do not manually add unredacted System screenshots.
+both PPM and PNG retention. The login credential is passed to curl over stdin,
+not in its command-line arguments. Printer configuration/settings exports are
+intentionally excluded because they may contain access codes or other secrets.
+Do not manually add unredacted System screenshots or configuration exports.
 EOF
 
 ZIP="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP.zip"
@@ -182,3 +188,4 @@ echo "Folder: $OUT"
 echo "ZIP:    $ZIP"
 echo "PNG frames: $(find "$OUT/png" -type f -name '*.png' | wc -l | tr -d ' ')"
 echo "System portal-code line: REDACTED in retained PPM + PNG"
+echo "Printer configuration/settings exports: EXCLUDED"
