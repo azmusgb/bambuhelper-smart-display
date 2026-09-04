@@ -19,7 +19,16 @@
     "rollbackVersion": "7.2",
     "note": "Static installer promoted to the physically accepted Workshop OS v11.19.1 artifact pair; Smart Home v7.2 is retained as the single immediate rollback."
   },
-  "candidate": null,
+  "candidate": {
+    "version": "11.22",
+    "branch": "feature/v11-22-display-expert",
+    "name": "Workshop OS v11.22 Display Expert RC1",
+    "purpose": "Move safe visually dense display settings onto physical WS350 expert surfaces while preserving the inherited v11.20 authentication boundary, fixed safety-state colors, and portal-only text/secret inputs.",
+    "pullRequest": 74,
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required"
+  },
   "mainState": {
     "version": "11.20",
     "commit": "748119d8a364604b6845748abd9e58fa646dfeaf",
