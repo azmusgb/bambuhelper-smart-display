@@ -11,15 +11,18 @@ STAMP="$(date '+%Y%m%d-%H%M%S')"
 OUT="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP"
 COOKIE="$(mktemp -t bambu-capture-cookie)"
 LOGIN_BODY="$(mktemp -t bambu-capture-login)"
+RAW_PPM="$(mktemp -t bambu-capture-frame)"
 CATALOG="$OUT/views.json"
-chmod 600 "$COOKIE" "$LOGIN_BODY"
+chmod 600 "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"
 
 cleanup() {
   stty echo 2>/dev/null || true
   unset CODE 2>/dev/null || true
-  rm -f "$COOKIE" "$LOGIN_BODY"
+  rm -f "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 mkdir -p "$OUT/png" "$OUT/ppm" "$OUT/state"
 
@@ -68,8 +71,9 @@ import sys
 import zlib
 
 src = Path(sys.argv[1])
-dst = Path(sys.argv[2])
-view_id = sys.argv[3] if len(sys.argv) > 3 else ''
+ppm_dst = Path(sys.argv[2])
+png_dst = Path(sys.argv[3])
+view_id = sys.argv[4] if len(sys.argv) > 4 else ''
 
 with src.open('rb') as f:
     magic = f.readline().strip()
@@ -104,10 +108,11 @@ if view_id == 'system':
             i = row + x * 3
             rgb[i:i+3] = bytes(fill)
 
-    # Replace the raw source too; neither retained PPM nor derived PNG may
-    # contain the live portal credential.
-    header = f'P6\n{w} {h}\n255\n'.encode('ascii')
-    src.write_bytes(header + rgb)
+# Only sanitized pixels are ever written into the retained capture directory.
+# The raw framebuffer remains solely in a mode-0600 temporary file managed by
+# the shell and is removed by the EXIT trap.
+header = f'P6\n{w} {h}\n255\n'.encode('ascii')
+ppm_dst.write_bytes(header + rgb)
 
 def chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', binascii.crc32(kind + data) & 0xffffffff)
@@ -122,7 +127,7 @@ png = bytearray(b'\x89PNG\r\n\x1a\n')
 png += chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
 png += chunk(b'IDAT', zlib.compress(bytes(scan), 9))
 png += chunk(b'IEND', b'')
-dst.write_bytes(png)
+png_dst.write_bytes(png)
 PY
 chmod +x "$OUT/ppm_to_png.py"
 
@@ -158,8 +163,11 @@ while IFS=$'\t' read -r IDX ID LABEL GROUP; do
     exit 1
   fi
 
-  curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$PPM"
-  python3 "$OUT/ppm_to_png.py" "$PPM" "$PNG" "$ID"
+  # Raw framebuffer bytes never enter the retained capture tree. The converter
+  # reads the private temp file and writes only sanitized PPM/PNG outputs.
+  curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$RAW_PPM"
+  python3 "$OUT/ppm_to_png.py" "$RAW_PPM" "$PPM" "$PNG" "$ID"
+  : > "$RAW_PPM"
 
   QLABEL="${LABEL//\"/\"\"}"
   QGROUP="${GROUP//\"/\"\"}"
@@ -175,11 +183,13 @@ curl -sS -b "$COOKIE" -H 'X-BambuHelper-Client: 1' -X POST \
 rm -f "$OUT/view-list.tsv"
 
 cat > "$OUT/SECURITY-NOTE.txt" <<'EOF'
-The System framebuffer's live portal-code line was redacted automatically before
-both PPM and PNG retention. The login credential is passed to curl over stdin,
-not in its command-line arguments. Printer configuration/settings exports are
-intentionally excluded because they may contain access codes or other secrets.
-Do not manually add unredacted System screenshots or configuration exports.
+The System framebuffer's live portal-code line was redacted before any PPM or PNG
+was written into this retained capture folder. Raw framebuffer bytes existed only
+in a mode-0600 temporary file outside the bundle and were cleared after each view
+and removed on exit. The login credential was passed to curl over stdin, not in
+its command-line arguments. Printer configuration/settings exports are excluded
+because they may contain access codes or other secrets. Do not manually add
+unredacted System screenshots or configuration exports.
 EOF
 
 ZIP="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP.zip"
@@ -193,5 +203,6 @@ echo "CAPTURE COMPLETE"
 echo "Folder: $OUT"
 echo "ZIP:    $ZIP"
 echo "PNG frames: $(find "$OUT/png" -type f -name '*.png' | wc -l | tr -d ' ')"
-echo "System portal-code line: REDACTED in retained PPM + PNG"
+echo "System portal-code line: REDACTED before retained PPM + PNG write"
+echo "Raw framebuffer: TEMPORARY 0600 ONLY"
 echo "Printer configuration/settings exports: EXCLUDED"
