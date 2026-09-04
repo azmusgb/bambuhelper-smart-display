@@ -145,7 +145,10 @@ def patch_recovery(repo: Path) -> None:
     p = repo / "src" / "web_server.cpp"
     text = p.read_text(encoding="utf-8")
 
-    # Portal-code login remains available on AP too. Independent recovery routes\n    # do not require it in Recovery Safe Mode, but authenticated AP access is\n    # available for protected surfaces when the physical code can be read.\n    ap_login_redirect = '''  if (isAPMode()) {\n    server.sendHeader("Location", "/");\n    server.send(303, "text/plain", "Setup mode");\n    return;\n  }\n'''
+    # Portal-code login remains available on AP too. Independent recovery routes
+    # do not require it in Recovery Safe Mode, but authenticated AP access is
+    # available for protected surfaces when the physical code can be read.
+    ap_login_redirect = '''  if (isAPMode()) {\n    server.sendHeader("Location", "/");\n    server.send(303, "text/plain", "Setup mode");\n    return;\n  }\n'''
     count = text.count(ap_login_redirect)
     if count != 2:
         raise PatchError(f"AP login redirect: expected exactly 2 matches, found {count}")
