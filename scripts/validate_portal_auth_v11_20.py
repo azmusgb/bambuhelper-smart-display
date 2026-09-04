@@ -42,7 +42,7 @@ def main() -> int:
     forbid(build, "SMART_HOME_DEV_UNLOCK", "development unlock build flag")
 
     for marker in [
-        "if (isAPMode()) return true;",
+        '#include "recovery_manager.h"',
         "return cookieMatches(server);",
         "if (!cookieMatches(server))",
         "if (mutating && !sameOrigin(server))",
@@ -52,15 +52,29 @@ def main() -> int:
         "constantTimeEqual",
         "; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400",
         "memset(g_sessionToken, 0, sizeof(g_sessionToken));",
+        "static bool apPublicRouteAllowed(WebServer& server)",
+        'uri == "/save/wifi"',
+        'uri == "/app.css"',
+        'uri == "/app.js"',
+        "recoverySafeModeActive()",
+        'uri == "/recovery"',
+        'uri.startsWith("/recovery/")',
+        'uri == "/ota/upload"',
+        'uri == "/reset"',
     ]:
-        need(security, marker, "LAN session enforcement/hardening")
+        need(security, marker, "LAN/session/scoped-AP security contract")
     for marker in [
         "portalAuthRequired",
         "Development phase: the WS350 portal stays open",
         "SMART_HOME_DEV_UNLOCK",
         "Smart Home v8.3 RC3 portal session security enabled",
+        "if (isAPMode()) return true;",
+        'uri == "/printer/control"',
+        'uri == "/printer/power"',
+        'uri == "/settings/export"',
+        'uri == "/debug"',
     ]:
-        forbid(security, marker, "development/stale auth surface")
+        forbid(security, marker, "development/stale/overbroad AP auth surface")
     for marker in [
         'Serial.printf("Portal code:',
         'Serial.print(g_portalCode',
@@ -81,7 +95,7 @@ def main() -> int:
         'SECURE_GET("/recovery", handleRecoveryPage)',
         'static bool recoveryMutationAllowed(){return securityAuthorize(server,true);}',
         "['Auth','ON · PORTAL CODE']",
-        "Recovery AP remains independently accessible",
+        "Recovery Safe Mode AP remains independently accessible",
         "Portal session reset. Sign in again with the current code shown on System.",
     ]:
         need(web, marker, "authenticated web/recovery contract")
@@ -90,8 +104,9 @@ def main() -> int:
         "OFF · DEVELOPMENT",
         "Development unlock remains active",
         "Normal / Development",
+        'server.send(303, "text/plain", "Setup mode")',
     ]:
-        forbid(web, marker, "public/development recovery surface")
+        forbid(web, marker, "public/development/forced-AP-login surface")
 
     for marker in [
         "function v1120Ws350Safety()",
@@ -102,9 +117,9 @@ def main() -> int:
     for marker in ["DEVELOPMENT MODE", "Portal code is temporarily disabled", "Smart Home DEV", "v93DevelopmentSafety"]:
         forbid(app, marker, "development portal UI")
 
-    # The physical recovery path must not depend on the browser login route.
-    # SECURE_GET remains safe in Recovery AP mode because securityAuthorize()
-    # explicitly allows isAPMode() before checking the session cookie.
+    # The physical recovery path must not depend on normal-LAN auth. The AP
+    # exception is deliberately route-scoped and gated by Recovery Safe Mode;
+    # ordinary AP fallback may expose Wi-Fi onboarding but not printer admin.
     need(hub, "securityPortalCode()", "physical portal code")
     need(hub, '"PORTAL ACCESS"', "physical portal access card")
     need(settings, "buttonType = BTN_TOUCHSCREEN;", "forced-safe WS350 touch")
@@ -114,8 +129,12 @@ def main() -> int:
     print("Boot-scoped 128-bit session token + HttpOnly/SameSite cookie: REQUIRED")
     print("Portal credential in serial logs: FORBIDDEN")
     print("Stale development/release auth identity: FORBIDDEN")
+    print("Ordinary AP fallback full-admin bypass: FORBIDDEN")
+    print("AP setup bypass: SCOPED TO onboarding essentials")
+    print("Recovery AP bypass: SCOPED TO deliberate Safe Mode recovery routes")
+    print("Sensitive settings export on unauthenticated AP: FORBIDDEN")
+    print("Portal-code login while on AP: AVAILABLE")
     print("Normal-LAN Recovery page authentication: REQUIRED")
-    print("Recovery AP auth bypass: PRESERVED")
     print("WS350 physical touch safety: PRESERVED")
     print("Same-origin mutation protection: PRESERVED")
     return 0
