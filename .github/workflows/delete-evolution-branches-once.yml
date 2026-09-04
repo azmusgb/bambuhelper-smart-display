@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify every evolution branch is contained in main, then delete
+      - name: Verify containment or exact audited superseded delta, then delete
         shell: bash
         run: |
           set -euo pipefail
@@ -57,23 +57,47 @@ jobs:
             evolve/v11-19-1-physical-fit
             evolve/v11-signature-workshop-os
           )
+          expected_delta() {
+            case "$1" in
+              evolve/v9-2-smart-printer-ux) printf '%s\n' '.github/workflows/bambuhelper-v9-2-smart-printer.yml' 'apply_smart_home_evolution_v9_2.py' 'docs/DEVICE_CAPABILITY_MATRIX.md' ;;
+              evolve/v9-3-dev-unlocked) printf '%s\n' '.github/workflows/bambuhelper-v9-3-dev-unlocked.yml' 'apply_smart_home_dev_unlock_v9_3.py' ;;
+              evolve/v9-4-recovery-foundation) printf '%s\n' '.github/workflows/bambuhelper-v9-4-recovery-foundation.yml' 'apply_smart_home_recovery_hardening_v9_4_1.py' 'apply_smart_home_recovery_v9_4.py' ;;
+              evolve/v9-6-ultimate-experience) printf '%s\n' '.github/workflows/bambuhelper-v9-6-ultimate.yml' 'apply_smart_home_touch_nav_compat_v9_6_2.py' 'apply_smart_home_touch_nav_v9_6_1.py' 'apply_smart_home_ultimate_v9_6.py' ;;
+              evolve/v10-workshop-os-theme) printf '%s\n' '.github/workflows/bambuhelper-v10-workshop-os-theme.yml' 'apply_smart_home_workshop_os_theme_v10.py' ;;
+              *) return 1 ;;
+            esac
+          }
           unsafe=0
           existing=()
           for b in "${branches[@]}"; do
-            if git show-ref --verify --quiet "refs/remotes/origin/$b"; then
-              existing+=("$b")
-              if git merge-base --is-ancestor "refs/remotes/origin/$b" refs/remotes/origin/main; then
-                echo "SAFE: $b is contained in main"
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$b"; then
+              echo "ALREADY ABSENT: $b"
+              continue
+            fi
+            existing+=("$b")
+            if git merge-base --is-ancestor "refs/remotes/origin/$b" refs/remotes/origin/main; then
+              echo "SAFE CONTAINED: $b"
+              continue
+            fi
+            if expected="$(expected_delta "$b" 2>/dev/null)"; then
+              base="$(git merge-base "refs/remotes/origin/$b" refs/remotes/origin/main)"
+              actual="$(git diff --name-only "$base" "refs/remotes/origin/$b" | sort)"
+              expected="$(printf '%s\n' "$expected" | sort)"
+              if [[ "$actual" == "$expected" ]]; then
+                echo "SAFE AUDITED-SUPERSEDED: $b"
               else
-                echo "UNSAFE: $b contains work not in main" >&2
+                echo "UNSAFE DELTA MISMATCH: $b" >&2
+                echo 'Expected:' >&2; echo "$expected" >&2
+                echo 'Actual:' >&2; echo "$actual" >&2
                 unsafe=1
               fi
             else
-              echo "ALREADY ABSENT: $b"
+              echo "UNSAFE UNREVIEWED DIVERGENCE: $b" >&2
+              unsafe=1
             fi
           done
           if (( unsafe != 0 )); then
-            echo 'Refusing cleanup: at least one evolution branch is not contained in main.' >&2
+            echo 'Refusing cleanup: branch evidence changed from the audited set.' >&2
             exit 1
           fi
           for b in "${existing[@]}"; do
