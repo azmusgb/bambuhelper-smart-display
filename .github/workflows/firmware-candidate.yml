@@ -3,6 +3,21 @@ name: Workshop OS Firmware Gate — v11.20 Portal Auth RC1
 on:
   pull_request:
     branches: [main]
+    paths:
+      - '.github/workflows/firmware-candidate.yml'
+      - 'README.md'
+      - 'SECURITY.md'
+      - 'releases/current.json'
+      - 'apply_smart_home_*.py'
+      - '.bambuhelper-validation/**'
+      - 'assets/**'
+      - 'scripts/apply_*.sh'
+      - 'scripts/validate_*.py'
+      - 'scripts/capture-ws350-views.zsh'
+      - 'docs/physical-*.md'
+      - 'docs/visual-*.md'
+      - 'docs/portal-auth-*.md'
+      - 'docs/settings-capability-registry/**'
   workflow_dispatch:
 
 permissions:
@@ -13,78 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scope:
-    name: Classify Firmware Scope
-    runs-on: ubuntu-24.04
-    outputs:
-      firmware: ${{ steps.classify.outputs.firmware }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - id: classify
-        name: Decide whether native firmware validation is required
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo 'firmware=true' >> "$GITHUB_OUTPUT"
-            echo 'Manual dispatch: full firmware validation required.'
-            exit 0
-          fi
-
-          git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA"
-          git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$HEAD_SHA"
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" | sort -u | tee /tmp/workshop-os-changed-files.txt
-
-          python - <<'PY'
-          import fnmatch
-          import os
-          from pathlib import Path
-
-          patterns = (
-              '.github/workflows/firmware-candidate.yml',
-              'apply_smart_home_*.py',
-              '.bambuhelper-validation/**',
-              'assets/**',
-              'scripts/apply_*.sh',
-              'scripts/validate_*.py',
-              'scripts/capture-ws350-views.zsh',
-          )
-
-          changed = [
-              line.strip()
-              for line in Path('/tmp/workshop-os-changed-files.txt').read_text().splitlines()
-              if line.strip()
-          ]
-          matched = sorted(
-              path for path in changed
-              if any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
-          )
-          required = bool(matched)
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
-              out.write(f"firmware={'true' if required else 'false'}\n")
-
-          print('Firmware-sensitive paths:')
-          if matched:
-              for path in matched:
-                  print(f'  - {path}')
-          else:
-              print('  (none)')
-          print(f"Native firmware validation required: {'YES' if required else 'NO'}")
-          PY
-
   validate:
-    name: Native Firmware Validation
-    needs: scope
-    if: needs.scope.outputs.firmware == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -110,6 +54,7 @@ jobs:
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
           python -m py_compile scripts/validate_portal_auth_v11_20.py
+          python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
           bash -n scripts/capture-ws350-views.zsh
@@ -172,6 +117,9 @@ jobs:
 
       - name: Validate v11.20 portal authentication contracts
         run: python scripts/validate_portal_auth_v11_20.py upstream
+
+      - name: Validate v11.21 settings parity against reconstructed source
+        run: python scripts/validate_settings_parity.py --repo upstream
 
       - name: Verify inherited safety after auth delta
         run: |
@@ -283,37 +231,3 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
-
-  merge-gate:
-    name: Merge Gate
-    needs: [scope, validate]
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Enforce path-aware firmware gate result
-        shell: bash
-        env:
-          SCOPE_RESULT: ${{ needs.scope.result }}
-          FIRMWARE_REQUIRED: ${{ needs.scope.outputs.firmware }}
-          FIRMWARE_RESULT: ${{ needs.validate.result }}
-        run: |
-          set -euo pipefail
-
-          if [[ "$SCOPE_RESULT" != "success" ]]; then
-            echo "Scope classification failed: $SCOPE_RESULT" >&2
-            exit 1
-          fi
-
-          if [[ "$FIRMWARE_REQUIRED" == "true" ]]; then
-            if [[ "$FIRMWARE_RESULT" != "success" ]]; then
-              echo "Firmware-sensitive change requires successful native validation; result=$FIRMWARE_RESULT" >&2
-              exit 1
-            fi
-            echo 'Merge Gate: PASS — firmware-sensitive change completed full native validation.'
-          else
-            if [[ "$FIRMWARE_RESULT" != "skipped" ]]; then
-              echo "Expected native validation to be skipped for non-firmware change; result=$FIRMWARE_RESULT" >&2
-              exit 1
-            fi
-            echo 'Merge Gate: PASS — no firmware-sensitive paths changed; native build correctly skipped.'
-          fi
