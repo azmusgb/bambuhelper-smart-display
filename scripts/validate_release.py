@@ -8,10 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-PRODUCTION_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin")
-PRODUCTION_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin")
-ROLLBACK_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.1-validated.bin")
-ROLLBACK_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.1-OTA.bin")
+PRODUCTION_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-Full.bin")
+PRODUCTION_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-OTA.bin")
+ROLLBACK_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin")
+ROLLBACK_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin")
 UPSTREAM_BASELINE = "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4"
 ACCEPTED_SOURCE_VERSION = "11.19.1"
 
@@ -235,13 +235,13 @@ def main() -> int:
 
     release = parsed["release.json"]
     profiles = release.get("profiles", {})
-    if set(profiles) != {"smart-home-v7.2", "smart-home-v7.1"}:
-        fail("release.json must expose exactly production v7.2 and rollback v7.1")
+    if set(profiles) != {"workshop-os-v11.19.1", "smart-home-v7.2"}:
+        fail("release.json must expose exactly production Workshop OS v11.19.1 and rollback v7.2")
     expected_paths = {
-        ("smart-home-v7.2", "file"): PRODUCTION_FULL.as_posix(),
-        ("smart-home-v7.2", "otaFile"): PRODUCTION_OTA.as_posix(),
-        ("smart-home-v7.1", "file"): ROLLBACK_FULL.as_posix(),
-        ("smart-home-v7.1", "otaFile"): ROLLBACK_OTA.as_posix(),
+        ("workshop-os-v11.19.1", "file"): PRODUCTION_FULL.as_posix(),
+        ("workshop-os-v11.19.1", "otaFile"): PRODUCTION_OTA.as_posix(),
+        ("smart-home-v7.2", "file"): ROLLBACK_FULL.as_posix(),
+        ("smart-home-v7.2", "otaFile"): ROLLBACK_OTA.as_posix(),
     }
     for (profile, key), expected in expected_paths.items():
         if profiles.get(profile, {}).get(key) != expected:
@@ -265,10 +265,10 @@ def main() -> int:
     candidate_summary = validate_candidate(manifest.get("candidate"), readme_text)
 
     download = manifest.get("download") or {}
-    if download.get("channel") != "production-rc-v7.2":
-        fail("download channel must remain production-rc-v7.2 until separately promoted")
-    if str(download.get("rollbackVersion")) != "7.1":
-        fail("download rollbackVersion must remain 7.1")
+    if download.get("channel") != "production-workshop-os-v11.19.1":
+        fail("download channel must identify promoted Workshop OS v11.19.1")
+    if str(download.get("rollbackVersion")) != "7.2":
+        fail("download rollbackVersion must identify Smart Home v7.2")
 
     archive = ROOT / "releases" / "archive"
     if not (archive / "README.md").is_file():
@@ -281,8 +281,8 @@ def main() -> int:
     print(f"Accepted source: {manifest['version']} ({source.get('name', 'unnamed')})")
     print(f"Accepted firmware commit: {accepted_commit}")
     print(f"Active candidate: {candidate_summary}")
-    print("Static download channel: v7.2 Full + OTA")
-    print("Immediate rollback channel: v7.1 Full + OTA")
+    print("Static download channel: Workshop OS v11.19.1 Full + OTA")
+    print("Immediate rollback channel: Smart Home v7.2 Full + OTA")
     print("Visual capture credential redaction: REQUIRED BEFORE RETENTION")
     print("Raw framebuffer retention: FORBIDDEN; 0600 temporary file only")
     print("Capture environment-specific default host: FORBIDDEN")
