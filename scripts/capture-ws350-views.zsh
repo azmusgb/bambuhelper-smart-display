@@ -36,6 +36,10 @@ if [ "$HTTP" != "303" ]; then
   exit 1
 fi
 
+# Do not retain the credential longer than needed. The authenticated cookie is
+# sufficient for the rest of the capture run.
+unset CODE
+
 echo "LOGIN OK"
 
 curl -fsS -b "$COOKIE" "$BASE/recovery/status" > "$OUT/state/recovery-status.json"
@@ -55,6 +59,7 @@ import zlib
 
 src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
+view_id = sys.argv[3] if len(sys.argv) > 3 else ''
 
 with src.open('rb') as f:
     magic = f.readline().strip()
@@ -67,11 +72,32 @@ with src.open('rb') as f:
     maxv = int(f.readline().strip())
     if maxv != 255:
         raise SystemExit(f'Unsupported max value {maxv}')
-    rgb = f.read()
+    rgb = bytearray(f.read())
 
 expected = w * h * 3
 if len(rgb) != expected:
     raise SystemExit(f'{src}: expected {expected} RGB bytes, got {len(rgb)}')
+
+# The System page intentionally shows the rotating portal credential on the
+# physical device. Acceptance artifacts must never preserve that credential.
+# The validated WS350 capture surface is 480x320 landscape; redact only the
+# credential line inside the Portal Access card while retaining the card,
+# heading, IP and "changes after reboot" copy for layout/fit review.
+if view_id == 'system':
+    if (w, h) != (480, 320):
+        raise SystemExit(f'Refusing unverified System redaction geometry: {w}x{h}')
+    x0, y0, x1, y1 = 330, 196, 468, 230
+    fill = (31, 35, 40)
+    for y in range(y0, y1):
+        row = y * w * 3
+        for x in range(x0, x1):
+            i = row + x * 3
+            rgb[i:i+3] = bytes(fill)
+
+    # Replace the raw source too; neither retained PPM nor derived PNG may
+    # contain the live portal credential.
+    header = f'P6\n{w} {h}\n255\n'.encode('ascii')
+    src.write_bytes(header + rgb)
 
 def chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', binascii.crc32(kind + data) & 0xffffffff)
@@ -123,7 +149,7 @@ while IFS=$'\t' read -r IDX ID LABEL GROUP; do
   fi
 
   curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$PPM"
-  python3 "$OUT/ppm_to_png.py" "$PPM" "$PNG"
+  python3 "$OUT/ppm_to_png.py" "$PPM" "$PNG" "$ID"
 
   QLABEL="${LABEL//\"/\"\"}"
   QGROUP="${GROUP//\"/\"\"}"
@@ -138,6 +164,12 @@ curl -sS -b "$COOKIE" -H 'X-BambuHelper-Client: 1' -X POST \
 
 rm -f "$OUT/view-list.tsv"
 
+cat > "$OUT/SECURITY-NOTE.txt" <<'EOF'
+The System framebuffer's live portal-code line was redacted automatically before
+both PPM and PNG retention. The portal credential is not intended to appear in
+this capture bundle. Do not manually add unredacted System screenshots.
+EOF
+
 ZIP="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP.zip"
 (
   cd "$HOME/Desktop"
@@ -149,3 +181,4 @@ echo "CAPTURE COMPLETE"
 echo "Folder: $OUT"
 echo "ZIP:    $ZIP"
 echo "PNG frames: $(find "$OUT/png" -type f -name '*.png' | wc -l | tr -d ' ')"
+echo "System portal-code line: REDACTED in retained PPM + PNG"
