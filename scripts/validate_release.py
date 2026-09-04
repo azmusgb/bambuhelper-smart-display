@@ -35,7 +35,9 @@ REQUIRED = [
     Path("CONTRIBUTING.md"), Path("release.json"), Path("releases/current.json"),
     Path("docs/REPOSITORY_HYGIENE.md"), Path("docs/UPSTREAM_SYNC.md"),
     Path("docs/RELEASE_PROCESS.md"), Path("docs/CONTROL_SAFETY.md"),
-    Path("scripts/capture-ws350-views.zsh"), Path(".github/pull_request_template.md"),
+    Path("scripts/capture-ws350-views.zsh"),
+    Path("scripts/accept-ws350-v11-23-rc2.zsh"),
+    Path(".github/pull_request_template.md"),
     Path(".github/workflows/firmware-candidate.yml"), Path(".github/workflows/validate.yml"),
     PRODUCTION_FULL, PRODUCTION_OTA, ROLLBACK_FULL, ROLLBACK_OTA,
 ]
@@ -110,28 +112,81 @@ def validate_main_state(main_state: object, readme_text: str) -> str:
 def validate_capture_security() -> None:
     capture = (ROOT / "scripts" / "capture-ws350-views.zsh").read_text(encoding="utf-8")
     required = [
-        'echo "Usage: $0 <device-host-or-ip>"', 'HOST="$1"',
-        'RAW_PPM="$(mktemp -t bambu-capture-frame)"', "stty -echo",
-        'chmod 600 "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"',
-        'rm -f "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"', "trap cleanup EXIT",
-        "--data-urlencode 'code@-'", "unset CODE",
+        'echo "Usage: $0 <device-host-or-ip>"',
+        'HOST="$1"',
+        'RAW_PPM="$(mktemp -t bambu-capture-frame)"',
+        'PROBE_BODY="$(mktemp -t bambu-capture-probe)"',
+        'ACCESS_MODE="trusted-lan-no-code"',
+        'chmod 600 "$RAW_PPM" "$PROBE_BODY"',
+        'rm -f "$RAW_PPM" "$PROBE_BODY"',
+        "trap cleanup EXIT",
+        'PROBE_HTTP=',
+        "This capture helper intentionally does not prompt for or accept a portal code.",
+        "TRUSTED-LAN ACCESS OK (NO PORTAL CODE)",
         "Deliberately do not capture /printer/config or settings exports",
-        "view_id == 'system'", "Refusing unverified System redaction geometry",
+        "view_id == 'system'",
+        "Refusing unverified System redaction geometry",
         "x0, y0, x1, y1 = 330, 196, 468, 230",
-        'curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$RAW_PPM"',
-        "SECURITY-NOTE.txt", "Raw framebuffer: TEMPORARY 0600 ONLY",
+        'curl -fsS "$BASE/hub/frame.ppm" -o "$RAW_PPM"',
+        "SECURITY-NOTE.txt",
+        "Raw framebuffer: TEMPORARY 0600 ONLY",
         "Printer configuration/settings exports: EXCLUDED",
     ]
     for marker in required:
         if marker not in capture:
-            fail(f"visual capture credential-safety contract missing: {marker}")
+            fail(f"visual capture no-code/sanitization contract missing: {marker}")
+
     forbidden = [
-        "10.0.0.124", '--data-urlencode "code=$CODE"', 'echo "$CODE"',
-        '"$BASE/printer/config?slot=0"', '"$BASE/settings/export"', "set -x",
+        "10.0.0.124",
+        "Portal code:",
+        "portal-code-fallback",
+        "stty -echo",
+        "LOGIN_BODY",
+        "COOKIE=",
+        "unset CODE",
+        "code@-",
+        "/login",
+        '--data-urlencode "code=$CODE"',
+        'echo "$CODE"',
+        '"$BASE/printer/config?slot=0"',
+        '"$BASE/settings/export"',
+        "set -x",
     ]
     for marker in forbidden:
         if marker in capture:
-            fail(f"capture helper may disclose sensitive/environment-specific configuration: {marker}")
+            fail(f"RC2 capture helper must not contain a credential/fallback path: {marker}")
+
+
+def validate_acceptance_security() -> None:
+    acceptance = (ROOT / "scripts" / "accept-ws350-v11-23-rc2.zsh").read_text(encoding="utf-8")
+    required = [
+        'HOST="${1:-10.0.0.124}"',
+        "FAIL: no-code trusted-LAN recovery/status returned HTTP",
+        "NO-CODE TRUSTED-LAN ACCESS: PASS",
+        "Smart Home v11.23 Network Locale Layout RC2",
+        "ROTATION PREVIEW + GUARDED COMMIT + TOUCH",
+        "Short-tap HOLD TO COMMIT ROTATION once. It must NOT commit.",
+        "Network Apply executed: NO",
+        "Portal code: NOT REQUIRED",
+        "Printer commands sent: NONE",
+        "All tested persisted settings: RESTORED",
+    ]
+    for marker in required:
+        if marker not in acceptance:
+            fail(f"RC2 physical acceptance contract missing: {marker}")
+
+    forbidden = [
+        "Portal code shown on device",
+        "stty -echo",
+        "portal-code-fallback",
+        "COOKIE=",
+        "code@-",
+        "/login",
+        "set -x",
+    ]
+    for marker in forbidden:
+        if marker in acceptance:
+            fail(f"RC2 acceptance helper must not contain a credential/fallback path: {marker}")
 
 
 def validate_stable_merge_gate(workflows_dir: Path) -> None:
@@ -141,7 +196,8 @@ def validate_stable_merge_gate(workflows_dir: Path) -> None:
         "scope:\n    name: Classify Firmware Scope",
         "validate:\n    name: Native Firmware Validation",
         "merge-gate:\n    name: Merge Gate",
-        "needs: [scope, validate]", "if: always()",
+        "needs: [scope, validate]",
+        "if: always()",
         "Native firmware validation required:",
     ]
     for marker in required:
@@ -195,6 +251,7 @@ def main() -> int:
             fail(f"workflow must declare contents: read: {name}")
     validate_stable_merge_gate(workflows_dir)
     validate_capture_security()
+    validate_acceptance_security()
 
     release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
     manifest = json.loads((ROOT / "releases/current.json").read_text(encoding="utf-8"))
@@ -248,7 +305,8 @@ def main() -> int:
     print(f"Main state: {main_state_summary}")
     print("Static download channel: Workshop OS v11.19.1 Full + OTA")
     print("Immediate static rollback: Smart Home v7.2 Full + OTA")
-    print("Visual capture credential redaction: REQUIRED BEFORE RETENTION")
+    print("RC2 helper authentication: NO-CODE ONLY")
+    print("Visual capture credential region: REDACTED BEFORE RETENTION")
     print("Firmware workflows: reusable path-aware firmware gate + repository/release gates")
     return 0
 
