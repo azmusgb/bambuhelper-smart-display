@@ -18,13 +18,14 @@ A merge is not physical acceptance by itself. `releases/current.json` is authori
 
 ## Active candidate — Workshop OS v11.23 Network Locale Layout RC2
 
-PR **#76** now carries the RC2 interaction redesign after RC1 proved technically healthy but exposed unnecessary friction during real WS350 touch testing.
+PR **#76** carries the RC2 interaction redesign after RC1 proved technically healthy but exposed unnecessary friction during real WS350 touch testing.
 
 ### RC2 touch experience
 
-The physical interface is being elevated around **discoverability, target size, explicit direction, and safe staging**:
+The physical interface is being elevated around **discoverability, target size, explicit direction, safe staging, and guarded commit flows**:
 
 - Network Expert uses large finger-sized controls instead of dense card-only gestures;
+- primary Network navigation and numeric-edit controls target roughly **52–60 px** reference hit areas where the 480×320 layout permits it;
 - every network page has explicit **Back / Next** navigation;
 - Time & Locale exposes dedicated **Prev / Next** timezone controls;
 - Address Editor exposes a visible **STAGED — NOT APPLIED** state;
@@ -32,9 +33,10 @@ The physical interface is being elevated around **discoverability, target size, 
 - Address Review separates **Back**, **Discard**, and guarded **Hold Apply + Restart**;
 - normal short taps can no longer accidentally apply a network configuration;
 - Display Expert removes hidden “hold to go backward” behavior — left-side / right-side card interaction becomes the explicit previous/next model;
-- display rotation remains intentionally **hold-guarded** because it changes orientation and touch mapping;
+- rotation is no longer committed directly from Extras: tapping Rotation opens a dedicated **Current / Preview / Prev / Next / Cancel / Hold Commit** interaction;
+- rotation Preview is staged only, short-tap Commit does not persist, and deliberate hold commits orientation/touch mapping together;
 - page position is shown explicitly on the Network Expert flow;
-- the existing 32-view deterministic framebuffer catalog is retained.
+- the existing 32-view deterministic framebuffer catalog is retained because rotation preview is modal rather than a new capture page.
 
 ### Temporary portal-code policy
 
@@ -47,7 +49,8 @@ This is intentionally narrower than deleting the security subsystem:
 - ordinary AP mode does **not** become a blanket admin bypass;
 - setup/recovery AP exceptions remain route-scoped;
 - the session/token implementation remains in source so the temporary bypass can be removed cleanly in one later delta;
-- the browser shows a visible **TEMPORARY TRUSTED-LAN MODE** warning.
+- the browser shows a visible **TEMPORARY TRUSTED-LAN MODE** warning;
+- RC2 capture and physical-acceptance helpers are **no-code only** and fail if the trusted-LAN bypass is not active; they do not prompt for or fall back to a portal code.
 
 The LAN-open mode is a temporary candidate-development decision, **not** the accepted long-term security policy.
 
@@ -58,7 +61,7 @@ The LAN-open mode is a temporary candidate-development decision, **not** the acc
 - segmented IP / gateway / subnet / DNS editing staged on-device;
 - no network mutation until the Review page is deliberately held to apply;
 - restart after an accepted network commit so addressing changes are applied coherently;
-- guarded display rotation;
+- guarded display rotation with a dedicated staged-preview flow in RC2;
 - Time & Locale, Address Editor, and Network Review framebuffer acceptance views;
 - Wi-Fi credentials and hostname remain browser-only inputs;
 - no speculative speed, fan, temperature, or AMS printer commands.
@@ -101,13 +104,13 @@ For a normal existing-device update, use the application/OTA image. A Full image
 
 Firmware is reconstructed deterministically from pinned upstream BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the versioned `apply_smart_home_*.py` evolution stack. The reusable firmware gate validates deterministic reconstruction, inherited safety/security, candidate-specific contracts, settings parity, browser JavaScript, native `ws_lcd_350`, shared `jc3248w535`, and Full/OTA artifact provenance.
 
-For v11.23 RC2, the gate reconstructs and validates the authenticated v11.20 baseline first, then applies the explicit RC2 temporary LAN-open delta. This keeps the accepted auth implementation testable and makes the development bypass obvious and reversible.
+For v11.23 RC2, the gate reconstructs and validates the authenticated v11.20 baseline first, applies the RC1 Network / Locale / Layout base, applies the RC2 touch/LAN-open delta, then applies the RC2 physical-touch finalization delta that enlarges key hit targets and introduces the dedicated rotation preview. This keeps each evolution step explicit and testable.
 
 `docs/settings-capability-registry/` is the machine-authoritative WS350 browser/device settings parity inventory.
 
 ## Repository layout
 
-- `apply_smart_home_*.py` — deterministic firmware evolution inputs.
+- `apply_smart_home_*.py` — deterministic firmware evolution inputs, including the RC2 physical-touch finalization delta.
 - `.bambuhelper-validation/` — verified patch payloads required by selected loaders.
 - `.github/workflows/firmware-candidate.yml` — single reusable firmware/hardware gate.
 - `.github/workflows/validate.yml` — repository validation.
@@ -116,7 +119,8 @@ For v11.23 RC2, the gate reconstructs and validates the authenticated v11.20 bas
 - `docs/` — architecture, safety, parity, acceptance, and roadmap documentation.
 - `docs/archive/` and `releases/archive/` — historical provenance.
 - `releases/current.json` — accepted-source / candidate / `main` / static-channel state.
-- `scripts/capture-ws350-views.zsh` — credential-safe physical framebuffer capture helper; RC2 supports temporary trusted-LAN access without requiring a code prompt.
+- `scripts/capture-ws350-views.zsh` — no-code-only RC2 physical framebuffer capture helper; it fails rather than prompting for a portal code if the temporary trusted-LAN contract is absent.
+- `scripts/accept-ws350-v11-23-rc2.zsh` — no-code-only physical acceptance helper for timezone, staged addressing, rotation preview/guarding, restoration, and final device health.
 
 ## Governance and safety
 
@@ -124,6 +128,7 @@ For v11.23 RC2, the gate reconstructs and validates the authenticated v11.20 bas
 - Hardware-facing changes require exact-head CI and real-device acceptance before source promotion.
 - Generated PlatformIO output, local capture ZIPs, credentials, and ad-hoc reports stay out of source control.
 - Captures redact the System credential region before retained output and exclude printer configuration/settings exports.
+- RC2 helper tooling must not reintroduce a portal-code prompt or authenticated fallback while the temporary no-code acceptance policy is active.
 - Static firmware retention remains bounded to the published pair plus one rollback pair.
 - Upstream synchronization is its own candidate; the accepted source line is never silently repinned.
 - Temporary trusted-LAN mode must be explicitly removed or intentionally re-approved before a security-hardened production promotion.
