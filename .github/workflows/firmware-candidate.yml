@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             echo 'firmware=true' >> "$GITHUB_OUTPUT"
+            echo 'Native firmware validation required: YES'
             exit 0
           fi
           git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA"
@@ -54,6 +55,7 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:
               out.write(f"firmware={'true' if matched else 'false'}\n")
           print('\n'.join(matched) if matched else 'No firmware-sensitive paths')
+          print(f"Native firmware validation required: {'YES' if matched else 'NO'}")
           PY
 
   validate:
