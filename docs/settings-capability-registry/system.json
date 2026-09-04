@@ -70,7 +70,7 @@
           "keys": ["netmode", "net_ip", "net_gw", "net_sn", "net_dns"]
         }
       ],
-      "physicalEvidence": ["\"IP ASSIGNMENT\"", "hubLoadNetworkEdit", "hubCommitNetworkAndRestart", "netSettings.useDHCP=g_networkEditDhcp"]
+      "physicalEvidence": ["\"STAGED - NOT APPLIED\"", "hubLoadNetworkEdit", "hubCommitNetworkAndRestart", "netSettings.useDHCP=g_networkEditDhcp"]
     },
     {
       "id": "network.wifi-credentials",
