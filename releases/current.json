@@ -21,10 +21,10 @@
   },
   "candidate": {
     "version": "11.23",
-    "name": "Workshop OS v11.23 Network Locale Layout RC1",
+    "name": "Workshop OS v11.23 Network Locale Layout RC2",
     "branch": "feature/v11-23-network-locale-layout",
     "pullRequest": 76,
-    "purpose": "Add physical expert timezone, staged atomic DHCP/static configuration, segmented IPv4 entry, guarded display rotation, and expanded network acceptance views without moving credentials or hostname onto the touchscreen.",
+    "purpose": "Elevate the WS350 touch experience with explicit large controls, visible staged-state and Back/Discard/Apply actions, remove hidden hold-to-reverse gestures, preserve guarded rotation/network commit semantics, and temporarily bypass the normal-Wi-Fi portal-code challenge while retaining same-origin mutation protection and AP/recovery boundaries.",
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
@@ -45,6 +45,10 @@
     },
     "candidate": {
       "networkLocaleLayoutContracts": "required",
+      "touchUxContracts": "required",
+      "normalWifiPortalCode": "temporarily-bypassed",
+      "sameOriginMutationProtection": "required",
+      "apRecoveryBoundaries": "required",
       "settingsParity": "required",
       "framebufferViews": 32,
       "physicalAcceptance": "required"
