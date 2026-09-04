@@ -171,6 +171,8 @@ jobs:
 
       - name: Package v11.20 Portal Auth RC1 artifacts
         shell: bash
+        env:
+          CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
@@ -192,7 +194,7 @@ jobs:
           done
           {
             echo 'Workshop OS v11.20 Portal Auth RC1'
-            echo "workshop_os_commit=${GITHUB_SHA}"
+            echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
             echo 'source_line=CANDIDATE'
             echo 'physical_acceptance=REQUIRED'
             echo 'accepted_v11_19_1_rendered_fit=PRESERVED'
@@ -200,13 +202,18 @@ jobs:
             echo 'development_unlock=REMOVED'
             echo 'portal_credential_serial_logging=FORBIDDEN'
             echo 'normal_lan_recovery_auth=REQUIRED'
-            echo 'recovery_ap_bypass=PRESERVED'
+            echo 'ordinary_ap_full_admin_bypass=FORBIDDEN'
+            echo 'ordinary_ap_public_scope=ONBOARDING_ONLY'
+            echo 'recovery_safe_mode_public_scope=RECOVERY_OTA_RESET_ONLY'
+            echo 'ap_portal_code_login=AVAILABLE'
+            echo 'settings_export_anonymous_ap=FORBIDDEN'
             echo 'ws350_touch_safety=PRESERVED'
             echo 'same_origin_mutation_guard=PRESERVED'
             echo 'guarded_power_control=PRESERVED'
             echo 'fail_closed_printer_commands=PRESERVED'
             echo 'capture_routes=AUTHENTICATED'
-            echo 'capture_system_credential=REDACTED_BY_TOOL'
+            echo 'capture_raw_frame_retention=FORBIDDEN'
+            echo 'capture_system_credential=REDACTED_BEFORE_RETENTION'
             echo 'capture_printer_config_exports=EXCLUDED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
