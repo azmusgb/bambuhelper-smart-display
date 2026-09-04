@@ -2,13 +2,14 @@
 
 ## Purpose
 
-Restore normal WS350 portal-code/session authentication now that the accepted v11.19.1 physical UI/recovery baseline is proven, while keeping recovery and touch safety independent from the browser login path.
+Restore normal WS350 portal-code/session authentication now that the accepted v11.19.1 physical UI/recovery baseline is proven, while keeping Recovery AP and touch safety independent from the browser login path.
 
 ## Security delta
 
 - removes `SMART_HOME_DEV_UNLOCK` from the reconstructed WS350 build;
 - removes the development authorization short-circuit from `security_manager.cpp`;
 - requires the boot-scoped portal-code cookie for normal LAN routes;
+- protects the Recovery page itself on normal LAN, not only its mutations;
 - retains same-origin checks for mutating browser requests;
 - retains Recovery AP authorization bypass through `isAPMode()`;
 - retains forced-safe WS350 touchscreen behavior;
@@ -24,6 +25,7 @@ Restore normal WS350 portal-code/session authentication now that the accepted v1
 - [ ] development auth bypass code/copy is absent.
 - [ ] login GET/POST routes remain present.
 - [ ] normal root/status/control/capture routes remain secured.
+- [ ] normal-LAN `/recovery` uses the secure GET wrapper.
 - [ ] same-origin protection remains present for mutations.
 - [ ] Recovery AP bypass and recovery mutation guard remain present.
 - [ ] WS350 physical portal-code card remains present.
@@ -59,8 +61,10 @@ Use only the exact CI artifact for this candidate.
    - verify an unauthenticated control request fails rather than executing;
    - verify Same-Origin protection remains active for mutating requests.
 6. **Recovery independence**
-   - open `/recovery` and verify it renders independently of the normal portal JavaScript;
+   - while on normal LAN and signed out, request `/recovery` and verify it redirects to `/login` rather than exposing the recovery page;
+   - sign in and verify `/recovery` renders independently of the normal portal JavaScript;
    - on normal LAN, verify recovery mutations require the authenticated portal session;
+   - enter Recovery Safe Mode/AP and verify `/recovery` remains directly accessible without the normal LAN session;
    - verify Recovery Safe Mode/AP still permits recovery actions without the normal LAN session;
    - verify Force Touchscreen, reset UI, reboot and rollback paths remain available as designed.
 7. **OTA/recovery regression**
@@ -74,4 +78,4 @@ Use only the exact CI artifact for this candidate.
 
 ## Promotion gate
 
-Do not merge/promote v11.20 solely because CI is green. Physical login, reboot/session invalidation, OTA and Recovery AP behavior must be demonstrated on the actual WS350 first.
+Do not merge/promote v11.20 solely because CI is green. Physical login, reboot/session invalidation, normal-LAN Recovery gating, OTA and Recovery AP behavior must be demonstrated on the actual WS350 first.
