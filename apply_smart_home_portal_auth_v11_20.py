@@ -37,6 +37,12 @@ def patch_security(repo: Path) -> None:
     text = replace_once(text, '#include "smart_home_build.h"\n', '', "remove dev build include")
     text = replace_once(
         text,
+        '  Serial.printf("Portal code: %s\\n", g_portalCode);\n',
+        '',
+        "remove portal-code serial disclosure",
+    )
+    text = replace_once(
+        text,
         '''static bool portalAuthRequired() {\n#if defined(BOARD_IS_WS350) && defined(SMART_HOME_DEV_UNLOCK) && SMART_HOME_DEV_UNLOCK\n  return false;\n#else\n  return true;\n#endif\n}\n\n''',
         '',
         "remove dev auth policy",
