@@ -5,11 +5,15 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/firmware-candidate.yml'
+      - 'README.md'
+      - 'SECURITY.md'
+      - 'releases/current.json'
       - 'apply_smart_home_*.py'
       - '.bambuhelper-validation/**'
       - 'assets/**'
       - 'scripts/apply_*.sh'
       - 'scripts/validate_*.py'
+      - 'scripts/capture-ws350-views.zsh'
       - 'docs/physical-*.md'
       - 'docs/visual-*.md'
       - 'docs/portal-auth-*.md'
@@ -180,23 +184,30 @@ jobs:
           cp scripts/validate_portal_auth_v11_20.py firmware-gate-artifacts/tools/validate_portal_auth_v11_20.py
           cp docs/portal-auth-v11-20.md firmware-gate-artifacts/docs/portal-auth-v11-20.md
           cp docs/physical-fit-v11-19-1.md firmware-gate-artifacts/docs/physical-fit-v11-19-1.md
+          cp SECURITY.md firmware-gate-artifacts/docs/SECURITY.md
+          cp releases/current.json firmware-gate-artifacts/docs/release-state.json
           for f in include/web_pages.h include/smart_home_build.h web/app.js web/app.css src/web_server.cpp src/bambu_mqtt.cpp src/smart_hub.cpp src/settings.cpp src/display_ui.h src/tasmota.cpp src/security_manager.cpp include/security_manager.h; do
             mkdir -p "firmware-gate-artifacts/source-snapshot/$(dirname "$f")"
             cp "upstream/$f" "firmware-gate-artifacts/source-snapshot/$f"
           done
           {
             echo 'Workshop OS v11.20 Portal Auth RC1'
+            echo "workshop_os_commit=${GITHUB_SHA}"
             echo 'source_line=CANDIDATE'
             echo 'physical_acceptance=REQUIRED'
             echo 'accepted_v11_19_1_rendered_fit=PRESERVED'
             echo 'portal_auth=ENABLED'
             echo 'development_unlock=REMOVED'
+            echo 'portal_credential_serial_logging=FORBIDDEN'
+            echo 'normal_lan_recovery_auth=REQUIRED'
             echo 'recovery_ap_bypass=PRESERVED'
             echo 'ws350_touch_safety=PRESERVED'
             echo 'same_origin_mutation_guard=PRESERVED'
             echo 'guarded_power_control=PRESERVED'
             echo 'fail_closed_printer_commands=PRESERVED'
             echo 'capture_routes=AUTHENTICATED'
+            echo 'capture_system_credential=REDACTED_BY_TOOL'
+            echo 'capture_printer_config_exports=EXCLUDED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             sha256sum firmware-gate-artifacts/*.bin
