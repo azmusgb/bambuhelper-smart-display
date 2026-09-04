@@ -83,11 +83,12 @@ Security changes must preserve the fail-closed control model documented in `docs
 
 Use synthetic values in fixtures, docs, screenshots and bug reports. Never commit a real household SSID/password, printer access code, device portal code, cloud token, private key, or personally identifying device inventory.
 
-The supported `scripts/capture-ws350-views.zsh` workflow must remain credential-safe even while RC2 is LAN-open:
+The supported `scripts/capture-ws350-views.zsh` workflow must remain credential-safe while RC2 is LAN-open:
 
-- RC2 should first attempt the no-login trusted-LAN capture path;
-- authenticated fallback, when needed on older builds, must not echo or expose the portal code in process arguments;
-- cookie/login/raw-frame temporary files use restrictive permissions and are removed on normal exit and interruption;
+- RC2 capture is **no-login only** on normal station-mode Wi-Fi;
+- the helper must fail closed if the no-code trusted-LAN contract is not active;
+- the RC2 helper must never prompt for, accept, echo, or transmit a portal code;
+- raw-frame/probe temporary files use restrictive permissions and are removed on normal exit and interruption;
 - raw framebuffer bytes are kept only in a private temporary file outside the retained capture directory;
 - the live System credential region remains redacted **before** retained PPM or PNG output is written;
 - printer configuration/settings exports remain excluded because those models can contain access codes or other secrets;
