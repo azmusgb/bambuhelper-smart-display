@@ -66,15 +66,20 @@ def main() -> int:
         'SECURE_POST("/printer/power", handlePrinterPower)',
         'SECURE_GET("/hub/views", handleHubViews)',
         'SECURE_GET("/hub/frame.ppm", handleHubFramePpm)',
+        'SECURE_GET("/recovery", handleRecoveryPage)',
         'static bool recoveryMutationAllowed(){return securityAuthorize(server,true);}',
-        'server.on("/recovery", HTTP_GET, handleRecoveryPage)',
         "['Auth','ON · PORTAL CODE']",
         "Recovery AP remains independently accessible",
         "Portal session reset. Sign in again with the current code shown on System.",
     ]:
         need(web, marker, "authenticated web/recovery contract")
-    for marker in ["OFF · DEVELOPMENT", "Development unlock remains active", "Normal / Development"]:
-        forbid(web, marker, "development recovery copy")
+    for marker in [
+        'server.on("/recovery", HTTP_GET, handleRecoveryPage)',
+        "OFF · DEVELOPMENT",
+        "Development unlock remains active",
+        "Normal / Development",
+    ]:
+        forbid(web, marker, "public/development recovery surface")
 
     for marker in [
         "function v1120Ws350Safety()",
@@ -86,12 +91,15 @@ def main() -> int:
         forbid(app, marker, "development portal UI")
 
     # The physical recovery path must not depend on the browser login route.
+    # SECURE_GET remains safe in Recovery AP mode because securityAuthorize()
+    # explicitly allows isAPMode() before checking the session cookie.
     need(hub, "securityPortalCode()", "physical portal code")
     need(hub, '"PORTAL ACCESS"', "physical portal access card")
     need(settings, "buttonType = BTN_TOUCHSCREEN;", "forced-safe WS350 touch")
 
     print("Workshop OS v11.20 portal authentication contracts: PASS")
     print("LAN portal authentication: REQUIRED")
+    print("Normal-LAN Recovery page authentication: REQUIRED")
     print("Recovery AP auth bypass: PRESERVED")
     print("WS350 physical touch safety: PRESERVED")
     print("Same-origin mutation protection: PRESERVED")
