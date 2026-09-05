@@ -1,5 +1,5 @@
 import Foundation
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 
 @MainActor
 final class BLECentral: NSObject, ObservableObject {
