@@ -29,6 +29,9 @@ jobs:
       - name: Validate settings capability registry
         run: python3 scripts/validate_settings_parity.py
 
+      - name: Validate Workshop Companion protocol
+        run: python3 scripts/validate_companion_protocol.py
+
       - name: Validate shell helpers
         run: |
           bash -n scripts/waveshare-usb.sh
