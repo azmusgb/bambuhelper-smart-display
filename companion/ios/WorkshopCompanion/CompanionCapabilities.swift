@@ -1,6 +1,6 @@
 import Foundation
 import AVFoundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 private enum CameraCaptureOutcome: Sendable {
     case completed(URL)
