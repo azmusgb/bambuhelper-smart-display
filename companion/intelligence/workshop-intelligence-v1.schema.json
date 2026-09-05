@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workshop.local/schema/workshop-intelligence-v1.json",
+  "title": "Workshop Intelligence v1",
+  "$defs": {
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity"],
+      "properties": {
+        "identity": {"type": "string", "maxLength": 160},
+        "online": {"type": ["boolean", "null"]},
+        "lanReachable": {"type": ["boolean", "null"]},
+        "authenticatedSession": {"type": ["boolean", "null"]}
+      }
+    },
+    "printer": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": ["string", "null"], "maxLength": 160},
+        "state": {"type": ["string", "null"], "maxLength": 160},
+        "progressPct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "layer": {"type": ["integer", "null"], "minimum": 0},
+        "layerTotal": {"type": ["integer", "null"], "minimum": 0},
+        "nozzleC": {"type": ["number", "null"]},
+        "bedC": {"type": ["number", "null"]},
+        "chamberC": {"type": ["number", "null"]},
+        "errorSummary": {"type": ["string", "null"], "maxLength": 160}
+      }
+    },
+    "power": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "mapped": {"type": ["boolean", "null"]},
+        "on": {"type": ["boolean", "null"]},
+        "watts": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "companion": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "bleConnected": {"type": ["boolean", "null"]},
+        "lanReady": {"type": ["boolean", "null"]},
+        "latestPhoneCaptureAvailable": {"type": ["boolean", "null"]}
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device"],
+      "properties": {
+        "device": {"$ref": "#/$defs/device"},
+        "printer": {"$ref": "#/$defs/printer"},
+        "power": {"$ref": "#/$defs/power"},
+        "companion": {"$ref": "#/$defs/companion"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "intent", "advisoryOnly"],
+      "properties": {
+        "label": {"type": "string", "maxLength": 160},
+        "intent": {
+          "enum": [
+            "physical-check",
+            "open-workshop-os",
+            "review-printer",
+            "review-power",
+            "review-network",
+            "none"
+          ]
+        },
+        "advisoryOnly": {"const": true}
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "id", "kind", "question", "snapshot"],
+      "properties": {
+        "v": {"const": 1},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {
+          "enum": ["explain-status", "diagnose", "summarize", "recommend-next", "photo-inspect"]
+        },
+        "question": {"type": "string", "minLength": 1, "maxLength": 500},
+        "snapshot": {"$ref": "#/$defs/snapshot"}
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "id",
+        "provider",
+        "severity",
+        "summary",
+        "observations",
+        "recommendedActions",
+        "requiresPhysicalCheck"
+      ],
+      "properties": {
+        "v": {"const": 1},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "provider": {"type": "string", "minLength": 1, "maxLength": 80},
+        "severity": {"enum": ["info", "watch", "warning", "critical"]},
+        "summary": {"type": "string", "maxLength": 500},
+        "observations": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {"type": "string", "maxLength": 240}
+        },
+        "recommendedActions": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/action"}
+        },
+        "requiresPhysicalCheck": {"type": "boolean"}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/response"}
+  ]
+}
