@@ -21,56 +21,9 @@ A merge is not physical acceptance by itself. `releases/current.json` is authori
 
 ### Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76
 
-PR **#76** carries the RC2 interaction redesign after RC1 proved technically healthy but exposed unnecessary friction during real WS350 touch testing.
+PR **#76** is the current direct-to-`main` hardware candidate. It adds explicit physical controls for timezone, staged DHCP/static network configuration, segmented IPv4 editing, and guarded display rotation. Ordinary adjustments use visible directional controls rather than hidden long-press reversal semantics.
 
-The physical interface is being elevated around **discoverability, target size, explicit direction, safe staging, and guarded commit flows**:
-
-- Network Expert uses large finger-sized controls instead of dense card-only gestures;
-- primary Network navigation and numeric-edit controls target roughly **52–60 px** reference hit areas where the 480×320 layout permits it;
-- every network page has explicit **Back / Next** navigation;
-- Time & Locale exposes dedicated **Prev / Next** timezone controls;
-- Address Editor exposes a visible **STAGED — NOT APPLIED** state;
-- IPv4 editing uses selectable octets plus explicit **-10 / -1 / +1 / +10** controls;
-- Address Review separates **Back**, **Discard**, and guarded **Hold Apply + Restart**;
-- normal short taps cannot apply a network configuration;
-- Display Expert removes hidden “hold to go backward” behavior in favor of explicit left/right direction semantics;
-- Rotation opens a dedicated **Current / Preview / Prev / Next / Cancel / Hold Commit** interaction;
-- changing Rotation Preview does not persist, and a short tap on Commit does not persist;
-- live guarded-action progress makes protected commits visible;
-- the established 32-view deterministic framebuffer catalog is retained because Rotation Preview is modal rather than a new capture page.
-
-#### Security boundary
-
-The **mergeable v11.23 candidate preserves the accepted v11.20 portal/session boundary**.
-
-An early RC2 hardware-iteration delta briefly introduced a station-mode trusted-LAN bypass. That state is treated only as a historical/intermediate reconstruction condition and is explicitly removed before final security validation, settings-parity validation, browser JavaScript validation, native builds, artifact packaging, or promotion.
-
-The final candidate requires:
-
-- normal station-mode management access through the boot-scoped portal-code session;
-- same-origin protection for mutating requests;
-- route-scoped setup/recovery AP exceptions rather than blanket AP authorization;
-- `WORKSHOP_OS_TEMP_LAN_OPEN` absent from final reconstructed source;
-- authenticated framebuffer capture using `scripts/capture-ws350-views.zsh`;
-- portal-code input hidden from the terminal and sent to `/login` over stdin rather than command-line arguments;
-- System portal-code pixels redacted before retained capture output;
-- no tracked or packaged no-code acceptance helper.
-
-See `docs/security-hardening-v11-23-rc2.md`, `docs/PHYSICAL_ACCEPTANCE_V11_23_RC2.md`, and `SECURITY.md` for the enforceable boundary.
-
-#### Network / Locale / Layout scope
-
-- physical timezone selection using the existing supported timezone database;
-- coordinated DHCP/static mode;
-- segmented IP / gateway / subnet / DNS editing staged on-device;
-- no network mutation until the Review page is deliberately held to apply;
-- restart after an accepted network commit so addressing changes are applied coherently;
-- guarded display rotation with a dedicated staged-preview flow;
-- Time & Locale, Address Editor, and Network Review framebuffer acceptance views;
-- Wi-Fi credentials and hostname remain browser-only inputs;
-- no speculative speed, fan, temperature, or AMS printer commands.
-
-The candidate is **not accepted** until exact-head RC2 CI and real-device touch/display/network/security acceptance pass. v11.22 remains the authoritative physically accepted source baseline.
+The **final mergeable candidate preserves the accepted v11.20 portal/session boundary**. An early RC2 hardware-iteration delta briefly introduced a station-mode trusted-LAN bypass, but that state is historical/intermediate only and is explicitly removed before final security validation, settings-parity validation, browser JavaScript validation, native builds, artifact packaging, or promotion. Final CI forbids `WORKSHOP_OS_TEMP_LAN_OPEN`, the normal-LAN session bypass, and the temporary LAN-open browser banner from surviving into reconstructed candidate source. Physical network, touch, rotation, and security acceptance remain required before promotion.
 
 ### Workshop OS v11.24 Audio Console RC1 — PR #77
 
@@ -89,14 +42,22 @@ Acceptance evidence includes:
 - shared `jc3248w535` 320×480 regression success;
 - inherited v11.20 portal-auth contract validation;
 - v11.22 Display Expert contract and settings-parity validation;
-- healthy read-only device interrogation reporting `Smart Home v11.22 Display Expert RC1`, `safeMode=false`, responsive FT6336 touch, connected Wi-Fi, healthy memory, and connected printer telemetry;
+- healthy read-only device interrogation reporting `Smart Home v11.22 Display Expert RC1`, `safeMode=false`, responsive FT6336 touch, connected Wi-Fi, healthy memory, and connected X2D telemetry;
 - complete **29-view** authenticated framebuffer capture with the System credential line redacted before retained PNG/PPM output.
 
 ### v11.22 Display Expert
 
-The physical Display Experience includes 14 pages, with expert surfaces for curated theme palettes, clock colors, gauge colors/scales/behavior, glow, layout, Clock Info, and AMS Tray Types.
+The physical Display Experience includes 14 pages with expert surfaces for:
 
-Free-text Gauge Labels remain browser-only.
+- curated theme palettes and clock colors;
+- gauge arc/label/value colors;
+- nozzle, bed, chamber, and power full-scale values;
+- gauge smoothing and warning threshold/color;
+- glow mode/style/duration/color;
+- 8-slot landscape, 9-slot portrait, and split presentation;
+- Clock Info and AMS Tray Types.
+
+Free-text Gauge Labels remain portal-only. Guarded display rotation is being validated in v11.23 rather than being retrofitted into the accepted v11.22 baseline.
 
 ### Inherited safety and security
 
@@ -106,15 +67,23 @@ Speed, fan, temperature, AMS, or other printer commands are not added without a 
 
 ## Static installer
 
-The static installer intentionally remains **Workshop OS v11.19.1 Physical Fit RC2**, with **Smart Home v7.2** as rollback. Accepted source and static distribution are independent release surfaces.
+The static installer intentionally remains **Workshop OS v11.19.1 Physical Fit RC2** for the moment, with **Smart Home v7.2** as its rollback. Accepted source and static distribution are independent release surfaces; advancing accepted source does not silently rewrite the published binary channel.
 
 For a normal existing-device update, use the application/OTA image. A Full image belongs only at flash offset `0x0` during intentional USB recovery/full flash.
 
 ## Validation model
 
-Firmware is reconstructed deterministically from pinned upstream BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the versioned `apply_smart_home_*.py` evolution stack.
+Firmware is reconstructed deterministically from pinned upstream BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the versioned `apply_smart_home_*.py` evolution stack. The reusable firmware gate validates:
 
-For v11.23 RC2, the firmware gate reconstructs and validates the authenticated v11.20 baseline, applies the Network / Locale / Layout and touch-UX deltas, applies the physical-touch and guarded-feedback deltas, then applies the explicit **authenticated-LAN restore**. Only after the restore passes does CI run settings parity, browser JavaScript, native `ws_lcd_350`, shared `jc3248w535`, Full-image merge, and artifact packaging.
+1. deterministic reconstruction and candidate tooling;
+2. inherited device and control contracts;
+3. accepted visual/rendered-fit boundaries;
+4. portal-auth contracts;
+5. candidate-specific behavior contracts;
+6. browser JavaScript;
+7. native `ws_lcd_350` build;
+8. shared `jc3248w535` regression build;
+9. Full/OTA artifact generation and provenance.
 
 `docs/settings-capability-registry/` is the machine-authoritative WS350 browser/device settings parity inventory.
 
@@ -122,25 +91,24 @@ For v11.23 RC2, the firmware gate reconstructs and validates the authenticated v
 
 - `apply_smart_home_*.py` — deterministic firmware evolution inputs.
 - `.bambuhelper-validation/` — verified patch payloads required by selected loaders.
-- `.github/workflows/firmware-candidate.yml` — reusable path-aware firmware/hardware gate.
+- `.github/workflows/firmware-candidate.yml` — single reusable firmware/hardware gate.
 - `.github/workflows/validate.yml` — repository validation.
 - `.github/workflows/release-gate.yml` — source/release metadata gate and stable `merge-gate` coordination.
-- `.github/workflows/release-main.yml` — accepted static-installer integrity gate.
-- `docs/` — architecture, safety, parity, acceptance, security, and roadmap documentation.
+- `.github/workflows/release-main.yml` — accepted static installer integrity gate.
+- `docs/` — architecture, safety, parity, acceptance, and roadmap documentation.
 - `docs/archive/` and `releases/archive/` — historical provenance.
 - `releases/current.json` — accepted-source / direct-candidate / `main` / static-channel state.
 - `scripts/capture-ws350-views.zsh` — authenticated credential-safe physical framebuffer capture.
-- `docs/PHYSICAL_ACCEPTANCE_V11_23_RC2.md` — current physical acceptance checklist.
 
 ## Governance and safety
 
 - `main` is protected by the stable path-aware `merge-gate`.
 - Hardware-facing changes require exact-head CI and real-device acceptance before source promotion.
 - Generated PlatformIO output, local capture ZIPs, credentials, and ad-hoc reports stay out of source control.
-- Captures redact the System credential region before retained output and exclude printer configuration/settings exports.
-- Final firmware validation forbids the temporary trusted-LAN bypass from surviving into reconstructed candidate source.
+- Captures redact the System credential before retained output and exclude printer configuration/settings exports.
+- Final candidate validation forbids the temporary trusted-LAN bypass from surviving into reconstructed source.
 - Static firmware retention remains bounded to the published pair plus one rollback pair.
-- Upstream synchronization is its own candidate; the accepted source line is never silently repinned. See `docs/UPSTREAM_SYNC.md`.
+- Upstream synchronization is its own candidate; the accepted source line is never silently repinned.
 
 ## License and attribution
 
