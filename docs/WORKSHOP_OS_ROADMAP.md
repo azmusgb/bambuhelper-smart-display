@@ -72,9 +72,9 @@ Implemented candidate scope includes:
 
 Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
-### v11.23 security exception during hardware iteration
+### v11.23 final authenticated boundary
 
-RC2 temporarily permits no-code access on normal trusted-LAN station Wi-Fi so touch/network UX can be iterated without portal-code friction. This is a **candidate-only development exception**, not accepted baseline policy. The inherited authenticated/session implementation is reconstructed and validated before the bypass delta, same-origin protection for mutating requests remains, and ordinary AP mode is not converted into a blanket privileged bypass.
+Final RC2 preserves the v11.20 portal/session boundary throughout active reconstruction. The temporary trusted-LAN no-code experiment is historical only and is excluded from the mergeable candidate. Normal station-mode management requires the boot-scoped session, mutating requests retain same-origin protection, and setup/recovery exceptions remain route-scoped. The secure touch applicators never invoke the historical bypass helpers; CI validates authentication after each active RC2 transformation and at the final boundary.
 
 Promotion requires exact-head CI plus new real-device acceptance of touch geometry, staged-network safety, rotation preview/commit behavior, and the intended security boundary.
 
@@ -135,16 +135,49 @@ No major UX feature family. Focus on:
 - settings migrations;
 - artifact provenance and publisher-verifiable release metadata.
 
-## v12 — Workshop OS 2
+## v12.0 — Canonical source and state ownership
 
-Only after parity and reliability are closed out:
+The source migration has two independently validated stages. Preparation can proceed in a draft stacked behind #77 while #76 remains the sole direct firmware candidate to `main`. Such preparation does not promote an unaccepted source or change the published installer.
 
+1. **Direct build:** materialize one canonical source tree from a pinned, explicitly identified reconstruction; retain source/input hashes and compare the complete build inputs against the reconstruction. Build both `ws_lcd_350` and `jc3248w535`, preserve browser and safety contracts, and retain the old recipe as the comparison oracle during migration. No behavior change or upstream repin belongs in this stage.
+2. **Service extraction:** after the direct-build boundary is validated, migrate shared workshop state and the guarded command path first, then the remaining services incrementally. UI, browser, voice and automation must share the same state and command authority. Use bounded embedded modules and event storage; service names do not require one task or queue per service.
+
+Canonical application ownership belongs under `workshop-os/`. Preserve `releases/current.json` as release-state authority and keep the four existing workflow filenames. Historical patch inputs remain available until the verified cutover; do not delete them merely because a snapshot exists.
+
+Reconstruction equivalence and CI can be established without the device. Physical smoke acceptance and the accepted base are still required before the direct-build candidate is promoted. Further service refactoring must remain a separate change so its behavior can be evaluated independently.
+
+## v12.1 — Real Filament Inventory visibility
+
+Move truthful inventory visibility ahead of speculative printer commands. `azmusgb/filamentinventory` already supplies the authenticated `/api/display-feed` metric-card endpoint; extend its producer/consumer contract rather than inventing a competing inventory database.
+
+- Keep existing summary clients compatible.
+- Add a versioned read API for authorized spool identity, material, brand, color, location and printer/feeder/slot placement.
+- Preserve Bill/Aimee private profile boundaries; a household view requires an explicit sharing model.
+- Distinguish measured, estimated and unknown quantities; expose source age and valid-empty/unavailable/stale states.
+- Give devices revocable profile-bound read credentials instead of requiring a general inventory sync credential for new integrations.
+- Validate the configured feed end to end on the actual WS350 before claiming physical integration acceptance.
+
+The existing feed reads cloud-synced inventory. It does not make unsynced browser data available on the LAN. Strict offline inventory availability needs a continuously available local adapter and an explicit synchronization contract.
+
+## v12.2 — QR and physical placement
+
+Start with the existing phone/browser spool QR workflow. Resolve the spool in the authorized workspace, select a printer/feeder/slot, and confirm physical placement. Require revision checks, duplicate-safe requests and an audit result. Keep one current physical placement per spool and one current spool per slot; shared equipment occupancy must not leak another private profile's records.
+
+Inventory placement and an AMS motor command are separate operations. Hardware load/unload/retry remains capability-gated and requires a proven protocol plus physical acceptance.
+
+## Later capability-gated work
+
+- notifications and bounded automation through the accepted event and command paths;
 - richer AMS/material workflow;
 - HMS recovery assistant and state-driven quick actions;
 - command lifecycle `REQUESTED → SENT → OBSERVED → CONFIRMED` where telemetry permits;
-- real Filament Inventory integration through a configured API bridge;
 - state-aware Home/Standby experiences;
-- historical device/print telemetry when backed by real storage.
+- historical device/print telemetry when backed by real storage;
+- push-to-talk after microphone/audio acceptance, with visible capture, cancellation and explicit speech-processing destination;
+- BLE provisioning/recovery with physical enrollment intent and preserved independent recovery;
+- multi-device workshop state backed by stable equipment identity and real sources.
+
+Neither a successful MIC ECHO nor a constructible MQTT packet establishes a voice or printer-control capability. Version numbers remain planning labels; proven backend support and acceptance determine delivery order.
 
 ## Cross-release invariants
 
