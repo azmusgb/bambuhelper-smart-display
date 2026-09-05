@@ -1,8 +1,8 @@
-name: Workshop OS Firmware Gate — v11.24 Audio Console RC1
+name: Workshop OS Firmware Gate — v11.25 Workshop Companion BLE RC1
 
 on:
   pull_request:
-    branches: [feature/v11-23-network-locale-layout]
+    branches: [feature/v11-24-audio-console]
 
 permissions:
   contents: read
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Native Audio Console Validation
+    name: Native Workshop Companion BLE Validation
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     steps:
@@ -36,8 +36,6 @@ jobs:
           python -m py_compile apply_smart_home_portal_auth_v11_20.py
           python -m py_compile apply_smart_home_display_expert_v11_22.py
           python -m py_compile apply_smart_home_network_locale_layout_v11_23.py
-          # Historical RC2 module remains only as a source of touch/layout helpers.
-          # The secure wrapper never invokes its auth/browser bypass functions.
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_secure.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize.py
@@ -45,6 +43,7 @@ jobs:
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile apply_smart_home_auth_restore_v11_23_rc2.py
           python -m py_compile apply_smart_home_audio_console_v11_24.py
+          python -m py_compile apply_workshop_companion_ble_v11_25.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
@@ -56,6 +55,7 @@ jobs:
           python -m py_compile scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile scripts/validate_auth_restore_v11_23_rc2.py
           python -m py_compile scripts/validate_audio_console_v11_24.py
+          python -m py_compile scripts/validate_workshop_companion_ble_v11_25.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
 
@@ -81,7 +81,6 @@ jobs:
         run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
       - name: Validate v11.23 RC1 base contract
         run: python scripts/validate_network_locale_layout_v11_23.py upstream
-
       - name: Apply v11.23 RC2 secure touch UX
         run: python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
       - name: Validate v11.23 RC2 secure touch UX and authenticated boundary
@@ -96,20 +95,22 @@ jobs:
         run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
       - name: Validate v11.23 RC2 guarded-action feedback
         run: python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
-
       - name: Normalize final authenticated v11.23 LAN boundary
         run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
       - name: Validate final authenticated v11.23 RC2 boundary
         run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
-
       - name: Apply v11.24 Audio Console
         run: python apply_smart_home_audio_console_v11_24.py --repo upstream --apply
       - name: Validate v11.24 Audio Console and inherited Hardware controls
         run: python scripts/validate_audio_console_v11_24.py upstream
-      - name: Validate settings parity against reconstructed v11.24 source
+      - name: Apply v11.25 Workshop Companion BLE
+        run: python apply_workshop_companion_ble_v11_25.py --repo upstream --apply
+      - name: Validate v11.25 Workshop Companion BLE contract
+        run: python scripts/validate_workshop_companion_ble_v11_25.py upstream
+      - name: Validate settings parity against reconstructed v11.25 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Verify inherited safety after v11.24 delta
+      - name: Verify inherited safety after v11.25 delta
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -118,22 +119,22 @@ jobs:
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           build=Path('upstream/include/smart_home_build.h').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
+          ble=Path('upstream/src/workshop_companion_ble.cpp').read_text()
           app=Path('upstream/web/app.js').read_text()
           for needle in [
-              'SMART_HOME_VERSION "v11.24"',
-              'Smart Home v11.24 Audio Console RC1',
-              'Workshop OS v11.23 RC2 secure touch UX',
+              'SMART_HOME_VERSION "v11.25"',
+              'Smart Home v11.25 Workshop Companion BLE RC1',
+              'Workshop OS v11.25 Workshop Companion BLE RC1',
               'Workshop OS v11.23 RC2 authenticated LAN restore',
           ]:
-              assert needle in build + hub, needle
+              assert needle in build + hub + ble, needle
           for forbidden in [
               'WORKSHOP_OS_TEMP_LAN_OPEN',
               'if (!isAPMode()) return true;',
               'TEMPORARY TRUSTED-LAN MODE',
               'v1123Rc2LanOpenBanner',
-              'Workshop OS v11.23 RC2 touch UX and temporary trusted-LAN portal bypass',
           ]:
-              assert forbidden not in build + hub + security + app, forbidden
+              assert forbidden not in build + hub + security + app + ble, forbidden
           for needle in [
               'ensureInitialized();',
               'return cookieMatches(server);',
@@ -142,22 +143,20 @@ jobs:
               assert needle in security, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
-          for needle in [
-              'SECURE_GET("/hub/views", handleHubViews)',
-              'SECURE_GET("/hub/frame.ppm", handleHubFramePpm)',
-              'SECURE_POST("/hub/show", handleHubShow)',
+          for forbidden in [
+              'requestPause','requestResume','requestStop','requestLightCommand',
+              'requestSpeedCommand','requestFanCommand','tasmotaSet','tasmotaToggle',
+              'portalCode','access_code','accessCode','sessionCookie','Set-Cookie',
           ]:
-              assert needle in web, needle
-          for forbidden in ['requestSpeedCommand','requestFanCommand']:
-              assert forbidden not in hub and forbidden not in web and forbidden not in mqtt, forbidden
-          print('v11.24 inherited safety + secure-throughout authenticated boundary: PASS')
+              assert forbidden not in ble, forbidden
+          print('v11.25 inherited safety + BLE orchestration-only boundary: PASS')
           PY
 
       - name: Validate browser JavaScript
         run: node --check upstream/web/app.js
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
-      - name: Build WS350 v11.24
+      - name: Build WS350 v11.25
         working-directory: upstream
         run: pio run -e ws_lcd_350
       - name: Regression build shared 320x480 target
@@ -167,7 +166,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.24 Audio Console RC1 artifacts
+      - name: Package v11.25 Workshop Companion BLE RC1 artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -176,31 +175,25 @@ jobs:
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p firmware-gate-artifacts/tools firmware-gate-artifacts/docs
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.24-Audio-Console-RC1-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.24-Audio-Console-RC1-OTA.bin
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Workshop-Companion-BLE-RC1-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Workshop-Companion-BLE-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
-          cp apply_smart_home_audio_console_v11_24.py firmware-gate-artifacts/tools/
-          cp scripts/validate_audio_console_v11_24.py firmware-gate-artifacts/tools/
-          cp docs/audio-console-v11-24.md firmware-gate-artifacts/docs/
+          cp apply_workshop_companion_ble_v11_25.py firmware-gate-artifacts/tools/
+          cp scripts/validate_workshop_companion_ble_v11_25.py firmware-gate-artifacts/tools/
+          cp docs/workshop-companion-ble-v11-25.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
           {
-            echo 'Workshop OS v11.24 Audio Console RC1'
+            echo 'Workshop OS v11.25 Workshop Companion BLE RC1'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
-            echo 'source_line=STACKED_CANDIDATE_ON_SECURE_THROUGHOUT_V11_23_RC2'
+            echo 'source_line=STACKED_CANDIDATE_ON_V11_24_AUDIO_CONSOLE'
             echo 'physical_acceptance=REQUIRED'
-            echo 'speaker_volume=PERSISTENT_ES8311_DAC_0_100'
-            echo 'mic_level=250MS_ON_DEMAND'
-            echo 'mic_echo=1S_3S_5S_LOCAL_ONLY'
-            echo 'hardware_console=OUTPUT_MIC_ALERTS_QUIET_LED_FINISH_ERROR_POWER_AUTO_OFF'
-            echo 'hidden_hold_reverse=ABSENT_FROM_HARDWARE_CONSOLE'
-            echo 'led_finish_error_controls=PRESERVED'
-            echo 'power_automation_controls=PRESERVED'
-            echo 'v11_23_touch_ux=SECURE_THROUGHOUT_EXPLICIT_CONTROLS'
-            echo 'normal_wifi_portal_code=REQUIRED_AUTHENTICATED_BOUNDARY'
-            echo 'temporary_trusted_lan_bypass=ABSENT_ALL_ACTIVE_STAGES'
-            echo 'same_origin_mutation_guard=PRESERVED'
-            echo 'canonical_v11_24_applicator=YES'
-            echo 'same_release_fixup_helpers=ABSENT'
+            echo 'ble_transport=ORCHESTRATION_ONLY'
+            echo 'lan_transport=AUTHENTICATED_AUTHORITY_AND_LARGE_PAYLOADS'
+            echo 'ble_portal_session_bypass=ABSENT'
+            echo 'ble_printer_power_mutations=ABSENT'
+            echo 'ble_long_lived_secrets=ABSENT'
+            echo 'ws350_only=YES'
+            echo 'shared_target_ble=DISABLED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             sha256sum firmware-gate-artifacts/*.bin
@@ -208,7 +201,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-24-audio-console-rc1
+          name: workshop-os-v11-25-workshop-companion-ble-rc1
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
