@@ -30,13 +30,8 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def braced_bounds(text: str, start: str, label: str) -> tuple[int, int]:
-    pos = text.find(start)
-    if pos < 0:
-        raise PatchError(f"{label}: start anchor missing")
-    if text.find(start, pos + 1) >= 0:
-        raise PatchError(f"{label}: start anchor is not unique")
-    brace = text.find("{", pos)
+def braced_bounds_at(text: str, start: int, label: str) -> tuple[int, int]:
+    brace = text.find("{", start)
     if brace < 0:
         raise PatchError(f"{label}: opening brace missing")
     depth = 0
@@ -62,8 +57,17 @@ def braced_bounds(text: str, start: str, label: str) -> tuple[int, int]:
         elif c == "}":
             depth -= 1
             if depth == 0:
-                return pos, i + 1
+                return start, i + 1
     raise PatchError(f"{label}: closing brace missing")
+
+
+def braced_bounds(text: str, start: str, label: str) -> tuple[int, int]:
+    pos = text.find(start)
+    if pos < 0:
+        raise PatchError(f"{label}: start anchor missing")
+    if text.find(start, pos + 1) >= 0:
+        raise PatchError(f"{label}: start anchor is not unique")
+    return braced_bounds_at(text, pos, label)
 
 
 def replace_braced(text: str, start: str, replacement: str, label: str) -> str:
@@ -72,17 +76,39 @@ def replace_braced(text: str, start: str, replacement: str, label: str) -> str:
 
 
 def function_body(text: str, signature_fragment: str, label: str) -> tuple[int, int, str]:
-    a, b = braced_bounds(text, signature_fragment, label)
-    return a, b, text[a:b]
+    if signature_fragment != "int buzzerBackendMicEcho(":
+        a, b = braced_bounds(text, signature_fragment, label)
+        return a, b, text[a:b]
+
+    matches = list(re.finditer(
+        r"(?m)^[ \t]*int[ \t]+buzzerBackendMicEcho[ \t]*\([^;{]*\)[ \t]*\{",
+        text,
+    ))
+    candidates: list[tuple[int, int, str]] = []
+    for match in matches:
+        a, b = braced_bounds_at(text, match.start(), label)
+        block = text[a:b]
+        if "1400" in block and (
+            "MALLOC_CAP_SPIRAM" in block
+            or "stopAudioTaskForDiagnostic" in block
+            or "heap_caps_malloc" in block
+        ):
+            candidates.append((a, b, block))
+    if len(candidates) != 1:
+        raise PatchError(
+            f"{label}: expected one PSRAM-backed definition with 1400 ms cap, "
+            f"found {len(candidates)} from {len(matches)} definitions"
+        )
+    return candidates[0]
 
 
 AUDIO_DRAW = r'''static void drawAudioSettings(bool full) {
   (void)full;
   const int16_t W=tft.width();
-  const uint8_t page=(uint8_t)(g_audioSettingsPage%4U);
-  static const char* titles[] = {"OUTPUT","MIC","ALERTS","QUIET"};
+  const uint8_t page=(uint8_t)(g_audioSettingsPage%9U);
+  static const char* titles[] = {"OUTPUT","MIC","ALERTS","QUIET","LED","FINISH","ERROR","POWER","AUTO OFF"};
   tft.fillScreen(UI_BG);
-  drawHeader("AUDIO",titles[page],3);
+  drawHeader("HARDWARE",titles[page],3);
   uiBottomNav(3,nullptr);
 
   char value[24];
@@ -117,7 +143,7 @@ AUDIO_DRAW = r'''static void drawAudioSettings(bool full) {
                          "Lower cooldown temperature",UI_PURPLE);
     uiDisplaySettingCard(hubMoreRect(3),"THRESHOLD +5",value,
                          "Raise cooldown temperature",UI_GREEN);
-  }else{
+  }else if(page==3){
     char qs[12],qe[12];
     hubQuietHourLabel(buzzerSettings.quietStartHour,qs,sizeof(qs),true);
     hubQuietHourLabel(buzzerSettings.quietEndHour,qe,sizeof(qe),false);
@@ -129,9 +155,76 @@ AUDIO_DRAW = r'''static void drawAudioSettings(bool full) {
                          "Move end one hour earlier",UI_GREEN);
     uiDisplaySettingCard(hubMoreRect(3),"QUIET END +1",qe,
                          "Move end one hour later",UI_GREEN);
+  }else if(page==4){
+    char br[16];snprintf(br,sizeof(br),"%u%%",(unsigned)hubLevelPct(ledSettings.brightness));
+    uiDisplaySettingCard(hubMoreRect(0),"STATUS LED",ledSettings.enabled?"ON":"OFF",
+                         "Master indicator output",UI_ORANGE);
+    uiDisplaySettingCard(hubMoreRect(1),"BRIGHTNESS -25",br,
+                         "Lower status LED brightness",UI_CYAN);
+    uiDisplaySettingCard(hubMoreRect(2),"BRIGHTNESS +25",br,
+                         "Raise status LED brightness",UI_CYAN);
+    uiDisplaySettingCard(hubMoreRect(3),"PRINT AUTO",ledSettings.autoOnWhilePrinting?"ON":"OFF",
+                         "Auto-on follows active printing",UI_PURPLE);
+  }else if(page==5){
+    char secs[20],peak[16];
+    snprintf(secs,sizeof(secs),"%u SEC",(unsigned)ledSettings.finishSeconds);
+    snprintf(peak,sizeof(peak),"%u%%",(unsigned)hubLevelPct(ledSettings.finishBrightness));
+    uiDisplaySettingCard(hubMoreRect(0),"PAUSE BREATH",ledSettings.pauseBreathing?"ON":"OFF",
+                         "Slow breath during print pause",UI_GREEN);
+    uiDisplaySettingCard(hubMoreRect(1),"FINISH EFFECT",hubLedFinishModeLabel(),
+                         "Tap to cycle effect",UI_ORANGE);
+    uiDisplaySettingCard(hubMoreRect(2),"FINISH DURATION",secs,
+                         "Tap to cycle 5-600 sec",UI_CYAN);
+    uiDisplaySettingCard(hubMoreRect(3),"FINISH PEAK",peak,
+                         "Tap to raise/wrap brightness",UI_PURPLE);
+  }else if(page==6){
+    char secs[20];
+    if(ledSettings.errorStrobeSeconds==0)strlcpy(secs,"UNTIL CLEAR",sizeof(secs));
+    else snprintf(secs,sizeof(secs),"%u SEC",(unsigned)ledSettings.errorStrobeSeconds);
+    uiDisplaySettingCard(hubMoreRect(0),"ERROR STROBE",ledSettings.errorStrobe?"ON":"OFF",
+                         "Fast indicator strobe on error",UI_ORANGE);
+    uiDisplaySettingCard(hubMoreRect(1),"ERROR DURATION",secs,
+                         "Tap to cycle 0 / 5-600 sec",UI_CYAN);
+    uiDisplaySettingCard(hubMoreRect(2),"LED DRIVER",hubLedDriverLabel(),
+                         "Read-only; wiring stays in portal",UI_PURPLE);
+    uiDisplaySettingCard(hubMoreRect(3),"GPIO & COLORS","PORTAL",
+                         "Expert wiring and RGB color setup",UI_GREEN);
+  }else if(page==7){
+    const uint8_t plug=hubPowerConfigPlug();
+    if(plug==0xFF){
+      uiDisplaySettingCard(hubMoreRect(0),"PLUG STATUS","NO SLOT","Selected printer has no plug slot",UI_MUTED);
+      uiDisplaySettingCard(hubMoreRect(1),"POLL INTERVAL","N/A","No mapped plug for this printer",UI_CYAN);
+      uiDisplaySettingCard(hubMoreRect(2),"STATUS DISPLAY","N/A","Configure plug mapping in portal",UI_PURPLE);
+      uiDisplaySettingCard(hubMoreRect(3),"BUTTON POWER",dispSettings.buttonPowerControl?"ON":"OFF","Global physical button option",UI_GREEN);
+    }else{
+      TasmotaSettings& ps=tasmotaSettings[plug];
+      char poll[16],detail[48];snprintf(poll,sizeof(poll),"%u SEC",(unsigned)ps.pollInterval);
+      snprintf(detail,sizeof(detail),"Plug %u - %s",(unsigned)(plug+1),ps.ip[0]?ps.ip:"set address in portal");
+      uiDisplaySettingCard(hubMoreRect(0),"PLUG STATUS",ps.enabled?"ON":(ps.ip[0]?"OFF":"NEEDS IP"),detail,UI_ORANGE);
+      uiDisplaySettingCard(hubMoreRect(1),"POLL INTERVAL",poll,"Tap to cycle 10-60 sec",UI_CYAN);
+      uiDisplaySettingCard(hubMoreRect(2),"STATUS DISPLAY",hubPowerDisplayModeLabel(ps.displayMode),"Tap: Alternate / Power / Layer",UI_PURPLE);
+      uiDisplaySettingCard(hubMoreRect(3),"BUTTON POWER",dispSettings.buttonPowerControl?"ON":"OFF","Physical button power-control option",UI_GREEN);
+    }
+  }else{
+    const uint8_t plug=hubPowerConfigPlug();
+    if(plug==0xFF){
+      uiDisplaySettingCard(hubMoreRect(0),"AUTO OFF","UNAVAILABLE","No mapped plug for selected printer",UI_MUTED);
+      uiDisplaySettingCard(hubMoreRect(1),"AUTO OFF DELAY","N/A","Configure plug mapping in portal",UI_CYAN);
+      uiDisplaySettingCard(hubMoreRect(2),"CANCEL ON DOOR","N/A","No mapped power target",UI_PURPLE);
+      uiDisplaySettingCard(hubMoreRect(3),"PLUG CONFIG","PORTAL","Configure printer/plug mapping",UI_GREEN);
+    }else{
+      TasmotaSettings& ps=tasmotaSettings[plug];
+      char delay[20],detail[48];snprintf(delay,sizeof(delay),"%u MIN",(unsigned)ps.autoOffDelayMin);
+      snprintf(detail,sizeof(detail),"%s - Plug %u",hubPowerTypeLabel(ps.plugType),(unsigned)(plug+1));
+      uiDisplaySettingCard(hubMoreRect(0),"AUTO OFF",ps.autoOffEnabled?"ON":"OFF","Power down after print completion",UI_ORANGE);
+      uiDisplaySettingCard(hubMoreRect(1),"AUTO OFF DELAY",delay,"Tap to cycle 1-240 min",UI_CYAN);
+      uiDisplaySettingCard(hubMoreRect(2),"CANCEL ON DOOR",ps.autoOffCancelOnDoor?"ON":"OFF","Opening door cancels pending auto-off",UI_PURPLE);
+      uiDisplaySettingCard(hubMoreRect(3),"PLUG CONFIG",detail,ps.ip[0]?ps.ip:"IP/type/outlet setup stays in portal",UI_GREEN);
+    }
   }
 
   HubRect back=hubSystemSubBackRect(),next=hubSystemSubNextRect();
+  const char* nextLabel=page==0?"MIC >":(page==1?"ALERTS >":(page==2?"QUIET >":(page==3?"LED >":(page==4?"FINISH >":(page==5?"ERROR >":(page==6?"POWER >":(page==7?"AUTO OFF >":"OUTPUT >")))))));
   if(hubLandscape()){
     uiPanelFill(148,210,W-296,54);
     uiDrawFit(g_audioDiagMessage,158,237,W-316,FONT_SMALL,ML_DATUM,g_audioDiagColor,UI_PANEL_2);
@@ -140,7 +233,7 @@ AUDIO_DRAW = r'''static void drawAudioSettings(bool full) {
     uiDrawFit(g_audioDiagMessage,20,330,W-40,FONT_SMALL,ML_DATUM,g_audioDiagColor,UI_PANEL_2);
   }
   uiActionButton(back,"< SYSTEM",UI_BLUE);
-  uiActionButton(next,page==3?"OUTPUT >":"NEXT >",UI_PURPLE);
+  uiActionButton(next,nextLabel,UI_PURPLE);
   hubMarkFrameDirty();g_dirty=false;
 }'''
 
@@ -151,11 +244,11 @@ AUDIO_TOUCH = r'''    if(g_audioSettingsView){
         g_dirty=true;buzzerPlay(BUZZ_CLICK);return true;
       }
       if(hubSystemSubNextRect().contains(x,y)){
-        g_audioSettingsPage=(uint8_t)((g_audioSettingsPage+1U)%4U);
+        g_audioSettingsPage=(uint8_t)((g_audioSettingsPage+1U)%9U);
         g_audioConsoleMicLevel=-1;g_dirty=true;buzzerPlay(BUZZ_CLICK);return true;
       }
       for(uint8_t i=0;i<4;i++) if(hubMoreRect(i).contains(x,y)){
-        const uint8_t page=(uint8_t)(g_audioSettingsPage%4U);
+        const uint8_t page=(uint8_t)(g_audioSettingsPage%9U);
         if(page==0){
           if(i==0 || i==1){
             int v=(int)buzzerSettings.volume+(i==0?-10:10);
@@ -224,7 +317,7 @@ AUDIO_TOUCH = r'''    if(g_audioSettingsView){
             char msg[56];snprintf(msg,sizeof(msg),"Cooldown threshold %u C",(unsigned)buzzerSettings.bedCooldownThresholdC);
             setAudioDiag(msg,UI_CYAN);
           }
-        }else{
+        }else if(page==3){
           if(i==0 || i==1){
             buzzerSettings.quietStartHour=hubStepHour(buzzerSettings.quietStartHour,i==0);
             saveBuzzerSettings();
@@ -232,6 +325,80 @@ AUDIO_TOUCH = r'''    if(g_audioSettingsView){
           }else{
             buzzerSettings.quietEndHour=hubStepHour(buzzerSettings.quietEndHour,i==2);
             saveBuzzerSettings();setAudioDiag("Quiet end updated",UI_GREEN);
+          }
+        }else if(page==4){
+          static const uint8_t ledLevels[]={0,64,128,192,255};
+          if(i==0){
+            ledSettings.enabled=!ledSettings.enabled;
+            hubPersistLed(ledSettings.enabled?"Status LED enabled":"Status LED disabled",ledSettings.enabled?UI_GREEN:UI_DIM);
+          }else if(i==1){
+            ledSettings.brightness=hubStepPreset(ledSettings.brightness,ledLevels,5,true);
+            hubPersistLed("LED brightness lowered",UI_CYAN);
+          }else if(i==2){
+            ledSettings.brightness=hubStepPreset(ledSettings.brightness,ledLevels,5,false);
+            hubPersistLed("LED brightness raised",UI_CYAN);
+          }else{
+            ledSettings.autoOnWhilePrinting=!ledSettings.autoOnWhilePrinting;
+            hubPersistLed("Print auto behavior updated",UI_PURPLE);
+          }
+        }else if(page==5){
+          static const uint8_t ledLevels[]={0,64,128,192,255};
+          if(i==0){
+            ledSettings.pauseBreathing=!ledSettings.pauseBreathing;
+            hubPersistLed("Pause breathing updated",UI_GREEN);
+          }else if(i==1){
+            ledSettings.finishMode=(uint8_t)((ledSettings.finishMode+1U)%3U);
+            hubPersistLed("Finish effect updated",UI_ORANGE);
+          }else if(i==2){
+            ledSettings.finishSeconds=hubStepLedSeconds(ledSettings.finishSeconds,false,false);
+            hubPersistLed("Finish duration updated",UI_CYAN);
+          }else{
+            ledSettings.finishBrightness=hubStepPreset(ledSettings.finishBrightness,ledLevels,5,false);
+            hubPersistLed("Finish peak updated",UI_PURPLE);
+          }
+        }else if(page==6){
+          if(i==0){
+            ledSettings.errorStrobe=!ledSettings.errorStrobe;
+            hubPersistLed("Error strobe updated",ledSettings.errorStrobe?UI_RED:UI_DIM);
+          }else if(i==1){
+            ledSettings.errorStrobeSeconds=hubStepLedSeconds(ledSettings.errorStrobeSeconds,false,true);
+            hubPersistLed("Error duration updated",UI_CYAN);
+          }else{
+            setAudioDiag("LED hardware wiring stays in portal",UI_DIM);
+          }
+        }else if(page==7){
+          const uint8_t plug=hubPowerConfigPlug();
+          if(i==3){
+            dispSettings.buttonPowerControl=!dispSettings.buttonPowerControl;
+            hubPersistPower("Button power-control setting updated",UI_GREEN);
+          }else if(plug==0xFF){
+            setAudioDiag("Selected printer has no smart-plug slot",UI_AMBER);
+          }else{
+            TasmotaSettings& ps=tasmotaSettings[plug];
+            if(i==0){
+              if(!ps.enabled&&!ps.ip[0]) setAudioDiag("Set plug IP in portal before enabling",UI_AMBER);
+              else{ps.enabled=!ps.enabled;hubPersistPower(ps.enabled?"Smart plug enabled":"Smart plug disabled",ps.enabled?UI_GREEN:UI_DIM);}
+            }else if(i==1){
+              ps.pollInterval=hubStepPowerPoll(ps.pollInterval,false);hubPersistPower("Power poll interval updated",UI_CYAN);
+            }else{
+              ps.displayMode=(uint8_t)((ps.displayMode+1U)%3U);hubPersistPower("Power status display updated",UI_PURPLE);
+            }
+          }
+        }else{
+          const uint8_t plug=hubPowerConfigPlug();
+          if(plug==0xFF){
+            setAudioDiag("Selected printer has no smart-plug slot",UI_AMBER);
+          }else{
+            TasmotaSettings& ps=tasmotaSettings[plug];
+            if(i==0){
+              ps.autoOffEnabled=!ps.autoOffEnabled;hubPersistPower(ps.autoOffEnabled?"Printer auto-off enabled":"Printer auto-off disabled",ps.autoOffEnabled?UI_GREEN:UI_DIM);
+            }else if(i==1){
+              ps.autoOffDelayMin=hubStepAutoOffDelay(ps.autoOffDelayMin,false);hubPersistPower("Auto-off delay updated",UI_CYAN);
+            }else if(i==2){
+              ps.autoOffCancelOnDoor=!ps.autoOffCancelOnDoor;hubPersistPower("Door-cancel setting updated",UI_PURPLE);
+            }else{
+              setAudioDiag("Plug IP, type and outlet stay in portal",UI_DIM);
+            }
           }
         }
         g_dirty=true;return true;
@@ -288,16 +455,10 @@ def patch_backend(root: Path) -> None:
     new='''  uint8_t pct = buzzerSettings.volume <= 100 ? buzzerSettings.volume : 75;\n  uint8_t vol = (pct == 0) ? 0 : (uint8_t)(((pct * 256U) / 100U) - 1U);\n  if (!esWrite(ES_REG_DAC_32, vol)) return false;'''
     text=replace_once(text,old,new,"dynamic ES8311 codec volume")
 
-    # v10.6 owns the microphone diagnostic implementation. Extend only its
-    # existing hard cap; preserve all PSRAM bounds, DMA chunking and task handoff.
-    try:
-        a,b,echo=function_body(text,"int buzzerBackendMicEcho(","mic echo function")
-    except PatchError:
-        raise PatchError("v10.6 mic echo implementation missing before v11.24")
+    a,b,echo=function_body(text,"int buzzerBackendMicEcho(","mic echo function")
     if "1400" not in echo:
         raise PatchError("mic echo 1400 ms safety cap not found")
-    echo2=echo.replace("1400","5000")
-    text=text[:a]+echo2+text[b:]
+    text=text[:a]+echo.replace("1400","5000")+text[b:]
 
     if 'void buzzerBackendSetVolume(uint8_t percent)' not in text:
         insert='''\nvoid buzzerBackendSetVolume(uint8_t percent) {\n  if(percent>100U)percent=100U;\n  buzzerSettings.volume=percent;\n  if(!gCodecReady)return;\n  const uint8_t vol=(percent==0U)?0U:(uint8_t)(((percent*256U)/100U)-1U);\n  esWrite(ES_REG_DAC_32,vol);\n}\n\n'''
@@ -313,8 +474,8 @@ def patch_hub(root: Path) -> None:
         text=replace_once(text,'uint8_t g_audioSettingsPage = 0;\n',
                           'uint8_t g_audioSettingsPage = 0;\nint g_audioConsoleMicLevel = -1;\n',
                           "audio console state")
-    text=replace_braced(text,'static void drawAudioSettings(bool full)',AUDIO_DRAW,"Audio Console renderer")
-    text=replace_braced(text,'    if(g_audioSettingsView){',AUDIO_TOUCH,"Audio Console touch block")
+    text=replace_braced(text,'static void drawAudioSettings(bool full)',AUDIO_DRAW,"nine-page Hardware Console renderer")
+    text=replace_braced(text,'    if(g_audioSettingsView){',AUDIO_TOUCH,"nine-page Hardware Console touch block")
     text += f"\n// {MARKER}\n"
     save(root,rel,text)
 
@@ -350,7 +511,12 @@ def patch(root: Path) -> None:
         "src/settings.cpp":["buz_vol"],
         "src/buzzer_backend.h":["buzzerBackendSetVolume"],
         "src/buzzer_backend_es8311.cpp":["buzzerBackendSetVolume","ES_REG_DAC_32","5000"],
-        "src/smart_hub.cpp":["VOLUME -10","VOLUME +10","MIC LEVEL","ECHO 1 SEC","ECHO 3 SEC","ECHO 5 SEC","THRESHOLD -5","THRESHOLD +5","QUIET START -1","QUIET END +1"],
+        "src/smart_hub.cpp":[
+            "g_audioSettingsPage%9U","(g_audioSettingsPage+1U)%9U",
+            "VOLUME -10","VOLUME +10","MIC LEVEL","ECHO 1 SEC","ECHO 3 SEC","ECHO 5 SEC",
+            "THRESHOLD -5","THRESHOLD +5","QUIET START -1","QUIET END +1",
+            "STATUS LED","FINISH EFFECT","ERROR STROBE","PLUG STATUS","AUTO OFF DELAY","CANCEL ON DOOR"
+        ],
         "src/web_server.cpp":["buzvol","buz[\"volume\"]"],
     }
     for rel,needles in checks.items():
