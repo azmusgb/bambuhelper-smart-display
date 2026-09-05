@@ -4,6 +4,8 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var bluetooth = BLECentral()
     @StateObject private var capabilities = CompanionCapabilities()
+    @StateObject private var intelligence = WorkshopIntelligenceEngine()
+    @State private var intelligenceQuestion = "What needs attention right now?"
 
     var body: some View {
         NavigationStack {
@@ -45,6 +47,94 @@ struct ContentView: View {
                     }
                 }
 
+                Section("Workshop Copilot") {
+                    LabeledContent("Provider", value: intelligence.providerName)
+
+                    if let reason = intelligence.availabilityReason,
+                       intelligence.phase == .unavailable {
+                        Text(reason)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    TextField("Ask about the current workshop state", text: $intelligenceQuestion, axis: .vertical)
+                        .lineLimit(2...5)
+
+                    Button {
+                        Task {
+                            await intelligence.ask(
+                                kind: .diagnose,
+                                question: intelligenceQuestion,
+                                snapshot: intelligenceSnapshot()
+                            )
+                        }
+                    } label: {
+                        if intelligence.phase == .thinking {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Thinking on iPhone…")
+                            }
+                        } else {
+                            Text("Ask Workshop Copilot")
+                        }
+                    }
+                    .disabled(intelligence.phase == .thinking || intelligence.phase == .checking)
+
+                    Text("Copilot is advisory only. The model never receives Workshop credentials and cannot directly pause, stop, power, configure, update, or recover hardware.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let answer = intelligence.answer {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text(answer.severity.rawValue.uppercased())
+                                    .font(.caption.bold())
+                                    .foregroundStyle(severityColor(answer.severity))
+                                Spacer()
+                                Text(answer.provider)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(answer.summary)
+                                .font(.body)
+
+                            if !answer.observations.isEmpty {
+                                Text("Observations")
+                                    .font(.caption.bold())
+                                ForEach(answer.observations, id: \.self) { observation in
+                                    Text("• \(observation)")
+                                        .font(.callout)
+                                }
+                            }
+
+                            if !answer.recommendedActions.isEmpty {
+                                Text("Recommended next checks")
+                                    .font(.caption.bold())
+                                ForEach(answer.recommendedActions) { action in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(action.label)
+                                            .font(.callout)
+                                        Text(action.intent.rawValue)
+                                            .font(.caption.monospaced())
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+
+                            if answer.requiresPhysicalCheck {
+                                Label("Physical verification recommended", systemImage: "eye")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if let error = intelligence.lastError {
+                        Text(error)
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 Section("Companion request") {
                     if let event = bluetooth.lastEvent {
                         LabeledContent("Type", value: event.t)
@@ -69,7 +159,7 @@ struct ContentView: View {
                     Section("Latest camera capture") {
                         Text(photo.lastPathComponent)
                             .font(.caption.monospaced())
-                        Text("The image stays on the iPhone in v1. A later authenticated Wi-Fi transport can transfer images; BLE never carries photo payloads.")
+                        Text("The image remains local to the iPhone in the accepted Companion baseline. Candidate firmware adds authenticated LAN transfer; BLE never carries photo payloads.")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -82,6 +172,9 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Workshop Companion")
+            .task {
+                await intelligence.refreshAvailability()
+            }
         }
     }
 
@@ -92,6 +185,37 @@ struct ContentView: View {
 
     private func loginURL(from base: URL) -> URL {
         base.appendingPathComponent("login")
+    }
+
+    private func intelligenceSnapshot() -> WorkshopIntelligenceV1.Snapshot {
+        let identity = bluetooth.bootstrap?.device
+            ?? bluetooth.peripheralName
+            ?? "Workshop OS"
+
+        return WorkshopIntelligenceV1.Snapshot(
+            device: .init(
+                identity: identity,
+                online: bluetooth.deviceState?.online,
+                lanReachable: bluetooth.deviceState?.lan,
+                authenticatedSession: bluetooth.deviceState?.session
+            ),
+            printer: nil,
+            power: nil,
+            companion: .init(
+                bleConnected: bluetooth.phase == .connected,
+                lanReady: bluetooth.deviceState?.lan,
+                latestPhoneCaptureAvailable: capabilities.lastPhotoURL != nil
+            )
+        )
+    }
+
+    private func severityColor(_ severity: WorkshopIntelligenceV1.Severity) -> Color {
+        switch severity {
+        case .info: return .secondary
+        case .watch: return .yellow
+        case .warning: return .orange
+        case .critical: return .red
+        }
     }
 
     private func isActionable(_ event: CompanionEnvelope) -> Bool {
