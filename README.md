@@ -4,7 +4,7 @@ Local-first Workshop OS for the **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`
 
 ## Release model
 
-The repository deliberately separates the **physically accepted source baseline** from the conservative static download channel.
+The repository deliberately separates the **physically accepted source baseline** from the conservative static download channel and from hardware candidates still awaiting real-device acceptance.
 
 | Surface | Current state | Purpose |
 | --- | --- | --- |
@@ -12,9 +12,24 @@ The repository deliberately separates the **physically accepted source baseline*
 | `main` | **Workshop OS v11.22 Display Expert RC1 — accepted** | PR #74 merged after exact-head CI and real-device acceptance. |
 | `release.json` / Netlify | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative static installer retained until its binary-channel promotion is performed separately. |
 | static rollback download | **Smart Home v7.2** | Current static-channel rollback while v11.19.1 remains the published installer. |
-| active candidate | **None** | No firmware candidate is currently open. |
+| active candidate | **Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76 (draft)** | Direct-to-`main` hardware candidate; exact-head CI and physical WS350 acceptance are required. |
+| stacked follow-on | **Workshop OS v11.24 Audio Console RC1 — PR #77 (draft)** | Built on #76 and not independently promotable until its base candidate is accepted. |
 
-A merge is not physical acceptance by itself. `releases/current.json` is authoritative for accepted source, candidate state, `main` state, and the static download channel.
+A merge is not physical acceptance by itself. `releases/current.json` is authoritative for the accepted source, the direct-to-`main` hardware candidate, `main` state, and the static download channel. Stacked follow-on candidates are documented here and in the roadmap rather than represented as a second authoritative `candidate` object.
+
+## Current candidate stack
+
+### Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76
+
+PR **#76** is the current direct-to-`main` hardware candidate. It adds explicit physical controls for timezone, staged DHCP/static network configuration, segmented IPv4 editing, and guarded display rotation. Ordinary adjustments use visible directional controls rather than hidden long-press reversal semantics.
+
+The candidate also contains a **temporary trusted-LAN no-code mode** for hardware UX iteration. That exception is build-gated, visible in the browser, and is **not accepted baseline security behavior**. The inherited authenticated/session implementation is reconstructed and validated before the candidate delta is applied. Physical network, touch, rotation, and security acceptance remain required before promotion.
+
+### Workshop OS v11.24 Audio Console RC1 — PR #77
+
+PR **#77** is stacked on #76. It evolves the existing ES8311/onboard-microphone path with persistent speaker volume, explicit event/click/cooldown/quiet controls, a short microphone-level sample, and explicit 1/3/5-second local record/playback loops. Capture remains local-only and temporary.
+
+Because #77 depends on #76, it cannot be treated as a direct replacement for the accepted v11.22 baseline until the underlying v11.23 candidate has completed its own validation and physical acceptance path.
 
 ## Accepted source — Workshop OS v11.22 Display Expert RC1
 
@@ -32,7 +47,7 @@ Acceptance evidence includes:
 
 ### v11.22 Display Expert
 
-The physical Display Experience now includes 14 pages, adding expert surfaces for:
+The physical Display Experience includes 14 pages with expert surfaces for:
 
 - curated theme palettes and clock colors;
 - gauge arc/label/value colors;
@@ -42,7 +57,7 @@ The physical Display Experience now includes 14 pages, adding expert surfaces fo
 - 8-slot landscape, 9-slot portrait, and split presentation;
 - Clock Info and AMS Tray Types.
 
-Free-text Gauge Labels remain portal-only. Guarded display rotation remains assigned to v11.23.
+Free-text Gauge Labels remain portal-only. Guarded display rotation is being validated in v11.23 rather than being retrofitted into the accepted v11.22 baseline.
 
 ### Inherited safety and security
 
@@ -82,7 +97,7 @@ Firmware is reconstructed deterministically from pinned upstream BambuHelper com
 - `.github/workflows/release-main.yml` — accepted static installer integrity gate.
 - `docs/` — architecture, safety, parity, acceptance, and roadmap documentation.
 - `docs/archive/` and `releases/archive/` — historical provenance.
-- `releases/current.json` — accepted-source / candidate / `main` / static-channel state.
+- `releases/current.json` — accepted-source / direct-candidate / `main` / static-channel state.
 - `scripts/capture-ws350-views.zsh` — authenticated credential-safe physical framebuffer capture.
 
 ## Governance and safety
