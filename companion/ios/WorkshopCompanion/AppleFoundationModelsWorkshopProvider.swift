@@ -39,7 +39,8 @@ actor AppleFoundationModelsWorkshopProvider: WorkshopIntelligenceProvider {
             generating: AppleWorkshopGeneratedAnswer.self
         ).content
 
-        return normalize(generated, requestID: request.id)
+        let normalized = normalize(generated, requestID: request.id)
+        return WorkshopIntelligenceOutputGuard.apply(normalized, to: request.snapshot)
     }
 
     private func availabilityMessage(_ reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
