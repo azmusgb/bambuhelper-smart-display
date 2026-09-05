@@ -46,10 +46,9 @@ jobs:
               '.github/workflows/firmware-candidate.yml', 'README.md', 'SECURITY.md',
               'releases/current.json', 'apply_smart_home_*.py', '.bambuhelper-validation/**',
               'assets/**', 'scripts/apply_*.sh', 'scripts/validate_*.py',
-              'scripts/capture-ws350-views.zsh', 'scripts/accept-ws350-v11-23-rc2.zsh',
-              'docs/physical-*.md', 'docs/visual-*.md', 'docs/portal-auth-*.md',
-              'docs/display-expert-*.md', 'docs/network-*.md', 'docs/touch-*.md',
-              'docs/settings-capability-registry/**'
+              'scripts/capture-ws350-views.zsh', 'docs/physical-*.md', 'docs/visual-*.md',
+              'docs/portal-auth-*.md', 'docs/display-expert-*.md', 'docs/network-*.md',
+              'docs/touch-*.md', 'docs/settings-capability-registry/**'
           )
           changed=[p.strip() for p in Path('/tmp/changed.txt').read_text().splitlines() if p.strip()]
           matched=[p for p in changed if any(fnmatch.fnmatchcase(p, pat) for pat in patterns)]
@@ -88,6 +87,7 @@ jobs:
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
+          python -m py_compile apply_smart_home_auth_restore_v11_23_rc2.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
@@ -97,21 +97,19 @@ jobs:
           python -m py_compile scripts/validate_touch_ux_v11_23_rc2.py
           python -m py_compile scripts/validate_touch_ux_v11_23_rc2_finalize.py
           python -m py_compile scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py
+          python -m py_compile scripts/validate_auth_restore_v11_23_rc2.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
           bash -n scripts/apply_workshop_os_v11_19_1.sh
           bash -n scripts/capture-ws350-views.zsh
-          bash -n scripts/accept-ws350-v11-23-rc2.zsh
-
-          for helper in scripts/capture-ws350-views.zsh scripts/accept-ws350-v11-23-rc2.zsh; do
-            if grep -Eq 'printf[[:space:]]+"Portal code|Portal code shown on device|portal-code-fallback|code@-|/login' "$helper"; then
-              echo "RC2 helper unexpectedly contains portal-code authentication: $helper" >&2
-              exit 1
-            fi
-          done
-          grep -q 'NO PORTAL CODE' scripts/capture-ws350-views.zsh
-          grep -q 'Portal code: NOT REQUIRED' scripts/accept-ws350-v11-23-rc2.zsh
-          echo 'RC2 helper no-code contract: PASS'
+          grep -q 'stty -echo' scripts/capture-ws350-views.zsh
+          grep -q "--data-urlencode 'code@-'" scripts/capture-ws350-views.zsh
+          grep -q 'curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm"' scripts/capture-ws350-views.zsh
+          if grep -q 'TRUSTED-LAN ACCESS OK (NO PORTAL CODE)' scripts/capture-ws350-views.zsh; then
+            echo 'Unauthenticated capture helper is forbidden.' >&2
+            exit 1
+          fi
+          echo 'Authenticated capture-helper contract: PASS'
 
       - name: Reconstruct accepted v11.19 baseline
         run: bash scripts/apply_workshop_os_v11_19.sh upstream
@@ -125,19 +123,19 @@ jobs:
         run: python scripts/validate_rendered_fit_v11_19_1.py upstream
       - name: Apply v11.20 Portal Auth
         run: python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
-      - name: Validate v11.20 portal authentication baseline
+      - name: Validate v11.20 authenticated baseline
         run: python scripts/validate_portal_auth_v11_20.py upstream
       - name: Apply v11.22 Display Expert
         run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
       - name: Validate v11.22 Display Expert
         run: python scripts/validate_display_expert_v11_22.py upstream
-      - name: Apply v11.23 Network Locale Layout Expert RC1 base
+      - name: Apply v11.23 Network Locale Layout RC1 base
         run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
       - name: Validate v11.23 RC1 base contract
         run: python scripts/validate_network_locale_layout_v11_23.py upstream
-      - name: Apply v11.23 RC2 touch UX and temporary trusted-LAN mode
+      - name: Apply v11.23 RC2 touch UX intermediate delta
         run: python apply_smart_home_touch_ux_v11_23_rc2.py --repo upstream --apply
-      - name: Validate v11.23 RC2 touch UX / LAN-open contract
+      - name: Validate v11.23 RC2 touch UX intermediate contract
         run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
       - name: Apply v11.23 RC2 physical touch finalization
         run: python apply_smart_home_touch_ux_v11_23_rc2_finalize.py --repo upstream --apply
@@ -147,10 +145,14 @@ jobs:
         run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
       - name: Validate v11.23 RC2 guarded-action feedback
         run: python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
-      - name: Validate settings parity against reconstructed v11.23 RC2 source
+      - name: Restore authenticated v11.23 LAN boundary
+        run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
+      - name: Validate final authenticated v11.23 boundary
+        run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
+      - name: Validate settings parity against final v11.23 RC2 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Verify inherited safety after v11.23 RC2 delta
+      - name: Verify final inherited safety
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -159,12 +161,13 @@ jobs:
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           build=Path('upstream/include/smart_home_build.h').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
-          for needle in [
-              'SMART_HOME_VERSION "v11.23"',
-              'Smart Home v11.23 Network Locale Layout RC2',
-              '#define WORKSHOP_OS_TEMP_LAN_OPEN 1',
-          ]:
+          app=Path('upstream/web/app.js').read_text()
+          for needle in ['SMART_HOME_VERSION "v11.23"','Smart Home v11.23 Network Locale Layout RC2','Workshop OS v11.23 RC2 authenticated LAN restore']:
               assert needle in build, needle
+          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','if (!isAPMode()) return true;','TEMPORARY TRUSTED-LAN MODE']:
+              assert forbidden not in build + security + app, forbidden
+          assert 'return cookieMatches(server);' in security
+          assert 'if (mutating && !sameOrigin(server))' in security
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
           for needle in [
@@ -173,11 +176,9 @@ jobs:
               'SECURE_POST("/hub/show", handleHubShow)',
           ]:
               assert needle in web, needle
-          assert 'if (mutating && !sameOrigin(server))' in security
-          assert 'if (isAPMode()) return true;' not in security
           for forbidden in ['requestSpeedCommand','requestFanCommand']:
               assert forbidden not in hub and forbidden not in web and forbidden not in mqtt, forbidden
-          print('v11.23 RC2 inherited safety: PASS')
+          print('v11.23 RC2 final authenticated safety: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -207,15 +208,12 @@ jobs:
           cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC2-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp scripts/capture-ws350-views.zsh firmware-gate-artifacts/tools/
-          cp scripts/accept-ws350-v11-23-rc2.zsh firmware-gate-artifacts/tools/
           cp apply_smart_home_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
           cp apply_smart_home_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp apply_smart_home_touch_ux_v11_23_rc2_finalize.py firmware-gate-artifacts/tools/
           cp apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py firmware-gate-artifacts/tools/
-          cp scripts/validate_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
-          cp scripts/validate_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
-          cp scripts/validate_touch_ux_v11_23_rc2_finalize.py firmware-gate-artifacts/tools/
-          cp scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py firmware-gate-artifacts/tools/
+          cp apply_smart_home_auth_restore_v11_23_rc2.py firmware-gate-artifacts/tools/
+          cp scripts/validate_auth_restore_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_settings_parity.py firmware-gate-artifacts/tools/
           cp docs/physical-settings-parity.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
@@ -234,11 +232,11 @@ jobs:
             echo 'display_rotation=DEDICATED_PREVIEW_GUARDED_HOLD_COMMIT'
             echo 'guarded_hold_progress=5_SEGMENTS_650MS'
             echo 'active_print_network_warning=ENABLED_DISPLAY_RESTART_ONLY'
-            echo 'normal_wifi_portal_code=TEMPORARILY_BYPASSED'
-            echo 'capture_auth=NO_CODE_ONLY'
-            echo 'acceptance_auth=NO_CODE_ONLY'
+            echo 'normal_wifi_portal_code=REQUIRED'
+            echo 'capture_auth=AUTHENTICATED_SESSION'
             echo 'same_origin_mutation_guard=PRESERVED'
             echo 'ap_recovery_boundaries=PRESERVED'
+            echo 'trusted_lan_bypass=ABSENT_FINAL_SOURCE'
             echo 'capture_views=32'
             echo 'wifi_credentials=PORTAL_INPUT'
             echo 'hostname=PORTAL_INPUT'
