@@ -5,12 +5,13 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 ## Current release state
 
 - **Physically accepted hardware/source baseline:** Workshop OS **v11.22 Display Expert RC1**.
-- **Current code on `main`:** Workshop OS **v11.22 Display Expert RC1** — accepted.
+- **Current code on `main`:** Workshop OS **v11.22 Display Expert RC1** plus the non-invasive **Workshop Companion v1 protocol/iPhone foundation** from PR **#82** — accepted firmware bytes remain unchanged.
 - **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA (intentionally conservative until a separate binary-channel promotion).
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
 - **Repository governance:** protected `main` with stable path-aware `merge-gate`; force pushes and deletion blocked.
 - **Active direct firmware candidate:** Workshop OS **v11.23 Network / Locale / Layout Expert RC2**, PR **#76** — draft, physical acceptance required.
 - **Stacked follow-on candidate:** Workshop OS **v11.24 Audio Console RC1**, PR **#77** — draft, based on #76.
+- **Stacked Companion firmware candidate:** Workshop OS **v11.25 Workshop Companion BLE RC1**, PR **#83** — draft, based on #77; BLE/Wi-Fi coexistence and iPhone physical acceptance required.
 
 `releases/current.json` remains authoritative for the accepted source and the direct-to-`main` hardware candidate. Green CI alone is not physical acceptance, and a stacked candidate cannot bypass acceptance of its base.
 
@@ -96,6 +97,43 @@ Implemented candidate scope includes:
 
 The v11.24 interaction contract follows v11.23 RC2: ordinary adjustments use explicit directional controls rather than hidden long-press reverse semantics.
 
+## Completed infrastructure — Workshop Companion v1
+
+PR **#82** merged the phone/protocol foundation without changing accepted firmware behavior.
+
+The architectural contract is now explicit and machine-validated:
+
+- ESP32-S3 BLE is an **orchestration plane**, not a Bluetooth Classic/A2DP/HFP/LE Audio device;
+- BLE handles discovery, presence, compact capability/event messages and LAN handoff metadata;
+- Wi-Fi/LAN remains the authenticated authority and high-bandwidth plane for management, printer/power operations, images, audio, OTA and larger payloads;
+- BLE bootstrap locates Workshop OS but does not authorize protected routes;
+- portal codes, session cookies, printer credentials, Wi-Fi passwords and inventory credentials are forbidden from the BLE contract;
+- v1 GATT UUIDs and event/command names are shared across the protocol specification, compile-neutral firmware constants and Swift model;
+- CI fails on protocol/version/UUID/auth-boundary/privacy-declaration drift;
+- the native SwiftUI/CoreBluetooth starter can scan/connect, read bootstrap/state, subscribe to events, negotiate capabilities, answer ping/pong and open the existing authenticated Workshop OS login boundary;
+- the iPhone capability layer supports foreground camera capture, TTS and local notifications with explicit completed/cancelled/permission-denied/foreground-required/unsupported/failed result states;
+- photos remain on-phone in v1; BLE never carries photo/audio payloads.
+
+Future provisioning must use a separately designed authenticated enrollment flow; transport pairing alone is not Workshop OS authorization.
+
+## In validation — v11.25 Workshop Companion BLE RC1
+
+PR **#83** is the WS350 firmware half of Workshop Companion and is stacked on v11.24. It must remain draft until its base candidates and its own physical BLE/iPhone acceptance are complete.
+
+Candidate scope:
+
+- WS350-only BLE capability flag with no-op stubs on non-WS350 builds;
+- Companion v1 GATT service with bootstrap, device-event, phone-command and device-state characteristics;
+- non-secret LAN bootstrap with `auth=portal-session`;
+- compact target payloads of at most 180 bytes;
+- phone presence/LAN state notifications and automatic advertising restart after disconnect;
+- initial `hello` capability advertisement for camera request, TTS request, notification and LAN handoff;
+- no direct BLE path to pause/resume/stop, chamber light, smart-plug power, settings, recovery or OTA authorization;
+- deterministic reconstruction and a fail-closed BLE security validator before native build;
+- native `ws_lcd_350` plus BLE-neutral `jc3248w535` regression builds and candidate Full/OTA packaging.
+
+Physical acceptance must verify iPhone discovery/connect/reconnect, all four characteristics, request/result round trips, BLE + Wi-Fi + MQTT + audio coexistence, free-heap/memory behavior and continued portal/session enforcement. CI success alone does not promote this candidate.
+
 ## Backlog — Printer / Workshop / Power configuration
 
 Still useful after the current candidate stack is physically accepted:
@@ -173,8 +211,9 @@ Inventory placement and an AMS motor command are separate operations. Hardware l
 - command lifecycle `REQUESTED → SENT → OBSERVED → CONFIRMED` where telemetry permits;
 - state-aware Home/Standby experiences;
 - historical device/print telemetry when backed by real storage;
-- push-to-talk after microphone/audio acceptance, with visible capture, cancellation and explicit speech-processing destination;
-- BLE provisioning/recovery with physical enrollment intent and preserved independent recovery;
+- push-to-talk after microphone/audio acceptance, with visible capture, cancellation and explicit speech-processing destination; use BLE only for orchestration and Wi-Fi for audio payloads;
+- authenticated BLE Wi-Fi provisioning/recovery only after a physical enrollment-intent and credential-protection design is proven; preserve independent recovery;
+- native authenticated Companion LAN client, photo/audio transfer and Live Activity integration after the v11.25 transport boundary is physically accepted;
 - multi-device workshop state backed by stable equipment identity and real sources.
 
 Neither a successful MIC ECHO nor a constructible MQTT packet establishes a voice or printer-control capability. Version numbers remain planning labels; proven backend support and acceptance determine delivery order.
@@ -192,6 +231,6 @@ Every future release must preserve:
 - no secrets in source, logs, backups, captures, or artifacts;
 - deterministic reconstruction from a pinned upstream baseline;
 - native WS350 plus shared-target CI;
-- real-device acceptance whenever touch, display, audio, recovery, authentication, network, or control behavior can change.
+- real-device acceptance whenever touch, display, audio, recovery, authentication, network, radio, or control behavior can change.
 
 Quality gates and physical evidence — not planned version numbers — determine promotion.
