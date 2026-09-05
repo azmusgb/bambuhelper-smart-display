@@ -66,6 +66,7 @@ SOURCE = r'''#include "workshop_companion_ble.h"
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <ctype.h>
 
 namespace {
 constexpr uint8_t kProtocolVersion = 1;
@@ -351,7 +352,7 @@ def apply(root: Path) -> None:
     checks = {
         "src/workshop_companion_ble.cpp": [
             SERVICE_UUID, BOOTSTRAP_UUID, DEVICE_EVENT_UUID, PHONE_COMMAND_UUID, DEVICE_STATE_UUID,
-            '"portal-session"', '"hello"', '"camera-request"', '"tts-request"', '"lan-handoff"',
+            "portal-session", "hello", "camera-request", "tts-request", "lan-handoff",
         ],
         "src/main.cpp": ["initWorkshopCompanionBle();", "workshopCompanionBleTick();"],
         "boards/ws_lcd_350.ini": [FLAG],
