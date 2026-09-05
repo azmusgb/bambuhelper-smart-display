@@ -92,8 +92,8 @@ When intentionally promoting the download channel:
 `main` should use GitHub branch protection/rulesets so repository policy is enforced by the platform rather than documentation alone. Recommended minimums:
 
 - require a pull request before merging;
-- require successful `Validate` and `Release Gate` checks;
-- for firmware-facing PRs, also require the reusable Workshop OS firmware gate;
+- require the stable `merge-gate` status, which coordinates `Release Gate`, `Validate`, and the applicable firmware/static-installer workflows;
+- keep the path classification current when adding canonical source or new build inputs, so firmware-facing changes cannot evade the reusable firmware gate;
 - require branches to be up to date before merge;
 - block force pushes and branch deletion;
 - do not allow bypass of required checks for routine firmware promotion.
