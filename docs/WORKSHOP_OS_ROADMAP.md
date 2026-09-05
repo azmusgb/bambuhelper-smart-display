@@ -9,9 +9,10 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 - **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA (intentionally conservative until a separate binary-channel promotion).
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
 - **Repository governance:** protected `main` with stable path-aware `merge-gate`; force pushes and deletion blocked.
-- **Active firmware candidate:** Workshop OS **v11.23 Network / Locale / Layout Expert RC1** on `feature/v11-23-network-locale-layout`; physical acceptance required before promotion.
+- **Active direct firmware candidate:** Workshop OS **v11.23 Network / Locale / Layout Expert RC2**, PR **#76** — draft, physical acceptance required.
+- **Stacked follow-on candidate:** Workshop OS **v11.24 Audio Console RC1**, PR **#77** — draft, based on #76 and not independently promotable.
 
-`releases/current.json` remains authoritative. Green CI alone is not physical acceptance.
+`releases/current.json` remains authoritative for the accepted source and the direct-to-`main` hardware candidate. Green CI alone is not physical acceptance, and a stacked candidate cannot bypass acceptance of its base.
 
 ## Completed — v11.20 Portal Auth
 
@@ -22,7 +23,7 @@ Inherited into v11.22 and accepted as part of the current source line:
 - protected normal-LAN admin/recovery surfaces;
 - independent recovery-safe-mode path;
 - authenticated framebuffer capture;
-- no development-auth bypass;
+- no development-auth bypass in accepted/final source;
 - credential-safe retained capture artifacts.
 
 ## Completed — v11.21 Settings Parity Audit
@@ -51,35 +52,56 @@ Implemented:
 
 Gauge Labels remain portal input because they are free text.
 
-## Active candidate — v11.23 Network / Locale / Layout Expert
+## In validation — v11.23 Network / Locale / Layout Expert RC2
 
-Candidate implementation moves the remaining safe network/locale/layout expert settings onto the WS350 without introducing an on-device keyboard or secret entry.
+PR **#76** is the current direct-to-`main` hardware candidate.
 
-Implemented in the candidate:
+Implemented candidate scope includes:
 
-- timezone selection using the existing timezone database and POSIX TZ strings;
-- four-page Network Expert flow: Essentials, Time & Locale, Address Edit, Review;
-- staged coordinated DHCP/static configuration;
-- segmented numeric IP / gateway / subnet / DNS editing;
-- atomic hold-to-apply network save followed by reboot;
-- live DHCP values as the initial edit seed when stored static values are unavailable;
-- guarded hold-only display rotation;
-- authenticated capture catalog expanded from 29 to at least 32 views for the new Network Expert surfaces.
+- explicit, larger finger-sized Network Expert controls;
+- explicit Back / Next navigation rather than hidden tap/hold direction changes;
+- physical timezone Prev / Next controls;
+- coordinated DHCP/static mode;
+- staged IP / gateway / subnet / DNS editing;
+- selectable IPv4 octets with explicit `-10 / -1 / +1 / +10` controls;
+- visible `STAGED — NOT APPLIED` state;
+- separate Back / Discard / guarded Hold Apply + Restart review actions;
+- guarded Display Rotation with Current / Preview / Prev / Next / Cancel / Hold Commit;
+- preview-only rotation changes that do not persist until deliberate commit;
+- live guarded-action progress feedback;
+- retention of the deterministic 32-view candidate capture catalog.
 
 Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
-### v11.23 acceptance constraints
+### v11.23 security boundary
 
-- no partially-applied static configuration;
-- no network settings are changed until the explicit Review hold-to-apply action;
-- static apply requires nonzero IP, gateway, and subnet;
-- display rotation is hold-only and must be recoverable;
-- the accepted physical-capture orientation remains rotation 3 for credential-redaction geometry;
-- no secret/free-text keyboard work is introduced;
-- inherited v11.22 portal-auth, control-safety, recovery, and visual contracts remain intact;
-- physical acceptance requires exact-head CI, WS350 + shared-target builds, read-only interrogation, and a credential-safe capture pass.
+The mergeable RC2 candidate preserves the accepted v11.20 portal/session model. Normal station-mode management requires the boot-scoped portal-code session, mutating requests retain same-origin protection, and AP/setup/recovery authorization remains route-scoped.
 
-## Next — v11.24 Printer / Workshop / Power Configuration
+An early hardware-iteration delta historically introduced a trusted-LAN no-code bypass. That state is not a promotion target. The deterministic candidate pipeline explicitly restores and validates the authenticated boundary before settings parity, JavaScript validation, native builds, packaging, or promotion. Final reconstructed source must not contain `WORKSHOP_OS_TEMP_LAN_OPEN`, a normal-LAN session bypass, or the temporary LAN-open browser banner.
+
+Promotion requires exact-head CI plus real-device acceptance of touch geometry, staged-network safety, rotation preview/commit behavior, authenticated capture, and the security boundary in `docs/PHYSICAL_ACCEPTANCE_V11_23_RC2.md`.
+
+## In validation — v11.24 Audio Console RC1
+
+PR **#77** is stacked on v11.23 and therefore cannot be independently promoted ahead of its base candidate.
+
+Implemented candidate scope includes:
+
+- persistent ES8311 speaker volume, 0–100%, with explicit `-10 / +10` controls;
+- Event Sounds toggle;
+- direct Speaker Test;
+- 250 ms onboard-microphone level sample with 0–100% feedback;
+- explicit 1-second, 3-second, and 5-second local record/playback loops;
+- Button Clicks control;
+- Bed Cooldown control and explicit threshold adjustment;
+- Quiet Start / Quiet End explicit hour controls;
+- continued PSRAM-backed local-only mic capture → playback → release behavior.
+
+The v11.24 interaction contract follows v11.23 RC2: ordinary adjustments use explicit directional controls rather than hidden long-press reverse semantics. Its final promotion path must inherit the authenticated v11.23 boundary; it must not resurrect the historical trusted-LAN bypass.
+
+## Backlog — Printer / Workshop / Power configuration
+
+Still useful after the current candidate stack is physically accepted:
 
 - light start/finish/failure automation and off delay;
 - printer connection mode and region;
@@ -88,9 +110,9 @@ Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 - plug type/outlet selection;
 - power currency/tariff.
 
-Printer identity/access credentials, custom dashboard URL, Workshop note, and plug IP/hostname remain portal input.
+Printer identity/access credentials, custom dashboard URL, Workshop note, and plug IP/hostname remain portal input unless a safe physical-input design is deliberately introduced.
 
-## v11.25 — Deeper Waveshare hardware use
+## Deeper Waveshare hardware use
 
 Capability-gated opportunities:
 
@@ -98,13 +120,13 @@ Capability-gated opportunities:
 2. PCF85063 RTC fallback;
 3. microSD diagnostics/history/export;
 4. QMI8658 motion/orientation behavior;
-5. richer ES8311 notification controls;
+5. richer ES8311 notification behavior after Audio Console acceptance;
 6. panel-life-aware backlight/sleep policies;
 7. wiring-sensitive buzzer/LED expert controls.
 
 Peripheral failure must degrade gracefully and never block printer operation.
 
-## v11.26 — Reliability / soak release
+## Reliability / soak release
 
 No major UX feature family. Focus on:
 
@@ -136,6 +158,7 @@ Every future release must preserve:
 - fail-closed printer and power commands;
 - guarded destructive actions;
 - no speculative Bambu commands;
+- authenticated normal-LAN management in final/accepted source;
 - no visible steady-state flicker regression;
 - no secrets in source, logs, backups, captures, or artifacts;
 - deterministic reconstruction from a pinned upstream baseline;
