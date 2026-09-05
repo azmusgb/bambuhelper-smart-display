@@ -28,4 +28,19 @@ targets:
         SUPPORTS_MACCATALYST: NO
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
     scheme:
-      testTargets: []
+      testTargets:
+        - WorkshopCompanionTests
+
+  WorkshopCompanionTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: WorkshopCompanionTests
+    dependencies:
+      - target: WorkshopCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.azmusgb.WorkshopCompanionTests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
