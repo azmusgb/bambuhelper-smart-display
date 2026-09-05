@@ -160,8 +160,34 @@ jobs:
         run: python scripts/validate_workshop_companion_web_v11_26.py upstream
       - name: Revalidate settings parity against reconstructed v11.26 source
         run: python scripts/validate_settings_parity.py --repo upstream
-      - name: Revalidate authenticated boundary after Companion Web delta
-        run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
+
+      - name: Validate inherited authentication primitives after v11.26
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          security=Path('upstream/src/security_manager.cpp').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          companion=Path('upstream/src/companion_web.cpp').read_text()
+          for needle in [
+              'ensureInitialized();',
+              'return cookieMatches(server);',
+              'if (mutating && !sameOrigin(server))',
+              'if (apPublicRouteAllowed(server))',
+              'securitySessionValid(server)',
+              'securityAuthorize(server, true)',
+              'securityAuthorize(server, false)',
+              '/login?next=/companion',
+          ]:
+              assert needle in security + web + companion, needle
+          for forbidden in [
+              'WORKSHOP_OS_TEMP_LAN_OPEN',
+              'TEMPORARY TRUSTED-LAN MODE',
+              'if (!isAPMode()) return true;',
+              'sendHeader("Location", server.arg("next"))',
+          ]:
+              assert forbidden not in security + web + companion, forbidden
+          print('v11.26 inherited portal/session + same-origin boundary: PASS')
+          PY
 
       - name: Verify inherited safety after v11.26 delta
         run: |
