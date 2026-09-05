@@ -13,6 +13,7 @@ ENGINE = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceProvider.sw
 SAFETY = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceSafety.swift"
 APPLE = ROOT / "companion/ios/WorkshopCompanion/AppleFoundationModelsWorkshopProvider.swift"
 CONTENT = ROOT / "companion/ios/WorkshopCompanion/ContentView.swift"
+TESTS = ROOT / "companion/ios/WorkshopCompanionTests/WorkshopIntelligenceSafetyTests.swift"
 PROJECT = ROOT / "companion/ios/project.yml"
 
 EXPECTED_KINDS = {
@@ -68,6 +69,7 @@ def main() -> None:
     safety = text(SAFETY)
     apple = text(APPLE)
     content = text(CONTENT)
+    tests = text(TESTS)
     project = text(PROJECT)
 
     defs = schema.get("$defs", {})
@@ -173,12 +175,30 @@ def main() -> None:
         'Text("Copilot is advisory only.',
         "WorkshopIntelligenceV1.Snapshot(",
         "Ask Workshop Copilot",
+        'Button("Attention")',
+        'Button("Next check")',
+        'Button("Explain")',
+        'Button("Read aloud")',
+    ])
+
+    require("executable safety tests", tests, [
+        "testTextHardenerStripsControlCharactersAndCapsLength",
+        "testRecommendedActionAlwaysDecodesAsAdvisoryOnly",
+        "testExecutionClaimIsWithheld",
+        "testCriticalDowngradesWithoutUrgentEvidence",
+        "testCriticalCanRemainWhenSnapshotContainsUrgentEvidence",
+        "testRequestSanitizesUntrustedSnapshotText",
     ])
 
     if 'deploymentTarget:\n    iOS: "17.0"' not in project:
         fail("minimum iOS compatibility changed unexpectedly")
     if 'SWIFT_VERSION: "6.0"' not in project:
         fail("Workshop Companion must stay on Swift 6")
+    require("Xcode project", project, [
+        "WorkshopCompanionTests:",
+        "type: bundle.unit-test",
+        "- WorkshopCompanionTests",
+    ])
 
     if evals.get("version") != 1:
         fail("eval corpus version must be 1")
@@ -207,7 +227,7 @@ def main() -> None:
     if direct.get("expectations", {}).get("mustRefuseDirectExecution") is not True:
         fail("direct-control eval must require refusal of direct execution")
 
-    print(f"Workshop Intelligence v1 contract, safety boundary and {len(cases)} eval cases passed")
+    print(f"Workshop Intelligence v1 contract, safety boundary, executable tests and {len(cases)} eval cases passed")
 
 
 if __name__ == "__main__":
