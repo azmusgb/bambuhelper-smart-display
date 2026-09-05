@@ -4,6 +4,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+SAFE_MARKER = "Workshop OS v11.23 RC2 secure touch UX"
+
 
 def need(body: str, marker: str, label: str) -> None:
     if marker not in body:
@@ -22,6 +24,8 @@ def main() -> int:
     repo = Path(sys.argv[1]).resolve()
     hub = (repo / "src/smart_hub.cpp").read_text(encoding="utf-8", errors="replace")
     web = (repo / "src/web_server.cpp").read_text(encoding="utf-8", errors="replace")
+    app = (repo / "web/app.js").read_text(encoding="utf-8", errors="replace")
+    security = (repo / "src/security_manager.cpp").read_text(encoding="utf-8", errors="replace")
     build = (repo / "include/smart_home_build.h").read_text(encoding="utf-8", errors="replace")
 
     for marker in [
@@ -29,9 +33,11 @@ def main() -> int:
         'SMART_HOME_PROFILE "network-touch-ux"',
         'Smart Home v11.23 Network Locale Layout RC2',
         '#define WORKSHOP_OS_RC2_TOUCH_UX 1',
+        SAFE_MARKER,
     ]:
-        need(build, marker, "RC2 touch identity")
+        need(build, marker, "RC2 secure touch identity")
 
+    need(hub, SAFE_MARKER, "secure touch implementation marker")
     for marker in [
         "hubRc2ButtonRef",
         "hubRc2CardRef",
@@ -64,19 +70,27 @@ def main() -> int:
     ]:
         need(web, marker, "centralized route wrapper")
 
+    # Security is now an invariant at every active reconstruction stage, not a
+    # property repaired only at the end of the candidate stack.
+    combined = build + security + app
+    for marker in [
+        "WORKSHOP_OS_TEMP_LAN_OPEN",
+        "if (!isAPMode()) return true;",
+        "TEMPORARY TRUSTED-LAN MODE",
+        "v1123Rc2LanOpenBanner",
+    ]:
+        forbid(combined, marker, "historical trusted-LAN bypass")
+    need(security, "return cookieMatches(server);", "portal session validation")
+    need(security, "if (mutating && !sameOrigin(server))", "same-origin mutation guard")
+
     for marker in ["requestSpeedCommand", "requestFanCommand"]:
         forbid(hub, marker, "speculative printer command")
 
-    # Security is deliberately validated by the inherited v11.20 contract and
-    # the final v11.23 authenticated-boundary validator. This validator owns
-    # only the RC2 touch/interaction surface so a temporary intermediate state
-    # cannot be mistaken for an approved security posture.
-    print("v11.23 RC2 touch UX contract: PASS")
+    print("v11.23 RC2 secure touch UX contract: PASS")
     print("Touch UX: explicit navigation + explicit increment/decrement controls")
     print("Network staging: visible NOT APPLIED state + Back / Discard / guarded Apply")
-    print("Display Expert reverse: visible left/right semantics, no hold-to-reverse")
-    print("Rotation: guarded interaction retained for finalization delta")
-    print("Security posture: validated separately; not defined by this touch validator")
+    print("Security: authenticated v11.20 boundary preserved throughout reconstruction")
+    print("Historical trusted-LAN bypass: ABSENT")
     return 0
 
 
