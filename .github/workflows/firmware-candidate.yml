@@ -1,8 +1,8 @@
-name: Workshop OS Firmware Gate — v11.26 Companion Web RC1
+name: Workshop OS Firmware Gate — v11.27 Companion Link RC1
 
 on:
   pull_request:
-    branches: [feature/v11-25-workshop-companion-ble]
+    branches: [feature/v11-26-companion-web]
 
 permissions:
   contents: read
@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   validate:
-    name: Native Companion Web Validation
+    name: Native Companion Link Validation
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
         name: Checkout Workshop OS stacked merge candidate
@@ -45,6 +45,7 @@ jobs:
           python -m py_compile apply_smart_home_audio_console_v11_24.py
           python -m py_compile apply_workshop_companion_ble_v11_25.py
           python -m py_compile apply_workshop_companion_web_v11_26.py
+          python -m py_compile apply_workshop_companion_link_v11_27.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
@@ -58,6 +59,7 @@ jobs:
           python -m py_compile scripts/validate_audio_console_v11_24.py
           python -m py_compile scripts/validate_workshop_companion_ble_v11_25.py
           python -m py_compile scripts/validate_workshop_companion_web_v11_26.py
+          python -m py_compile scripts/validate_workshop_companion_link_v11_27.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
 
@@ -117,7 +119,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           hub=Path('upstream/src/smart_hub.cpp').read_text()
-          web=Path('upstream/src/web_server.cpp').read_text()
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           build=Path('upstream/include/smart_home_build.h').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
@@ -137,11 +138,7 @@ jobs:
               'v1123Rc2LanOpenBanner',
           ]:
               assert forbidden not in build + hub + security + app + ble, forbidden
-          for needle in [
-              'ensureInitialized();',
-              'return cookieMatches(server);',
-              'if (mutating && !sameOrigin(server))',
-          ]:
+          for needle in ['ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))']:
               assert needle in security, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
@@ -169,20 +166,13 @@ jobs:
           web=Path('upstream/src/web_server.cpp').read_text()
           companion=Path('upstream/src/companion_web.cpp').read_text()
           for needle in [
-              'ensureInitialized();',
-              'return cookieMatches(server);',
-              'if (mutating && !sameOrigin(server))',
-              'if (apPublicRouteAllowed(server))',
-              'securitySessionValid(server)',
-              'securityAuthorize(server, true)',
-              'securityAuthorize(server, false)',
-              '/login?next=/companion',
+              'ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))',
+              'if (apPublicRouteAllowed(server))','securitySessionValid(server)','securityAuthorize(server, true)',
+              'securityAuthorize(server, false)','/login?next=/companion',
           ]:
               assert needle in security + web + companion, needle
           for forbidden in [
-              'WORKSHOP_OS_TEMP_LAN_OPEN',
-              'TEMPORARY TRUSTED-LAN MODE',
-              'if (!isAPMode()) return true;',
+              'WORKSHOP_OS_TEMP_LAN_OPEN','TEMPORARY TRUSTED-LAN MODE','if (!isAPMode()) return true;',
               'sendHeader("Location", server.arg("next"))',
           ]:
               assert forbidden not in security + web + companion, forbidden
@@ -201,42 +191,66 @@ jobs:
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           app=Path('upstream/web/app.js').read_text()
           for needle in [
-              'SMART_HOME_VERSION "v11.26"',
-              'Smart Home v11.26 Companion Web RC1',
-              'Workshop OS v11.26 Companion Web RC1',
-              'registerCompanionWebRoutes();',
-              'securitySessionValid(server)',
-              'securityAuthorize(server, true)',
+              'SMART_HOME_VERSION "v11.26"','Smart Home v11.26 Companion Web RC1',
+              'Workshop OS v11.26 Companion Web RC1','registerCompanionWebRoutes();',
+              'securitySessionValid(server)','securityAuthorize(server, true)',
               'g_phoneConnected || companionWebPhoneConnected()',
           ]:
               assert needle in build + web + companion + ble, needle
-          for needle in [
-              'ensureInitialized();',
-              'return cookieMatches(server);',
-              'if (mutating && !sameOrigin(server))',
-          ]:
+          for needle in ['ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))']:
               assert needle in security, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
           for forbidden in [
-              'WORKSHOP_OS_TEMP_LAN_OPEN',
-              'if (!isAPMode()) return true;',
-              'TEMPORARY TRUSTED-LAN MODE',
-              'v1123Rc2LanOpenBanner',
-              'sendHeader("Location", server.arg("next"))',
-              'WebSocket',
-              'ws://',
-              'wss://',
+              'WORKSHOP_OS_TEMP_LAN_OPEN','if (!isAPMode()) return true;','TEMPORARY TRUSTED-LAN MODE',
+              'v1123Rc2LanOpenBanner','sendHeader("Location", server.arg("next"))','WebSocket','ws://','wss://',
           ]:
               assert forbidden not in build + security + web + companion + app, forbidden
           print('v11.26 authenticated local Companion Web + inherited safety: PASS')
+          PY
+
+      - name: Apply v11.27 Companion Link
+        run: python apply_workshop_companion_link_v11_27.py --repo upstream --apply
+      - name: Validate v11.27 Companion Link contract
+        run: python scripts/validate_workshop_companion_link_v11_27.py upstream
+      - name: Revalidate settings parity against reconstructed v11.27 source
+        run: python scripts/validate_settings_parity.py --repo upstream
+
+      - name: Verify inherited safety after v11.27 delta
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          security=Path('upstream/src/security_manager.cpp').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          companion=Path('upstream/src/companion_web.cpp').read_text()
+          ble=Path('upstream/src/workshop_companion_ble.cpp').read_text()
+          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
+          for needle in [
+              'SMART_HOME_VERSION "v11.27"','Smart Home v11.27 Companion Link RC1',
+              'Workshop OS v11.27 Companion Link RC1','server.on("/companion/state", HTTP_GET',
+              'server.on("/companion/capture", HTTP_POST','securityAuthorize(server, true)',
+              'securityAuthorize(server, false)','g_phoneConnected || companionWebPhoneConnected()',
+              'kCaptureMaxBytes = 256U * 1024U','MALLOC_CAP_SPIRAM',
+          ]:
+              assert needle in build + companion + ble, needle
+          for needle in ['ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))']:
+              assert needle in security, needle
+          for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
+              assert needle in mqtt, needle
+          for forbidden in [
+              'WORKSHOP_OS_TEMP_LAN_OPEN','if (!isAPMode()) return true;','TEMPORARY TRUSTED-LAN MODE',
+              'sendHeader("Location", server.arg("next"))','LittleFS','SPIFFS','FFat','Preferences',
+          ]:
+              assert forbidden not in build + security + web + companion, forbidden
+          print('v11.27 authenticated Companion Link + volatile capture boundary: PASS')
           PY
 
       - name: Validate browser JavaScript
         run: node --check upstream/web/app.js
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
-      - name: Build WS350 v11.26
+      - name: Build WS350 v11.27
         working-directory: upstream
         run: pio run -e ws_lcd_350
       - name: Regression build shared 320x480 target
@@ -246,7 +260,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.26 Companion Web RC1 artifacts
+      - name: Package v11.27 Companion Link RC1 artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -255,31 +269,37 @@ jobs:
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p firmware-gate-artifacts/tools firmware-gate-artifacts/docs firmware-gate-artifacts/web
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.26-Companion-Web-RC1-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.26-Companion-Web-RC1-OTA.bin
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.27-Companion-Link-RC1-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.27-Companion-Link-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp apply_workshop_companion_ble_v11_25.py firmware-gate-artifacts/tools/
           cp scripts/validate_workshop_companion_ble_v11_25.py firmware-gate-artifacts/tools/
           cp apply_workshop_companion_web_v11_26.py firmware-gate-artifacts/tools/
           cp scripts/validate_workshop_companion_web_v11_26.py firmware-gate-artifacts/tools/
-          cp assets/v11_26_companion_web.html firmware-gate-artifacts/web/
+          cp apply_workshop_companion_link_v11_27.py firmware-gate-artifacts/tools/
+          cp scripts/validate_workshop_companion_link_v11_27.py firmware-gate-artifacts/tools/
+          cp assets/v11_26_companion_web.html firmware-gate-artifacts/web/v11_26_companion_web_base.html
           cp docs/workshop-companion-ble-v11-25.md firmware-gate-artifacts/docs/
           cp docs/workshop-companion-web-v11-26.md firmware-gate-artifacts/docs/
+          cp docs/workshop-companion-link-v11-27.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
           {
-            echo 'Workshop OS v11.26 Companion Web RC1'
+            echo 'Workshop OS v11.27 Companion Link RC1'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
-            echo 'source_line=STACKED_CANDIDATE_ON_V11_25_WORKSHOP_COMPANION_BLE'
+            echo 'source_line=STACKED_CANDIDATE_ON_V11_26_COMPANION_WEB'
             echo 'physical_acceptance=REQUIRED'
-            echo 'companion_web=AUTHENTICATED_LOCAL_HTTP'
+            echo 'companion_state=SINGLE_AUTHENTICATED_ENVELOPE'
+            echo 'visible_state_poll_ms=1000'
+            echo 'hidden_state_poll_ms=4500'
+            echo 'phone_capture=JPEG_TO_VOLATILE_PSRAM'
+            echo 'capture_max_bytes=262144'
+            echo 'capture_persistence=ABSENT'
+            echo 'capture_flash_writes=ABSENT'
             echo 'cloud_relay=NOT_REQUIRED'
-            echo 'websocket_dependency=ABSENT'
             echo 'existing_guarded_command_routes=REUSED'
             echo 'portal_session_bypass=ABSENT'
             echo 'open_redirect=ABSENT'
-            echo 'photo_upload=DEFERRED'
             echo 'ble_transport=ORCHESTRATION_ONLY'
-            echo 'web_phone_presence=HEARTBEAT_15S'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             sha256sum firmware-gate-artifacts/*.bin
@@ -287,7 +307,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-26-companion-web-rc1
+          name: workshop-os-v11-27-companion-link-rc1
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
