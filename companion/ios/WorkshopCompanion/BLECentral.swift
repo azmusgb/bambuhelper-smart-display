@@ -1,5 +1,5 @@
 import Foundation
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 
 @MainActor
 final class BLECentral: NSObject, ObservableObject {
@@ -176,11 +176,14 @@ extension BLECentral: CBCentralManagerDelegate {
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
+        // Do not carry the non-Sendable CoreBluetooth advertisement dictionary
+        // across the MainActor boundary. Extract the only value the UI needs.
+        let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         Task { @MainActor in
             guard self.peripheral == nil else { return }
             self.central.stopScan()
             self.peripheral = peripheral
-            self.peripheralName = peripheral.name ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
+            self.peripheralName = peripheral.name ?? advertisedName
             self.phase = .connecting
             peripheral.delegate = self
             self.central.connect(peripheral)
