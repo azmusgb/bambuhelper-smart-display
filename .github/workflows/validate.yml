@@ -32,6 +32,9 @@ jobs:
       - name: Validate Workshop Companion protocol
         run: python3 scripts/validate_companion_protocol.py
 
+      - name: Validate Workshop Intelligence contract
+        run: python3 scripts/validate_workshop_intelligence.py
+
       - name: Validate shell helpers
         run: |
           bash -n scripts/waveshare-usb.sh
@@ -58,6 +61,37 @@ jobs:
         run: xcodegen generate --spec project.yml
 
       - name: Compile iOS Simulator app
+        working-directory: companion/ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project WorkshopCompanion.xcodeproj \
+            -scheme WorkshopCompanion \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build
+
+  companion-ios-foundation-models:
+    name: Workshop Companion iOS 26 / Foundation Models
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Apple toolchain
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: companion/ios
+        run: xcodegen generate --spec project.yml
+
+      - name: Compile Foundation Models path
         working-directory: companion/ios
         run: |
           set -euo pipefail
