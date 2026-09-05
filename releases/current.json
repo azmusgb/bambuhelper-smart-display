@@ -30,7 +30,6 @@
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
   },
-  "mainState": null,
   "validation": {
     "acceptedSource": {
       "exactHeadCi": "passed",
