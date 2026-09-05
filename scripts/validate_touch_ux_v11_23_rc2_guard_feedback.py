@@ -15,6 +15,16 @@ def forbid(body: str, marker: str, label: str) -> None:
         raise SystemExit(f"V11.23 RC2 GUARD FEEDBACK FAILED: forbidden {label}: {marker}")
 
 
+def before(body: str, first: str, second: str, label: str) -> None:
+    a = body.find(first)
+    b = body.find(second)
+    if a < 0 or b < 0 or a >= b:
+        raise SystemExit(
+            f"V11.23 RC2 GUARD FEEDBACK FAILED: declaration order {label}: "
+            f"{first!r} must precede {second!r}"
+        )
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit(f"Usage: {sys.argv[0]} <reconstructed-repo>")
@@ -29,6 +39,7 @@ def main() -> int:
 
     for marker in [
         'Workshop OS v11.23 RC2 guarded-action feedback',
+        'Workshop OS v11.23 RC2 rotation preview declaration-order fix',
         'void smartHubUpdateHoldProgress(uint16_t rawX, uint16_t rawY, uint32_t holdMs)',
         'uint8_t segments=(uint8_t)((holdMs*5U+649U)/650U);',
         'kind=1;bx=240;by=252;bw=230;bh=56;label="HOLD APPLY";',
@@ -42,6 +53,22 @@ def main() -> int:
         'displayedPrinter().state.gcodeStateId==GCODE_PAUSE',
     ]:
         need(hub, marker, 'guarded-action source contract')
+
+    # C++ declaration order is a real compile-time contract: the Display
+    # renderer references both symbols before the full rotation-preview helper
+    # implementation later in the translation unit.
+    before(
+        hub,
+        'static bool g_rotationPreviewMode=false;',
+        'static void drawDisplayExperience(bool full) {',
+        'rotation preview state before display renderer',
+    )
+    before(
+        hub,
+        'static void hubRc2DrawRotationPreview();',
+        'static void drawDisplayExperience(bool full) {',
+        'rotation preview prototype before display renderer',
+    )
 
     need(
         main_cpp,
@@ -70,6 +97,7 @@ def main() -> int:
     print('v11.23 RC2 guarded-action feedback: PASS')
     print('Hold progress: 5 live segments tied to 650 ms commit threshold')
     print('Network Apply: active-printer display restart/reconnect warning')
+    print('Rotation preview: declaration order compile-safe')
     print('Printer behavior: informational only; guarded-feedback delta adds no printer command')
     return 0
 
