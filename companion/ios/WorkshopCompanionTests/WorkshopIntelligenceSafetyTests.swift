@@ -39,6 +39,22 @@ final class WorkshopIntelligenceSafetyTests: XCTestCase {
         XCTAssertTrue(guarded.recommendedActions.allSatisfy(\.advisoryOnly))
     }
 
+    func testCommandSentExecutionClaimIsWithheld() {
+        let generated = WorkshopIntelligenceV1.Answer(
+            requestID: "test",
+            provider: "test-provider",
+            severity: .info,
+            summary: "Power-off command sent successfully.",
+            observations: [],
+            recommendedActions: [],
+            requiresPhysicalCheck: false
+        )
+
+        let guarded = WorkshopIntelligenceOutputGuard.apply(generated, to: normalSnapshot())
+        XCTAssertTrue(guarded.summary.contains("No hardware action was performed"))
+        XCTAssertEqual(guarded.recommendedActions.first?.intent, .openWorkshopOS)
+    }
+
     func testCriticalDowngradesWithoutUrgentEvidence() {
         let generated = WorkshopIntelligenceV1.Answer(
             requestID: "test",
@@ -59,16 +75,7 @@ final class WorkshopIntelligenceSafetyTests: XCTestCase {
     }
 
     func testCriticalCanRemainWhenSnapshotContainsUrgentEvidence() {
-        let generated = WorkshopIntelligenceV1.Answer(
-            requestID: "test",
-            provider: "test-provider",
-            severity: .critical,
-            summary: "Move away and address the physical hazard.",
-            observations: ["The supplied evidence reports smoke."],
-            recommendedActions: [.init(label: "Verify the area physically", intent: .physicalCheck)],
-            requiresPhysicalCheck: true
-        )
-
+        let generated = criticalHazardAnswer()
         var snapshot = normalSnapshot()
         snapshot.printer?.state = "ERROR"
         snapshot.printer?.errorSummary = "User reports smoke and burning smell near printer"
@@ -76,6 +83,26 @@ final class WorkshopIntelligenceSafetyTests: XCTestCase {
         let guarded = WorkshopIntelligenceOutputGuard.apply(generated, to: snapshot)
         XCTAssertEqual(guarded.severity, .critical)
         XCTAssertTrue(guarded.requiresPhysicalCheck)
+    }
+
+    func testCriticalCanRemainForDirectUserHazardReport() {
+        let guarded = WorkshopIntelligenceOutputGuard.apply(
+            criticalHazardAnswer(),
+            to: normalSnapshot(),
+            userQuestion: "I see smoke coming from the back of the printer. What should I do?"
+        )
+
+        XCTAssertEqual(guarded.severity, .critical)
+    }
+
+    func testHypotheticalSmokeQuestionDoesNotGrantCriticalSeverity() {
+        let guarded = WorkshopIntelligenceOutputGuard.apply(
+            criticalHazardAnswer(),
+            to: normalSnapshot(),
+            userQuestion: "What should I do if there were smoke someday?"
+        )
+
+        XCTAssertEqual(guarded.severity, .warning)
     }
 
     func testRequestSanitizesUntrustedSnapshotText() {
@@ -175,6 +202,18 @@ final class WorkshopIntelligenceSafetyTests: XCTestCase {
                 return
             }
         }
+    }
+
+    private func criticalHazardAnswer() -> WorkshopIntelligenceV1.Answer {
+        WorkshopIntelligenceV1.Answer(
+            requestID: "test",
+            provider: "test-provider",
+            severity: .critical,
+            summary: "Move away and address the physical hazard.",
+            observations: ["The supplied evidence indicates an urgent physical hazard."],
+            recommendedActions: [.init(label: "Verify the area physically", intent: .physicalCheck)],
+            requiresPhysicalCheck: true
+        )
     }
 
     private func normalSnapshot() -> WorkshopIntelligenceV1.Snapshot {
