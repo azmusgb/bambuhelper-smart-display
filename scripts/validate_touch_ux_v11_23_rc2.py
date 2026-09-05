@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 SAFE_MARKER = "Workshop OS v11.23 RC2 secure touch UX"
+FINAL_MARKER = "Workshop OS v11.23 RC2 physical touch finalization"
 
 
 def need(body: str, marker: str, label: str) -> None:
@@ -53,10 +54,20 @@ def main() -> int:
         "hubNetworkDiscardEdit",
         "if(longPress&&hubStaticNetworkValid())hubCommitNetworkAndRestart()",
         "const bool hubRc2Reverse=(x<tft.width()/2)",
-        "i==3&&longPress",
-        "HOLD TO ROTATE CLOCKWISE",
     ]:
         need(hub, marker, "touch UX")
+
+    # Before finalization, rotation still uses the original guarded hold slot.
+    # After finalization, that exact source is intentionally replaced by the
+    # dedicated preview modal and Hold Commit flow. Validate the correct stage
+    # instead of falsely requiring both mutually-exclusive representations.
+    if FINAL_MARKER in hub:
+        need(hub, "g_rotationPreviewMode", "finalized rotation preview")
+        need(hub, '"HOLD TO COMMIT ROTATION"', "finalized guarded rotation")
+        forbid(hub, "i==3&&longPress", "superseded direct rotation mutation")
+    else:
+        need(hub, "i==3&&longPress", "pre-finalization guarded rotation")
+        need(hub, "HOLD TO ROTATE CLOCKWISE", "pre-finalization rotation copy")
 
     forbid(hub, "Tap next / hold previous", "hidden reverse gesture copy")
     forbid(hub, "Tap next / hold prev", "hidden reverse gesture copy")
@@ -70,8 +81,7 @@ def main() -> int:
     ]:
         need(web, marker, "centralized route wrapper")
 
-    # Security is now an invariant at every active reconstruction stage, not a
-    # property repaired only at the end of the candidate stack.
+    # Authentication is an invariant at every active reconstruction stage.
     combined = build + security + app
     for marker in [
         "WORKSHOP_OS_TEMP_LAN_OPEN",
@@ -86,7 +96,8 @@ def main() -> int:
     for marker in ["requestSpeedCommand", "requestFanCommand"]:
         forbid(hub, marker, "speculative printer command")
 
-    print("v11.23 RC2 secure touch UX contract: PASS")
+    stage = "finalized" if FINAL_MARKER in hub else "touch-base"
+    print(f"v11.23 RC2 secure touch UX contract: PASS ({stage})")
     print("Touch UX: explicit navigation + explicit increment/decrement controls")
     print("Network staging: visible NOT APPLIED state + Back / Discard / guarded Apply")
     print("Security: authenticated v11.20 boundary preserved throughout reconstruction")
