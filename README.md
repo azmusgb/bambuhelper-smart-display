@@ -23,7 +23,7 @@ A merge is not physical acceptance by itself. `releases/current.json` is authori
 
 PR **#76** is the current direct-to-`main` hardware candidate. It adds explicit physical controls for timezone, staged DHCP/static network configuration, segmented IPv4 editing, and guarded display rotation. Ordinary adjustments use visible directional controls rather than hidden long-press reversal semantics.
 
-The candidate also contains a **temporary trusted-LAN no-code mode** for hardware UX iteration. That exception is build-gated, visible in the browser, and is **not accepted baseline security behavior**. The inherited authenticated/session implementation is reconstructed and validated before the candidate delta is applied. Physical network, touch, rotation, and security acceptance remain required before promotion.
+The **final RC2 preserves the v11.20 portal/session security model**. An early hardware-iteration delta temporarily introduced a trusted-LAN no-code bypass, but that experiment is not part of the mergeable candidate. The final authenticated-boundary gate explicitly forbids the temporary bypass, the ordinary station-mode portal still requires the boot-scoped session, mutating requests retain same-origin protection, and framebuffer capture remains session-authenticated and credential-safe. Physical network, touch, rotation, and security acceptance remain required before promotion.
 
 ### Workshop OS v11.24 Audio Console RC1 — PR #77
 

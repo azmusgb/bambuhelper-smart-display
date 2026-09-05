@@ -24,7 +24,8 @@
     "branch": "feature/v11-23-network-locale-layout",
     "pullRequest": 76,
     "name": "Workshop OS v11.23 Network / Locale / Layout Expert RC2",
-    "purpose": "Direct-to-main hardware candidate for explicit physical network, timezone and guarded display-rotation controls; includes a temporary trusted-LAN no-code mode for hardware iteration.",
+    "purpose": "Direct-to-main hardware candidate for explicit physical network, timezone and guarded display-rotation controls with larger touch targets and explicit directional navigation.",
+    "securityBoundary": "Final RC2 preserves the v11.20 portal/session model. The temporary trusted-LAN no-code bypass used during early hardware iteration is not part of the mergeable candidate and is explicitly forbidden by the final authenticated-boundary gate.",
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
