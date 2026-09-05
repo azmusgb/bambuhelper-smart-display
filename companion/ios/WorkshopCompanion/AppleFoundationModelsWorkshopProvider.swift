@@ -40,7 +40,11 @@ actor AppleFoundationModelsWorkshopProvider: WorkshopIntelligenceProvider {
         ).content
 
         let normalized = normalize(generated, requestID: request.id)
-        return WorkshopIntelligenceOutputGuard.apply(normalized, to: request.snapshot)
+        return WorkshopIntelligenceOutputGuard.apply(
+            normalized,
+            to: request.snapshot,
+            userQuestion: request.question
+        )
     }
 
     private func availabilityMessage(_ reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
