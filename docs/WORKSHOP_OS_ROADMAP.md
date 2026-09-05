@@ -10,7 +10,7 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
 - **Repository governance:** protected `main` with stable path-aware `merge-gate`; force pushes and deletion blocked.
 - **Active direct firmware candidate:** Workshop OS **v11.23 Network / Locale / Layout Expert RC2**, PR **#76** — draft, physical acceptance required.
-- **Stacked follow-on candidate:** Workshop OS **v11.24 Audio Console RC1**, PR **#77** — draft, based on #76.
+- **Stacked follow-on candidate:** Workshop OS **v11.24 Audio Console RC1**, PR **#77** — draft, based on #76 and not independently promotable.
 
 `releases/current.json` remains authoritative for the accepted source and the direct-to-`main` hardware candidate. Green CI alone is not physical acceptance, and a stacked candidate cannot bypass acceptance of its base.
 
@@ -23,7 +23,7 @@ Inherited into v11.22 and accepted as part of the current source line:
 - protected normal-LAN admin/recovery surfaces;
 - independent recovery-safe-mode path;
 - authenticated framebuffer capture;
-- no development-auth bypass;
+- no development-auth bypass in accepted/final source;
 - credential-safe retained capture artifacts.
 
 ## Completed — v11.21 Settings Parity Audit
@@ -68,15 +68,18 @@ Implemented candidate scope includes:
 - separate Back / Discard / guarded Hold Apply + Restart review actions;
 - guarded Display Rotation with Current / Preview / Prev / Next / Cancel / Hold Commit;
 - preview-only rotation changes that do not persist until deliberate commit;
+- live guarded-action progress feedback;
 - retention of the deterministic 32-view candidate capture catalog.
 
 Wi-Fi credentials and hostname remain **PORTAL-INPUT**.
 
-### v11.23 security exception during hardware iteration
+### v11.23 security boundary
 
-RC2 temporarily permits no-code access on normal trusted-LAN station Wi-Fi so touch/network UX can be iterated without portal-code friction. This is a **candidate-only development exception**, not accepted baseline policy. The inherited authenticated/session implementation is reconstructed and validated before the bypass delta, same-origin protection for mutating requests remains, and ordinary AP mode is not converted into a blanket privileged bypass.
+The mergeable RC2 candidate preserves the accepted v11.20 portal/session model. Normal station-mode management requires the boot-scoped portal-code session, mutating requests retain same-origin protection, and AP/setup/recovery authorization remains route-scoped.
 
-Promotion requires exact-head CI plus new real-device acceptance of touch geometry, staged-network safety, rotation preview/commit behavior, and the intended security boundary.
+An early hardware-iteration delta historically introduced a trusted-LAN no-code bypass. That state is not a promotion target. The deterministic candidate pipeline explicitly restores and validates the authenticated boundary before settings parity, JavaScript validation, native builds, packaging, or promotion. Final reconstructed source must not contain `WORKSHOP_OS_TEMP_LAN_OPEN`, a normal-LAN session bypass, or the temporary LAN-open browser banner.
+
+Promotion requires exact-head CI plus real-device acceptance of touch geometry, staged-network safety, rotation preview/commit behavior, authenticated capture, and the security boundary in `docs/PHYSICAL_ACCEPTANCE_V11_23_RC2.md`.
 
 ## In validation — v11.24 Audio Console RC1
 
@@ -94,7 +97,7 @@ Implemented candidate scope includes:
 - Quiet Start / Quiet End explicit hour controls;
 - continued PSRAM-backed local-only mic capture → playback → release behavior.
 
-The v11.24 interaction contract follows v11.23 RC2: ordinary adjustments use explicit directional controls rather than hidden long-press reverse semantics.
+The v11.24 interaction contract follows v11.23 RC2: ordinary adjustments use explicit directional controls rather than hidden long-press reverse semantics. Its final promotion path must inherit the authenticated v11.23 boundary; it must not resurrect the historical trusted-LAN bypass.
 
 ## Backlog — Printer / Workshop / Power configuration
 
@@ -155,6 +158,7 @@ Every future release must preserve:
 - fail-closed printer and power commands;
 - guarded destructive actions;
 - no speculative Bambu commands;
+- authenticated normal-LAN management in final/accepted source;
 - no visible steady-state flicker regression;
 - no secrets in source, logs, backups, captures, or artifacts;
 - deterministic reconstruction from a pinned upstream baseline;
