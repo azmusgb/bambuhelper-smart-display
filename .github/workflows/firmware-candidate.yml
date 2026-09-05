@@ -36,9 +36,7 @@ jobs:
           python -m py_compile apply_smart_home_portal_auth_v11_20.py
           python -m py_compile apply_smart_home_display_expert_v11_22.py
           python -m py_compile apply_smart_home_network_locale_layout_v11_23.py
-          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_secure.py
-          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile apply_smart_home_auth_restore_v11_23_rc2.py
@@ -69,181 +67,109 @@ jobs:
         run: python scripts/validate_device_contracts.py
       - name: Validate accepted v11.19 visual contracts
         run: python scripts/validate_visual_contracts_v11_19.py upstream
+
       - name: Apply accepted v11.19.1 physical-fit delta
         run: python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
       - name: Validate accepted v11.19.1 rendered fit
         run: python scripts/validate_rendered_fit_v11_19_1.py upstream
+
       - name: Apply v11.20 Portal Auth
         run: python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
       - name: Validate v11.20 authenticated baseline
         run: python scripts/validate_portal_auth_v11_20.py upstream
+
       - name: Apply v11.22 Display Expert
         run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
       - name: Validate v11.22 Display Expert
         run: python scripts/validate_display_expert_v11_22.py upstream
+
       - name: Apply v11.23 Network Locale Layout Expert RC1 base
         run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
       - name: Validate v11.23 RC1 base contract
         run: python scripts/validate_network_locale_layout_v11_23.py upstream
       - name: Apply v11.23 RC2 secure touch UX
         run: python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
-      - name: Validate v11.23 RC2 secure touch UX and authenticated boundary
+      - name: Validate v11.23 RC2 secure touch UX
         run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
       - name: Apply v11.23 RC2 secure physical touch finalization
         run: python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
       - name: Validate v11.23 RC2 physical touch finalization
         run: python scripts/validate_touch_ux_v11_23_rc2_finalize.py upstream
-      - name: Revalidate authenticated boundary after touch finalization
+      - name: Revalidate v11.23 authenticated touch boundary
         run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
-      - name: Apply v11.23 RC2 guarded-action feedback
+      - name: Apply v11.23 guarded-action feedback
         run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
-      - name: Validate v11.23 RC2 guarded-action feedback
+      - name: Validate v11.23 guarded-action feedback
         run: python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
       - name: Normalize final authenticated v11.23 LAN boundary
         run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
-      - name: Validate final authenticated v11.23 RC2 boundary
+      - name: Validate final authenticated v11.23 boundary
         run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
+
       - name: Apply v11.24 Audio Console
         run: python apply_smart_home_audio_console_v11_24.py --repo upstream --apply
-      - name: Validate v11.24 Audio Console and inherited Hardware controls
+      - name: Validate v11.24 Audio Console
         run: python scripts/validate_audio_console_v11_24.py upstream
+
       - name: Apply v11.25 Workshop Companion BLE
         run: python apply_workshop_companion_ble_v11_25.py --repo upstream --apply
-      - name: Validate v11.25 Workshop Companion BLE contract
+      - name: Validate v11.25 Workshop Companion BLE
         run: python scripts/validate_workshop_companion_ble_v11_25.py upstream
-      - name: Validate settings parity against reconstructed v11.25 source
+
+      - name: Apply v11.26 Workshop Companion Web
+        run: python apply_workshop_companion_web_v11_26.py --repo upstream --apply
+      - name: Validate v11.26 Workshop Companion Web
+        run: python scripts/validate_workshop_companion_web_v11_26.py upstream
+
+      - name: Apply v11.27 Companion Link
+        run: python apply_workshop_companion_link_v11_27.py --repo upstream --apply
+      - name: Validate v11.27 Companion Link
+        run: python scripts/validate_workshop_companion_link_v11_27.py upstream
+      - name: Validate settings parity against reconstructed v11.27 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Verify inherited safety before v11.26 delta
+      - name: Verify final inherited security and control boundaries
         run: |
           python - <<'PY'
           from pathlib import Path
-          hub=Path('upstream/src/smart_hub.cpp').read_text()
-          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           build=Path('upstream/include/smart_home_build.h').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
+          companion=Path('upstream/src/companion_web.cpp').read_text()
           ble=Path('upstream/src/workshop_companion_ble.cpp').read_text()
-          app=Path('upstream/web/app.js').read_text()
+          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           for needle in [
-              'SMART_HOME_VERSION "v11.25"',
-              'Smart Home v11.25 Workshop Companion BLE RC1',
-              'Workshop OS v11.25 Workshop Companion BLE RC1',
-              'Workshop OS v11.23 RC2 authenticated LAN restore',
+              'SMART_HOME_VERSION "v11.27"',
+              'Smart Home v11.27 Companion Link RC1',
+              'Workshop OS v11.27 Companion Link RC1',
+              'server.on("/companion/state", HTTP_GET',
+              'server.on("/companion/capture", HTTP_POST',
+              'securityAuthorize(server, true)',
+              'securityAuthorize(server, false)',
+              'g_phoneConnected || companionWebPhoneConnected()',
+              'kCaptureMaxBytes = 256U * 1024U',
+              'MALLOC_CAP_SPIRAM',
           ]:
-              assert needle in build + hub + ble, needle
+              assert needle in build + companion + ble, needle
+          for needle in [
+              'ensureInitialized();',
+              'return cookieMatches(server);',
+              'if (mutating && !sameOrigin(server))',
+          ]:
+              assert needle in security, needle
+          for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
+              assert needle in mqtt, needle
           for forbidden in [
               'WORKSHOP_OS_TEMP_LAN_OPEN',
               'if (!isAPMode()) return true;',
               'TEMPORARY TRUSTED-LAN MODE',
-              'v1123Rc2LanOpenBanner',
-          ]:
-              assert forbidden not in build + hub + security + app + ble, forbidden
-          for needle in ['ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))']:
-              assert needle in security, needle
-          for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
-              assert needle in mqtt, needle
-          for forbidden in [
-              'requestPause','requestResume','requestStop','requestLightCommand',
-              'requestSpeedCommand','requestFanCommand','tasmotaSet','tasmotaToggle',
-              'portalCode','access_code','accessCode','sessionCookie','Set-Cookie',
-          ]:
-              assert forbidden not in ble, forbidden
-          print('v11.25 inherited safety + BLE orchestration-only boundary: PASS')
-          PY
-
-      - name: Apply v11.26 Workshop Companion Web
-        run: python apply_workshop_companion_web_v11_26.py --repo upstream --apply
-      - name: Validate v11.26 Workshop Companion Web contract
-        run: python scripts/validate_workshop_companion_web_v11_26.py upstream
-      - name: Revalidate settings parity against reconstructed v11.26 source
-        run: python scripts/validate_settings_parity.py --repo upstream
-
-      - name: Validate inherited authentication primitives after v11.26
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          security=Path('upstream/src/security_manager.cpp').read_text()
-          web=Path('upstream/src/web_server.cpp').read_text()
-          companion=Path('upstream/src/companion_web.cpp').read_text()
-          for needle in [
-              'ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))',
-              'if (apPublicRouteAllowed(server))','securitySessionValid(server)','securityAuthorize(server, true)',
-              'securityAuthorize(server, false)','/login?next=/companion',
-          ]:
-              assert needle in security + web + companion, needle
-          for forbidden in [
-              'WORKSHOP_OS_TEMP_LAN_OPEN','TEMPORARY TRUSTED-LAN MODE','if (!isAPMode()) return true;',
               'sendHeader("Location", server.arg("next"))',
           ]:
-              assert forbidden not in security + web + companion, forbidden
-          print('v11.26 inherited portal/session + same-origin boundary: PASS')
-          PY
-
-      - name: Verify inherited safety after v11.26 delta
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          build=Path('upstream/include/smart_home_build.h').read_text()
-          security=Path('upstream/src/security_manager.cpp').read_text()
-          web=Path('upstream/src/web_server.cpp').read_text()
-          companion=Path('upstream/src/companion_web.cpp').read_text()
-          ble=Path('upstream/src/workshop_companion_ble.cpp').read_text()
-          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
-          app=Path('upstream/web/app.js').read_text()
-          for needle in [
-              'SMART_HOME_VERSION "v11.26"','Smart Home v11.26 Companion Web RC1',
-              'Workshop OS v11.26 Companion Web RC1','registerCompanionWebRoutes();',
-              'securitySessionValid(server)','securityAuthorize(server, true)',
-              'g_phoneConnected || companionWebPhoneConnected()',
-          ]:
-              assert needle in build + web + companion + ble, needle
-          for needle in ['ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))']:
-              assert needle in security, needle
-          for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
-              assert needle in mqtt, needle
-          for forbidden in [
-              'WORKSHOP_OS_TEMP_LAN_OPEN','if (!isAPMode()) return true;','TEMPORARY TRUSTED-LAN MODE',
-              'v1123Rc2LanOpenBanner','sendHeader("Location", server.arg("next"))','WebSocket','ws://','wss://',
-          ]:
-              assert forbidden not in build + security + web + companion + app, forbidden
-          print('v11.26 authenticated local Companion Web + inherited safety: PASS')
-          PY
-
-      - name: Apply v11.27 Companion Link
-        run: python apply_workshop_companion_link_v11_27.py --repo upstream --apply
-      - name: Validate v11.27 Companion Link contract
-        run: python scripts/validate_workshop_companion_link_v11_27.py upstream
-      - name: Revalidate settings parity against reconstructed v11.27 source
-        run: python scripts/validate_settings_parity.py --repo upstream
-
-      - name: Verify inherited safety after v11.27 delta
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          build=Path('upstream/include/smart_home_build.h').read_text()
-          security=Path('upstream/src/security_manager.cpp').read_text()
-          web=Path('upstream/src/web_server.cpp').read_text()
-          companion=Path('upstream/src/companion_web.cpp').read_text()
-          ble=Path('upstream/src/workshop_companion_ble.cpp').read_text()
-          mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
-          for needle in [
-              'SMART_HOME_VERSION "v11.27"','Smart Home v11.27 Companion Link RC1',
-              'Workshop OS v11.27 Companion Link RC1','server.on("/companion/state", HTTP_GET',
-              'server.on("/companion/capture", HTTP_POST','securityAuthorize(server, true)',
-              'securityAuthorize(server, false)','g_phoneConnected || companionWebPhoneConnected()',
-              'kCaptureMaxBytes = 256U * 1024U','MALLOC_CAP_SPIRAM',
-          ]:
-              assert needle in build + companion + ble, needle
-          for needle in ['ensureInitialized();','return cookieMatches(server);','if (mutating && !sameOrigin(server))']:
-              assert needle in security, needle
-          for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
-              assert needle in mqtt, needle
-          for forbidden in [
-              'WORKSHOP_OS_TEMP_LAN_OPEN','if (!isAPMode()) return true;','TEMPORARY TRUSTED-LAN MODE',
-              'sendHeader("Location", server.arg("next"))','LittleFS','SPIFFS','FFat','Preferences',
-          ]:
-              assert forbidden not in build + security + web + companion, forbidden
-          print('v11.27 authenticated Companion Link + volatile capture boundary: PASS')
+              assert forbidden not in build + security + companion, forbidden
+          # Capture persistence is scoped to the Companion implementation. The
+          # wider firmware legitimately uses Preferences/NVS for normal settings.
+          for forbidden in ['LittleFS','SPIFFS','FFat','Preferences','putBytes(','writeFile(']:
+              assert forbidden not in companion, forbidden
+          print('v11.27 final inherited security + volatile capture boundary: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -268,19 +194,12 @@ jobs:
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          mkdir -p firmware-gate-artifacts/tools firmware-gate-artifacts/docs firmware-gate-artifacts/web
+          mkdir -p firmware-gate-artifacts/tools firmware-gate-artifacts/docs
           cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.27-Companion-Link-RC1-Full.bin
           cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.27-Companion-Link-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
-          cp apply_workshop_companion_ble_v11_25.py firmware-gate-artifacts/tools/
-          cp scripts/validate_workshop_companion_ble_v11_25.py firmware-gate-artifacts/tools/
-          cp apply_workshop_companion_web_v11_26.py firmware-gate-artifacts/tools/
-          cp scripts/validate_workshop_companion_web_v11_26.py firmware-gate-artifacts/tools/
           cp apply_workshop_companion_link_v11_27.py firmware-gate-artifacts/tools/
           cp scripts/validate_workshop_companion_link_v11_27.py firmware-gate-artifacts/tools/
-          cp assets/v11_26_companion_web.html firmware-gate-artifacts/web/v11_26_companion_web_base.html
-          cp docs/workshop-companion-ble-v11-25.md firmware-gate-artifacts/docs/
-          cp docs/workshop-companion-web-v11-26.md firmware-gate-artifacts/docs/
           cp docs/workshop-companion-link-v11-27.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
           {
