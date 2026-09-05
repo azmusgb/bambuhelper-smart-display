@@ -23,12 +23,15 @@ protocol WorkshopIntelligenceProvider: Sendable {
 enum WorkshopIntelligenceError: LocalizedError {
     case providerUnavailable(String)
     case emptyQuestion
+    case photoInspectionUnavailable
     case malformedOutput
 
     var errorDescription: String? {
         switch self {
         case .providerUnavailable(let reason): return reason
         case .emptyQuestion: return "Ask a question before running Workshop Copilot."
+        case .photoInspectionUnavailable:
+            return "Photo inspection is not enabled in Workshop Intelligence v1. A photo must be explicitly supplied to a future multimodal provider before Copilot can make visual claims."
         case .malformedOutput: return "The model returned an answer that could not be safely normalized."
         }
     }
@@ -76,6 +79,9 @@ final class WorkshopIntelligenceEngine: ObservableObject {
     @Published private(set) var availabilityReason: String?
     @Published private(set) var answer: WorkshopIntelligenceV1.Answer?
     @Published private(set) var lastError: String?
+    @Published private(set) var lastGroundingRuleIDs: [String] = []
+    @Published private(set) var lastContextDomains: [String] = []
+    @Published private(set) var lastRequestID: String?
 
     private let provider: any WorkshopIntelligenceProvider
 
@@ -106,6 +112,24 @@ final class WorkshopIntelligenceEngine: ObservableObject {
             return
         }
 
+        guard kind != .photoInspect else {
+            answer = nil
+            lastGroundingRuleIDs = []
+            lastContextDomains = contextDomains(snapshot)
+            lastRequestID = nil
+            lastError = WorkshopIntelligenceError.photoInspectionUnavailable.localizedDescription
+            phase = .failed
+            return
+        }
+
+        let request = WorkshopIntelligenceV1.Request(kind: kind, question: cleaned, snapshot: snapshot)
+        lastRequestID = request.id
+        lastGroundingRuleIDs = WorkshopDomainKnowledge.select(
+            question: request.question,
+            snapshot: request.snapshot
+        ).map(\.id)
+        lastContextDomains = contextDomains(request.snapshot)
+
         let status = await provider.availability()
         providerName = status.provider
         availabilityReason = status.reason
@@ -118,7 +142,6 @@ final class WorkshopIntelligenceEngine: ObservableObject {
         phase = .thinking
         lastError = nil
         answer = nil
-        let request = WorkshopIntelligenceV1.Request(kind: kind, question: cleaned, snapshot: snapshot)
 
         do {
             answer = try await provider.answer(request)
@@ -132,12 +155,27 @@ final class WorkshopIntelligenceEngine: ObservableObject {
     func clearAnswer() {
         answer = nil
         lastError = nil
+        lastGroundingRuleIDs = []
+        lastContextDomains = []
+        lastRequestID = nil
         if phase == .failed { phase = .idle }
+    }
+
+    private func contextDomains(_ snapshot: WorkshopIntelligenceV1.Snapshot) -> [String] {
+        var domains = ["device"]
+        if snapshot.printer != nil { domains.append("printer") }
+        if snapshot.power != nil { domains.append("power") }
+        if snapshot.companion != nil { domains.append("companion") }
+        return domains
     }
 }
 
 enum WorkshopIntelligencePrompt {
     static func make(for request: WorkshopIntelligenceV1.Request) throws -> String {
+        guard request.kind != .photoInspect else {
+            throw WorkshopIntelligenceError.photoInspectionUnavailable
+        }
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(request.snapshot)
