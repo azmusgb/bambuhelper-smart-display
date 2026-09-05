@@ -25,6 +25,7 @@
     "branch": "feature/v11-23-network-locale-layout",
     "pullRequest": 76,
     "purpose": "Elevate the WS350 touch experience with explicit large controls, visible staged network state, safe Back/Discard/Apply actions, dedicated rotation preview and guarded commit, while preserving the authenticated v11.20 portal/session boundary, same-origin mutation protection, AP/recovery boundaries, and the 32-view credential-safe capture catalog.",
+    "securityBoundary": "Final RC2 preserves the v11.20 portal/session model. The temporary trusted-LAN no-code bypass used during early hardware iteration is not part of the mergeable candidate and is explicitly forbidden by the final authenticated-boundary gate.",
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
