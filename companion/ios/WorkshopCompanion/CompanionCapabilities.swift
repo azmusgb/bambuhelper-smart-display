@@ -8,9 +8,15 @@ private enum CameraCaptureOutcome: Sendable {
     case failed(String)
 }
 
+private enum CameraConfigurationResult: Sendable {
+    case ready
+    case unsupported
+    case failed(String)
+}
+
 /// Owns every AVCaptureSession/AVCapturePhotoOutput mutation on one serial queue.
-/// AVFoundation's capture types are not Sendable, so this object is the explicit
-/// synchronization boundary and never exposes them to MainActor/UI code.
+/// AVFoundation capture objects are not Sendable, so this service is the explicit
+/// synchronization boundary. MainActor/UI code sees only Sendable outcomes.
 private final class CameraCaptureService: NSObject, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.azmusgb.WorkshopCompanion.camera", qos: .userInitiated)
     private let session = AVCaptureSession()
@@ -26,7 +32,7 @@ private final class CameraCaptureService: NSObject, @unchecked Sendable {
             }
 
             switch configureIfNeeded() {
-            case .success:
+            case .ready:
                 pendingCompletion = completion
                 if !session.isRunning {
                     session.startRunning()
@@ -40,8 +46,8 @@ private final class CameraCaptureService: NSObject, @unchecked Sendable {
         }
     }
 
-    private func configureIfNeeded() -> CameraCaptureOutcome {
-        if configured { return .success }
+    private func configureIfNeeded() -> CameraConfigurationResult {
+        if configured { return .ready }
 
         session.beginConfiguration()
         defer { session.commitConfiguration() }
@@ -59,7 +65,7 @@ private final class CameraCaptureService: NSObject, @unchecked Sendable {
             session.addInput(input)
             session.addOutput(photoOutput)
             configured = true
-            return .success
+            return .ready
         } catch {
             return .failed(error.localizedDescription)
         }
@@ -87,24 +93,22 @@ private final class CameraCaptureService: NSObject, @unchecked Sendable {
 
 extension CameraCaptureService: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        let outcome: CameraCaptureOutcome
-        if let error {
-            outcome = .failed(error.localizedDescription)
-        } else if let data = photo.fileDataRepresentation() {
-            outcome = persist(data)
-        } else {
-            outcome = .failed("The camera did not return JPEG data.")
-        }
+        let errorMessage = error?.localizedDescription
+        let data = error == nil ? photo.fileDataRepresentation() : nil
 
-        // Keep completion serialization on the same queue that owns capture state.
+        // Serialize completion and cache persistence on the same queue that owns
+        // all mutable capture state. The delegate callback never touches that
+        // state directly.
         queue.async { [self] in
-            finish(outcome)
+            if let errorMessage {
+                finish(.failed(errorMessage))
+            } else if let data {
+                finish(persist(data))
+            } else {
+                finish(.failed("The camera did not return JPEG data."))
+            }
         }
     }
-}
-
-private extension CameraCaptureOutcome {
-    static var success: CameraCaptureOutcome { .completed(URL(fileURLWithPath: "/dev/null")) }
 }
 
 @MainActor
