@@ -45,9 +45,6 @@ jobs:
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile apply_smart_home_auth_restore_v11_23_rc2.py
           python -m py_compile apply_smart_home_audio_console_v11_24.py
-          python -m py_compile apply_smart_home_audio_console_v11_24_runner.py
-          python -m py_compile apply_smart_home_audio_console_v11_24_preserve_led.py
-          python -m py_compile apply_smart_home_audio_console_v11_24_preserve_power.py
           python -m py_compile scripts/validate_device_contracts.py
           python -m py_compile scripts/validate_visual_contracts_v11_19.py
           python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
@@ -106,10 +103,7 @@ jobs:
         run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
 
       - name: Apply v11.24 Audio Console
-        run: |
-          python apply_smart_home_audio_console_v11_24_runner.py --repo upstream --apply
-          python apply_smart_home_audio_console_v11_24_preserve_led.py --repo upstream --apply
-          python apply_smart_home_audio_console_v11_24_preserve_power.py --repo upstream --apply
+        run: python apply_smart_home_audio_console_v11_24.py --repo upstream --apply
       - name: Validate v11.24 Audio Console and inherited Hardware controls
         run: python scripts/validate_audio_console_v11_24.py upstream
       - name: Validate settings parity against reconstructed v11.24 source
@@ -186,9 +180,6 @@ jobs:
           cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.24-Audio-Console-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp apply_smart_home_audio_console_v11_24.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_audio_console_v11_24_runner.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_audio_console_v11_24_preserve_led.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_audio_console_v11_24_preserve_power.py firmware-gate-artifacts/tools/
           cp scripts/validate_audio_console_v11_24.py firmware-gate-artifacts/tools/
           cp docs/audio-console-v11-24.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
@@ -208,6 +199,8 @@ jobs:
             echo 'normal_wifi_portal_code=REQUIRED_AUTHENTICATED_BOUNDARY'
             echo 'temporary_trusted_lan_bypass=ABSENT_ALL_ACTIVE_STAGES'
             echo 'same_origin_mutation_guard=PRESERVED'
+            echo 'canonical_v11_24_applicator=YES'
+            echo 'same_release_fixup_helpers=ABSENT'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             sha256sum firmware-gate-artifacts/*.bin
