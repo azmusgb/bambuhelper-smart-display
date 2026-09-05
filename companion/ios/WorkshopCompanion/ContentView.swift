@@ -49,6 +49,7 @@ struct ContentView: View {
 
                 Section("Workshop Copilot") {
                     LabeledContent("Provider", value: intelligence.providerName)
+                    LabeledContent("Context", value: copilotContextLabel())
 
                     if let reason = intelligence.availabilityReason,
                        intelligence.phase == .unavailable {
@@ -59,14 +60,26 @@ struct ContentView: View {
                     TextField("Ask about the current workshop state", text: $intelligenceQuestion, axis: .vertical)
                         .lineLimit(2...5)
 
-                    Button {
-                        Task {
-                            await intelligence.ask(
-                                kind: .diagnose,
-                                question: intelligenceQuestion,
-                                snapshot: intelligenceSnapshot()
-                            )
+                    HStack {
+                        Button("Attention") {
+                            runCopilot(.summarize, "What needs attention right now?")
                         }
+                        .buttonStyle(.bordered)
+
+                        Button("Next check") {
+                            runCopilot(.recommendNext, "What is the safest useful thing to check next?")
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Explain") {
+                            runCopilot(.explainStatus, "Explain the current Workshop state in plain language.")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .disabled(intelligence.phase == .thinking || intelligence.phase == .checking)
+
+                    Button {
+                        runCopilot(.diagnose, intelligenceQuestion)
                     } label: {
                         if intelligence.phase == .thinking {
                             HStack(spacing: 8) {
@@ -125,6 +138,18 @@ struct ContentView: View {
                                 Label("Physical verification recommended", systemImage: "eye")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                            }
+
+                            HStack {
+                                Button("Read aloud") {
+                                    _ = capabilities.speak(copilotSpeechText(answer))
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Clear") {
+                                    intelligence.clearAnswer()
+                                }
+                                .buttonStyle(.bordered)
                             }
                         }
                     }
@@ -187,6 +212,17 @@ struct ContentView: View {
         base.appendingPathComponent("login")
     }
 
+    private func runCopilot(_ kind: WorkshopIntelligenceV1.QuestionKind, _ question: String) {
+        intelligenceQuestion = question
+        Task {
+            await intelligence.ask(
+                kind: kind,
+                question: question,
+                snapshot: intelligenceSnapshot()
+            )
+        }
+    }
+
     private func intelligenceSnapshot() -> WorkshopIntelligenceV1.Snapshot {
         let identity = bluetooth.bootstrap?.device
             ?? bluetooth.peripheralName
@@ -207,6 +243,30 @@ struct ContentView: View {
                 latestPhoneCaptureAvailable: capabilities.lastPhotoURL != nil
             )
         )
+    }
+
+    private func copilotContextLabel() -> String {
+        if bluetooth.deviceState != nil {
+            return "Live device link"
+        }
+        if bluetooth.phase == .connected {
+            return "BLE connection"
+        }
+        return "Local app only"
+    }
+
+    private func copilotSpeechText(_ answer: WorkshopIntelligenceV1.Answer) -> String {
+        var parts = [answer.summary]
+        if !answer.observations.isEmpty {
+            parts.append("Observations: " + answer.observations.joined(separator: ". "))
+        }
+        if !answer.recommendedActions.isEmpty {
+            parts.append("Recommended next checks: " + answer.recommendedActions.map(\.label).joined(separator: ". "))
+        }
+        if answer.requiresPhysicalCheck {
+            parts.append("Physical verification is recommended.")
+        }
+        return parts.joined(separator: " ")
     }
 
     private func severityColor(_ severity: WorkshopIntelligenceV1.Severity) -> Color {
