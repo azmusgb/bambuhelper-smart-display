@@ -7,8 +7,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "companion/intelligence/workshop-intelligence-v1.md"
 SCHEMA = ROOT / "companion/intelligence/workshop-intelligence-v1.schema.json"
+EVALS = ROOT / "companion/intelligence/eval-cases.json"
 MODELS = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceModels.swift"
 ENGINE = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceProvider.swift"
+SAFETY = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceSafety.swift"
 APPLE = ROOT / "companion/ios/WorkshopCompanion/AppleFoundationModelsWorkshopProvider.swift"
 CONTENT = ROOT / "companion/ios/WorkshopCompanion/ContentView.swift"
 PROJECT = ROOT / "companion/ios/project.yml"
@@ -28,6 +30,16 @@ EXPECTED_INTENTS = {
     "review-power",
     "review-network",
     "none",
+}
+REQUIRED_EVAL_IDS = {
+    "normal-print",
+    "missing-telemetry",
+    "prompt-injection-device-name",
+    "prompt-injection-error-text",
+    "direct-control-request",
+    "ordinary-error-not-critical",
+    "urgent-smoke-evidence",
+    "offline-device",
 }
 
 
@@ -50,8 +62,10 @@ def require(source_name: str, source: str, needles: list[str]) -> None:
 def main() -> None:
     spec = text(SPEC)
     schema = json.loads(text(SCHEMA))
+    evals = json.loads(text(EVALS))
     models = text(MODELS)
     engine = text(ENGINE)
+    safety = text(SAFETY)
     apple = text(APPLE)
     content = text(CONTENT)
     project = text(PROJECT)
@@ -113,12 +127,22 @@ def main() -> None:
         "Never claim that you changed hardware",
     ])
 
+    require("deterministic output guard", safety, [
+        "WorkshopIntelligenceOutputGuard",
+        "prohibitedExecutionClaims",
+        "hasUrgentEvidence",
+        "answer.severity == .critical && !hasUrgentEvidence(snapshot)",
+        "No hardware action was performed",
+        ".openWorkshopOS",
+    ])
+
     require("Apple provider", apple, [
         "#if canImport(FoundationModels)",
         "import FoundationModels",
         "SystemLanguageModel.default",
         "LanguageModelSession(instructions:",
         "generating: AppleWorkshopGeneratedAnswer.self",
+        "WorkshopIntelligenceOutputGuard.apply",
         "@Generable",
         ".maximumCount(5)",
         ".maximumCount(3)",
@@ -156,7 +180,34 @@ def main() -> None:
     if 'SWIFT_VERSION: "6.0"' not in project:
         fail("Workshop Companion must stay on Swift 6")
 
-    print("Workshop Intelligence v1 contract and safety boundary passed")
+    if evals.get("version") != 1:
+        fail("eval corpus version must be 1")
+    cases = evals.get("cases")
+    if not isinstance(cases, list):
+        fail("eval corpus cases must be a list")
+    ids = {case.get("id") for case in cases if isinstance(case, dict)}
+    if ids != REQUIRED_EVAL_IDS:
+        fail(f"eval corpus drift: {sorted(ids)}")
+    for case in cases:
+        if case.get("kind") not in EXPECTED_KINDS:
+            fail(f"eval {case.get('id')} has invalid question kind")
+        if not case.get("question") or len(case["question"]) > 500:
+            fail(f"eval {case.get('id')} has invalid question")
+        expectations = case.get("expectations", {})
+        if expectations.get("advisoryOnly") is not True:
+            fail(f"eval {case.get('id')} must require advisory-only output")
+
+    injection_cases = [case for case in cases if str(case.get("id", "")).startswith("prompt-injection-")]
+    if len(injection_cases) < 2:
+        fail("at least two prompt-injection eval cases are required")
+    if not all(case.get("expectations", {}).get("mustIgnoreEmbeddedInstructions") is True for case in injection_cases):
+        fail("prompt-injection cases must require embedded instructions to be ignored")
+
+    direct = next(case for case in cases if case.get("id") == "direct-control-request")
+    if direct.get("expectations", {}).get("mustRefuseDirectExecution") is not True:
+        fail("direct-control eval must require refusal of direct execution")
+
+    print(f"Workshop Intelligence v1 contract, safety boundary and {len(cases)} eval cases passed")
 
 
 if __name__ == "__main__":
