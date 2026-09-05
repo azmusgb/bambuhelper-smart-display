@@ -18,10 +18,14 @@ def forbid(body: str, marker: str, label: str) -> None:
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit(f"Usage: {sys.argv[0]} <reconstructed-repo>")
-    repo=Path(sys.argv[1]).resolve()
-    hub=(repo/'src/smart_hub.cpp').read_text(encoding='utf-8',errors='replace')
-    main_cpp=(repo/'src/main.cpp').read_text(encoding='utf-8',errors='replace')
-    header=(repo/'src/smart_hub.h').read_text(encoding='utf-8',errors='replace')
+    repo = Path(sys.argv[1]).resolve()
+    project = Path(__file__).resolve().parents[1]
+    hub = (repo / 'src/smart_hub.cpp').read_text(encoding='utf-8', errors='replace')
+    main_cpp = (repo / 'src/main.cpp').read_text(encoding='utf-8', errors='replace')
+    header = (repo / 'src/smart_hub.h').read_text(encoding='utf-8', errors='replace')
+    delta = (project / 'apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py').read_text(
+        encoding='utf-8', errors='replace'
+    )
 
     for marker in [
         'Workshop OS v11.23 RC2 guarded-action feedback',
@@ -37,21 +41,38 @@ def main() -> int:
         'displayedPrinter().state.printing',
         'displayedPrinter().state.gcodeStateId==GCODE_PAUSE',
     ]:
-        need(hub,marker,'guarded-action source contract')
+        need(hub, marker, 'guarded-action source contract')
 
-    need(main_cpp,'if (hubTouchHasPoint) smartHubUpdateHoldProgress(hubTouchX, hubTouchY, d);','live hold dispatch')
-    need(main_cpp,'hubTouchMaxHoldMs >= 650','existing long-press threshold')
-    need(header,'void smartHubUpdateHoldProgress(uint16_t rawX, uint16_t rawY, uint32_t holdMs);','hold-feedback declaration')
+    need(
+        main_cpp,
+        'if (hubTouchHasPoint) smartHubUpdateHoldProgress(hubTouchX, hubTouchY, d);',
+        'live hold dispatch',
+    )
+    need(main_cpp, 'hubTouchMaxHoldMs >= 650', 'existing long-press threshold')
+    need(
+        header,
+        'void smartHubUpdateHoldProgress(uint16_t rawX, uint16_t rawY, uint32_t holdMs);',
+        'hold-feedback declaration',
+    )
 
-    # The warning is informational only; this delta must not add printer-control calls.
-    forbid(hub,'requestPrinterControlCommand','printer command in guarded network feedback')
+    # The reconstructed hub legitimately contains inherited printer-control
+    # functions from accepted releases. The v11.23 guarded-feedback delta must
+    # remain informational only, so inspect the delta that introduced this
+    # behavior rather than rejecting inherited symbols elsewhere in smart_hub.cpp.
+    for marker in [
+        'requestPrinterControlCommand',
+        'requestLightCommand',
+        'requestPower',
+        'tasmotaSetPower',
+    ]:
+        forbid(delta, marker, 'printer-control addition in guarded network feedback delta')
 
     print('v11.23 RC2 guarded-action feedback: PASS')
     print('Hold progress: 5 live segments tied to 650 ms commit threshold')
     print('Network Apply: active-printer display restart/reconnect warning')
-    print('Printer behavior: informational only; no printer command added')
+    print('Printer behavior: informational only; guarded-feedback delta adds no printer command')
     return 0
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     raise SystemExit(main())
