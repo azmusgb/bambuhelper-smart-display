@@ -4,7 +4,7 @@ Local-first Workshop OS for the **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`
 
 ## Release model
 
-The repository deliberately separates the **physically accepted source baseline** from the conservative static download channel.
+The repository deliberately separates the **physically accepted source baseline** from the conservative static download channel and from hardware candidates still awaiting real-device acceptance.
 
 | Surface | Current state | Purpose |
 | --- | --- | --- |
@@ -12,15 +12,16 @@ The repository deliberately separates the **physically accepted source baseline*
 | `main` | **Workshop OS v11.22 Display Expert RC1 — accepted** | PR #74 merged after exact-head CI and real-device acceptance. |
 | `release.json` / Netlify | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative static installer retained until its binary-channel promotion is performed separately. |
 | static rollback download | **Smart Home v7.2** | Current static-channel rollback while v11.19.1 remains the published installer. |
-| active candidate | **Workshop OS v11.23 Network Locale Layout RC2 — PR #76** | Touch-UX / network candidate; exact-head CI and physical WS350 acceptance are required before promotion. |
+| active candidate | **Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76 (draft)** | Direct-to-`main` hardware candidate; exact-head CI and physical WS350 acceptance are required. |
+| stacked follow-on | **Workshop OS v11.24 Audio Console RC1 — PR #77 (draft)** | Built on #76 and not independently promotable until its base candidate is accepted. |
 
-A merge is not physical acceptance by itself. `releases/current.json` is authoritative for accepted source, candidate state, `main` state, and the static download channel.
+A merge is not physical acceptance by itself. `releases/current.json` is authoritative for the accepted source, the direct-to-`main` hardware candidate, `main` state, and the static download channel. Stacked follow-on candidates are documented here and in the roadmap rather than represented as a second authoritative `candidate` object.
 
-## Active candidate — Workshop OS v11.23 Network Locale Layout RC2
+## Current candidate stack
+
+### Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76
 
 PR **#76** carries the RC2 interaction redesign after RC1 proved technically healthy but exposed unnecessary friction during real WS350 touch testing.
-
-### RC2 touch experience
 
 The physical interface is being elevated around **discoverability, target size, explicit direction, safe staging, and guarded commit flows**:
 
@@ -35,9 +36,10 @@ The physical interface is being elevated around **discoverability, target size, 
 - Display Expert removes hidden “hold to go backward” behavior in favor of explicit left/right direction semantics;
 - Rotation opens a dedicated **Current / Preview / Prev / Next / Cancel / Hold Commit** interaction;
 - changing Rotation Preview does not persist, and a short tap on Commit does not persist;
+- live guarded-action progress makes protected commits visible;
 - the established 32-view deterministic framebuffer catalog is retained because Rotation Preview is modal rather than a new capture page.
 
-### Security boundary
+#### Security boundary
 
 The **mergeable v11.23 candidate preserves the accepted v11.20 portal/session boundary**.
 
@@ -54,9 +56,9 @@ The final candidate requires:
 - System portal-code pixels redacted before retained capture output;
 - no tracked or packaged no-code acceptance helper.
 
-See `docs/security-hardening-v11-23-rc2.md` and `SECURITY.md` for the enforceable security boundary.
+See `docs/security-hardening-v11-23-rc2.md`, `docs/PHYSICAL_ACCEPTANCE_V11_23_RC2.md`, and `SECURITY.md` for the enforceable boundary.
 
-### Network / Locale / Layout scope
+#### Network / Locale / Layout scope
 
 - physical timezone selection using the existing supported timezone database;
 - coordinated DHCP/static mode;
@@ -69,6 +71,12 @@ See `docs/security-hardening-v11-23-rc2.md` and `SECURITY.md` for the enforceabl
 - no speculative speed, fan, temperature, or AMS printer commands.
 
 The candidate is **not accepted** until exact-head RC2 CI and real-device touch/display/network/security acceptance pass. v11.22 remains the authoritative physically accepted source baseline.
+
+### Workshop OS v11.24 Audio Console RC1 — PR #77
+
+PR **#77** is stacked on #76. It evolves the existing ES8311/onboard-microphone path with persistent speaker volume, explicit event/click/cooldown/quiet controls, a short microphone-level sample, and explicit 1/3/5-second local record/playback loops. Capture remains local-only and temporary.
+
+Because #77 depends on #76, it cannot be treated as a direct replacement for the accepted v11.22 baseline until the underlying v11.23 candidate has completed its own validation and physical acceptance path. v11.24 must inherit the authenticated v11.23 security boundary and may not resurrect the historical trusted-LAN bypass.
 
 ## Accepted source — Workshop OS v11.22 Display Expert RC1
 
@@ -90,9 +98,9 @@ The physical Display Experience includes 14 pages, with expert surfaces for cura
 
 Free-text Gauge Labels remain browser-only.
 
-### Inherited safety
+### Inherited safety and security
 
-Printer control remains selected-printer scoped and fail-closed. Chamber Light, Pause/Resume, guarded Stop, and mapped Printer Power retain their established safeguards.
+v11.22 preserves the v11.20 rotating portal-code and boot-scoped session boundary plus the accepted v11.19.1 control and recovery behavior. Printer control remains selected-printer scoped and fail-closed. Chamber Light, Pause/Resume, guarded Stop, and mapped Printer Power retain their established safeguards.
 
 Speed, fan, temperature, AMS, or other printer commands are not added without a proven backend path and explicit safety semantics.
 
@@ -120,7 +128,7 @@ For v11.23 RC2, the firmware gate reconstructs and validates the authenticated v
 - `.github/workflows/release-main.yml` — accepted static-installer integrity gate.
 - `docs/` — architecture, safety, parity, acceptance, security, and roadmap documentation.
 - `docs/archive/` and `releases/archive/` — historical provenance.
-- `releases/current.json` — accepted-source / candidate / `main` / static-channel state.
+- `releases/current.json` — accepted-source / direct-candidate / `main` / static-channel state.
 - `scripts/capture-ws350-views.zsh` — authenticated credential-safe physical framebuffer capture.
 - `docs/PHYSICAL_ACCEPTANCE_V11_23_RC2.md` — current physical acceptance checklist.
 
@@ -132,7 +140,7 @@ For v11.23 RC2, the firmware gate reconstructs and validates the authenticated v
 - Captures redact the System credential region before retained output and exclude printer configuration/settings exports.
 - Final firmware validation forbids the temporary trusted-LAN bypass from surviving into reconstructed candidate source.
 - Static firmware retention remains bounded to the published pair plus one rollback pair.
-- Upstream synchronization is its own candidate; the accepted source line is never silently repinned.
+- Upstream synchronization is its own candidate; the accepted source line is never silently repinned. See `docs/UPSTREAM_SYNC.md`.
 
 ## License and attribution
 
