@@ -45,17 +45,17 @@ def main() -> None:
 
     for needle in [
         'constexpr uint8_t kProtocolVersion = 1;',
-        '"portal-session"',
+        'portal-session',
         'kBlePayloadTarget = 180',
         'BLECharacteristic::PROPERTY_READ',
         'BLECharacteristic::PROPERTY_NOTIFY',
         'BLECharacteristic::PROPERTY_WRITE',
         'workshopCompanionBleNotify(',
-        '"hello"',
-        '"camera-request"',
-        '"tts-request"',
-        '"notify"',
-        '"lan-handoff"',
+        'hello',
+        'camera-request',
+        'tts-request',
+        'notify',
+        'lan-handoff',
         'WiFi.status() == WL_CONNECTED',
     ]:
         require(impl, needle, "BLE implementation")
