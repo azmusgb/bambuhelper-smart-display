@@ -42,3 +42,31 @@ jobs:
             echo 'firmware/build must not be tracked'
             exit 1
           fi
+
+  companion-ios:
+    name: Workshop Companion iOS
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: companion/ios
+        run: xcodegen generate --spec project.yml
+
+      - name: Compile iOS Simulator app
+        working-directory: companion/ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project WorkshopCompanion.xcodeproj \
+            -scheme WorkshopCompanion \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build
