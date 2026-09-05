@@ -64,7 +64,7 @@ jobs:
           static_required=0
           for f in "${files[@]}"; do
             case "$f" in
-              .github/workflows/firmware-candidate.yml|README.md|SECURITY.md|releases/current.json|apply_smart_home_*.py|.bambuhelper-validation/*|.bambuhelper-validation/**/*|assets/*|assets/**/*|scripts/apply_*.sh|scripts/validate_*.py|scripts/capture-ws350-views.zsh|scripts/accept-ws350-v11-23-rc2.zsh|docs/physical-*.md|docs/visual-*.md|docs/portal-auth-*.md|docs/display-expert-*.md|docs/network-*.md|docs/touch-*.md|docs/settings-capability-registry/*|docs/settings-capability-registry/**/*)
+              .github/workflows/firmware-candidate.yml|README.md|SECURITY.md|releases/current.json|apply_smart_home_*.py|.bambuhelper-validation/*|.bambuhelper-validation/**/*|assets/*|assets/**/*|scripts/apply_*.sh|scripts/validate_*.py|scripts/capture-ws350-views.zsh|docs/physical-*.md|docs/visual-*.md|docs/portal-auth-*.md|docs/display-expert-*.md|docs/network-*.md|docs/touch-*.md|docs/security-*.md|docs/PHYSICAL_ACCEPTANCE*.md|docs/settings-capability-registry/*|docs/settings-capability-registry/**/*)
                 firmware_required=1
                 ;;
             esac
