@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 
 MARKER = "Workshop OS v11.23 RC2 guarded-action feedback"
+ORDER_MARKER = "Workshop OS v11.23 RC2 rotation preview declaration-order fix"
 
 
 class PatchError(RuntimeError):
@@ -74,6 +75,34 @@ void smartHubUpdateHoldProgress(uint16_t rawX, uint16_t rawY, uint32_t holdMs) {
 '''
 
 
+def fix_rotation_preview_declaration_order(text: str) -> str:
+    """Move rotation-preview state/prototype ahead of the renderer that uses them."""
+    if ORDER_MARKER in text:
+        return text
+
+    late = "static bool g_rotationPreviewMode=false;\n"
+    if text.count(late) != 1:
+        raise PatchError(
+            f"rotation preview state: expected exactly 1 late definition, found {text.count(late)}"
+        )
+    text = text.replace(late, "", 1)
+
+    anchor = "static void drawDisplayExperience(bool full) {"
+    if text.count(anchor) != 1:
+        raise PatchError(
+            f"display renderer: expected exactly 1 anchor, found {text.count(anchor)}"
+        )
+    declarations = (
+        "// v11.23 RC2 rotation preview is referenced by drawDisplayExperience before\n"
+        "// its helper implementation later in this translation unit.\n"
+        "static bool g_rotationPreviewMode=false;\n"
+        "static void hubRc2DrawRotationPreview();\n\n"
+    )
+    text = text.replace(anchor, declarations + anchor, 1)
+    text += f"\n// {ORDER_MARKER}\n"
+    return text
+
+
 def patch_header(repo: Path) -> None:
     p=repo/"src"/"smart_hub.h"
     text=p.read_text(encoding="utf-8")
@@ -128,6 +157,12 @@ def patch_hub(repo: Path) -> None:
     stub="bool smartHubHandleTouch(uint16_t, uint16_t, bool) { return false; }\n"
     if stub in text and "void smartHubUpdateHoldProgress(uint16_t, uint16_t, uint32_t) {}" not in text:
         text=text.replace(stub,stub+"void smartHubUpdateHoldProgress(uint16_t, uint16_t, uint32_t) {}\n",1)
+
+    # The RC2 rotation-preview finalization inserts its state/helper later in
+    # this translation unit, but drawDisplayExperience() consumes them earlier.
+    # Normalize declaration order here so the v11.23 candidate compiles on its
+    # own and downstream candidates inherit a sound base.
+    text=fix_rotation_preview_declaration_order(text)
 
     text += f"\n// {MARKER}\n"
     p.write_text(text,encoding="utf-8")
