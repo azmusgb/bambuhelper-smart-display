@@ -85,8 +85,12 @@ jobs:
           python -m py_compile apply_smart_home_portal_auth_v11_20.py
           python -m py_compile apply_smart_home_display_expert_v11_22.py
           python -m py_compile apply_smart_home_network_locale_layout_v11_23.py
+          # Historical RC2 module is retained only as the source of touch/layout
+          # transformation helpers. It is never executed directly by this gate.
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2.py
+          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_secure.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize.py
+          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py
           python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
           python -m py_compile apply_smart_home_auth_restore_v11_23_rc2.py
           python -m py_compile scripts/validate_device_contracts.py
@@ -134,19 +138,25 @@ jobs:
         run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
       - name: Validate v11.23 RC1 base contract
         run: python scripts/validate_network_locale_layout_v11_23.py upstream
-      - name: Apply v11.23 RC2 touch UX intermediate delta
-        run: python apply_smart_home_touch_ux_v11_23_rc2.py --repo upstream --apply
-      - name: Validate v11.23 RC2 touch UX
+
+      - name: Apply v11.23 RC2 secure touch UX
+        run: python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
+      - name: Validate v11.23 RC2 secure touch UX and authenticated boundary
         run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
-      - name: Apply v11.23 RC2 physical touch finalization
-        run: python apply_smart_home_touch_ux_v11_23_rc2_finalize.py --repo upstream --apply
+      - name: Apply v11.23 RC2 secure physical touch finalization
+        run: python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
       - name: Validate v11.23 RC2 physical touch finalization
         run: python scripts/validate_touch_ux_v11_23_rc2_finalize.py upstream
+      - name: Revalidate authenticated boundary after touch finalization
+        run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
       - name: Apply v11.23 RC2 guarded-action feedback
         run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
       - name: Validate v11.23 RC2 guarded-action feedback
         run: python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
-      - name: Restore authenticated v11.23 LAN boundary
+
+      # Defense-in-depth normalization. The secure touch path above must already
+      # preserve authentication; this layer now proves idempotent restoration.
+      - name: Normalize final authenticated v11.23 LAN boundary
         run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
       - name: Validate final authenticated v11.23 boundary
         run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
@@ -163,10 +173,21 @@ jobs:
           build=Path('upstream/include/smart_home_build.h').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
           app=Path('upstream/web/app.js').read_text()
-          for needle in ['SMART_HOME_VERSION "v11.23"','Smart Home v11.23 Network Locale Layout RC2','Workshop OS v11.23 RC2 authenticated LAN restore']:
-              assert needle in build, needle
-          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','if (!isAPMode()) return true;','TEMPORARY TRUSTED-LAN MODE']:
-              assert forbidden not in build + security + app, forbidden
+          for needle in [
+              'SMART_HOME_VERSION "v11.23"',
+              'Smart Home v11.23 Network Locale Layout RC2',
+              'Workshop OS v11.23 RC2 secure touch UX',
+              'Workshop OS v11.23 RC2 authenticated LAN restore',
+          ]:
+              assert needle in build + hub, needle
+          for forbidden in [
+              'WORKSHOP_OS_TEMP_LAN_OPEN',
+              'if (!isAPMode()) return true;',
+              'TEMPORARY TRUSTED-LAN MODE',
+              'v1123Rc2LanOpenBanner',
+              'Workshop OS v11.23 RC2 touch UX and temporary trusted-LAN portal bypass',
+          ]:
+              assert forbidden not in build + hub + security + app, forbidden
           assert 'return cookieMatches(server);' in security
           assert 'if (mutating && !sameOrigin(server))' in security
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
@@ -179,7 +200,7 @@ jobs:
               assert needle in web, needle
           for forbidden in ['requestSpeedCommand','requestFanCommand']:
               assert forbidden not in hub and forbidden not in web and forbidden not in mqtt, forbidden
-          print('v11.23 RC2 final authenticated safety: PASS')
+          print('v11.23 RC2 secure reconstruction + final authenticated safety: PASS')
           PY
 
       - name: Validate browser JavaScript
@@ -209,11 +230,6 @@ jobs:
           cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.23-Network-Locale-Layout-RC2-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp scripts/capture-ws350-views.zsh firmware-gate-artifacts/tools/
-          cp apply_smart_home_network_locale_layout_v11_23.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_touch_ux_v11_23_rc2.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_touch_ux_v11_23_rc2_finalize.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py firmware-gate-artifacts/tools/
-          cp apply_smart_home_auth_restore_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_auth_restore_v11_23_rc2.py firmware-gate-artifacts/tools/
           cp scripts/validate_settings_parity.py firmware-gate-artifacts/tools/
           cp docs/physical-settings-parity.md firmware-gate-artifacts/docs/
@@ -228,6 +244,7 @@ jobs:
             echo 'physical_acceptance=REQUIRED'
             echo 'accepted_v11_22=PRESERVED'
             echo 'touch_ux=EXPLICIT_CONTROLS'
+            echo 'security_intermediate=NEVER_ENABLED_BY_ACTIVE_RECONSTRUCTION'
             echo 'primary_touch_targets=52PX_REFERENCE_WHERE_LAYOUT_PERMITS'
             echo 'hidden_hold_reverse=REMOVED'
             echo 'timezone_physical_expert=ENABLED'
@@ -235,11 +252,11 @@ jobs:
             echo 'display_rotation=DEDICATED_PREVIEW_GUARDED_HOLD_COMMIT'
             echo 'guarded_hold_progress=5_SEGMENTS_650MS'
             echo 'active_print_network_warning=ENABLED_DISPLAY_RESTART_ONLY'
-            echo 'normal_wifi_portal_code=REQUIRED'
+            echo 'normal_wifi_portal_code=REQUIRED_THROUGHOUT_RECONSTRUCTION'
             echo 'capture_auth=AUTHENTICATED_SESSION'
             echo 'same_origin_mutation_guard=PRESERVED'
             echo 'ap_recovery_boundaries=PRESERVED'
-            echo 'trusted_lan_bypass=ABSENT_FINAL_SOURCE'
+            echo 'trusted_lan_bypass=ABSENT_ALL_ACTIVE_STAGES'
             echo 'capture_views=32'
             echo 'wifi_credentials=PORTAL_INPUT'
             echo 'hostname=PORTAL_INPUT'
@@ -272,7 +289,7 @@ jobs:
           [[ "$SCOPE_RESULT" == "success" ]] || exit 1
           if [[ "$FIRMWARE_REQUIRED" == "true" ]]; then
             [[ "$FIRMWARE_RESULT" == "success" ]] || exit 1
-            echo 'Merge Gate: PASS — full native v11.23 RC2 validation completed.'
+            echo 'Merge Gate: PASS — full native v11.23 RC2 secure reconstruction validation completed.'
           else
             [[ "$FIRMWARE_RESULT" == "skipped" ]] || exit 1
             echo 'Merge Gate: PASS — native validation correctly skipped.'
