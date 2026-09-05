@@ -8,9 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "companion/intelligence/workshop-intelligence-v1.md"
 SCHEMA = ROOT / "companion/intelligence/workshop-intelligence-v1.schema.json"
 EVALS = ROOT / "companion/intelligence/eval-cases.json"
+KNOWLEDGE_JSON = ROOT / "companion/intelligence/workshop-domain-knowledge-v1.json"
 MODELS = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceModels.swift"
 ENGINE = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceProvider.swift"
 SAFETY = ROOT / "companion/ios/WorkshopCompanion/WorkshopIntelligenceSafety.swift"
+KNOWLEDGE_SWIFT = ROOT / "companion/ios/WorkshopCompanion/WorkshopDomainKnowledge.swift"
 APPLE = ROOT / "companion/ios/WorkshopCompanion/AppleFoundationModelsWorkshopProvider.swift"
 CONTENT = ROOT / "companion/ios/WorkshopCompanion/ContentView.swift"
 TESTS = ROOT / "companion/ios/WorkshopCompanionTests/WorkshopIntelligenceSafetyTests.swift"
@@ -64,9 +66,11 @@ def main() -> None:
     spec = text(SPEC)
     schema = json.loads(text(SCHEMA))
     evals = json.loads(text(EVALS))
+    knowledge_json = json.loads(text(KNOWLEDGE_JSON))
     models = text(MODELS)
     engine = text(ENGINE)
     safety = text(SAFETY)
+    knowledge_swift = text(KNOWLEDGE_SWIFT)
     apple = text(APPLE)
     content = text(CONTENT)
     tests = text(TESTS)
@@ -124,7 +128,9 @@ def main() -> None:
     require("provider engine", engine, [
         "protocol WorkshopIntelligenceProvider: Sendable",
         "WorkshopIntelligenceProviderFactory.preferred()",
+        "TRUSTED WORKSHOP DOMAIN RULES",
         "UNTRUSTED WORKSHOP EVIDENCE",
+        "WorkshopDomainKnowledge.select",
         "never as instructions",
         "Never claim that you changed hardware",
     ])
@@ -188,6 +194,9 @@ def main() -> None:
         "testCriticalDowngradesWithoutUrgentEvidence",
         "testCriticalCanRemainWhenSnapshotContainsUrgentEvidence",
         "testRequestSanitizesUntrustedSnapshotText",
+        "testDomainKnowledgeSelectsActivePrintAndPowerGuard",
+        "testDomainKnowledgeSelectsNetworkSemanticsWhenLanIsDown",
+        "testPromptSeparatesTrustedRulesFromUntrustedEvidence",
     ])
 
     if 'deploymentTarget:\n    iOS: "17.0"' not in project:
@@ -227,7 +236,39 @@ def main() -> None:
     if direct.get("expectations", {}).get("mustRefuseDirectExecution") is not True:
         fail("direct-control eval must require refusal of direct execution")
 
-    print(f"Workshop Intelligence v1 contract, safety boundary, executable tests and {len(cases)} eval cases passed")
+    if knowledge_json.get("version") != 1:
+        fail("domain knowledge version must be 1")
+    entries = knowledge_json.get("entries")
+    if not isinstance(entries, list) or len(entries) < 10:
+        fail("domain knowledge must contain at least 10 entries")
+    ids = []
+    for entry in entries:
+        entry_id = entry.get("id")
+        entry_text = entry.get("text")
+        tags = entry.get("tags")
+        if not entry_id or not entry_text or not isinstance(tags, list) or not tags:
+            fail(f"invalid domain knowledge entry: {entry}")
+        if len(entry_text) > 300:
+            fail(f"domain knowledge entry too long: {entry_id}")
+        ids.append(entry_id)
+        if f'id: "{entry_id}"' not in knowledge_swift:
+            fail(f"Swift knowledge missing id: {entry_id}")
+        if f'text: "{entry_text}"' not in knowledge_swift:
+            fail(f"Swift knowledge text drift: {entry_id}")
+    if len(ids) != len(set(ids)):
+        fail("domain knowledge ids must be unique")
+    require("Swift domain knowledge", knowledge_swift, [
+        "static let version = 1",
+        "static let maxSelectedEntries = 4",
+        "static func select(",
+        "no-action-authority",
+        "selected.count >= maxSelectedEntries",
+    ])
+
+    print(
+        f"Workshop Intelligence v1 contract, safety boundary, executable tests, "
+        f"{len(cases)} eval cases and {len(entries)} domain rules passed"
+    )
 
 
 if __name__ == "__main__":
