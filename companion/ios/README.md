@@ -1,21 +1,32 @@
 # Workshop Companion iOS starter
 
-This directory contains the first native iPhone client for Workshop Companion v1.
+This directory contains the native iPhone client for Workshop Companion v1.
 
-## Target
+## Reproducible Xcode target
 
-Create an iOS SwiftUI application target named `WorkshopCompanion` in Xcode and add the files under `WorkshopCompanion/` to that target.
+The app target is defined in `project.yml` and generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen). Do not hand-maintain or commit a generated `.xcodeproj`.
 
 Recommended deployment baseline: iOS 17+.
 
-Required frameworks are all Apple system frameworks:
+Required frameworks are Apple system frameworks:
 
 - SwiftUI
 - CoreBluetooth
 - AVFoundation
 - UserNotifications
 
-Use `WorkshopCompanion/Info.plist` as the target privacy/background-mode source or copy its keys into the target's generated Info settings.
+`WorkshopCompanion/Info.plist` is the target privacy/background-mode source.
+
+Generate and open the project on a Mac:
+
+```bash
+cd companion/ios
+brew install xcodegen
+xcodegen generate --spec project.yml
+open WorkshopCompanion.xcodeproj
+```
+
+The repository `Validate` workflow performs the same project generation on `macos-15` and compiles the `WorkshopCompanion` scheme for the generic iOS Simulator with code signing disabled. A green `Workshop Companion iOS` job therefore proves that the checked-in Swift source and project definition compile against the Apple SDK used by CI.
 
 ## What the starter already does
 
@@ -43,10 +54,11 @@ Use `WorkshopCompanion/Info.plist` as the target privacy/background-mode source 
 - BLE does not execute printer or power mutations.
 - Wi-Fi credentials are not provisioned over BLE yet.
 - Camera capture is user/foreground constrained; the app does not claim that a suspended iOS app can silently operate the camera.
+- The CI build is unsigned and simulator-targeted; installing on a physical iPhone still requires an Apple development signing identity/team and real-device permission/transport acceptance.
 
 ## Next implementation slice
 
-After a future firmware GATT server is physically proven:
+After the v11.25 firmware GATT server is physically proven:
 
 1. persist the paired Workshop OS peripheral identifier and use CoreBluetooth state restoration;
 2. add a native authenticated LAN client instead of opening `/login` externally;
