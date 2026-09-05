@@ -30,13 +30,7 @@
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
   },
-  "mainState": {
-    "branch": "main",
-    "acceptedFirmwareVersion": "11.22",
-    "acceptedFirmwareCommit": "b6ff19e8617a8cceb380ea3c3621c54ea0048f11",
-    "candidateFirmwareMerged": false,
-    "note": "main may contain documentation, governance and release-state commits newer than the accepted firmware commit; v11.23 and stacked v11.24 firmware remain on candidate branches until physical acceptance."
-  },
+  "mainState": null,
   "validation": {
     "acceptedSource": {
       "exactHeadCi": "passed",
