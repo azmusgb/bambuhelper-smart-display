@@ -13,9 +13,10 @@ The repository deliberately separates the **physically accepted source baseline*
 | `release.json` / Netlify | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative static installer retained until its binary-channel promotion is performed separately. |
 | static rollback download | **Smart Home v7.2** | Current static-channel rollback while v11.19.1 remains the published installer. |
 | active candidate | **Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76 (draft)** | Direct-to-`main` hardware candidate; exact-head CI and physical WS350 acceptance are required. |
-| stacked follow-on | **Workshop OS v11.24 Audio Console RC1 — PR #77 (draft)** | Built on #76 and not independently promotable until its base candidate is accepted. |
+| stacked follow-on | **Workshop OS v11.24 Audio Console RC1 — PR #77 (draft)** | First stacked dependency on #76; not independently promotable until its base candidate is accepted. |
+| later stacked candidates | **v11.25–v11.30 Companion / Unified Web chain** | Substantial implementation exists beyond #77, but it remains candidate-only while the direct physical gate is unresolved. See `docs/CANDIDATE_STACK_2026-09-06.md`. |
 
-A merge is not physical acceptance by itself. `releases/current.json` is authoritative for the accepted source, the direct-to-`main` hardware candidate, `main` state, and the static download channel. Stacked follow-on candidates are documented here and in the roadmap rather than represented as a second authoritative `candidate` object.
+A merge is not physical acceptance by itself. `releases/current.json` is authoritative for the accepted source, the direct-to-`main` hardware candidate, `main` state, and the static download channel. Stacked follow-on candidates are documented here and in `docs/CANDIDATE_STACK_2026-09-06.md` rather than represented as a second authoritative `candidate` object.
 
 ## Current candidate stack
 
@@ -30,6 +31,14 @@ The **final RC2 preserves the v11.20 portal/session security model**. An early h
 PR **#77** is stacked on #76. It evolves the existing ES8311/onboard-microphone path with persistent speaker volume, explicit event/click/cooldown/quiet controls, a short microphone-level sample, and explicit 1/3/5-second local record/playback loops. Capture remains local-only and temporary.
 
 Because #77 depends on #76, it cannot be treated as a direct replacement for the accepted v11.22 baseline until the underlying v11.23 candidate has completed its own validation and physical acceptance path.
+
+### Later stacked Companion / Unified Web candidates
+
+Implementation has continued in a dependency chain beyond #77, including PRs **#83, #87, #88, #91, and #92**. The current farthest stacked candidate is **v11.30 Unified Web + Companion RC2**. Its exact head has passed software-side validation and firmware-gate builds, but it remains physically unaccepted and therefore non-authoritative.
+
+The complete chain, its security notes, and the distinction between software-green and physically accepted state are recorded in `docs/CANDIDATE_STACK_2026-09-06.md`.
+
+PRs #91/#92 include a WS350-only **open-LAN acceptance policy** for testing. Treat that as candidate-only policy, not an accepted production-security decision. Stable promotion requires an explicit authentication decision plus physical validation.
 
 ## Accepted source — Workshop OS v11.22 Display Expert RC1
 
