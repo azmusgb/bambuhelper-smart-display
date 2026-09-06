@@ -13,9 +13,10 @@ The repository deliberately separates the **physically accepted source baseline*
 | `release.json` / Netlify | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative static installer retained until its binary-channel promotion is performed separately. |
 | static rollback download | **Smart Home v7.2** | Current static-channel rollback while v11.19.1 remains the published installer. |
 | active candidate | **Workshop OS v11.23 Network / Locale / Layout Expert RC2 — PR #76 (draft)** | Direct-to-`main` hardware candidate; exact-head CI and physical WS350 acceptance are required. |
-| stacked follow-on | **Workshop OS v11.24 Audio Console RC1 — PR #77 (draft)** | Built on #76 and not independently promotable until its base candidate is accepted. |
+| stacked follow-on | **Workshop OS v11.24 Audio Console RC1 — PR #77 (draft)** | First stacked dependency on #76; not independently promotable until its base candidate is accepted. |
+| deferred backlog | **post-v11.24 Companion / Assistant experiments — issue #97** | Former v11.25–v11.30 / Workshop Intelligence PRs are closed as preserved implementation evidence until the physical baseline is accepted. |
 
-A merge is not physical acceptance by itself. `releases/current.json` is authoritative for the accepted source, the direct-to-`main` hardware candidate, `main` state, and the static download channel. Stacked follow-on candidates are documented here and in the roadmap rather than represented as a second authoritative `candidate` object.
+A merge is not physical acceptance by itself. `releases/current.json` is authoritative for the accepted source, the direct-to-`main` hardware candidate, `main` state, and the static download channel. The active promotion train is deliberately limited to **#76 -> #77**; deferred Companion/Assistant implementation evidence is recorded in `docs/CANDIDATE_STACK_2026-09-06.md` and issue #97 rather than represented as another active candidate chain.
 
 ## Current candidate stack
 
@@ -77,6 +78,16 @@ The candidate is **not accepted** until exact-head RC2 CI and real-device touch/
 PR **#77** is stacked on #76. It evolves the existing ES8311/onboard-microphone path with persistent speaker volume, explicit event/click/cooldown/quiet controls, a short microphone-level sample, and explicit 1/3/5-second local record/playback loops. Capture remains local-only and temporary.
 
 Because #77 depends on #76, it cannot be treated as a direct replacement for the accepted v11.22 baseline until the underlying v11.23 candidate has completed its own validation and physical acceptance path. v11.24 must inherit the authenticated v11.23 security boundary and may not resurrect the historical trusted-LAN bypass.
+
+### Deferred post-v11.24 Companion / Assistant work — issue #97
+
+The former later stacked PRs **#83, #87, #88, #90, #91, and #92** are now closed as **deferred implementation evidence**. Their branches, commits, discussions, and prior validation remain available, but they are not active merge candidates and do not form an accepted release train.
+
+After #76 and #77 are physically accepted, re-enter that work through **issue #97** and rebuild the smallest still-relevant Companion/Assistant slice on the then-accepted baseline. Do not merge the historical dependency stack wholesale.
+
+PRs #91/#92 experimented with a WS350-only **Acceptance Open LAN** policy. That posture is explicitly **not eligible for stable promotion**. A stable successor must retain an authenticated normal-LAN/session boundary or use an explicitly approved revocable, least-authority device-scoped credential model, with the chosen security/recovery behavior physically validated.
+
+Filament Inventory Assistant migration remains separately tracked by **issue #94** and must preserve Filament Inventory as the sole inventory authority.
 
 ## Accepted source — Workshop OS v11.22 Display Expert RC1
 
