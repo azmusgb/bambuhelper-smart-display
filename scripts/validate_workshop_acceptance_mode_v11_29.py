@@ -35,10 +35,18 @@ def main() -> int:
         'SMART_HOME_VERSION "v11.29"',
         'SMART_HOME_PROFILE "acceptance-open-lan"',
         'Smart Home v11.29 Acceptance Open LAN RC1',
+        '#if defined(BOARD_IS_WS350)',
         '#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1',
         'Workshop OS v11.29 Acceptance Open LAN RC1',
     ]:
-        need(build, marker, "candidate identity")
+        need(build, marker, "candidate identity / WS350 scope")
+
+    ws350_guard = (
+        "#if defined(BOARD_IS_WS350) && defined(WORKSHOP_OS_ACCEPTANCE_OPEN_LAN) "
+        "&& WORKSHOP_OS_ACCEPTANCE_OPEN_LAN"
+    )
+    if security.count(ws350_guard) < 3:
+        fail("WS350 acceptance guard must scope init, session validity and authorization")
 
     for marker in [
         '#include "smart_home_build.h"',
@@ -57,8 +65,8 @@ def main() -> int:
 
     need(
         security,
-        "#if !defined(WORKSHOP_OS_ACCEPTANCE_OPEN_LAN) || !WORKSHOP_OS_ACCEPTANCE_OPEN_LAN",
-        "header-only API provenance disabled in open mode",
+        "#if !defined(BOARD_IS_WS350) || !defined(WORKSHOP_OS_ACCEPTANCE_OPEN_LAN) || !WORKSHOP_OS_ACCEPTANCE_OPEN_LAN",
+        "header-only API provenance disabled only for WS350 open mode",
     )
 
     for forbidden in [
@@ -79,7 +87,7 @@ def main() -> int:
     for marker in [
         "function v1129AcceptanceOpenLanBanner()",
         "LOCAL ACCEPTANCE MODE",
-        "Portal sign-in is off on normal Wi-Fi",
+        "Portal sign-in is off on this WS350 over normal Wi-Fi",
         "sensitive export/debug is blocked",
     ]:
         need(app, marker, "visible acceptance-mode disclosure")
@@ -100,11 +108,12 @@ def main() -> int:
         need(companion, marker, "inherited Companion functionality")
 
     print("Workshop OS v11.29 Acceptance Open LAN contracts: PASS")
+    print("Acceptance open-LAN runtime scope: WS350 ONLY")
     print("Normal-LAN portal code: DISABLED BY DEFAULT")
     print("Physical portal-code display: ABSENT")
     print("Normal-LAN browser GETs: OPEN")
     print("Browser mutations: SAME-ORIGIN REQUIRED")
-    print("Header-only mutation provenance: DISABLED")
+    print("Header-only mutation provenance: DISABLED ON WS350 ACCEPTANCE MODE")
     print("Sensitive export/debug: BLOCKED")
     print("AP/recovery route scoping: PRESERVED")
     print("Future portal-code implementation: RETAINED, SAFARI INPUT FIXED")
