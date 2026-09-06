@@ -82,6 +82,26 @@ Color remains semantic: green healthy/ready, amber attention/staged, red fault/d
 ### v11.23 RC2 Network controls
 `hubRc2CardRef()` and `hubRc2ButtonRef()` inherit the same instrument surfaces and accent-rail language while preserving every existing hitbox and touch behavior. No control coordinate, Back/Next rule, staged-network rule, or guarded Apply behavior is changed.
 
+## QMI8658 auto orientation
+
+The prototype also adds optional **sensor-driven display orientation** for the WS350's onboard QMI8658 accelerometer.
+
+Design rules:
+
+- auto orientation is **off by default** until explicitly enabled on the physical Rotation screen;
+- persisted `dispSettings.rotation` remains the durable manual/fallback orientation;
+- automatic changes are runtime-only and never write NVS;
+- the display and touch geometry are reapplied together through the existing display-settings path;
+- rotation is deferred while a finger is held down so a gesture cannot begin in one coordinate system and finish in another;
+- only stable gravity orientation is accepted: approximately 600 ms stable with multiple samples, low-pass filtering, dominance margin and an ambiguity grace period;
+- a flat or near-diagonal device preserves the last confirmed orientation instead of guessing;
+- the gyro is not required for normal rotation; the accelerometer is sufficient and cheaper;
+- sensor failure is fail-safe: the device stays on the persisted manual orientation and reports `QMI8658 NOT FOUND`.
+
+The QMI8658 uses the same WS350 I²C bus already brought up for the display-reset expander / FT6336 path. The prototype does not reinitialize that bus. The hardware-specific QMI-to-display quarter-turn correction is isolated in one constant. It is **implemented but not physically validated on this unit yet**, so the mapping cannot be called accepted until the real WS350 is rotated through all four orientations and touch alignment is checked in each.
+
+The Rotation screen remains the manual recovery surface. With auto orientation off it still exposes Preview / Prev / Next / guarded manual commit. With auto orientation on it shows the effective runtime rotation and sensor status, while manual commit controls are disabled until auto mode is turned off.
+
 ## Deliberately unchanged
 
 ### System / portal credential screen
@@ -91,8 +111,8 @@ The System page is not moved in this prototype. Its portal-code position partici
 No new printer, inventory, AMS, spool, quantity, ownership, location, or device fact is created. The segmented progress ring uses the existing real `BambuState::progress`; it does not synthesize a trend or estimate.
 
 ### Controls and safety
-No printer command, power behavior, long-press rule, persistence path, network mutation, authentication rule, or recovery behavior is changed.
+No printer command, power behavior, network mutation, authentication rule, or recovery behavior is changed. The only new persisted setting is the user's explicit Auto Orient preference; automatic orientation itself is runtime state.
 
 ## Release discipline
 
-This branch is intentionally isolated as implementation evidence. Before promotion it must be replayed on the then-accepted post-v11.24 baseline, rebuilt through the canonical firmware gate, visually captured on a real WS350, checked for 480×320 fit and touch behavior, and accepted as a distinct hardware-facing delta.
+This branch is intentionally isolated as implementation evidence. Before promotion it must be replayed on the then-accepted post-v11.24 baseline, rebuilt through the canonical firmware gate, visually captured on a real WS350, checked for 480×320 fit and touch behavior, rotated physically through all four orientations, and accepted as a distinct hardware-facing delta.
