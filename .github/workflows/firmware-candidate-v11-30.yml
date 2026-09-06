@@ -32,7 +32,7 @@ jobs:
       - name: Reconstruct and validate Workshop OS through v11.30
         run: |
           set -euo pipefail
-          python -m py_compile apply_workshop_unified_web_companion_v11_30.py scripts/validate_workshop_unified_web_companion_v11_30.py
+          python -m py_compile apply_workshop_unified_web_companion_v11_30.py apply_workshop_unified_web_companion_v11_30_fixup.py scripts/validate_workshop_unified_web_companion_v11_30.py
           bash scripts/apply_workshop_os_v11_19.sh upstream
           python scripts/validate_device_contracts.py
           python scripts/validate_visual_contracts_v11_19.py upstream
@@ -65,8 +65,10 @@ jobs:
           python apply_workshop_acceptance_mode_v11_29.py --repo upstream --apply
           python scripts/validate_workshop_acceptance_mode_v11_29.py upstream
           python apply_workshop_unified_web_companion_v11_30.py --repo upstream --apply
+          python apply_workshop_unified_web_companion_v11_30_fixup.py --repo upstream --apply
           python scripts/validate_workshop_unified_web_companion_v11_30.py upstream
           python scripts/validate_settings_parity.py --repo upstream
+          grep -F ".card:not(#v1130AttentionCard)" upstream/src/companion_web.cpp
 
       - name: Verify inherited boundaries and browser syntax
         run: |
@@ -79,7 +81,7 @@ jobs:
           display=Path('upstream/src/display_ui.cpp').read_text()
           app=Path('upstream/web/app.js').read_text()
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
-          for needle in ['SMART_HOME_VERSION "v11.30"','#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1','server.on("/companion/state", HTTP_GET','server.on("/companion/capture/show", HTTP_POST','MALLOC_CAP_SPIRAM','if (companionWebViewerActive())','tft.drawJpg(phoneBuf, (uint32_t)phoneLen','v1130CompanionEnhance']:
+          for needle in ['SMART_HOME_VERSION "v11.30"','#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1','server.on("/companion/state", HTTP_GET','server.on("/companion/capture/show", HTTP_POST','MALLOC_CAP_SPIRAM','if (companionWebViewerActive())','tft.drawJpg(phoneBuf, (uint32_t)phoneLen','v1130CompanionEnhance','.card:not(#v1130AttentionCard)']:
               assert needle in build+companion+display, needle
           for needle in ['v1130UnifiedRail','v1130-mobile-dock','v1130PauseLiveRail(true)',"fetch('/companion/state?slot=0&_='+Date.now()"]:
               assert needle in app, needle
@@ -132,6 +134,7 @@ jobs:
           cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.30-Unified-Web-Companion-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp apply_workshop_unified_web_companion_v11_30.py firmware-gate-artifacts/tools/
+          cp apply_workshop_unified_web_companion_v11_30_fixup.py firmware-gate-artifacts/tools/
           cp scripts/validate_workshop_unified_web_companion_v11_30.py firmware-gate-artifacts/tools/
           cp docs/workshop-unified-web-companion-v11-30.md firmware-gate-artifacts/docs/
           {
@@ -142,7 +145,7 @@ jobs:
             echo 'standard_web_mobile_dock=PRESENT'
             echo 'companion_handoff=FIRST_CLASS'
             echo 'companion_attention=DOM_DERIVED_NO_EXTRA_POLL'
-            echo 'companion_jump_nav=OVERVIEW_CONTROLS_PHOTO_SYSTEM'
+            echo 'companion_jump_nav=OVERVIEW_CONTROLS_PHOTO_SYSTEM_CORRECTED'
             echo 'ota_supplemental_poll=PAUSED_DURING_UPLOAD'
             echo 'normal_lan_portal_code=DISABLED_BY_DEFAULT_WS350'
             echo 'same_origin_mutations=REQUIRED'
