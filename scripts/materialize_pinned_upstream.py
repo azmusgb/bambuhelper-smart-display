@@ -2,7 +2,7 @@
 """Materialize the exact historical BambuHelper source tree used by Workshop OS.
 
 The historical commit object is no longer reachable through a normal git fetch,
-but GitHub still serves its immutable root tree and blob objects.  This helper
+but GitHub still serves its immutable root tree and blob objects. This helper
 uses that Git object identity directly rather than silently repinning Workshop OS
 to a newer upstream revision.
 """
@@ -22,13 +22,13 @@ from urllib.request import Request, urlopen
 
 OWNER = "Keralots"
 REPO = "BambuHelper"
-PINNED_COMMIT = "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4"
+PINNED_COMMIT = "8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4"
 PINNED_TREE = "754c5506bdac08033f0cdc3439e4814acd2b4294"
 API = "https://api.github.com"
 
-# Only files that can influence reconstruction/build/package are materialized.
-# Large historical documentation, photos and prebuilt binaries are deliberately
-# excluded, while the immutable Git tree still authenticates the source listing.
+# Build inputs plus the small installer/web-flasher documents that the earliest
+# Workshop OS evolution patches intentionally update. Large photos, historical
+# prebuilt firmware and unrelated desktop tools remain excluded.
 PREFIXES = (
     "boards/",
     "include/",
@@ -45,6 +45,12 @@ EXACT = {
     "partitions_8mb_app0.csv",
     "partitions_16mb.csv",
     "tools/gen_web_assets.py",
+    "docs/index.html",
+    "docs/styles.css",
+    "docs/cloud-token.html",
+    "docs/flasher.js",
+    "docs/CNAME",
+    "docs/.nojekyll",
 }
 
 
@@ -126,6 +132,9 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
         "web/app.js",
         "web/app.css",
         "tools/gen_web_assets.py",
+        "docs/index.html",
+        "docs/styles.css",
+        "docs/flasher.js",
     }
     paths = {entry["path"] for entry in entries}
     missing = sorted(required - paths)
@@ -133,8 +142,6 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
         raise RuntimeError(f"pinned tree is missing required build inputs: {missing}")
 
     if dest.exists():
-        # Destination is CI scratch state; refuse to mix trees rather than trying
-        # to merge historical source with a newer checkout.
         if any(dest.iterdir()):
             raise RuntimeError(f"destination is not empty: {dest}")
     else:
@@ -142,7 +149,7 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
 
     print(f"Pinned upstream commit identity: {PINNED_COMMIT}")
     print(f"Pinned immutable tree: {PINNED_TREE}")
-    print(f"Materializing {len(entries)} build-relevant blobs with {workers} workers")
+    print(f"Materializing {len(entries)} reconstruction/build blobs with {workers} workers")
 
     records: list[tuple[str, str]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -156,7 +163,6 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
             if index % 50 == 0 or index == len(entries):
                 print(f"  verified {index}/{len(entries)} blobs")
 
-    # This digest is a compact audit identity for exactly the selected subset.
     manifest = "".join(f"{sha}  {path}\n" for path, sha in sorted(records)).encode("utf-8")
     subset_sha256 = hashlib.sha256(manifest).hexdigest()
     (dest / ".workshop-pinned-upstream.txt").write_text(
