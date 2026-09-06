@@ -22,32 +22,6 @@ jobs:
       - uses: actions/checkout@v4
         name: Checkout Workshop OS design branch
 
-      - uses: actions/checkout@v4
-        name: Fetch BambuHelper history containing pinned baseline
-        with:
-          repository: Keralots/BambuHelper
-          ref: main
-          fetch-depth: 0
-          path: upstream
-
-      - name: Select and verify exact pinned BambuHelper baseline
-        working-directory: upstream
-        shell: bash
-        run: |
-          set -euo pipefail
-          PIN='8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4'
-          EXPECTED_TREE='754c5506bdac08033f0cdc3439e4814acd2b4294'
-          git cat-file -e "${PIN}^{commit}"
-          ACTUAL_TREE="$(git show -s --format=%T "$PIN")"
-          [[ "$ACTUAL_TREE" == "$EXPECTED_TREE" ]] || {
-            echo "Pinned upstream tree mismatch: expected ${EXPECTED_TREE}, got ${ACTUAL_TREE}" >&2
-            exit 1
-          }
-          git checkout --detach "$PIN"
-          [[ "$(git rev-parse HEAD)" == "$PIN" ]]
-          echo "Pinned BambuHelper baseline: ${PIN}"
-          echo "Pinned BambuHelper tree: ${ACTUAL_TREE}"
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -55,10 +29,20 @@ jobs:
       - name: Validate prototype tooling syntax
         run: |
           set -euo pipefail
+          python -m py_compile scripts/materialize_pinned_upstream.py
           python -m py_compile apply_workshop_instrument_ui_v1.py
           python -m py_compile apply_workshop_auto_orientation_v1.py
           python -m py_compile scripts/validate_workshop_instrument_ui_v1.py
           python -m py_compile scripts/validate_workshop_auto_orientation_v1.py
+
+      - name: Materialize exact pinned BambuHelper tree
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf upstream
+          python scripts/materialize_pinned_upstream.py --dest upstream --workers 8
+          cat upstream/.workshop-pinned-upstream.txt
 
       - name: Reconstruct accepted v11.19 baseline
         run: bash scripts/apply_workshop_os_v11_19.sh upstream
@@ -171,8 +155,9 @@ jobs:
             echo 'Workshop OS v11.23 Instrument UI + Auto Orient Prototype'
             echo "source_sha=${SOURCE_SHA}"
             echo 'base_candidate=757dd25d3921acd45b5d229c29d090d885914751'
-            echo 'upstream_pin=8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4'
+            echo 'upstream_pin=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
             echo 'upstream_tree=754c5506bdac08033f0cdc3439e4814acd2b4294'
+            cat upstream/.workshop-pinned-upstream.txt
             echo 'release_state=BUILT_TEST_PROTOTYPE'
             echo 'physical_acceptance=REQUIRED'
             echo 'instrument_ui=ENABLED'
