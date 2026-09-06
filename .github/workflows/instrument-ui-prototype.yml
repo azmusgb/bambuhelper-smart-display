@@ -97,7 +97,7 @@ jobs:
       - name: Apply Workshop Instrument UI v1
         run: python apply_workshop_instrument_ui_v1.py --repo upstream --apply
       - name: Validate Workshop Instrument UI v1
-        run: python scripts/validate_workshop_instrument_ui_v1.py upstream
+        run: python scripts/validate_workshop_instrument_ui_v1.py --repo upstream
 
       - name: Apply QMI8658 auto orientation
         run: python apply_workshop_auto_orientation_v1.py --repo upstream --apply
