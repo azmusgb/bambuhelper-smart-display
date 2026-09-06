@@ -72,7 +72,7 @@ def main() -> int:
         '#include "companion_web.h"',
         "if (companionWebViewerActive())",
         "companionWebGetLatestCapture(&phoneBuf, &phoneLen, &captureId, &srcW, &srcH)",
-        "tft.drawJpg(phoneBuf, phoneLen",
+        "tft.drawJpg(phoneBuf, (uint32_t)phoneLen",
         "PHONE PHOTO  |  TAP TO EXIT",
         "cameraGetLatestFrame(",
         "companionWebViewerDeactivate()",
@@ -84,6 +84,7 @@ def main() -> int:
 
     print("Workshop OS v11.28 Physical Companion Viewer contracts: PASS")
     print("Phone photo display takeover: EXPLICIT ONLY")
+    print("JPEG renderer length: EXPLICIT UINT32")
     print("Normal chamber-camera fallback: PRESERVED")
     print("Phone capture persistence: VOLATILE PSRAM ONLY")
     return 0
