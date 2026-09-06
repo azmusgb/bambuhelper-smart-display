@@ -1,134 +1,70 @@
-# Workshop OS v11.30 — Unified Web + Companion RC1
+# Workshop OS v11.30 — Unified Web + Companion RC2
 
-## Purpose
+v11.30 evolves the two browser surfaces as one product while keeping their jobs distinct:
 
-v11.30 makes the two browser surfaces feel like parts of one Workshop OS instead of separate utilities:
+- **Workshop OS web** is the complete local control/configuration surface.
+- **Workshop Companion** is the phone-first operational surface for live state, guarded controls, photos and device context.
 
-- the full Workshop OS portal remains the deep control/configuration surface;
-- Companion remains the fast, phone-first operational surface;
-- both expose the same live state vocabulary and obvious handoffs between them.
+## Standard Workshop OS web
 
-This candidate is stacked on v11.29 Acceptance Open LAN and inherits its temporary WS350-only no-portal-code policy for physical acceptance.
+The full web UI adds a persistent live rail showing:
 
-## Full Workshop OS improvements
+- workshop freshness;
+- printer state and active job;
+- mapped power state / watts;
+- Companion presence and phone-photo state;
+- device RSSI.
 
-### Persistent live status rail
+It also adds deterministic attention warnings for stale state, printer offline, impossible active-print/power combinations, and very weak Wi-Fi.
 
-The standard portal gains a compact live rail sourced from `/companion/state` with:
+On phones, a four-target bottom dock keeps **Home / Printer / Companion / More** reachable without forcing the user back through the desktop navigation hierarchy.
 
-- workshop freshness / reconnect state;
-- printer state, progress and active job;
-- mapped printer power state and watts;
-- Companion presence / photo-ready state;
-- device Wi-Fi RSSI and stale-state warning.
+The supplemental live-state poll is intentionally paused during firmware upload so it cannot compete with OTA for the ESP32 web connection.
 
-The rail is intentionally supplemental. Existing section-specific status APIs remain authoritative for the controls already on those pages.
+## Workshop Companion
 
-### Attention model
+Companion stays a focused, one-page control surface rather than duplicating the complete portal.
 
-The standard portal surfaces only a small set of deterministic issues:
+It adds:
 
-- stale Workshop OS state;
-- configured printer offline;
-- active print while mapped power reports off;
-- very weak Wi-Fi RSSI.
+- sticky jump navigation for **Overview / Controls / Photo / System**;
+- a compact Attention summary derived from the existing live DOM/state loop;
+- larger phone targets and improved scroll offsets;
+- clearer photo-state presentation;
+- first-class handoff back to the full Workshop OS.
 
-It does not invent printer faults or infer safety conditions from missing telemetry.
+No extra Companion state poll is introduced by the Attention summary.
 
-### Navigation and mobile ergonomics
+## RC2 — Physical phone-photo viewer reliability
 
-Desktop/tablet gains direct actions for:
+Physical acceptance exposed a real state-machine defect in the inherited v11.28 viewer.
 
-- Home;
-- Workshop;
-- Open Companion;
-- Updates.
+`Show on Waveshare` placed the display into the existing `SCREEN_CAMERA` surface. The core state machine treated that surface as valid only while the displayed Bambu printer itself could stream its chamber camera. A phone JPEG therefore appeared to activate successfully, but the next state-machine pass could immediately leave `SCREEN_CAMERA` and clear the phone-viewer flag.
 
-Phone-sized layouts gain a fixed four-target bottom dock:
+RC2 makes the phone photo a **sticky explicit display override** while retaining the proven camera renderer:
 
-- Home;
-- Printer;
-- Companion;
-- More / Workshop.
+- the viewer remains active independently of printer camera availability;
+- it also remains valid if the printer is offline or no printer is configured;
+- auto-OTA may still preempt the viewer;
+- one physical tap exits to the exact screen that was active before `Show on Waveshare`;
+- the normal chamber-camera path remains unchanged whenever the phone override is inactive;
+- Companion no longer announces success merely because the POST returned HTTP 200 — it refreshes state and requires `capture.viewer=true` before saying the photo is actually displaying;
+- both the full web rail and Companion expose whether the photo is merely stored or **Displaying**.
 
-The Companion handoff is a real `/companion` link rather than another nested configuration section.
+The JPEG itself remains volatile PSRAM-only and is never written to flash.
 
-### OTA coexistence
+## v11.29 Acceptance Mode inherited
 
-The supplemental `/companion/state` poll runs approximately every 3.2 seconds while visible and every 7 seconds while hidden.
+For WS350 physical acceptance only, normal-LAN portal-code authentication remains disabled by default. Same-origin mutation protection remains active, the historical header-only mutation provenance shortcut remains disabled, sensitive export/debug routes remain blocked, and AP/recovery scoping remains preserved.
 
-When OTA starts, the v11.30 poll explicitly pauses before the firmware XHR begins. On failed uploads it resumes from `loadend`. A successful upload remains quiet while the device reboots. This preserves the single-long-running-connection assumptions already built into the OTA path.
+## Promotion boundary
 
-## Companion improvements
+v11.30 RC2 remains a hardware candidate until physical WS350 acceptance verifies:
 
-### Attention summary
-
-Companion gains a compact, deterministic status summary at the top of the page. It reports:
-
-- reconnecting / stale state;
-- Waveshare online but printer offline;
-- print paused;
-- print in progress with percent and remaining time;
-- workshop ready.
-
-The summary is derived from the existing Companion DOM, which is already updated by the one-second authenticated state loop. v11.30 does **not** add a second Companion state poll.
-
-### Jump navigation
-
-A sticky phone-friendly navigation strip jumps directly to:
-
-1. Overview
-2. Controls
-3. Photo
-4. System
-
-This keeps the page useful one-handed without turning it into a second copy of the full portal.
-
-### Visual refinement
-
-- stronger sticky header hierarchy;
-- larger action targets;
-- improved section scroll offsets;
-- better photo preview height;
-- compact mini status cells for Printer / Power / Photo;
-- clearer Workshop Companion branding.
-
-## Inherited v11.28 photo behavior
-
-v11.30 preserves the full Physical Companion Viewer contract:
-
-- upload JPEG to volatile PSRAM;
-- upload alone never changes the physical screen;
-- explicit **Show on Waveshare** action;
-- contain-fit render through the fullscreen JPEG surface;
-- normal chamber-camera fallback when phone viewer is inactive;
-- tap physical screen to exit;
-- no flash persistence.
-
-## Inherited v11.29 acceptance security boundary
-
-On the WS350 acceptance build:
-
-- normal-LAN portal code remains disabled by default;
-- normal-LAN browser reads are open;
-- browser mutations still require same-origin provenance;
-- header-only mutation provenance remains disabled;
-- `/settings/export` and `/debug` remain blocked;
-- AP/recovery scoping remains intact;
-- legacy portal-code implementation remains present for later re-enable, with the Safari format bug fixed.
-
-## Physical acceptance additions for v11.30
-
-In addition to the existing hardware acceptance matrix, verify:
-
-- standard portal live rail remains current without visible layout overlap;
-- standard portal works at iPhone width and desktop width;
-- mobile dock targets are finger-sized and do not cover critical content;
-- Companion link opens directly;
-- Companion jump nav lands on the correct four sections;
-- Companion Attention copy tracks printing / paused / offline transitions correctly;
-- v11.30 supplemental full-web polling does not interfere with OTA;
-- failed OTA resumes normal web status activity;
-- successful OTA reboots and reconnects normally;
-- photo upload / Show on Waveshare / tap-to-exit still work;
-- normal chamber camera still returns after leaving phone-photo viewer.
+- standard web layout on desktop and phone;
+- Companion jump navigation and controls;
+- `Show on Waveshare` actually produces the physical photo viewer;
+- physical tap returns to the prior screen;
+- chamber camera still works when the phone viewer is inactive;
+- OTA remains stable with supplemental polling paused;
+- printer, power, audio, BLE, Wi-Fi, persistence and recovery behavior remain stable.
