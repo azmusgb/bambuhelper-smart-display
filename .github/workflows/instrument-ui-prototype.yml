@@ -23,11 +23,30 @@ jobs:
         name: Checkout Workshop OS design branch
 
       - uses: actions/checkout@v4
-        name: Checkout pinned BambuHelper baseline
+        name: Fetch BambuHelper history containing pinned baseline
         with:
           repository: Keralots/BambuHelper
-          ref: 8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4
+          ref: main
+          fetch-depth: 0
           path: upstream
+
+      - name: Select and verify exact pinned BambuHelper baseline
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN='8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4'
+          EXPECTED_TREE='754c5506bdac08033f0cdc3439e4814acd2b4294'
+          git cat-file -e "${PIN}^{commit}"
+          ACTUAL_TREE="$(git show -s --format=%T "$PIN")"
+          [[ "$ACTUAL_TREE" == "$EXPECTED_TREE" ]] || {
+            echo "Pinned upstream tree mismatch: expected ${EXPECTED_TREE}, got ${ACTUAL_TREE}" >&2
+            exit 1
+          }
+          git checkout --detach "$PIN"
+          [[ "$(git rev-parse HEAD)" == "$PIN" ]]
+          echo "Pinned BambuHelper baseline: ${PIN}"
+          echo "Pinned BambuHelper tree: ${ACTUAL_TREE}"
 
       - uses: actions/setup-python@v5
         with:
@@ -152,6 +171,8 @@ jobs:
             echo 'Workshop OS v11.23 Instrument UI + Auto Orient Prototype'
             echo "source_sha=${SOURCE_SHA}"
             echo 'base_candidate=757dd25d3921acd45b5d229c29d090d885914751'
+            echo 'upstream_pin=8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4'
+            echo 'upstream_tree=754c5506bdac08033f0cdc3439e4814acd2b4294'
             echo 'release_state=BUILT_TEST_PROTOTYPE'
             echo 'physical_acceptance=REQUIRED'
             echo 'instrument_ui=ENABLED'
