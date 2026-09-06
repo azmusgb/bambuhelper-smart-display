@@ -130,6 +130,7 @@ jobs:
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           for needle in [
               'SMART_HOME_VERSION "v11.29"',
+              '#if defined(BOARD_IS_WS350)',
               '#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1',
               'server.on("/companion/state", HTTP_GET',
               'server.on("/companion/capture", HTTP_POST',
@@ -137,10 +138,11 @@ jobs:
               'kCaptureMaxBytes = 256U * 1024U',
               'MALLOC_CAP_SPIRAM',
               'if (companionWebViewerActive())',
-              'tft.drawJpg(phoneBuf, phoneLen',
+              'tft.drawJpg(phoneBuf, (uint32_t)phoneLen',
           ]:
               assert needle in build + companion + display, needle
           for needle in [
+              '#if defined(BOARD_IS_WS350) && defined(WORKSHOP_OS_ACCEPTANCE_OPEN_LAN) && WORKSHOP_OS_ACCEPTANCE_OPEN_LAN',
               'if (!isAPMode()) return true;',
               'if (mutating && !sameOrigin(server))',
               'uri == "/settings/export" || uri == "/debug"',
@@ -194,6 +196,7 @@ jobs:
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
             echo 'source_line=STACKED_CANDIDATE_ON_V11_27_COMPANION_LINK'
             echo 'physical_acceptance=REQUIRED'
+            echo 'acceptance_open_lan_scope=WS350_ONLY'
             echo 'normal_lan_portal_code=DISABLED_BY_DEFAULT'
             echo 'physical_portal_code_display=ABSENT'
             echo 'normal_lan_reads=OPEN'
