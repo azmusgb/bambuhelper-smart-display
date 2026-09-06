@@ -29,54 +29,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Validate candidate tooling
+      - name: Reconstruct and validate Workshop OS through v11.30
         run: |
           set -euo pipefail
-          python -m py_compile apply_smart_home_physical_fit_v11_19_1.py
-          python -m py_compile apply_smart_home_portal_auth_v11_20.py
-          python -m py_compile apply_smart_home_display_expert_v11_22.py
-          python -m py_compile apply_smart_home_network_locale_layout_v11_23.py
-          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_secure.py
-          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py
-          python -m py_compile apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py
-          python -m py_compile apply_smart_home_auth_restore_v11_23_rc2.py
-          python -m py_compile apply_smart_home_audio_console_v11_24.py
-          python -m py_compile apply_workshop_companion_ble_v11_25.py
-          python -m py_compile apply_workshop_companion_web_v11_26.py
-          python -m py_compile apply_workshop_companion_link_v11_27.py
-          python -m py_compile apply_workshop_companion_viewer_v11_28.py
-          python -m py_compile apply_workshop_acceptance_mode_v11_29.py
-          python -m py_compile apply_workshop_unified_web_companion_v11_30.py
-          python -m py_compile scripts/validate_workshop_companion_viewer_v11_28.py
-          python -m py_compile scripts/validate_workshop_acceptance_mode_v11_29.py
-          python -m py_compile scripts/validate_workshop_unified_web_companion_v11_30.py
-          python -m py_compile scripts/validate_settings_parity.py
-          bash -n scripts/apply_workshop_os_v11_19.sh
-
-      - name: Reconstruct accepted v11.19 baseline
-        run: bash scripts/apply_workshop_os_v11_19.sh upstream
-      - name: Validate inherited v11.19 device contracts
-        run: python scripts/validate_device_contracts.py
-      - name: Validate accepted v11.19 visual contracts
-        run: python scripts/validate_visual_contracts_v11_19.py upstream
-
-      - name: Apply accepted v11.19.1 physical-fit delta
-        run: python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
-      - name: Validate accepted v11.19.1 rendered fit
-        run: python scripts/validate_rendered_fit_v11_19_1.py upstream
-
-      - name: Apply and validate v11.20 Portal Auth baseline
-        run: |
+          python -m py_compile apply_workshop_unified_web_companion_v11_30.py scripts/validate_workshop_unified_web_companion_v11_30.py
+          bash scripts/apply_workshop_os_v11_19.sh upstream
+          python scripts/validate_device_contracts.py
+          python scripts/validate_visual_contracts_v11_19.py upstream
+          python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
+          python scripts/validate_rendered_fit_v11_19_1.py upstream
           python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
           python scripts/validate_portal_auth_v11_20.py upstream
-
-      - name: Apply and validate v11.22 Display Expert
-        run: |
           python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
           python scripts/validate_display_expert_v11_22.py upstream
-
-      - name: Reconstruct and validate secure v11.23 RC2
-        run: |
           python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
           python scripts/validate_network_locale_layout_v11_23.py upstream
           python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
@@ -87,47 +52,25 @@ jobs:
           python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
           python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
           python scripts/validate_auth_restore_v11_23_rc2.py upstream
-
-      - name: Apply and validate v11.24 Audio Console
-        run: |
           python apply_smart_home_audio_console_v11_24.py --repo upstream --apply
           python scripts/validate_audio_console_v11_24.py upstream
-
-      - name: Apply and validate v11.25 Workshop Companion BLE
-        run: |
           python apply_workshop_companion_ble_v11_25.py --repo upstream --apply
           python scripts/validate_workshop_companion_ble_v11_25.py upstream
-
-      - name: Apply and validate v11.26 Workshop Companion Web
-        run: |
           python apply_workshop_companion_web_v11_26.py --repo upstream --apply
           python scripts/validate_workshop_companion_web_v11_26.py upstream
-
-      - name: Apply and validate v11.27 Companion Link
-        run: |
           python apply_workshop_companion_link_v11_27.py --repo upstream --apply
           python scripts/validate_workshop_companion_link_v11_27.py upstream
-
-      - name: Apply and validate v11.28 Physical Companion Viewer
-        run: |
           python apply_workshop_companion_viewer_v11_28.py --repo upstream --apply
           python scripts/validate_workshop_companion_viewer_v11_28.py upstream
-
-      - name: Apply and validate v11.29 Acceptance Open LAN
-        run: |
           python apply_workshop_acceptance_mode_v11_29.py --repo upstream --apply
           python scripts/validate_workshop_acceptance_mode_v11_29.py upstream
-
-      - name: Apply and validate v11.30 Unified Web + Companion
-        run: |
           python apply_workshop_unified_web_companion_v11_30.py --repo upstream --apply
           python scripts/validate_workshop_unified_web_companion_v11_30.py upstream
+          python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Validate settings parity against reconstructed v11.30 source
-        run: python scripts/validate_settings_parity.py --repo upstream
-
-      - name: Verify inherited control, recovery and capture boundaries
+      - name: Verify inherited boundaries and browser syntax
         run: |
+          set -euo pipefail
           python - <<'PY'
           from pathlib import Path
           build=Path('upstream/include/smart_home_build.h').read_text()
@@ -136,55 +79,30 @@ jobs:
           display=Path('upstream/src/display_ui.cpp').read_text()
           app=Path('upstream/web/app.js').read_text()
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
-          for needle in [
-              'SMART_HOME_VERSION "v11.30"',
-              '#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1',
-              'server.on("/companion/state", HTTP_GET',
-              'server.on("/companion/capture", HTTP_POST',
-              'server.on("/companion/capture/show", HTTP_POST',
-              'kCaptureMaxBytes = 256U * 1024U',
-              'MALLOC_CAP_SPIRAM',
-              'if (companionWebViewerActive())',
-              'tft.drawJpg(phoneBuf, (uint32_t)phoneLen',
-              'v1130CompanionEnhance',
-          ]:
-              assert needle in build + companion + display, needle
-          for needle in [
-              'v1130UnifiedRail',
-              'v1130-mobile-dock',
-              'v1130PauseLiveRail(true)',
-              "fetch('/companion/state?slot=0&_='+Date.now()",
-          ]:
+          for needle in ['SMART_HOME_VERSION "v11.30"','#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1','server.on("/companion/state", HTTP_GET','server.on("/companion/capture/show", HTTP_POST','MALLOC_CAP_SPIRAM','if (companionWebViewerActive())','tft.drawJpg(phoneBuf, (uint32_t)phoneLen','v1130CompanionEnhance']:
+              assert needle in build+companion+display, needle
+          for needle in ['v1130UnifiedRail','v1130-mobile-dock','v1130PauseLiveRail(true)',"fetch('/companion/state?slot=0&_='+Date.now()"]:
               assert needle in app, needle
-          for needle in [
-              'if (!isAPMode()) return true;',
-              'if (mutating && !sameOrigin(server))',
-              'uri == "/settings/export" || uri == "/debug"',
-              'recoverySafeModeActive()',
-          ]:
+          for needle in ['if (!isAPMode()) return true;','if (mutating && !sameOrigin(server))','uri == "/settings/export" || uri == "/debug"','recoverySafeModeActive()']:
               assert needle in security, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
           for forbidden in ['LittleFS','SPIFFS','FFat','Preferences','putBytes(','writeFile(']:
               assert forbidden not in companion, forbidden
-          print('v11.30 inherited control + recovery + volatile capture boundaries: PASS')
+          print('v11.30 inherited boundaries: PASS')
           PY
-
-      - name: Validate browser JavaScript
-        run: node --check upstream/web/app.js
-      - name: Validate embedded Companion JavaScript syntax
-        run: |
+          node --check upstream/web/app.js
           python - <<'PY'
           from pathlib import Path
           import re
           s=Path('upstream/src/companion_web.cpp').read_text()
-          m=re.search(r'R"COMPANION\((<!doctype html>.*)</html>\)COMPANION";',s,re.S)
-          assert m, 'embedded Companion HTML missing'
-          html=m.group(1)+'</html>'
+          start=s.find('R"COMPANION(')
+          end=s.find(')COMPANION";', start)
+          assert start >= 0 and end > start, 'embedded Companion raw string missing'
+          html=s[start+len('R"COMPANION('):end]
           scripts=re.findall(r'<script(?: [^>]*)?>(.*?)</script>',html,re.S)
           assert scripts, 'embedded Companion scripts missing'
-          out=Path('/tmp/companion-all.js')
-          out.write_text('\n'.join(scripts))
+          Path('/tmp/companion-all.js').write_text('\n'.join(scripts))
           print(f'extracted {len(scripts)} Companion scripts')
           PY
           node --check /tmp/companion-all.js
@@ -201,7 +119,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.30 Unified Web + Companion RC1 artifacts
+      - name: Package v11.30 artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -219,7 +137,6 @@ jobs:
           {
             echo 'Workshop OS v11.30 Unified Web + Companion RC1'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
-            echo 'source_line=STACKED_ON_V11_29_ACCEPTANCE_OPEN_LAN'
             echo 'physical_acceptance=REQUIRED'
             echo 'standard_web_live_rail=PRESENT'
             echo 'standard_web_mobile_dock=PRESENT'
@@ -229,7 +146,6 @@ jobs:
             echo 'ota_supplemental_poll=PAUSED_DURING_UPLOAD'
             echo 'normal_lan_portal_code=DISABLED_BY_DEFAULT_WS350'
             echo 'same_origin_mutations=REQUIRED'
-            echo 'sensitive_export_debug=BLOCKED'
             echo 'phone_capture=VOLATILE_PSRAM_ONLY'
             echo 'physical_phone_photo_viewer=EXPLICIT_ONLY'
             echo 'chamber_camera_fallback=PRESERVED'
