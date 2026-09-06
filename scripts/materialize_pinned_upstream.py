@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Materialize the exact historical BambuHelper source tree used by Workshop OS.
+"""Materialize the immutable historical BambuHelper tree used by Workshop OS.
 
-The historical commit object is no longer reachable through a normal git fetch,
-but GitHub still serves its immutable root tree and blob objects. This helper
-uses that Git object identity directly rather than silently repinning Workshop OS
-to a newer upstream revision.
+The exact commit is the Workshop OS source pin. GitHub's normal checkout path can
+occasionally stop resolving an old detached commit, while the immutable root tree
+and blob objects remain available. This helper reconstructs the text/source tree
+from those Git objects and verifies every blob by Git SHA before use.
+
+It intentionally excludes only binary payloads that cannot influence the Python
+patch chain or native source build (prebuilt firmware, images, fonts, archives and
+host executables). This is broader than a hand-picked source subset because some
+historic Workshop OS applicators validate README/docs/release metadata too.
 """
 from __future__ import annotations
 
@@ -26,43 +31,33 @@ PINNED_COMMIT = "8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4"
 PINNED_TREE = "754c5506bdac08033f0cdc3439e4814acd2b4294"
 API = "https://api.github.com"
 
-# Build inputs plus the small installer/web-flasher documents that the earliest
-# Workshop OS evolution patches intentionally update. Large photos, historical
-# prebuilt firmware and unrelated desktop tools remain excluded.
-PREFIXES = (
-    "boards/",
-    "include/",
-    "lib/",
-    "src/",
-    "web/",
-    "scripts/",
-)
-EXACT = {
-    "platformio.ini",
-    "merge_bins.py",
-    "partitions_4mb.csv",
-    "partitions_8mb.csv",
-    "partitions_8mb_app0.csv",
-    "partitions_16mb.csv",
-    "tools/gen_web_assets.py",
-    "docs/index.html",
-    "docs/styles.css",
-    "docs/cloud-token.html",
-    "docs/flasher.js",
-    "docs/CNAME",
-    "docs/.nojekyll",
+# Exclude payloads that are not inputs to the source reconstruction/build. The
+# path list remains intentionally small and extension-based so metadata/docs
+# consumed by old patchers are not silently omitted.
+BINARY_SUFFIXES = {
+    ".bin", ".exe", ".dll", ".dylib", ".so", ".a", ".o", ".elf",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".pdf",
+    ".ttf", ".otf", ".woff", ".woff2",
+    ".zip", ".7z", ".rar", ".gz", ".tgz", ".tar", ".xz",
+    ".mp3", ".wav", ".ogg", ".mp4", ".mov",
 }
+MAX_TEXT_BLOB_BYTES = 3_000_000
 
 
-def selected(path: str) -> bool:
-    return path in EXACT or any(path.startswith(prefix) for prefix in PREFIXES)
+def selected(entry: dict) -> bool:
+    path = entry.get("path", "")
+    suffix = Path(path).suffix.lower()
+    if suffix in BINARY_SUFFIXES:
+        return False
+    size = int(entry.get("size") or 0)
+    return size <= MAX_TEXT_BLOB_BYTES
 
 
-def request_json(url: str, token: str | None, attempts: int = 4) -> dict:
+def request_json(url: str, token: str | None, attempts: int = 5) -> dict:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "WorkshopOS-pinned-upstream-materializer/1",
+        "User-Agent": "WorkshopOS-pinned-upstream-materializer/2",
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -75,7 +70,7 @@ def request_json(url: str, token: str | None, attempts: int = 4) -> dict:
             last = exc
             if attempt + 1 == attempts:
                 break
-            time.sleep(1.0 * (attempt + 1))
+            time.sleep(1.25 * (attempt + 1))
     raise RuntimeError(f"GitHub API request failed for {url}: {last}")
 
 
@@ -84,9 +79,10 @@ def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(header + data).hexdigest()
 
 
-def fetch_blob(entry: dict, token: str | None) -> tuple[str, bytes, str]:
+def fetch_blob(entry: dict, token: str | None) -> tuple[str, bytes, str, str]:
     path = entry["path"]
     expected = entry["sha"]
+    mode = entry.get("mode", "100644")
     payload = request_json(entry["url"], token)
     if payload.get("sha") != expected:
         raise RuntimeError(
@@ -98,7 +94,7 @@ def fetch_blob(entry: dict, token: str | None) -> tuple[str, bytes, str]:
     actual = git_blob_sha(data)
     if actual != expected:
         raise RuntimeError(f"{path}: blob SHA verification failed: {actual} != {expected}")
-    return path, data, expected
+    return path, data, expected, mode
 
 
 def materialize(dest: Path, token: str | None, workers: int) -> None:
@@ -111,16 +107,16 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
     if tree.get("truncated"):
         raise RuntimeError("GitHub returned a truncated pinned tree; refusing partial reconstruction")
 
-    entries = [
-        item for item in tree.get("tree", [])
-        if item.get("type") == "blob" and selected(item.get("path", ""))
-    ]
+    all_blobs = [item for item in tree.get("tree", []) if item.get("type") == "blob"]
+    entries = [item for item in all_blobs if selected(item)]
+    excluded = [item for item in all_blobs if not selected(item)]
     if not entries:
-        raise RuntimeError("no build-relevant blobs selected from pinned tree")
+        raise RuntimeError("no source/text blobs selected from pinned tree")
 
     required = {
         "platformio.ini",
         "merge_bins.py",
+        "README.md",
         "boards/ws_lcd_350.ini",
         "src/main.cpp",
         "src/settings.cpp",
@@ -139,7 +135,7 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
     paths = {entry["path"] for entry in entries}
     missing = sorted(required - paths)
     if missing:
-        raise RuntimeError(f"pinned tree is missing required build inputs: {missing}")
+        raise RuntimeError(f"pinned tree is missing required reconstruction inputs: {missing}")
 
     if dest.exists():
         if any(dest.iterdir()):
@@ -149,36 +145,54 @@ def materialize(dest: Path, token: str | None, workers: int) -> None:
 
     print(f"Pinned upstream commit identity: {PINNED_COMMIT}")
     print(f"Pinned immutable tree: {PINNED_TREE}")
-    print(f"Materializing {len(entries)} reconstruction/build blobs with {workers} workers")
+    print(f"Materializing {len(entries)}/{len(all_blobs)} verified source/text blobs with {workers} workers")
+    print(f"Excluded binary/oversize blobs: {len(excluded)}")
 
-    records: list[tuple[str, str]] = []
+    records: list[tuple[str, str, str]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         future_map = {pool.submit(fetch_blob, entry, token): entry for entry in entries}
         for index, future in enumerate(concurrent.futures.as_completed(future_map), 1):
-            path, data, sha = future.result()
+            path, data, sha, mode = future.result()
             target = dest / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
-            records.append((path, sha))
+            # Preserve executable bit for shell/python tooling when represented by
+            # Git mode; normal CI invocation does not depend on it, but fidelity does.
+            if mode == "100755":
+                target.chmod(target.stat().st_mode | 0o111)
+            records.append((path, sha, mode))
             if index % 50 == 0 or index == len(entries):
                 print(f"  verified {index}/{len(entries)} blobs")
 
-    manifest = "".join(f"{sha}  {path}\n" for path, sha in sorted(records)).encode("utf-8")
+    manifest = "".join(
+        f"{mode} {sha}  {path}\n" for path, sha, mode in sorted(records)
+    ).encode("utf-8")
     subset_sha256 = hashlib.sha256(manifest).hexdigest()
+    excluded_manifest = "".join(
+        f"{item.get('mode','')} {item.get('sha','')} {item.get('size',0)}  {item.get('path','')}\n"
+        for item in sorted(excluded, key=lambda x: x.get("path", ""))
+    ).encode("utf-8")
+    excluded_sha256 = hashlib.sha256(excluded_manifest).hexdigest()
+
     (dest / ".workshop-pinned-upstream.txt").write_text(
         "\n".join(
             [
                 f"commit={PINNED_COMMIT}",
                 f"tree={PINNED_TREE}",
+                f"tree_blob_count={len(all_blobs)}",
                 f"materialized_blobs={len(records)}",
+                f"excluded_binary_or_oversize_blobs={len(excluded)}",
                 f"selected_manifest_sha256={subset_sha256}",
+                f"excluded_manifest_sha256={excluded_sha256}",
                 "",
             ]
         ),
         encoding="utf-8",
     )
+    (dest / ".workshop-pinned-upstream-excluded.txt").write_bytes(excluded_manifest)
     print(f"Selected manifest SHA256: {subset_sha256}")
-    print("Exact pinned upstream materialization: PASS")
+    print(f"Excluded manifest SHA256: {excluded_sha256}")
+    print("Immutable pinned upstream source/text materialization: PASS")
 
 
 def main() -> int:
