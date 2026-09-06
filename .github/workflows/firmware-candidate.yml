@@ -1,8 +1,8 @@
-name: Workshop OS Firmware Gate — v11.27 Companion Link RC1
+name: Workshop OS Firmware Gate — v11.29 Acceptance Open LAN RC1
 
 on:
   pull_request:
-    branches: [feature/v11-26-companion-web]
+    branches: [feature/v11-27-companion-link]
 
 permissions:
   contents: read
@@ -13,12 +13,12 @@ concurrency:
 
 jobs:
   validate:
-    name: Native Companion Link Validation
+    name: Native v11.29 Acceptance Mode Validation
     runs-on: ubuntu-24.04
-    timeout-minutes: 80
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-        name: Checkout Workshop OS stacked merge candidate
+        name: Checkout Workshop OS stacked candidate
       - uses: actions/checkout@v4
         name: Checkout pinned BambuHelper baseline
         with:
@@ -44,20 +44,10 @@ jobs:
           python -m py_compile apply_workshop_companion_ble_v11_25.py
           python -m py_compile apply_workshop_companion_web_v11_26.py
           python -m py_compile apply_workshop_companion_link_v11_27.py
-          python -m py_compile scripts/validate_device_contracts.py
-          python -m py_compile scripts/validate_visual_contracts_v11_19.py
-          python -m py_compile scripts/validate_rendered_fit_v11_19_1.py
-          python -m py_compile scripts/validate_portal_auth_v11_20.py
-          python -m py_compile scripts/validate_display_expert_v11_22.py
-          python -m py_compile scripts/validate_network_locale_layout_v11_23.py
-          python -m py_compile scripts/validate_touch_ux_v11_23_rc2.py
-          python -m py_compile scripts/validate_touch_ux_v11_23_rc2_finalize.py
-          python -m py_compile scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py
-          python -m py_compile scripts/validate_auth_restore_v11_23_rc2.py
-          python -m py_compile scripts/validate_audio_console_v11_24.py
-          python -m py_compile scripts/validate_workshop_companion_ble_v11_25.py
-          python -m py_compile scripts/validate_workshop_companion_web_v11_26.py
-          python -m py_compile scripts/validate_workshop_companion_link_v11_27.py
+          python -m py_compile apply_workshop_companion_viewer_v11_28.py
+          python -m py_compile apply_workshop_acceptance_mode_v11_29.py
+          python -m py_compile scripts/validate_workshop_companion_viewer_v11_28.py
+          python -m py_compile scripts/validate_workshop_acceptance_mode_v11_29.py
           python -m py_compile scripts/validate_settings_parity.py
           bash -n scripts/apply_workshop_os_v11_19.sh
 
@@ -73,110 +63,104 @@ jobs:
       - name: Validate accepted v11.19.1 rendered fit
         run: python scripts/validate_rendered_fit_v11_19_1.py upstream
 
-      - name: Apply v11.20 Portal Auth
-        run: python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
-      - name: Validate v11.20 authenticated baseline
-        run: python scripts/validate_portal_auth_v11_20.py upstream
+      - name: Apply and validate v11.20 Portal Auth baseline
+        run: |
+          python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
+          python scripts/validate_portal_auth_v11_20.py upstream
 
-      - name: Apply v11.22 Display Expert
-        run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
-      - name: Validate v11.22 Display Expert
-        run: python scripts/validate_display_expert_v11_22.py upstream
+      - name: Apply and validate v11.22 Display Expert
+        run: |
+          python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
+          python scripts/validate_display_expert_v11_22.py upstream
 
-      - name: Apply v11.23 Network Locale Layout Expert RC1 base
-        run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
-      - name: Validate v11.23 RC1 base contract
-        run: python scripts/validate_network_locale_layout_v11_23.py upstream
-      - name: Apply v11.23 RC2 secure touch UX
-        run: python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
-      - name: Validate v11.23 RC2 secure touch UX
-        run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
-      - name: Apply v11.23 RC2 secure physical touch finalization
-        run: python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
-      - name: Validate v11.23 RC2 physical touch finalization
-        run: python scripts/validate_touch_ux_v11_23_rc2_finalize.py upstream
-      - name: Revalidate v11.23 authenticated touch boundary
-        run: python scripts/validate_touch_ux_v11_23_rc2.py upstream
-      - name: Apply v11.23 guarded-action feedback
-        run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
-      - name: Validate v11.23 guarded-action feedback
-        run: python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
-      - name: Normalize final authenticated v11.23 LAN boundary
-        run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
-      - name: Validate final authenticated v11.23 boundary
-        run: python scripts/validate_auth_restore_v11_23_rc2.py upstream
+      - name: Reconstruct and validate secure v11.23 RC2
+        run: |
+          python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
+          python scripts/validate_network_locale_layout_v11_23.py upstream
+          python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
+          python scripts/validate_touch_ux_v11_23_rc2.py upstream
+          python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
+          python scripts/validate_touch_ux_v11_23_rc2_finalize.py upstream
+          python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
+          python scripts/validate_touch_ux_v11_23_rc2_guard_feedback.py upstream
+          python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
+          python scripts/validate_auth_restore_v11_23_rc2.py upstream
 
-      - name: Apply v11.24 Audio Console
-        run: python apply_smart_home_audio_console_v11_24.py --repo upstream --apply
-      - name: Validate v11.24 Audio Console
-        run: python scripts/validate_audio_console_v11_24.py upstream
+      - name: Apply and validate v11.24 Audio Console
+        run: |
+          python apply_smart_home_audio_console_v11_24.py --repo upstream --apply
+          python scripts/validate_audio_console_v11_24.py upstream
 
-      - name: Apply v11.25 Workshop Companion BLE
-        run: python apply_workshop_companion_ble_v11_25.py --repo upstream --apply
-      - name: Validate v11.25 Workshop Companion BLE
-        run: python scripts/validate_workshop_companion_ble_v11_25.py upstream
+      - name: Apply and validate v11.25 Workshop Companion BLE
+        run: |
+          python apply_workshop_companion_ble_v11_25.py --repo upstream --apply
+          python scripts/validate_workshop_companion_ble_v11_25.py upstream
 
-      - name: Apply v11.26 Workshop Companion Web
-        run: python apply_workshop_companion_web_v11_26.py --repo upstream --apply
-      - name: Validate v11.26 Workshop Companion Web
-        run: python scripts/validate_workshop_companion_web_v11_26.py upstream
+      - name: Apply and validate v11.26 Workshop Companion Web
+        run: |
+          python apply_workshop_companion_web_v11_26.py --repo upstream --apply
+          python scripts/validate_workshop_companion_web_v11_26.py upstream
 
-      - name: Apply v11.27 Companion Link
-        run: python apply_workshop_companion_link_v11_27.py --repo upstream --apply
-      - name: Validate v11.27 Companion Link
-        run: python scripts/validate_workshop_companion_link_v11_27.py upstream
-      - name: Validate settings parity against reconstructed v11.27 source
+      - name: Apply and validate v11.27 Companion Link
+        run: |
+          python apply_workshop_companion_link_v11_27.py --repo upstream --apply
+          python scripts/validate_workshop_companion_link_v11_27.py upstream
+
+      - name: Apply and validate v11.28 Physical Companion Viewer
+        run: |
+          python apply_workshop_companion_viewer_v11_28.py --repo upstream --apply
+          python scripts/validate_workshop_companion_viewer_v11_28.py upstream
+
+      - name: Apply and validate v11.29 Acceptance Open LAN
+        run: |
+          python apply_workshop_acceptance_mode_v11_29.py --repo upstream --apply
+          python scripts/validate_workshop_acceptance_mode_v11_29.py upstream
+
+      - name: Validate settings parity against reconstructed v11.29 source
         run: python scripts/validate_settings_parity.py --repo upstream
 
-      - name: Verify final inherited security and control boundaries
+      - name: Verify inherited control, recovery and volatile-capture boundaries
         run: |
           python - <<'PY'
           from pathlib import Path
           build=Path('upstream/include/smart_home_build.h').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
           companion=Path('upstream/src/companion_web.cpp').read_text()
-          ble=Path('upstream/src/workshop_companion_ble.cpp').read_text()
+          display=Path('upstream/src/display_ui.cpp').read_text()
           mqtt=Path('upstream/src/bambu_mqtt.cpp').read_text()
           for needle in [
-              'SMART_HOME_VERSION "v11.27"',
-              'Smart Home v11.27 Companion Link RC1',
-              'Workshop OS v11.27 Companion Link RC1',
+              'SMART_HOME_VERSION "v11.29"',
+              '#define WORKSHOP_OS_ACCEPTANCE_OPEN_LAN 1',
               'server.on("/companion/state", HTTP_GET',
               'server.on("/companion/capture", HTTP_POST',
-              'securityAuthorize(server, true)',
-              'securityAuthorize(server, false)',
-              'g_phoneConnected || companionWebPhoneConnected()',
+              'server.on("/companion/capture/show", HTTP_POST',
               'kCaptureMaxBytes = 256U * 1024U',
               'MALLOC_CAP_SPIRAM',
+              'if (companionWebViewerActive())',
+              'tft.drawJpg(phoneBuf, phoneLen',
           ]:
-              assert needle in build + companion + ble, needle
+              assert needle in build + companion + display, needle
           for needle in [
-              'ensureInitialized();',
-              'return cookieMatches(server);',
+              'if (!isAPMode()) return true;',
               'if (mutating && !sameOrigin(server))',
+              'uri == "/settings/export" || uri == "/debug"',
+              'recoverySafeModeActive()',
           ]:
               assert needle in security, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
-          for forbidden in [
-              'WORKSHOP_OS_TEMP_LAN_OPEN',
-              'if (!isAPMode()) return true;',
-              'TEMPORARY TRUSTED-LAN MODE',
-              'sendHeader("Location", server.arg("next"))',
-          ]:
-              assert forbidden not in build + security + companion, forbidden
-          # Capture persistence is scoped to the Companion implementation. The
-          # wider firmware legitimately uses Preferences/NVS for normal settings.
           for forbidden in ['LittleFS','SPIFFS','FFat','Preferences','putBytes(','writeFile(']:
               assert forbidden not in companion, forbidden
-          print('v11.27 final inherited security + volatile capture boundary: PASS')
+          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','Serial.printf("Portal code:']:
+              assert forbidden not in build + security, forbidden
+          print('v11.29 inherited control + recovery + volatile capture boundaries: PASS')
           PY
 
       - name: Validate browser JavaScript
         run: node --check upstream/web/app.js
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
-      - name: Build WS350 v11.27
+      - name: Build WS350 v11.29
         working-directory: upstream
         run: pio run -e ws_lcd_350
       - name: Regression build shared 320x480 target
@@ -186,7 +170,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.27 Companion Link RC1 artifacts
+      - name: Package v11.29 Acceptance Open LAN RC1 artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -195,30 +179,34 @@ jobs:
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p firmware-gate-artifacts/tools firmware-gate-artifacts/docs
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.27-Companion-Link-RC1-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.27-Companion-Link-RC1-OTA.bin
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.29-Acceptance-Open-LAN-RC1-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.29-Acceptance-Open-LAN-RC1-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
-          cp apply_workshop_companion_link_v11_27.py firmware-gate-artifacts/tools/
-          cp scripts/validate_workshop_companion_link_v11_27.py firmware-gate-artifacts/tools/
-          cp docs/workshop-companion-link-v11-27.md firmware-gate-artifacts/docs/
+          cp apply_workshop_companion_viewer_v11_28.py firmware-gate-artifacts/tools/
+          cp apply_workshop_acceptance_mode_v11_29.py firmware-gate-artifacts/tools/
+          cp scripts/validate_workshop_companion_viewer_v11_28.py firmware-gate-artifacts/tools/
+          cp scripts/validate_workshop_acceptance_mode_v11_29.py firmware-gate-artifacts/tools/
+          cp docs/workshop-companion-viewer-v11-28.md firmware-gate-artifacts/docs/
+          cp docs/workshop-acceptance-mode-v11-29.md firmware-gate-artifacts/docs/
           cp releases/current.json firmware-gate-artifacts/docs/release-state.json
           {
-            echo 'Workshop OS v11.27 Companion Link RC1'
+            echo 'Workshop OS v11.29 Acceptance Open LAN RC1'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
-            echo 'source_line=STACKED_CANDIDATE_ON_V11_26_COMPANION_WEB'
+            echo 'source_line=STACKED_CANDIDATE_ON_V11_27_COMPANION_LINK'
             echo 'physical_acceptance=REQUIRED'
-            echo 'companion_state=SINGLE_AUTHENTICATED_ENVELOPE'
-            echo 'visible_state_poll_ms=1000'
-            echo 'hidden_state_poll_ms=4500'
+            echo 'normal_lan_portal_code=DISABLED_BY_DEFAULT'
+            echo 'physical_portal_code_display=ABSENT'
+            echo 'normal_lan_reads=OPEN'
+            echo 'same_origin_mutations=REQUIRED'
+            echo 'header_only_mutation_provenance=DISABLED'
+            echo 'sensitive_settings_export_debug=BLOCKED'
+            echo 'ordinary_ap_scope=PRESERVED'
+            echo 'recovery_safe_mode=PRESERVED'
+            echo 'safari_login_pattern_bug=FIXED_FOR_FUTURE_REENABLE'
             echo 'phone_capture=JPEG_TO_VOLATILE_PSRAM'
-            echo 'capture_max_bytes=262144'
-            echo 'capture_persistence=ABSENT'
-            echo 'capture_flash_writes=ABSENT'
-            echo 'cloud_relay=NOT_REQUIRED'
-            echo 'existing_guarded_command_routes=REUSED'
-            echo 'portal_session_bypass=ABSENT'
-            echo 'open_redirect=ABSENT'
-            echo 'ble_transport=ORCHESTRATION_ONLY'
+            echo 'physical_phone_photo_viewer=EXPLICIT_ONLY'
+            echo 'auto_screen_takeover=ABSENT'
+            echo 'chamber_camera_fallback=PRESERVED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
             sha256sum firmware-gate-artifacts/*.bin
@@ -226,7 +214,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-27-companion-link-rc1
+          name: workshop-os-v11-29-acceptance-open-lan-rc1
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
