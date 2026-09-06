@@ -6,6 +6,7 @@ from pathlib import Path
 
 MARKER = "Workshop OS v11.29 Acceptance Open LAN RC1"
 FLAG = "WORKSHOP_OS_ACCEPTANCE_OPEN_LAN"
+WS350_ACCEPTANCE = f"defined(BOARD_IS_WS350) && defined({FLAG}) && {FLAG}"
 
 
 class PatchError(RuntimeError):
@@ -111,8 +112,9 @@ def patch_build(root: Path) -> None:
         "build label",
     )
     label = '#define SMART_HOME_BUILD_LABEL "Smart Home v11.29 Acceptance Open LAN RC1"\n'
+    scoped_flag = f"#if defined(BOARD_IS_WS350)\n#define {FLAG} 1\n#endif\n"
     if f"#define {FLAG} 1" not in text:
-        text = once(text, label, label + f"#define {FLAG} 1\n", "acceptance mode flag")
+        text = once(text, label, label + scoped_flag, "WS350 acceptance mode flag")
     if MARKER not in text:
         text += f"\n// {MARKER}\n"
     save(root, rel, text)
@@ -134,9 +136,9 @@ def patch_security(root: Path) -> None:
         text,
         "void securityInit()",
         f'''void securityInit() {{
-#if defined({FLAG}) && {FLAG}
-  // Acceptance build: normal station-mode access intentionally starts open.
-  // Do not generate a boot credential that the physical UI does not expose.
+#if {WS350_ACCEPTANCE}
+  // WS350 physical-acceptance build: normal station-mode access intentionally
+  // starts open. Do not generate a boot credential the physical UI does not expose.
   Serial.println("Workshop OS v11.29 acceptance mode: LAN sign-in disabled");
   return;
 #else
@@ -150,7 +152,7 @@ def patch_security(root: Path) -> None:
         text,
         "bool securitySessionValid(WebServer& server)",
         f'''bool securitySessionValid(WebServer& server) {{
-#if defined({FLAG}) && {FLAG}
+#if {WS350_ACCEPTANCE}
   if (!isAPMode()) return true;
 #endif
   ensureInitialized();
@@ -167,10 +169,10 @@ def patch_security(root: Path) -> None:
         text = once(
             text,
             api_header,
-            f'''#if !defined({FLAG}) || !{FLAG}
+            f'''#if !defined(BOARD_IS_WS350) || !defined({FLAG}) || !{FLAG}
 {api_header}#endif
 ''',
-            "disable header-only mutation provenance in open mode",
+            "disable header-only mutation provenance in WS350 open mode",
         )
 
     start, end, auth = get_braced_block(
@@ -181,9 +183,9 @@ def patch_security(root: Path) -> None:
     marker = "  ensureInitialized();"
     if marker not in auth:
         raise PatchError("authorize policy: ensureInitialized anchor missing")
-    open_policy = f'''#if defined({FLAG}) && {FLAG}
-  // User-requested physical acceptance mode: normal trusted-LAN pages are open
-  // without a portal cookie. Destructive/state-changing browser calls still
+    open_policy = f'''#if {WS350_ACCEPTANCE}
+  // User-requested WS350 physical-acceptance mode: normal trusted-LAN pages
+  // are open without a portal cookie. State-changing browser calls still
   // require same-origin provenance. Header-only API provenance is deliberately
   // disabled above while there is no session credential to bind it to.
   if (!isAPMode()) {{
@@ -239,7 +241,7 @@ def patch_browser_banner(root: Path) -> None:
     var b=document.createElement('div');
     b.id='v1129AcceptanceOpenLan';
     b.className='v1129-open-banner';
-    b.innerHTML='<strong>LOCAL ACCEPTANCE MODE</strong> · Portal sign-in is off on normal Wi-Fi. Browser-origin protection remains active for changes; sensitive export/debug is blocked.';
+    b.innerHTML='<strong>LOCAL ACCEPTANCE MODE</strong> · Portal sign-in is off on this WS350 over normal Wi-Fi. Browser-origin protection remains active for changes; sensitive export/debug is blocked.';
     main.insertBefore(b,main.firstChild);
   }
 }
