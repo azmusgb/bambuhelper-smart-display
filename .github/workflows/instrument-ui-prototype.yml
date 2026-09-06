@@ -44,6 +44,17 @@ jobs:
           python scripts/materialize_pinned_upstream.py --dest upstream --workers 8
           cat upstream/.workshop-pinned-upstream.txt
 
+          # Several historical Workshop OS deltas are unified-diff applicators
+          # that intentionally expect a Git working tree. Recreate only local
+          # Git metadata around the independently SHA-verified immutable source
+          # tree; do not change the pinned source identity or silently repin.
+          git -C upstream init -q
+          git -C upstream config user.name 'Workshop OS Reconstruction'
+          git -C upstream config user.email 'workshop-os-reconstruction@localhost'
+          git -C upstream add -A
+          git -C upstream commit -q -m 'Materialized pinned BambuHelper 8cb1cbbb source tree'
+          git -C upstream status --short
+
       - name: Reconstruct accepted v11.19 baseline
         run: bash scripts/apply_workshop_os_v11_19.sh upstream
       - name: Validate inherited v11.19 device contracts
@@ -155,7 +166,7 @@ jobs:
             echo 'Workshop OS v11.23 Instrument UI + Auto Orient Prototype'
             echo "source_sha=${SOURCE_SHA}"
             echo 'base_candidate=757dd25d3921acd45b5d229c29d090d885914751'
-            echo 'upstream_pin=8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4'
+            echo 'upstream_pin=8cb1cbbb6d3c175af919e8ebe1bbdcbe848ac4'
             echo 'upstream_tree=754c5506bdac08033f0cdc3439e4814acd2b4294'
             cat upstream/.workshop-pinned-upstream.txt
             echo 'release_state=BUILT_TEST_PROTOTYPE'
