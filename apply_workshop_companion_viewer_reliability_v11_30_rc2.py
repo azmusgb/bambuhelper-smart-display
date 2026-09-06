@@ -32,12 +32,7 @@ def once(text: str, old: str, new: str, label: str) -> str:
 def patch_build(root: Path) -> None:
     rel = "include/smart_home_build.h"
     text = load(root, rel)
-    text = once(
-        text,
-        'Smart Home v11.30 Unified Web + Companion RC1',
-        'Smart Home v11.30 Unified Web + Companion RC2',
-        "build label",
-    )
+    text = once(text, 'Smart Home v11.30 Unified Web + Companion RC1', 'Smart Home v11.30 Unified Web + Companion RC2', "build label")
     text += f"\n// {MARKER}\n"
     save(root, rel, text)
 
@@ -45,12 +40,7 @@ def patch_build(root: Path) -> None:
 def patch_companion_api(root: Path) -> None:
     rel = "src/companion_web.h"
     text = load(root, rel)
-    text = once(
-        text,
-        'bool companionWebViewerActive();\nvoid companionWebViewerDeactivate();\n',
-        'bool companionWebViewerActive();\nvoid companionWebViewerDeactivate();\nvoid companionWebViewerExitToReturnScreen();\n',
-        "viewer exit API declaration",
-    )
+    text = once(text, 'bool companionWebViewerActive();\nvoid companionWebViewerDeactivate();\n', 'bool companionWebViewerActive();\nvoid companionWebViewerDeactivate();\nvoid companionWebViewerExitToReturnScreen();\n', "viewer exit API declaration")
     save(root, rel, text)
 
     rel = "src/companion_web.cpp"
@@ -58,13 +48,10 @@ def patch_companion_api(root: Path) -> None:
     text = once(
         text,
         'bool companionWebViewerActive() { return g_captureViewerActive; }\n\nvoid companionWebViewerDeactivate() { g_captureViewerActive = false; }\n',
-        '''bool companionWebViewerActive() { return g_captureViewerActive; }\n\nvoid companionWebViewerDeactivate() { g_captureViewerActive = false; }\n\nvoid companionWebViewerExitToReturnScreen() {\n  if (!g_captureViewerActive) return;\n  const ScreenState target = g_captureViewerReturnScreen == SCREEN_CAMERA\n      ? SCREEN_IDLE : g_captureViewerReturnScreen;\n  // Clear the override before changing screen so setScreenState() does not\n  // interpret this deliberate exit as an external viewer cancellation.\n  g_captureViewerActive = false;\n  setScreenState(target);\n}\n''',
+        '''bool companionWebViewerActive() { return g_captureViewerActive; }\n\nvoid companionWebViewerDeactivate() { g_captureViewerActive = false; }\n\nvoid companionWebViewerExitToReturnScreen() {\n  if (!g_captureViewerActive) return;\n  const ScreenState target = g_captureViewerReturnScreen == SCREEN_CAMERA\n      ? SCREEN_IDLE : g_captureViewerReturnScreen;\n  g_captureViewerActive = false;\n  setScreenState(target);\n}\n''',
         "viewer exit implementation",
     )
 
-    # Make the phone surface report the *confirmed* physical state. A 200 from
-    # /capture/show is not enough; the state envelope must still report viewer=true
-    # after the main display state machine has had a chance to run.
     old = "$('showCaptureBtn').addEventListener('click',function(){if(!(capture&&capture.available)||busy.capture)return;busy.capture=true;render();post('/companion/capture/show',{}).then(function(){setFeedback('Phone photo is now on the Waveshare. Tap the display to exit.','ok');return refresh()}).catch(function(e){setFeedback(e.message||'Could not open photo on Waveshare','error')}).finally(function(){busy.capture=false;render()})});"
     new = "$('showCaptureBtn').addEventListener('click',function(){if(!(capture&&capture.available)||busy.capture)return;busy.capture=true;render();setFeedback('Opening photo on Waveshare…');post('/companion/capture/show',{}).then(function(){return new Promise(function(resolve){setTimeout(resolve,180)})}).then(function(){return refresh()}).then(function(){if(!(capture&&capture.viewer))throw new Error('Waveshare did not enter phone-photo view');setFeedback('Photo is displaying on the Waveshare. Tap the display to exit.','ok')}).catch(function(e){setFeedback(e.message||'Could not open photo on Waveshare','error')}).finally(function(){busy.capture=false;render()})});"
     text = once(text, old, new, "confirmed physical viewer feedback")
@@ -79,27 +66,45 @@ def patch_main_state_machine(root: Path) -> None:
     rel = "src/main.cpp"
     text = load(root, rel)
     if '#include "companion_web.h"' not in text:
-        text = once(
-            text,
-            '#include "camera_client.h"\n',
-            '#include "camera_client.h"\n#include "companion_web.h"\n',
-            "Companion viewer state include",
-        )
+        text = once(text, '#include "camera_client.h"\n', '#include "camera_client.h"\n#include "companion_web.h"\n', "Companion viewer state include")
 
-    # This is the physical defect found during acceptance. SCREEN_CAMERA was
-    # originally sticky only while a Bambu chamber stream remained possible.
-    # A phone JPEG is independent of printer camera capability, so keep the
-    # screen sticky while the explicit Companion override is active. Auto-OTA
-    # remains allowed to preempt the viewer.
-    anchor = '''  ledSetActivity(LED_ACT_IDLE);\n\n  if (!isAnyPrinterConfigured()) {\n'''
-    replacement = '''  ledSetActivity(LED_ACT_IDLE);\n\n#if BOARD_HAS_CAMERA\n  // Phone-photo viewer is a first-class display override, not a chamber-camera\n  // stream. Keep it up even when the printer has no camera tile, is offline, or\n  // no printer is configured. Auto-OTA is still allowed to take the display.\n  if (current == SCREEN_CAMERA && companionWebViewerActive() && !isOtaAutoInProgress()) {\n    return;\n  }\n#endif\n\n  if (!isAnyPrinterConfigured()) {\n'''
     if "Phone-photo viewer is a first-class display override" not in text:
-        text = once(text, anchor, replacement, "sticky phone viewer before printer state derivation")
+        fn = text.find("static void updateDisplayedPrinterScreenState() {")
+        if fn < 0:
+            raise PatchError("updateDisplayedPrinterScreenState not found")
+        anchor = text.find("  if (!isAnyPrinterConfigured()) {", fn)
+        if anchor < 0:
+            raise PatchError("no-printer state derivation anchor not found")
+        block = '''#if BOARD_HAS_CAMERA
+  // Phone-photo viewer is a first-class display override, not a chamber-camera
+  // stream. Keep it up even when the printer has no camera tile, is offline, or
+  // no printer is configured. Auto-OTA is still allowed to take the display.
+  if (current == SCREEN_CAMERA && companionWebViewerActive() && !isOtaAutoInProgress()) {
+    return;
+  }
+#endif
 
-    old = '''  if (cur == SCREEN_CAMERA) {\n    // Keep the drying peek reachable on camera boards by making it the next\n    // stop in the cycle: printing -> camera -> drying -> printing (+ next).\n    if (openDryPeek()) return;\n    setScreenState(SCREEN_PRINTING);\n    if (getActiveConnCount() >= 2) cycleDisplayedPrinterFromButton();\n    return;\n  }\n'''
-    new = '''  if (cur == SCREEN_CAMERA) {\n    // A phone photo has its own return target and must not enter the chamber\n    // camera / drying / printer-cycle tap behavior. One physical tap exits to\n    // exactly the screen that was active before Show on Waveshare.\n    if (companionWebViewerActive()) {\n      companionWebViewerExitToReturnScreen();\n      return;\n    }\n    // Keep the drying peek reachable on camera boards by making it the next\n    // stop in the cycle: printing -> camera -> drying -> printing (+ next).\n    if (openDryPeek()) return;\n    setScreenState(SCREEN_PRINTING);\n    if (getActiveConnCount() >= 2) cycleDisplayedPrinterFromButton();\n    return;\n  }\n'''
+'''
+        text = text[:anchor] + block + text[anchor:]
+
     if "A phone photo has its own return target" not in text:
-        text = once(text, old, new, "physical tap exits phone viewer")
+        fn = text.find("static void doTapActions() {")
+        if fn < 0:
+            raise PatchError("doTapActions not found")
+        cam = text.find("  if (cur == SCREEN_CAMERA) {", fn)
+        if cam < 0:
+            raise PatchError("camera tap block not found")
+        body = text.find("\n", cam) + 1
+        block = '''    // A phone photo has its own return target and must not enter the chamber
+    // camera / drying / printer-cycle tap behavior. One physical tap exits to
+    // exactly the screen that was active before Show on Waveshare.
+    if (companionWebViewerActive()) {
+      companionWebViewerExitToReturnScreen();
+      return;
+    }
+'''
+        text = text[:body] + block + text[body:]
+
     save(root, rel, text)
 
 
@@ -125,28 +130,11 @@ def apply(root: Path) -> None:
     patch_build(root)
 
     checks = {
-        "include/smart_home_build.h": [
-            'SMART_HOME_VERSION "v11.30"',
-            'Smart Home v11.30 Unified Web + Companion RC2',
-            MARKER,
-        ],
-        "src/companion_web.h": [
-            'companionWebViewerExitToReturnScreen();',
-        ],
-        "src/companion_web.cpp": [
-            'void companionWebViewerExitToReturnScreen()',
-            "Waveshare did not enter phone-photo view",
-            "Displaying now · ",
-        ],
-        "src/main.cpp": [
-            '#include "companion_web.h"',
-            'current == SCREEN_CAMERA && companionWebViewerActive() && !isOtaAutoInProgress()',
-            'companionWebViewerExitToReturnScreen();',
-            'A phone photo has its own return target',
-        ],
-        "web/app.js": [
-            "cap.viewer?'Displaying · ':'Photo ready · '",
-        ],
+        "include/smart_home_build.h": ['SMART_HOME_VERSION "v11.30"', 'Smart Home v11.30 Unified Web + Companion RC2', MARKER],
+        "src/companion_web.h": ['companionWebViewerExitToReturnScreen();'],
+        "src/companion_web.cpp": ['void companionWebViewerExitToReturnScreen()', "Waveshare did not enter phone-photo view", "Displaying now · "],
+        "src/main.cpp": ['#include "companion_web.h"', 'current == SCREEN_CAMERA && companionWebViewerActive() && !isOtaAutoInProgress()', 'companionWebViewerExitToReturnScreen();', 'A phone photo has its own return target'],
+        "web/app.js": ["cap.viewer?'Displaying · ':'Photo ready · '"],
     }
     for rel, needles in checks.items():
         body = load(root, rel)
