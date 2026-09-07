@@ -32,6 +32,7 @@ jobs:
           python -m py_compile scripts/materialize_pinned_upstream.py
           python -m py_compile apply_workshop_instrument_ui_v1.py
           python -m py_compile apply_workshop_auto_orientation_v1.py
+          python -m py_compile apply_workshop_auto_orientation_v1_1.py
           python -m py_compile scripts/validate_workshop_instrument_ui_v1.py
           python -m py_compile scripts/validate_workshop_auto_orientation_v1.py
 
@@ -100,7 +101,7 @@ jobs:
         run: python scripts/validate_workshop_instrument_ui_v1.py --repo upstream
 
       - name: Apply QMI8658 auto orientation
-        run: python apply_workshop_auto_orientation_v1.py --repo upstream --apply
+        run: python apply_workshop_auto_orientation_v1_1.py --repo upstream --apply
       - name: Validate QMI8658 auto-orientation contracts
         run: python scripts/validate_workshop_auto_orientation_v1.py upstream
 
