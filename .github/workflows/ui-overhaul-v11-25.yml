@@ -76,7 +76,11 @@ jobs:
           PY
 
       - name: Apply v11.25 full-device UI overhaul
-        run: python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
+        run: |
+          set -euo pipefail
+          mkdir -p upstream/firmware
+          cp -R firmware/ui-v11.25 upstream/firmware/
+          python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
 
       - name: Validate v11.25 source contracts
         run: python scripts/validate_ui_overhaul_v11_25.py upstream
