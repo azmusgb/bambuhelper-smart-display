@@ -19,9 +19,17 @@ Filament inventory data, cloud synchronization or inventory LLM behavior are own
 
 - `azmusgb/filamentinventory` — **Filament Inventory**
 
-That repository is authoritative for Bill/Aimee profile isolation, spool state, remaining-quantity evidence, cloud sync, QR/audit workflows, inventory Assistant grounding and server-side model transport.
+That repository is authoritative for profile isolation, spool state, remaining-quantity evidence, cloud sync, QR/audit workflows, inventory Assistant grounding and server-side model transport.
 
-Workshop OS consumes inventory facts through versioned authenticated device APIs. It must not become a second inventory database or model provider.
+Workshop OS consumes inventory facts through versioned authenticated device APIs. It must not become a second inventory database, quantity authority, ownership authority, placement authority, or model provider.
+
+## Filament Inventory integration mirror
+
+`azmusgb/filamentinventory` now contains a history-preserved integration mirror of Workshop OS under `firmware/workshop-os/`.
+
+That mirror is used for product-level contract validation, reconstruction, shared CI, candidate comparison, and recovery planning. It is **not** the current production firmware authority and does not replace this repository's physical-acceptance or release responsibilities.
+
+Mirrored CI may be cited as additional software evidence only when it is tied to an exact source/candidate mapping. It must not be used to promote firmware independently of the authoritative Workshop OS candidate line.
 
 ## Canonical device contract
 
@@ -38,11 +46,9 @@ The current sync-key reuse is a compatibility bridge. The target design is a dev
 
 ## Filament Inventory firmware consolidation
 
-`azmusgb/filamentinventory` previously evolved an independent **Waveshare Home** firmware line through v1.7.0. That line is now frozen and retained only as migration/reference material.
+`azmusgb/filamentinventory` previously evolved an independent **Waveshare Home** firmware line through v1.7.0. That line is frozen and retained only as migration/reference/recovery material.
 
-Workshop OS must preserve the valuable behavior without importing the duplicate firmware architecture wholesale.
-
-Unique migration targets include:
+Workshop OS must preserve valuable behavior without importing duplicate firmware authority. Unique migration targets include:
 
 - profile-aware inventory summary;
 - compact Inventory Assistant launcher;
@@ -55,13 +61,14 @@ Workshop OS remains authoritative for the underlying printer, power, network, au
 
 ## Candidate sequencing
 
-Do not mix repository consolidation into the active hardware acceptance deltas.
+Do not mix repository integration with physical-acceptance promotion.
 
-1. Complete v11.23 Network / Locale / Layout RC2 physical acceptance.
-2. Complete the dependent v11.24 Audio Console candidate acceptance.
-3. Create a separate Workshop OS inventory/Assistant migration candidate from the then-accepted source line.
-4. Run exact-head CI, native WS350 build, shared-display regression and real-device physical acceptance.
-5. Only then may the duplicate active firmware/tooling tree be removed from Filament Inventory.
+1. Complete v11.23 Network / Locale / Layout RC2 physical acceptance in authoritative PR #76.
+2. Complete the dependent v11.24 Audio Console candidate acceptance in authoritative PR #77.
+3. Rebase/recreate later Instrument UI/Auto Orient work on the then-accepted authoritative source line if it remains desired.
+4. Create the Workshop OS inventory/Assistant migration candidate from the then-accepted source line.
+5. Run exact-head CI, native WS350 build, shared-display regression and real-device physical acceptance.
+6. Consider any future firmware-authority migration only as a separate deliberate architecture change with proven recovery/rollback.
 
 ## LLM boundary
 
@@ -69,9 +76,16 @@ The WS350 never stores an OpenAI/provider API key.
 
 If Workshop OS later requests cloud-generated inventory answers, it must call a narrow Filament Inventory server endpoint with profile-scoped, least-privilege authorization. Local printer/AMS state and Filament Inventory data remain evidence; model output never becomes inventory source-of-truth state.
 
-## Companion terminology
+## Recovery rule
 
-- **Workshop Device Companion**: hardware orchestration, BLE presence/handoff, device capabilities.
-- **Filament Inventory Assistant**: inventory interpretation, recommendations and grounded LLM behavior.
+Waveshare Home and Workshop OS use incompatible partition layouts. Cross-line migration uses the approved full image at `0x0`, not OTA.
 
-These are related product surfaces but have different authority and security boundaries.
+Preserve the known-good recovery image, flashing procedure, artifact identity/hash, and rollback documentation until the replacement path is physically proven.
+
+## Release-state rule
+
+Keep these states distinct:
+
+`implemented -> built -> tested -> runtime validated -> production validated -> physically validated -> accepted -> stable`
+
+CI or integration-mirror success does not prove WS350 physical acceptance.
