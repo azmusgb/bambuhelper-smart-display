@@ -80,8 +80,8 @@
         "\"VOLUME +10\"",
         "\"EVENT SOUNDS\"",
         "\"BUTTON CLICKS\"",
-        "\"QUIET START\"",
-        "\"QUIET END\"",
+        "\"QUIET START -1\"",
+        "\"QUIET END -1\"",
         "\"BED COOLDOWN\""
       ]
     },
