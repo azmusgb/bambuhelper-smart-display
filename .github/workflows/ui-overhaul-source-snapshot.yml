@@ -1,0 +1,59 @@
+name: Workshop OS v11.25 UI Overhaul Source Snapshot
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Reconstruct v11.23 RC2 source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct accepted visual baseline
+        run: bash scripts/apply_workshop_os_v11_19.sh upstream
+      - name: Apply v11.19.1 physical fit
+        run: python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
+      - name: Apply v11.20 portal auth
+        run: python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
+      - name: Apply v11.22 display expert
+        run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
+      - name: Apply v11.23 network/locale/layout
+        run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
+      - name: Apply v11.23 RC2 secure touch UX
+        run: python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
+      - name: Apply v11.23 RC2 secure physical finalization
+        run: python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
+      - name: Apply guarded-action feedback
+        run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
+      - name: Normalize authenticated boundary
+        run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
+      - name: Package reconstructed UI source
+        run: |
+          set -euo pipefail
+          mkdir -p source-snapshot/src source-snapshot/include source-snapshot/web
+          cp upstream/src/smart_hub.cpp source-snapshot/src/
+          cp upstream/src/web_server.cpp source-snapshot/src/
+          cp upstream/src/bambu_mqtt.cpp source-snapshot/src/
+          cp upstream/src/bambu_mqtt.h source-snapshot/src/
+          cp upstream/include/smart_home_build.h source-snapshot/include/
+          cp upstream/web/app.js source-snapshot/web/
+          cp upstream/web/app.css source-snapshot/web/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workshop-os-v11-23-rc2-generated-source
+          retention-days: 3
+          path: source-snapshot/
