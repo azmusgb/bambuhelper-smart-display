@@ -4,7 +4,7 @@
       "id": "audio.event-and-quiet",
       "classification": "PHYSICAL",
       "implementedOnDevice": true,
-      "surface": "Hardware \u2192 Sound",
+      "surface": "Hardware → Sound",
       "browserBindings": [
         {
           "route": "/hub/experience",
@@ -25,7 +25,7 @@
       "id": "rotation.mode",
       "classification": "PHYSICAL-EXPERT",
       "implementedOnDevice": false,
-      "surface": "Display \u2192 Expert \u2192 Layout",
+      "surface": "Display → Expert → Layout",
       "browserBindings": [
         {
           "route": "/save/rotation",
@@ -60,12 +60,13 @@
       "id": "audio.core",
       "classification": "PHYSICAL",
       "implementedOnDevice": true,
-      "surface": "Hardware \u2192 Sound / Cooldown",
+      "surface": "Hardware → Sound / Cooldown",
       "browserBindings": [
         {
           "route": "/save/rotation",
           "keys": [
             "buzzen",
+            "buzvol",
             "buzqs",
             "buzqe",
             "buzclick",
@@ -75,6 +76,8 @@
         }
       ],
       "physicalEvidence": [
+        "\"VOLUME -10\"",
+        "\"VOLUME +10\"",
         "\"EVENT SOUNDS\"",
         "\"BUTTON CLICKS\"",
         "\"QUIET START\"",
@@ -86,7 +89,7 @@
       "id": "audio.pin",
       "classification": "PHYSICAL-EXPERT",
       "implementedOnDevice": false,
-      "surface": "Hardware \u2192 Expert \u2192 Sound",
+      "surface": "Hardware → Expert → Sound",
       "browserBindings": [
         {
           "route": "/save/rotation",
@@ -102,7 +105,7 @@
       "id": "hardware.battery-indicator",
       "classification": "PHYSICAL-EXPERT",
       "implementedOnDevice": false,
-      "surface": "Hardware \u2192 Expert \u2192 Power",
+      "surface": "Hardware → Expert → Power",
       "browserBindings": [
         {
           "route": "/save/rotation",
@@ -118,7 +121,7 @@
       "id": "led.core",
       "classification": "PHYSICAL",
       "implementedOnDevice": true,
-      "surface": "Hardware \u2192 LED / Finish / Error",
+      "surface": "Hardware → LED / Finish / Error",
       "browserBindings": [
         {
           "route": "/save/rotation",
@@ -145,7 +148,7 @@
       "id": "led.wiring-and-colors",
       "classification": "PHYSICAL-EXPERT",
       "implementedOnDevice": false,
-      "surface": "Hardware \u2192 Expert \u2192 LED",
+      "surface": "Hardware → Expert → LED",
       "browserBindings": [
         {
           "route": "/save/rotation",
