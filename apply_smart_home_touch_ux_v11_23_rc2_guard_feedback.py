@@ -6,6 +6,7 @@ from pathlib import Path
 
 MARKER = "Workshop OS v11.23 RC2 guarded-action feedback"
 ORDER_MARKER = "Workshop OS v11.23 RC2 rotation preview declaration-order fix"
+VISUAL_MARKER = "Workshop OS v11.23 RC2 calm product visual system"
 
 
 class PatchError(RuntimeError):
@@ -103,6 +104,97 @@ def fix_rotation_preview_declaration_order(text: str) -> str:
     return text
 
 
+def patch_product_visuals(text: str) -> str:
+    """Reduce chromatic noise while preserving every RC2 control and hit target.
+
+    Cards become quiet neutral information surfaces with a narrow semantic rail.
+    Buttons retain their semantic/action color at the boundary, so warning/error
+    states still read immediately without turning the whole page into a rainbow.
+    """
+    old_button = r'''static void hubRc2ButtonRef(int16_t x, int16_t y, int16_t w, int16_t h,
+                            const char* label, uint16_t accent,
+                            bool enabled=true) {
+  const int16_t sx=hubRc2SX(x), sy=hubRc2SY(y);
+  const int16_t sw=hubRc2SX(w), sh=hubRc2SY(h);
+  const uint16_t fill=enabled?UI_PANEL_2:UI_PANEL;
+  const uint16_t ink=enabled?UI_TEXT:UI_DIM;
+  tft.fillRoundRect(sx,sy,sw,sh,8,fill);
+  tft.drawRoundRect(sx,sy,sw,sh,8,enabled?accent:UI_BORDER);
+  uiDrawFit(label,sx+6,sy+(sh/2),sw-12,FONT_BODY,ML_DATUM,ink,fill);
+}'''
+    new_button = r'''static void hubRc2ButtonRef(int16_t x, int16_t y, int16_t w, int16_t h,
+                            const char* label, uint16_t accent,
+                            bool enabled=true) {
+  const int16_t sx=hubRc2SX(x), sy=hubRc2SY(y);
+  const int16_t sw=hubRc2SX(w), sh=hubRc2SY(h);
+  const uint16_t fill=enabled?UI_PANEL_2:UI_PANEL;
+  const uint16_t ink=enabled?UI_TEXT:UI_DIM;
+  const uint16_t edge=enabled?accent:UI_BORDER;
+  tft.fillRoundRect(sx,sy,sw,sh,10,fill);
+  tft.drawRoundRect(sx,sy,sw,sh,10,edge);
+  uiDrawFit(label,sx+8,sy+(sh/2),sw-16,FONT_BODY,ML_DATUM,ink,fill);
+}'''
+    text = replace_once(text, old_button, new_button, "calm RC2 button primitive")
+
+    old_card = r'''static void hubRc2CardRef(int16_t x, int16_t y, int16_t w, int16_t h,
+                          const char* title, const char* value,
+                          const char* detail, uint16_t accent) {
+  const int16_t sx=hubRc2SX(x), sy=hubRc2SY(y);
+  const int16_t sw=hubRc2SX(w), sh=hubRc2SY(h);
+  tft.fillRoundRect(sx,sy,sw,sh,8,UI_PANEL_2);
+  tft.drawRoundRect(sx,sy,sw,sh,8,UI_BORDER);
+  uiDrawFit(title,sx+8,sy+12,sw-16,FONT_SMALL,TL_DATUM,accent,UI_PANEL_2);
+  uiDrawFit(value,sx+8,sy+(sh/2),sw-16,FONT_BODY,ML_DATUM,UI_TEXT,UI_PANEL_2);
+  if(detail && detail[0])
+    uiDrawFit(detail,sx+8,sy+sh-10,sw-16,FONT_SMALL,BL_DATUM,UI_DIM,UI_PANEL_2);
+}'''
+    new_card = r'''static void hubRc2CardRef(int16_t x, int16_t y, int16_t w, int16_t h,
+                          const char* title, const char* value,
+                          const char* detail, uint16_t accent) {
+  const int16_t sx=hubRc2SX(x), sy=hubRc2SY(y);
+  const int16_t sw=hubRc2SX(w), sh=hubRc2SY(h);
+  tft.fillRoundRect(sx,sy,sw,sh,10,UI_PANEL_2);
+  tft.drawRoundRect(sx,sy,sw,sh,10,UI_BORDER);
+  const int16_t railH=(int16_t)(sh>18?sh-16:sh);
+  if(railH>0)tft.fillRoundRect(sx+6,sy+8,3,railH,2,accent);
+  uiDrawFit(title,sx+16,sy+12,sw-24,FONT_SMALL,TL_DATUM,UI_DIM,UI_PANEL_2);
+  uiDrawFit(value,sx+16,sy+(sh/2),sw-24,FONT_BODY,ML_DATUM,UI_TEXT,UI_PANEL_2);
+  if(detail && detail[0])
+    uiDrawFit(detail,sx+16,sy+sh-10,sw-24,FONT_SMALL,BL_DATUM,UI_DIM,UI_PANEL_2);
+}'''
+    text = replace_once(text, old_card, new_card, "calm RC2 card primitive")
+
+    old_page = r'''  tft.fillRoundRect(sx,sy,sw,sh,9,UI_PANEL_2);
+  uiDrawFit(label,sx+4,sy+(sh/2),sw-8,FONT_SMALL,ML_DATUM,UI_DIM,UI_PANEL_2);'''
+    new_page = r'''  tft.fillRoundRect(sx,sy,sw,sh,9,UI_PANEL);
+  tft.drawRoundRect(sx,sy,sw,sh,9,UI_BORDER);
+  uiDrawFit(label,sx+4,sy+(sh/2),sw-8,FONT_SMALL,ML_DATUM,UI_DIM,UI_PANEL);'''
+    text = replace_once(text, old_page, new_page, "quiet RC2 page indicator")
+
+    # Generic controls use one interaction accent. Green/amber/red remain for
+    # actual success/caution/error state instead of encoding arbitrary regions.
+    replacements = [
+        ('"Tap to cycle",UI_PURPLE);', '"Tap to cycle",UI_CYAN);', 2, "date-card decorative purple"),
+        ('"Hostname remains browser-only",UI_GREEN);', '"Hostname remains browser-only",UI_CYAN);', 1, "mDNS decorative green"),
+        ('"Use explicit PREV / NEXT",UI_ORANGE);', '"Use explicit PREV / NEXT",UI_CYAN);', 1, "timezone decorative amber"),
+        ('hubRc2ButtonRef(10,142,135,54,"< PREV",UI_ORANGE);', 'hubRc2ButtonRef(10,142,135,54,"< PREV",UI_BLUE);', 1, "timezone previous action"),
+        ('hubRc2ButtonRef(335,142,135,54,"NEXT >",UI_ORANGE);', 'hubRc2ButtonRef(335,142,135,54,"NEXT >",UI_BLUE);', 1, "timezone next action"),
+        ('hubRc2ButtonRef(10,202,108,52,"-10",UI_PURPLE);', 'hubRc2ButtonRef(10,202,108,52,"-10",UI_CYAN);', 1, "address minus ten"),
+        ('hubRc2ButtonRef(127,202,108,52,"-1",UI_PURPLE);', 'hubRc2ButtonRef(127,202,108,52,"-1",UI_CYAN);', 1, "address minus one"),
+        ('hubRc2ButtonRef(244,202,108,52,"+1",UI_GREEN);', 'hubRc2ButtonRef(244,202,108,52,"+1",UI_CYAN);', 1, "address plus one"),
+        ('hubRc2ButtonRef(361,202,109,52,"+10",UI_GREEN);', 'hubRc2ButtonRef(361,202,109,52,"+10",UI_CYAN);', 1, "address plus ten"),
+        ('g_networkEditDhcp?"AUTO":sn,"",UI_PURPLE);', 'g_networkEditDhcp?"AUTO":sn,"",UI_CYAN);', 1, "subnet decorative purple"),
+    ]
+    for old, new, expected, label in replacements:
+        count = text.count(old)
+        if count != expected:
+            raise PatchError(f"{label}: expected {expected} anchor(s), found {count}")
+        text = text.replace(old, new)
+
+    text += f"\n// {VISUAL_MARKER}\n"
+    return text
+
+
 def patch_header(repo: Path) -> None:
     p=repo/"src"/"smart_hub.h"
     text=p.read_text(encoding="utf-8")
@@ -163,6 +255,7 @@ def patch_hub(repo: Path) -> None:
     # Normalize declaration order here so the v11.23 candidate compiles on its
     # own and downstream candidates inherit a sound base.
     text=fix_rotation_preview_declaration_order(text)
+    text=patch_product_visuals(text)
 
     text += f"\n// {MARKER}\n"
     p.write_text(text,encoding="utf-8")
@@ -177,7 +270,7 @@ def apply(repo: Path) -> None:
     patch_header(repo)
     patch_main(repo)
     patch_hub(repo)
-    print("Workshop OS v11.23 RC2 guarded-action feedback applied")
+    print("Workshop OS v11.23 RC2 guarded-action feedback + calm product visuals applied")
 
 
 def main() -> int:
