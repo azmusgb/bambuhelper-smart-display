@@ -113,9 +113,35 @@ def sections(source_root: Path) -> dict[str, str]:
     return values
 
 
+def sanitize_generated_source(repo: Path) -> None:
+    """Remove accidental literal NUL bytes from reconstructed C++ source.
+
+    An older generator emitted a real NUL byte inside the intended C++ '\\0'
+    character literal in settings.cpp. GCC accepted it but warned on every
+    WS350/regression build. Convert only that exact character-literal form and
+    fail closed if any other NUL byte remains in the source file.
+    """
+    path = repo / "src" / "settings.cpp"
+    if not path.exists():
+        raise PatchError(f"missing {path}")
+    data = path.read_bytes()
+    literal = b"'\x00'"
+    replacements = data.count(literal)
+    if replacements:
+        data = data.replace(literal, b"'\\0'")
+        path.write_bytes(data)
+    if b"\x00" in data:
+        raise PatchError("settings.cpp still contains an embedded NUL byte")
+    print(f"RC5 source hygiene: settings.cpp embedded-NUL replacements={replacements}")
+
+
 def patch(repo: Path) -> None:
     source_root = Path(__file__).resolve().parent
     f = sections(source_root)
+
+    # Source hygiene is part of the final UI authority reconstruction so every
+    # RC5/RC6-derived build is warning-clean before compilation.
+    sanitize_generated_source(repo)
 
     build_path = repo / "include" / "smart_home_build.h"
     build = load(build_path)
