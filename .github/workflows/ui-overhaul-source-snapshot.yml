@@ -55,6 +55,7 @@ jobs:
           cp upstream/src/smart_hub.cpp source-snapshot/src/
           cp upstream/src/web_server.cpp source-snapshot/src/
           cp upstream/src/security_manager.cpp source-snapshot/src/
+          cp upstream/src/settings.cpp source-snapshot/src/
           cp upstream/src/bambu_mqtt.cpp source-snapshot/src/
           cp upstream/src/bambu_mqtt.h source-snapshot/src/
           cp upstream/include/smart_home_build.h source-snapshot/include/
