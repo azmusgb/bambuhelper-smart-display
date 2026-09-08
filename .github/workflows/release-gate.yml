@@ -45,7 +45,7 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: release-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 80
     steps:
       - name: Determine required conditional workflow gates
         id: required
@@ -62,16 +62,22 @@ jobs:
           required=("Validate")
           firmware_required=0
           rc4_required=0
+          rc5_required=0
           static_required=0
           for f in "${files[@]}"; do
             case "$f" in
-              .github/workflows/firmware-candidate.yml|README.md|SECURITY.md|releases/current.json|apply_smart_home_*.py|.bambuhelper-validation/*|.bambuhelper-validation/**/*|assets/*|assets/**/*|scripts/apply_*.sh|scripts/validate_*.py|scripts/capture-ws350-views.zsh|docs/physical-*.md|docs/visual-*.md|docs/portal-auth-*.md|docs/display-expert-*.md|docs/network-*.md|docs/touch-*.md|docs/security-*.md|docs/PHYSICAL_ACCEPTANCE*.md|docs/settings-capability-registry/*|docs/settings-capability-registry/**/*)
+              .github/workflows/firmware-candidate.yml|README.md|SECURITY.md|releases/current.json|apply_smart_home_*.py|.bambuhelper-validation/*|.bambuhelper-validation/**/*|assets/*|assets/**/*|scripts/apply_*.sh|scripts/validate_*.py|scripts/capture-ws350-views.zsh|scripts/capture-ws350-ui5.zsh|docs/physical-*.md|docs/visual-*.md|docs/portal-auth-*.md|docs/display-expert-*.md|docs/network-*.md|docs/touch-*.md|docs/security-*.md|docs/PHYSICAL_ACCEPTANCE*.md|docs/settings-capability-registry/*|docs/settings-capability-registry/**/*)
                 firmware_required=1
                 ;;
             esac
             case "$f" in
               .github/workflows/ui-overhaul-v11-25-rc4.yml|apply_workshop_os_ui_overhaul_v11_25_rc4.py|assets/v11_25_rc4_device.css|firmware/ui-v11.25-rc4/*|firmware/ui-v11.25-rc4/**/*|scripts/validate_ui_overhaul_v11_25_rc4.py)
                 rc4_required=1
+                ;;
+            esac
+            case "$f" in
+              .github/workflows/ui-overhaul-v11-25-rc5.yml|apply_workshop_os_ui_overhaul_v11_25_rc5.py|assets/v11_25_rc5_portal.css|firmware/ui-v11.25-rc5/*|firmware/ui-v11.25-rc5/**/*|scripts/validate_ui_overhaul_v11_25_rc5.py|scripts/verify_ui_binary_v11_25_rc5.py|scripts/capture-ws350-ui5.zsh|docs/UI_SOURCE_OF_TRUTH_V11_25.md|docs/PHYSICAL_ACCEPTANCE_V11_25_RC5.md)
+                rc5_required=1
                 ;;
             esac
             case "$f" in
@@ -85,6 +91,9 @@ jobs:
           fi
           if (( rc4_required )); then
             required+=("Workshop OS Firmware Gate — v11.25 Full Device UI Overhaul RC4")
+          fi
+          if (( rc5_required )); then
+            required+=("Workshop OS Firmware Gate — v11.25 RC5 Native UI Acceptance")
           fi
           if (( static_required )); then
             required+=("Validate accepted static installer")
@@ -106,7 +115,7 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t required < <(jq -r '.[]' <<< "$REQUIRED")
-          for attempt in $(seq 1 210); do
+          for attempt in $(seq 1 240); do
             runs="$(gh api "/repos/$REPO/actions/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100")"
             all_passed=1
             echo "Merge Gate poll $attempt"

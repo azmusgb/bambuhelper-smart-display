@@ -1,4 +1,4 @@
-name: Workshop OS v11.25 UI Overhaul Source Snapshot
+name: Workshop OS v11.25 RC5 Generated Source Snapshot
 
 on:
   pull_request:
@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   snapshot:
-    name: Reconstruct v11.23 RC2 source
+    name: Reconstruct exact RC5 generated source
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -23,37 +23,46 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Reconstruct accepted visual baseline
-        run: bash scripts/apply_workshop_os_v11_19.sh upstream
-      - name: Apply v11.19.1 physical fit
-        run: python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
-      - name: Apply v11.20 portal auth
-        run: python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
-      - name: Apply v11.22 display expert
-        run: python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
-      - name: Apply v11.23 network/locale/layout
-        run: python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
-      - name: Apply v11.23 RC2 secure touch UX
-        run: python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
-      - name: Apply v11.23 RC2 secure physical finalization
-        run: python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
-      - name: Apply guarded-action feedback
-        run: python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
-      - name: Normalize authenticated boundary
-        run: python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
-      - name: Package reconstructed UI source
+      - name: Reconstruct v11.23 RC2 baseline
         run: |
           set -euo pipefail
-          mkdir -p source-snapshot/src source-snapshot/include source-snapshot/web
+          bash scripts/apply_workshop_os_v11_19.sh upstream
+          python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
+          python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
+          python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
+          python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
+          python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
+      - name: Apply v11.25 presentation lineage and final RC5 authority
+        run: |
+          set -euo pipefail
+          python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
+          python apply_workshop_os_temp_no_code_v11_25.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc3.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc4.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc5.py --repo upstream --apply
+          python scripts/validate_ui_overhaul_v11_25_rc5.py upstream
+      - name: Package exact generated UI source and hashes
+        run: |
+          set -euo pipefail
+          mkdir -p source-snapshot/src source-snapshot/include source-snapshot/web source-snapshot/ui-authority
           cp upstream/src/smart_hub.cpp source-snapshot/src/
           cp upstream/src/web_server.cpp source-snapshot/src/
+          cp upstream/src/security_manager.cpp source-snapshot/src/
           cp upstream/src/bambu_mqtt.cpp source-snapshot/src/
           cp upstream/src/bambu_mqtt.h source-snapshot/src/
           cp upstream/include/smart_home_build.h source-snapshot/include/
           cp upstream/web/app.js source-snapshot/web/
           cp upstream/web/app.css source-snapshot/web/
+          cp firmware/ui-v11.25-rc5/*.cppfrag source-snapshot/ui-authority/
+          cp assets/v11_25_rc5_portal.css source-snapshot/ui-authority/
+          cp docs/UI_SOURCE_OF_TRUTH_V11_25.md source-snapshot/
+          find source-snapshot -type f -print0 | sort -z | xargs -0 sha256sum > source-snapshot/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-23-rc2-generated-source
-          retention-days: 3
+          name: workshop-os-v11-25-rc5-generated-source
+          retention-days: 7
           path: source-snapshot/
