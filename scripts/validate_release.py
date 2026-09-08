@@ -31,6 +31,7 @@ ALLOWED_WORKFLOWS = {
     "ui-overhaul-source-snapshot.yml",
     "ui-overhaul-v11-25.yml",
     "ui-overhaul-v11-25-rc4.yml",
+    "ui-overhaul-v11-25-rc5.yml",
     "validate.yml",
 }
 REQUIRED = [
