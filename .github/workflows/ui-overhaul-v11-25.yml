@@ -1,4 +1,4 @@
-name: Workshop OS Firmware Gate — v11.25 Full Device UI Overhaul RC1
+name: Workshop OS Firmware Gate — v11.25 Full Device UI Overhaul RC2
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Build and validate v11.25 UI overhaul
+    name: Build and validate v11.25 RC2 visual delta + temporary no-code LAN
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -34,7 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile apply_workshop_os_ui_overhaul_v11_25.py
+          python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc2.py
+          python -m py_compile apply_workshop_os_temp_no_code_v11_25.py
           python -m py_compile scripts/validate_ui_overhaul_v11_25.py
+          python -m py_compile scripts/validate_ui_overhaul_v11_25_rc2.py
           test -s firmware/ui-v11.25/shared.cppfrag
           test -s firmware/ui-v11.25/home_printer.cppfrag
           test -s firmware/ui-v11.25/workshop_more_system.cppfrag
@@ -70,22 +73,22 @@ jobs:
               assert needle in web, needle
           for needle in ['DROPPED: MQTT offline','if (!st.connected) return false']:
               assert needle in mqtt, needle
-          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','TEMPORARY TRUSTED-LAN MODE','requestSpeedCommand','requestFanCommand']:
+          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','WORKSHOP_OS_TEMP_NO_CODE_LAN','requestSpeedCommand','requestFanCommand']:
               assert forbidden not in hub + web + security + mqtt, forbidden
           print('Inherited v11.23 RC2 safety boundary: PASS')
           PY
 
-      - name: Apply v11.25 full-device UI overhaul
+      - name: Apply v11.25 RC1 full-device UI baseline
         run: |
           set -euo pipefail
           mkdir -p upstream/firmware
           cp -R firmware/ui-v11.25 upstream/firmware/
           python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
 
-      - name: Validate v11.25 source contracts
+      - name: Validate v11.25 RC1 source contracts
         run: python scripts/validate_ui_overhaul_v11_25.py upstream
 
-      - name: Revalidate authentication and command boundaries after overhaul
+      - name: Revalidate secure boundary before temporary physical-test bypass
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -100,10 +103,19 @@ jobs:
           assert 'if (mutating && !sameOrigin(server))' in security
           for needle in ['SECURE_GET("/hub/views", handleHubViews)','SECURE_GET("/hub/frame.ppm", handleHubFramePpm)','SECURE_POST("/hub/show", handleHubShow)']:
               assert needle in web, needle
-          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','TEMPORARY TRUSTED-LAN MODE','requestSpeedCommand','requestFanCommand','matchSpoolByColor','matchSpoolByMaterial']:
+          for forbidden in ['WORKSHOP_OS_TEMP_LAN_OPEN','WORKSHOP_OS_TEMP_NO_CODE_LAN','requestSpeedCommand','requestFanCommand','matchSpoolByColor','matchSpoolByMaterial']:
               assert forbidden not in hub + web + security, forbidden
-          print('v11.25 post-overhaul safety/auth boundary: PASS')
+          print('Secure pre-bypass boundary: PASS')
           PY
+
+      - name: Apply RC2 physical-feedback visual delta
+        run: python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
+
+      - name: Temporarily disable station-LAN device code
+        run: python apply_workshop_os_temp_no_code_v11_25.py --repo upstream --apply
+
+      - name: Validate RC2 visual and temporary-access contracts
+        run: python scripts/validate_ui_overhaul_v11_25_rc2.py upstream
 
       - name: Validate browser JavaScript
         run: node --check upstream/web/app.js
@@ -111,7 +123,7 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
 
-      - name: Build WS350 v11.25 RC1
+      - name: Build WS350 v11.25 RC2
         working-directory: upstream
         run: pio run -e ws_lcd_350
 
@@ -123,7 +135,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.25 RC1 artifacts
+      - name: Package v11.25 RC2 physical-test artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -132,18 +144,23 @@ jobs:
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
           mkdir -p firmware-gate-artifacts/docs firmware-gate-artifacts/tools
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC1-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC1-OTA.bin
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC2-Test-No-Code-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC2-Test-No-Code-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp docs/WORKSHOP_OS_V11_25_UI_OVERHAUL.md firmware-gate-artifacts/docs/
           cp docs/PHYSICAL_ACCEPTANCE_V11_25_UI_OVERHAUL.md firmware-gate-artifacts/docs/
           cp docs/UI_OVERHAUL_STATE_MODEL.md firmware-gate-artifacts/docs/
           cp scripts/validate_ui_overhaul_v11_25.py firmware-gate-artifacts/tools/
+          cp scripts/validate_ui_overhaul_v11_25_rc2.py firmware-gate-artifacts/tools/
+          cp apply_workshop_os_ui_overhaul_v11_25_rc2.py firmware-gate-artifacts/tools/
+          cp apply_workshop_os_temp_no_code_v11_25.py firmware-gate-artifacts/tools/
           {
-            echo 'Workshop OS v11.25 Full Device UI Overhaul RC1'
+            echo 'Workshop OS v11.25 Full Device UI Overhaul RC2 — physical-test build'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
             echo 'source_line=CANDIDATE_STACKED_ON_V11_23_RC2'
+            echo 'rc1_physical_result=REJECTED_VISUAL_DELTA_INSUFFICIENT'
             echo 'physical_acceptance=REQUIRED'
+            echo 'visual_delta=ORANGE_INDUSTRIAL_FLAT_COMMAND_CENTER'
             echo 'primary_nav=HOME_PRINTER_WORKSHOP_MORE'
             echo 'printer_modes=STATUS_AMS_CONTROL'
             echo 'routine_touch_floor=48PX'
@@ -152,7 +169,10 @@ jobs:
             echo 'ams_inventory_identity=UNKNOWN_UNLESS_AUTHORITATIVE_CONTRACT'
             echo 'guarded_stop=LONG_PRESS_WITH_PROGRESS'
             echo 'network_locale_layout_rc2=PRESERVED'
-            echo 'portal_auth=PRESERVED'
+            echo 'station_lan_device_code=TEMPORARILY_DISABLED'
+            echo 'mutating_same_origin_guard=PRESERVED'
+            echo 'ap_setup_recovery_policy=PRESERVED'
+            echo 'promotion_blocked=REMOVE_TEMP_NO_CODE_AND_PASS_PHYSICAL_ACCEPTANCE'
             echo 'recovery=PRESERVED'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
@@ -161,7 +181,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-25-full-device-ui-overhaul-rc1
+          name: workshop-os-v11-25-full-device-ui-overhaul-rc2-test-no-code
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
