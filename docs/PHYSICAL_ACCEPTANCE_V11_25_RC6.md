@@ -18,6 +18,20 @@ Record before testing:
 
 For a device already on the compatible Workshop OS partition layout, OTA/app update is permitted. For a cross-line migration from legacy Waveshare Home, use the Full image at `0x0`; never use OTA across incompatible partition layouts.
 
+## Pre-flash build evidence
+
+The exact artifact under test must come from a successful RC6 exact-head workflow that proves:
+
+- `ws_lcd_350` build passed;
+- `jc3248w535` regression build passed;
+- compiled secure binary verification passed;
+- the Full image contains the exact app image at `0x10000`;
+- retained RC5 portal CSS is embedded exactly;
+- temporary no-code runtime markers are absent;
+- reconstructed `settings.cpp` contains no embedded NUL byte and the historical `null character(s) preserved in literal` compiler warning is absent.
+
+A binary from an older head remains superseded even when its firmware SHA happens to match the current candidate; exact-head artifact identity is part of the acceptance evidence.
+
 ## Mandatory runtime identity
 
 After boot, `GET /recovery/status` must report:
