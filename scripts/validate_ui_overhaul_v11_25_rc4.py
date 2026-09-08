@@ -17,6 +17,10 @@ def main():
         require(build,n,'RC4 build/test identity')
     for n in ['W25_BG=0x08A3','W25_SURFACE=0x10E5','W25_SURFACE_2=0x1926','W25_ACCENT=0x5EB9','W25_INFO=0x5D5F','W25_WARN=0xF5AB','W25_DANGER=0xFB2E','W25_SUCCESS=0x5EB1','static const char* labels[4]={"HOME","PRINTER","WORKSHOP","MORE"};','static const char* labels[3]={"STATUS","AMS","CONTROL"};','HubRect hero=hr(8,48,304,128)','rail=hr(320,48,W-328,212)','"WORKSHOP STATUS"','"NO CODE"','"TEST BUILD ONLY"','"INVENTORY IDENTITY"','"Printer telemetry only - no inferred spool match"','"DIRECT CONTROLS"','"Stop requires hold"','g_printerMode!=HUB_PRINTER_CONTROL','s.connected&&active&&longPress']:
         require(hub,n,'RC4 native product contract')
+    token_pos=hub.find('static const uint16_t W25_BG=')
+    first_renderer=min(p for p in [hub.find('static void drawHeader('),hub.find('static void uiBottomNav(')] if p>=0)
+    if token_pos<0 or token_pos>first_renderer:
+        raise AssertionError('RC4 theme tokens must be declared before header/navigation renderers')
     for fn in ['drawHome','drawPrinter','drawWorkshop','drawMore','drawSystem']:
         count=len(re.findall(rf'static void {fn}\s*\(',hub))
         if count!=1: raise AssertionError(f'{fn}: expected 1 definition, found {count}')
@@ -30,6 +34,7 @@ def main():
         raise AssertionError('RC4 CSS does not override RC3 CSS')
     print('Workshop OS v11.25 RC4 Product Polish contract: PASS')
     print('native_palette=GRAPHITE_MINT_SEMANTIC')
+    print('theme_declaration_order=PASS')
     print('primary_nav=Home/Printer/Workshop/More')
     print('printer_modes=Status/AMS/Control')
     print('device_css=POLISHED_RESPONSIVE_TOUCH_A11Y')
