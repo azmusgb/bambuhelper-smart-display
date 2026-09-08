@@ -1,89 +1,68 @@
 # Workshop OS v11.25 — Full Device UI Overhaul
 
-Status: **design/implementation candidate only**. This document does not claim physical acceptance.
+## RC3 premium physical-test candidate
 
-## Product intent
+RC3 is the first candidate in this line that treats the WS350 display and the local web portal as one visual product rather than a set of individually improved screens.
 
-v11.25 is the first whole-device visual and interaction pass after the v11.23 Network / Locale / Layout RC2 work. It applies one coherent 480×320 workshop UI system across the primary device experience instead of limiting the redesign to settings flows.
+### Device UI
 
-## Primary navigation
+The 480×320 device keeps the primary information architecture:
 
-The persistent device navigation is:
+`Home · Printer · Workshop · More`
 
-- Home
-- Printer
-- Workshop
-- More
+and Printer modes:
 
-Primary navigation must remain explicit and finger-sized. Routine navigation must never depend on hidden long-press gestures.
+`Status · AMS · Control`
 
-## Visual system
+RC3 applies a coherent premium instrument-panel language across the complete primary path:
 
-- Neutral dark workshop surfaces with restrained depth.
-- Cyan/blue is the ordinary interaction accent.
-- Green is success/ready only.
-- Amber is caution/staged/attention only.
-- Red is destructive/error only.
-- Avoid rainbow-coded cards when color does not carry semantics.
-- Use a consistent header, card, status rail, action-bar and bottom-navigation grammar.
-- Prefer large values, short labels, one-line state explanations and arm's-length legibility.
-- No clipped text, overlapping controls or tiny tertiary metadata on primary screens.
+- compact Workshop identity header with explicit connection/health state;
+- restrained orange interaction accent instead of broad cyan decoration;
+- flatter, tighter cards with clearer edge hierarchy and less ornamental chrome;
+- stronger typography hierarchy between section label, state, value and supporting detail;
+- Home organized as a printer command center plus a separate next-action / material / access rail;
+- Printer Status with a dominant job card and a structured 2×2 live-telemetry matrix;
+- AMS cards that prioritize slot, remaining amount, material and printer-reported color while keeping inventory identity explicitly `Unknown` unless authoritative linkage exists;
+- Printer Control using large guarded action surfaces with destructive Stop visually separated;
+- Workshop centered on timer, note, material path and explicit quick actions;
+- More presented as a small set of high-level destinations instead of a dense settings page;
+- System presents health, audio/events, network and temporary local-access state as distinct operational cards;
+- routine touch targets remain at least 48 px with 52–60 px preferred where geometry permits.
 
-## Touch contract
+The candidate still preserves the durable source-of-truth rule: printer telemetry is not inventory identity. Color/material similarity must never be used to manufacture spool identity or placement.
 
-- 48 px is the hard minimum target dimension for routine controls.
-- Aim for approximately 52–60 px on primary actions where the layout permits.
-- Explicit Back / Next / Cancel controls on staged flows.
-- Long press is reserved for guarded destructive/commit actions such as Stop, power-off during an active print, Apply/Restart and rotation commit.
-- Disabled actions remain visible with a clear unavailable state rather than disappearing.
+## Local portal CSS
 
-## Home
+RC3 also adds a dedicated final CSS layer for the on-device/local portal. It tightens the shell, hierarchy and interaction design without changing API semantics:
 
-Home is a workshop dashboard, not a menu. It should answer at a glance:
+- stronger top bar and navigation hierarchy;
+- clearer selected navigation state;
+- refined dark surfaces and orange interaction accent;
+- larger, more consistent controls and focus states;
+- redesigned Workshop workspace cards, telemetry, progress, material slots and utility dock;
+- responsive behavior for tablet and phone widths;
+- explicit reduced-motion handling;
+- visible keyboard focus treatment.
 
-1. What is the printer doing?
-2. Is anything asking for attention?
-3. What is the most useful next action?
-4. Is there an active timer or note?
+## Temporary physical-test access mode
 
-The default landscape hierarchy is one dominant printer/workshop status hero plus compact attention and utility cards. When the printer is offline or unconfigured, that state is explicit and no device state is invented.
+At the user's request, the RC3 physical-test artifact continues the RC2 temporary station-LAN no-code mode. Normal station-mode LAN browsing does not require the device/boot code during this test build.
 
-## Printer
+This does **not** redefine the stable security policy. The following remain preserved:
 
-Printer uses explicit internal modes:
+- mutating requests retain same-origin protection;
+- AP/setup/recovery routing remains on its existing authorization path;
+- printer command boundaries remain unchanged;
+- recovery remains available.
 
-- STATUS
-- AMS
-- CONTROL
-
-STATUS prioritizes current job, progress, remaining time, layer and temperatures. AMS shows printer telemetry only; telemetry must not be presented as authoritative Filament Inventory spool identity. CONTROL groups light, pause/resume, guarded stop and mapped power actions using the existing safety boundaries.
-
-Where inventory integration has not authoritatively linked a physical spool, the device must say `Inventory spool: Unknown` rather than infer identity from color/material.
-
-## Workshop
-
-Workshop is the fast physical workbench surface: timers, note, quick attention items and safe shortcuts. It should not become another settings page.
-
-## More
-
-More is the launcher for secondary tools and device configuration. Keep the top-level choices shallow and contextual. System, Display, Tools and Custom remain reachable without crowding the primary navigation.
-
-## State vocabulary
-
-Physical and inventory-facing UI should consistently distinguish:
-
-- Known
-- Estimated
-- Stale
-- Conflicting
-- Unknown
-
-Unknown values remain unknown. Visual similarity is never enough to claim spool identity, owner, quantity or AMS placement.
+The temporary bypass is marked with `WORKSHOP_OS_TEMP_NO_CODE_LAN` and blocks promotion. Before any accepted/stable release, it must be removed and the secure candidate must be rebuilt and retested.
 
 ## Release discipline
 
-The implementation state progression remains:
+RC1 was rejected for insufficient visual delta. RC2 established the stronger visual reset. RC3 is the premium polish pass requested after physical review.
+
+Release states remain distinct:
 
 `implemented -> built -> tested -> runtime validated -> production validated -> physically validated -> accepted -> stable`
 
-v11.25 must not be merged/promoted as stable solely because CI or native builds pass. The WS350 physical acceptance pass must cover every changed primary screen and all guarded control paths.
+A green CI build is not physical acceptance. Do not merge/promote this draft candidate until the actual WS350 passes physical UX and control acceptance, and do not promote any artifact while the temporary no-code marker is enabled.
