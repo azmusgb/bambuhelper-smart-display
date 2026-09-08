@@ -28,6 +28,8 @@ ALLOWED_WORKFLOWS = {
     "firmware-candidate.yml",
     "release-gate.yml",
     "release-main.yml",
+    "ui-overhaul-source-snapshot.yml",
+    "ui-overhaul-v11-25.yml",
     "validate.yml",
 }
 REQUIRED = [
