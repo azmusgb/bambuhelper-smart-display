@@ -1,4 +1,4 @@
-name: Workshop OS Firmware Gate — v11.25 Full Device UI Overhaul RC2
+name: Workshop OS Firmware Gate — v11.25 Full Device UI Overhaul RC3
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Build and validate v11.25 RC2 visual delta + temporary no-code LAN
+    name: Build and validate v11.25 RC3 premium UI/UX + CSS + temporary no-code LAN
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -36,8 +36,11 @@ jobs:
           python -m py_compile apply_workshop_os_ui_overhaul_v11_25.py
           python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc2.py
           python -m py_compile apply_workshop_os_temp_no_code_v11_25.py
+          python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc3.py
           python -m py_compile scripts/validate_ui_overhaul_v11_25.py
           python -m py_compile scripts/validate_ui_overhaul_v11_25_rc2.py
+          python -m py_compile scripts/validate_ui_overhaul_v11_25_rc3.py
+          test -s assets/v11_25_rc3_portal_polish.css
           test -s firmware/ui-v11.25/shared.cppfrag
           test -s firmware/ui-v11.25/home_printer.cppfrag
           test -s firmware/ui-v11.25/workshop_more_system.cppfrag
@@ -108,14 +111,17 @@ jobs:
           print('Secure pre-bypass boundary: PASS')
           PY
 
-      - name: Apply RC2 physical-feedback visual delta
+      - name: Apply RC2 physical-feedback visual reset
         run: python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
 
       - name: Temporarily disable station-LAN device code
         run: python apply_workshop_os_temp_no_code_v11_25.py --repo upstream --apply
 
-      - name: Validate RC2 visual and temporary-access contracts
-        run: python scripts/validate_ui_overhaul_v11_25_rc2.py upstream
+      - name: Apply RC3 premium UI/UX and portal CSS polish
+        run: python apply_workshop_os_ui_overhaul_v11_25_rc3.py --repo upstream --apply
+
+      - name: Validate RC3 device and portal contracts
+        run: python scripts/validate_ui_overhaul_v11_25_rc3.py upstream
 
       - name: Validate browser JavaScript
         run: node --check upstream/web/app.js
@@ -123,7 +129,7 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
 
-      - name: Build WS350 v11.25 RC2
+      - name: Build WS350 v11.25 RC3
         working-directory: upstream
         run: pio run -e ws_lcd_350
 
@@ -135,7 +141,7 @@ jobs:
         working-directory: upstream
         run: python merge_bins.py --board ws_lcd_350 --full
 
-      - name: Package v11.25 RC2 physical-test artifacts
+      - name: Package v11.25 RC3 physical-test artifacts
         shell: bash
         env:
           CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -143,24 +149,26 @@ jobs:
           set -euo pipefail
           FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
           APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
-          mkdir -p firmware-gate-artifacts/docs firmware-gate-artifacts/tools
-          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC2-Test-No-Code-Full.bin
-          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC2-Test-No-Code-OTA.bin
+          mkdir -p firmware-gate-artifacts/docs firmware-gate-artifacts/tools firmware-gate-artifacts/portal
+          cp "$FULL" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC3-Premium-Test-No-Code-Full.bin
+          cp "$APP" firmware-gate-artifacts/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-Full-Device-UI-Overhaul-RC3-Premium-Test-No-Code-OTA.bin
           cp "$APP" firmware-gate-artifacts/WaveshareHome-firmware.bin
           cp docs/WORKSHOP_OS_V11_25_UI_OVERHAUL.md firmware-gate-artifacts/docs/
           cp docs/PHYSICAL_ACCEPTANCE_V11_25_UI_OVERHAUL.md firmware-gate-artifacts/docs/
           cp docs/UI_OVERHAUL_STATE_MODEL.md firmware-gate-artifacts/docs/
-          cp scripts/validate_ui_overhaul_v11_25.py firmware-gate-artifacts/tools/
-          cp scripts/validate_ui_overhaul_v11_25_rc2.py firmware-gate-artifacts/tools/
-          cp apply_workshop_os_ui_overhaul_v11_25_rc2.py firmware-gate-artifacts/tools/
+          cp scripts/validate_ui_overhaul_v11_25_rc3.py firmware-gate-artifacts/tools/
+          cp apply_workshop_os_ui_overhaul_v11_25_rc3.py firmware-gate-artifacts/tools/
           cp apply_workshop_os_temp_no_code_v11_25.py firmware-gate-artifacts/tools/
+          cp assets/v11_25_rc3_portal_polish.css firmware-gate-artifacts/portal/
           {
-            echo 'Workshop OS v11.25 Full Device UI Overhaul RC2 — physical-test build'
+            echo 'Workshop OS v11.25 Full Device UI Overhaul RC3 — premium physical-test build'
             echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
             echo 'source_line=CANDIDATE_STACKED_ON_V11_23_RC2'
             echo 'rc1_physical_result=REJECTED_VISUAL_DELTA_INSUFFICIENT'
+            echo 'rc2_result=SUPERSEDED_BY_PREMIUM_POLISH_PASS'
             echo 'physical_acceptance=REQUIRED'
-            echo 'visual_delta=ORANGE_INDUSTRIAL_FLAT_COMMAND_CENTER'
+            echo 'device_ui=PREMIUM_ORANGE_INSTRUMENT_PANEL'
+            echo 'portal_css=POLISHED_RESPONSIVE_ACCESSIBLE'
             echo 'primary_nav=HOME_PRINTER_WORKSHOP_MORE'
             echo 'printer_modes=STATUS_AMS_CONTROL'
             echo 'routine_touch_floor=48PX'
@@ -181,7 +189,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-25-full-device-ui-overhaul-rc2-test-no-code
+          name: workshop-os-v11-25-full-device-ui-overhaul-rc3-premium-test-no-code
           retention-days: 14
           if-no-files-found: error
           path: firmware-gate-artifacts/
