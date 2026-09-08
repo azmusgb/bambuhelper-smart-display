@@ -1,0 +1,40 @@
+name: Workshop OS UI Gate — v11.25 RC7 Touch-First UX
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workshop-os-v11-25-ui-rc7-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contracts:
+    name: Validate RC7 UX source contracts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile patch and validator
+        run: |
+          set -euo pipefail
+          python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc7.py
+          python -m py_compile scripts/validate_ui_overhaul_v11_25_rc7.py
+      - name: Validate UI7 fragments, security visibility and portal accessibility
+        run: python scripts/validate_ui_overhaul_v11_25_rc7.py .
+      - name: Verify source package
+        run: |
+          set -euo pipefail
+          test -s firmware/ui-v11.25-rc7/shared.cppfrag
+          test -s firmware/ui-v11.25-rc7/home.cppfrag
+          test -s firmware/ui-v11.25-rc7/printer.cppfrag
+          test -s firmware/ui-v11.25-rc7/workshop.cppfrag
+          test -s firmware/ui-v11.25-rc7/more_system.cppfrag
+          test -s assets/v11_25_rc7_portal.css
+          test -s docs/UX_UI_V11_25_RC7.md
