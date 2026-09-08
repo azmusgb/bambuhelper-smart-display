@@ -92,10 +92,12 @@ jobs:
           assert 'Workshop OS v11.25 RC7 Touch-First UX Overhaul' in css
           assert 'return cookieMatches(server);' in security
           assert 'if (mutating && !sameOrigin(server))' in security
-          assert '_profileCaps.hasDualNozzle' not in app
-          assert '!!(_profileCaps && _profileCaps.hasDualNozzle)' in app
-          assert 'HH_WIDGET_IDS.slice()' not in app
-          assert '(Array.isArray(HH_WIDGET_IDS) ? HH_WIDGET_IDS : []).slice()' in app
+          profile_guard='!!(_profileCaps && _profileCaps.hasDualNozzle)'
+          widget_guard='(Array.isArray(HH_WIDGET_IDS) ? HH_WIDGET_IDS : []).slice()'
+          assert profile_guard in app
+          assert '_profileCaps.hasDualNozzle' not in app.replace(profile_guard,'')
+          assert widget_guard in app
+          assert 'HH_WIDGET_IDS.slice()' not in app.replace(widget_guard,'')
           assert "pattern='[A-HJ-NP-Z2-9]{10}'" not in web
           assert "pattern='[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}'" in web
           for forbidden in ['matchSpoolByColor','matchSpoolByMaterial','resolveSpool']:
