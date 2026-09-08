@@ -1,99 +1,94 @@
-# Workshop OS v11.25 — Full Device UI Overhaul Physical Acceptance
+# Workshop OS v11.25 RC3 — Physical Acceptance
 
-This checklist is the hardware gate for v11.25. Automated build/test success does not satisfy this checklist.
+This checklist applies to the premium RC3 physical-test candidate. Automated build/test evidence does not satisfy this gate.
 
-## Device identity
+## Immediate visual acceptance
 
-Record:
+On first boot, verify that RC3 is unmistakably different from the previously rejected RC1 treatment:
 
-- candidate commit SHA
-- full-image SHA-256
-- OTA-image SHA-256
-- flashed image type and offset
-- WS350 hardware identity
-- date/time of test
-
-## Primary-screen visual pass
-
-Inspect Home, Printer Status, Printer AMS, Printer Control, Workshop and More on the physical 480×320 display.
-
-For every screen verify:
-
-- no clipped or overlapping text
-- no controls touching the display edge
-- title/value hierarchy is readable at arm's length
-- neutral surfaces dominate; semantic color is not decorative
-- selected, disabled, loading, offline, warning and destructive states are visually distinct
-- minimum routine touch target is at least 48 px in the reference layout
-- adjacent targets do not activate accidentally
-- important values remain legible under bright workshop lighting
-
-## Navigation
-
-Verify Home / Printer / Workshop / More from every primary screen.
-
-- one tap navigates
-- active destination is obvious
-- no hidden hold gesture is needed
-- Back/Next/Cancel are explicit on staged subflows
+- compact Workshop header and restrained orange accent are visible;
+- Home reads as a command center, not a collection of legacy rounded cards;
+- bottom navigation clearly shows `Home / Printer / Workshop / More` with a strong active state;
+- typography hierarchy is readable at normal viewing distance;
+- no important label/value is clipped at 480×320;
+- no primary surface appears visually crowded or ambiguous.
 
 ## Home
 
-Verify at minimum:
+- printer state and printer name are obvious;
+- active job, progress and time/layer summary are readable when printing;
+- next action is visually separate from printer state;
+- material data is clearly printer telemetry and does not imply inventory identity;
+- temporary local access state reads `OPEN / TEST` in this test artifact;
+- touch zones map to the visible surfaces.
 
-- unconfigured printer state
-- configured but offline state
-- connected idle state
-- active print state
-- paused state
-- active timer state
-- completed timer/attention state
-- note present / note absent
+## Printer
 
-No unobserved physical or inventory state may be fabricated.
+### Status
+- `Status / AMS / Control` segmented navigation is obvious and finger-sized;
+- job card and live telemetry are visually distinct;
+- nozzle, bed, chamber and fan metrics are readable without hunting;
+- disconnected/paused/error states remain clear.
 
-## Printer — Status / AMS / Control
+### AMS
+- all four visible slots fit cleanly;
+- active slot is distinguishable without relying on color alone;
+- material/color/remain are readable;
+- `Inventory ID: Unknown` is explicit when no authoritative inventory link exists;
+- no spool identity is inferred from printer color/material.
 
-Verify:
+### Control
+- Light, Pause/Resume, Printer Power and Stop are obvious;
+- disabled controls look disabled;
+- Stop still requires deliberate hold and displays hold progress;
+- mapped power remains separately guarded;
+- no routine navigation requires hidden long-press behavior.
 
-- STATUS, AMS and CONTROL mode switching
-- job title, progress, time remaining, layer and temperature layout
-- unknown or unreported values do not render as fake percentages or identities
-- AMS telemetry does not claim Filament Inventory spool identity unless linked by authoritative inventory data
-- where no authoritative inventory link exists, `Inventory spool: Unknown` is visible when identity context is shown
-- chamber light toggle
-- Pause -> Resume
-- guarded Stop: tap alone does not stop; intended hold path provides feedback and stops only after guard completion
-- disabled controls when offline/idle are visibly unavailable
-- mapped smart-plug power state, if configured
-- active-print power-off warning/guard, if power control is configured
+## Workshop / More / System
 
-## Workshop
+- Workshop timer, note and material path are easy to scan;
+- Workshop quick actions are at least 48 px and reliably tappable;
+- More exposes only high-level destinations and avoids dense settings presentation;
+- System health, audio/events, network and access status are visually separated;
+- speaker test, mic echo and events controls still work;
+- recovery status remains visible.
 
-Verify timer creation/use, timer completion, note visibility and all quick shortcuts. Confirm Workshop remains a workbench surface rather than a dense settings menu.
+## Portal CSS / browser UX
 
-## More / Settings
+From a phone and a desktop browser on the local network:
 
-Verify Custom, System, Display and Tools entry points. Re-run the v11.23 Network / Locale / Layout acceptance paths to ensure the full-device overhaul did not regress:
+- portal shell, top bar and navigation render correctly;
+- selected navigation state is obvious;
+- buttons and form controls have large consistent hit areas;
+- Workshop status/progress/material cards read clearly;
+- responsive layout does not overflow at narrow widths;
+- focus-visible treatment is present with keyboard navigation;
+- reduced-motion preference does not rely on animation for state communication.
 
-- timezone selection
-- DHCP/static staging
-- IPv4 editing
-- Review / Discard / guarded Apply + Restart
-- display rotation preview / guarded commit
-- authenticated portal/session boundary
+## Temporary no-code test boundary
 
-## Reliability and recovery
+For this RC3 physical-test build only:
 
-Verify:
+- station-mode portal opens without entering the boot/device code;
+- mutating actions still obey same-origin protection;
+- AP/setup/recovery behavior remains available;
+- the UI clearly indicates this is an open/test access state.
 
-- settings survive reboot
-- Wi-Fi reconnect
-- printer configuration survives reboot
-- OTA upgrade path from compatible Workshop OS
-- approved full-image recovery at `0x0`
-- known-good rollback artifact/procedure remains available
+**Promotion blocker:** `WORKSHOP_OS_TEMP_NO_CODE_LAN` must be removed and the secure candidate rebuilt/retested before acceptance or stable promotion.
 
-## Exit gate
+## Required control and recovery regression
 
-Do not mark v11.25 physically validated, accepted or stable until every applicable item above passes on the real WS350 and the candidate SHA/artifact hashes are recorded.
+- chamber light ON/OFF;
+- Pause -> Resume;
+- guarded Stop;
+- mapped smart-plug power ON/OFF and active-print warning;
+- timers/tools;
+- settings survive reboot;
+- Wi-Fi reconnect;
+- printer configuration survives reboot;
+- OTA from a compatible Workshop OS line;
+- approved recovery/full-image path remains functional.
+
+## Acceptance record
+
+Record exact candidate SHA, firmware artifact hash, flash method, device result, any defects, and final disposition. Do not mark `physically validated`, `accepted`, or `stable` until the corresponding real-device checks pass.
