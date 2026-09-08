@@ -34,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc7.py
+          python -m py_compile apply_workshop_os_portal_runtime_hotfix_v11_25_rc7.py
           python -m py_compile scripts/validate_ui_overhaul_v11_25_rc7.py
           python scripts/validate_ui_overhaul_v11_25_rc7.py .
 
@@ -66,6 +67,9 @@ jobs:
       - name: Apply RC7 touch-first presentation authority
         run: python apply_workshop_os_ui_overhaul_v11_25_rc7.py --repo upstream --apply
 
+      - name: Apply RC7 portal runtime hotfix
+        run: python apply_workshop_os_portal_runtime_hotfix_v11_25_rc7.py --repo upstream --apply
+
       - name: Validate generated RC7 source and inherited security boundary
         run: |
           set -euo pipefail
@@ -74,6 +78,8 @@ jobs:
           hub=Path('upstream/src/smart_hub.cpp').read_text()
           build=Path('upstream/include/smart_home_build.h').read_text()
           css=Path('upstream/web/app.css').read_text()
+          app=Path('upstream/web/app.js').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
           security=Path('upstream/src/security_manager.cpp').read_text()
           assert 'Workshop OS v11.25 RC7 Touch-First UX Overhaul' in build
           assert 'WORKSHOP_OS_UI_SCHEMA "UI7"' in build
@@ -86,9 +92,15 @@ jobs:
           assert 'Workshop OS v11.25 RC7 Touch-First UX Overhaul' in css
           assert 'return cookieMatches(server);' in security
           assert 'if (mutating && !sameOrigin(server))' in security
+          assert '_profileCaps.hasDualNozzle' not in app
+          assert '!!(_profileCaps && _profileCaps.hasDualNozzle)' in app
+          assert 'HH_WIDGET_IDS.slice()' not in app
+          assert '(Array.isArray(HH_WIDGET_IDS) ? HH_WIDGET_IDS : []).slice()' in app
+          assert "pattern='[A-HJ-NP-Z2-9]{10}'" not in web
+          assert "pattern='[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}'" in web
           for forbidden in ['matchSpoolByColor','matchSpoolByMaterial','resolveSpool']:
               assert forbidden not in hub, forbidden
-          print('Generated RC7 + inherited safety boundary: PASS')
+          print('Generated RC7 + portal runtime + inherited safety boundary: PASS')
           PY
           node --check upstream/web/app.js
 
@@ -120,8 +132,10 @@ jobs:
           cp "$FULL" "$OUT/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-RC7-Touch-First-UX-Full.bin"
           cp "$APP" "$OUT/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-RC7-Touch-First-UX-OTA.bin"
           cp upstream/src/smart_hub.cpp "$OUT/generated-source/src/"
+          cp upstream/src/web_server.cpp "$OUT/generated-source/src/"
           cp upstream/include/smart_home_build.h "$OUT/generated-source/include/"
           cp upstream/web/app.css "$OUT/generated-source/web/"
+          cp upstream/web/app.js "$OUT/generated-source/web/"
           cp firmware/ui-v11.25-rc7/*.cppfrag "$OUT/ui-source/"
           cp docs/UX_UI_V11_25_RC7.md "$OUT/docs/"
           {
@@ -131,6 +145,8 @@ jobs:
             echo 'runtime_fingerprints=UI7-H_UI7-P_UI7-W_UI7-M_UI7-S'
             echo 'portal_code_auth=PRESERVED'
             echo 'same_origin_guard=PRESERVED'
+            echo 'portal_runtime_boot_guards=PASS'
+            echo 'safari_portal_code_pattern=PASS'
             echo 'inventory_identity_inference=FORBIDDEN'
             echo 'ws350_build=PASS'
             echo 'jc3248w535_regression=PASS'
