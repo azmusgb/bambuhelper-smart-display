@@ -1,94 +1,155 @@
-# Workshop OS v11.25 RC3 — Physical Acceptance
+# Workshop OS v11.25 RC4 — Physical Acceptance
 
-This checklist applies to the premium RC3 physical-test candidate. Automated build/test evidence does not satisfy this gate.
+This checklist applies to the RC4 Product Polish physical-test candidate. Automated build/test evidence does **not** satisfy this hardware gate.
+
+## Candidate identity
+
+Before testing, record:
+
+- exact PR head SHA;
+- Full-image SHA-256;
+- OTA-image SHA-256;
+- image actually flashed and flash method;
+- WS350 hardware identity;
+- date/time of test.
+
+For a cross-line migration from Waveshare Home, use the approved **Full image at `0x0`**. OTA is only for a compatible Workshop OS partition layout.
 
 ## Immediate visual acceptance
 
-On first boot, verify that RC3 is unmistakably different from the previously rejected RC1 treatment:
+RC4 must be unmistakably different from the rejected legacy/RC1 treatment:
 
-- compact Workshop header and restrained orange accent are visible;
-- Home reads as a command center, not a collection of legacy rounded cards;
-- bottom navigation clearly shows `Home / Printer / Workshop / More` with a strong active state;
-- typography hierarchy is readable at normal viewing distance;
-- no important label/value is clipped at 480×320;
-- no primary surface appears visually crowded or ambiguous.
+- graphite surfaces with restrained mint interaction accent form one coherent product system;
+- blue/info, green/success, amber/warning and red/destructive states are semantic rather than decorative;
+- Home reads as an operational command center rather than a collection of generic cards;
+- typography clearly separates section label, current state, key value, action and supporting detail;
+- `Home / Printer / Workshop / More` is obvious at a glance;
+- primary information remains legible at normal workshop viewing distance;
+- no clipped, overlapping or edge-crowded content at 480×320;
+- routine controls have clear visible boundaries and reliable finger-sized targets;
+- selected, disabled, offline, warning, destructive and loading states are distinguishable without relying on color alone.
+
+Reject RC4 if it still feels like a reskinned developer dashboard rather than a purpose-built workshop appliance UI.
 
 ## Home
 
-- printer state and printer name are obvious;
-- active job, progress and time/layer summary are readable when printing;
-- next action is visually separate from printer state;
-- material data is clearly printer telemetry and does not imply inventory identity;
-- temporary local access state reads `OPEN / TEST` in this test artifact;
-- touch zones map to the visible surfaces.
+Verify configured and unconfigured states plus idle, active-print, paused and offline conditions.
+
+- printer state and printer name dominate appropriately;
+- active job progress and time/layer summary are readable while printing;
+- material and network are secondary to printer state;
+- Workshop Status/attention is separate from printer telemetry;
+- printer-reported material does not imply Filament Inventory identity;
+- temporary access state is explicitly visible as `NO CODE / TEST BUILD ONLY`;
+- visible Home cards match their touch zones; there are no invisible routine targets.
 
 ## Printer
 
 ### Status
-- `Status / AMS / Control` segmented navigation is obvious and finger-sized;
-- job card and live telemetry are visually distinct;
-- nozzle, bed, chamber and fan metrics are readable without hunting;
-- disconnected/paused/error states remain clear.
+
+- `Status / AMS / Control` segmented navigation is obvious and one-tap;
+- active segment is clear without relying on accent color alone;
+- job/status card and live telemetry are structurally distinct;
+- nozzle, bed, chamber and fan values are easy to scan;
+- disconnected, paused, failed and attention states remain unambiguous;
+- unknown/unreported telemetry never displays as a fabricated value.
 
 ### AMS
-- all four visible slots fit cleanly;
-- active slot is distinguishable without relying on color alone;
-- material/color/remain are readable;
-- `Inventory ID: Unknown` is explicit when no authoritative inventory link exists;
-- no spool identity is inferred from printer color/material.
+
+- four slot surfaces fit without crowding or clipped text;
+- active slot is distinguishable by structure/border, not filament color alone;
+- printer-reported slot, remaining percentage, material and color are readable;
+- `INVENTORY IDENTITY / Unknown` is explicit when no authoritative inventory link exists;
+- the explanatory text makes clear that printer telemetry does not infer spool identity;
+- no physical spool placement is invented from matching color/material.
 
 ### Control
-- Light, Pause/Resume, Printer Power and Stop are obvious;
-- disabled controls look disabled;
-- Stop still requires deliberate hold and displays hold progress;
-- mapped power remains separately guarded;
-- no routine navigation requires hidden long-press behavior.
 
-## Workshop / More / System
+- Light, Pause/Resume, mapped Printer Power and Stop are immediately understandable;
+- enabled and disabled states are visually different;
+- Pause becomes Resume when appropriate;
+- Stop requires deliberate hold, shows hold progress, and cannot fire on a normal tap;
+- mapped printer power retains its existing guard/warning behavior;
+- no routine navigation or ordinary command depends on a hidden hold gesture.
 
-- Workshop timer, note and material path are easy to scan;
-- Workshop quick actions are at least 48 px and reliably tappable;
-- More exposes only high-level destinations and avoids dense settings presentation;
-- System health, audio/events, network and access status are visually separated;
-- speaker test, mic echo and events controls still work;
-- recovery status remains visible.
+## Workshop
 
-## Portal CSS / browser UX
+- timer hierarchy is immediately readable;
+- timer ready/running/done states are distinct;
+- note content is legible without competing with the timer;
+- Material Path preserves `Unknown` inventory identity unless authoritative data exists;
+- Light / Tools / System / Printer actions are reliably tappable;
+- no action is presented as enabled when its underlying capability/state is unavailable.
 
-From a phone and a desktop browser on the local network:
+## More / System
 
-- portal shell, top bar and navigation render correctly;
-- selected navigation state is obvious;
-- buttons and form controls have large consistent hit areas;
-- Workshop status/progress/material cards read clearly;
-- responsive layout does not overflow at narrow widths;
-- focus-visible treatment is present with keyboard navigation;
-- reduced-motion preference does not rely on animation for state communication.
+- More exposes only high-level destinations and avoids a dense settings wall;
+- Custom / System / Display / Tools have clear differentiation;
+- System separates device health, audio, network and temporary access state;
+- Wi-Fi/offline state is readable;
+- speaker test, mic echo and event sound controls work;
+- recovery availability remains visible and functional.
+
+## Existing expert-flow regression
+
+Re-run the v11.23 Network / Locale / Layout acceptance paths:
+
+- explicit Back / Next / Cancel behavior;
+- timezone selection;
+- DHCP/static staging;
+- IPv4 editing;
+- review/discard;
+- guarded Apply + Restart;
+- display rotation preview and guarded commit.
+
+RC4 polish must not reintroduce hidden navigation gestures or reduce touch-target reliability in these inherited flows.
+
+## Portal UI / UX / CSS
+
+Test the local portal on desktop, tablet and phone widths.
+
+- shell, top bar, side navigation and selected state form a clear hierarchy;
+- graphite/mint dark mode is visually coherent and light mode remains fully usable;
+- cards are flatter and quieter than RC3; decorative shadows/gradients do not dominate;
+- forms and buttons are visually consistent;
+- coarse-pointer controls are at least 48 px high where the CSS contract applies;
+- Workshop command center, telemetry, progress and material cards remain readable at narrow widths;
+- keyboard `:focus-visible` treatment is obvious;
+- reduced-motion preference removes nonessential transitions/animation;
+- forced-colors mode preserves visible focus/state boundaries;
+- there is no horizontal overflow or clipped primary content at supported phone widths.
 
 ## Temporary no-code test boundary
 
-For this RC3 physical-test build only:
+For this RC4 physical-test build only:
 
 - station-mode portal opens without entering the boot/device code;
 - mutating actions still obey same-origin protection;
 - AP/setup/recovery behavior remains available;
-- the UI clearly indicates this is an open/test access state.
+- the device and portal make the test-only open-access state visible.
 
-**Promotion blocker:** `WORKSHOP_OS_TEMP_NO_CODE_LAN` must be removed and the secure candidate rebuilt/retested before acceptance or stable promotion.
+**Promotion blocker:** `WORKSHOP_OS_TEMP_NO_CODE_LAN` must be removed and a secure candidate rebuilt and retested before acceptance or stable promotion.
 
-## Required control and recovery regression
+## Control, persistence and recovery regression
+
+Verify on the real device:
 
 - chamber light ON/OFF;
 - Pause -> Resume;
 - guarded Stop;
 - mapped smart-plug power ON/OFF and active-print warning;
 - timers/tools;
+- speaker test;
+- MIC ECHO;
+- event sounds;
+- ambient/standby behavior;
 - settings survive reboot;
 - Wi-Fi reconnect;
 - printer configuration survives reboot;
-- OTA from a compatible Workshop OS line;
-- approved recovery/full-image path remains functional.
+- OTA upgrade from a compatible Workshop OS line;
+- approved full-image recovery path remains functional;
+- known-good rollback procedure/artifact remains available.
 
-## Acceptance record
+## Exit gate
 
-Record exact candidate SHA, firmware artifact hash, flash method, device result, any defects, and final disposition. Do not mark `physically validated`, `accepted`, or `stable` until the corresponding real-device checks pass.
+Do not mark RC4 `physically validated`, `accepted`, or `stable` until all applicable real-device checks pass and the exact candidate SHA/artifact hashes are recorded. Even after the visual/physical UX passes, remove the temporary no-code mode and rebuild/retest the secure candidate before promotion.
