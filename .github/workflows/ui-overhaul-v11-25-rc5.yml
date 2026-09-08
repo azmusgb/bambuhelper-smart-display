@@ -82,8 +82,12 @@ jobs:
           print('Inherited safety + authority boundary: PASS')
           PY
 
-      - name: Apply v11.25 RC1 baseline
-        run: python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
+      - name: Stage base v11.25 fragments and apply RC1 baseline
+        run: |
+          set -euo pipefail
+          mkdir -p upstream/firmware
+          cp -R firmware/ui-v11.25 upstream/firmware/
+          python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
       - name: Apply RC2 physical-feedback reset
         run: python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
       - name: Apply temporary station-LAN no-code test boundary
