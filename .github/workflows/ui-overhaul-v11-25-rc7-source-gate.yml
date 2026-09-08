@@ -2,7 +2,7 @@ name: Workshop OS UI Gate — v11.25 RC7 Touch-First UX
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/v11-25-workshop-ui-overhaul]
   workflow_dispatch:
 
 permissions:
@@ -13,28 +13,134 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  source-contracts:
-    name: Validate RC7 UX source contracts
+  build-and-validate:
+    name: Reconstruct, validate and build RC7
     runs-on: ubuntu-24.04
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
+        name: Checkout Workshop OS repository
+      - uses: actions/checkout@v4
+        name: Checkout pinned BambuHelper baseline
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Compile patch and validator
+
+      - name: Validate RC7 source package
         run: |
           set -euo pipefail
           python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc7.py
           python -m py_compile scripts/validate_ui_overhaul_v11_25_rc7.py
-      - name: Validate UI7 fragments, security visibility and portal accessibility
-        run: python scripts/validate_ui_overhaul_v11_25_rc7.py .
-      - name: Verify source package
+          python scripts/validate_ui_overhaul_v11_25_rc7.py .
+
+      - name: Reconstruct inherited v11.23 RC2 source baseline
         run: |
           set -euo pipefail
-          test -s firmware/ui-v11.25-rc7/shared.cppfrag
-          test -s firmware/ui-v11.25-rc7/home.cppfrag
-          test -s firmware/ui-v11.25-rc7/printer.cppfrag
-          test -s firmware/ui-v11.25-rc7/workshop.cppfrag
-          test -s firmware/ui-v11.25-rc7/more_system.cppfrag
-          test -s assets/v11_25_rc7_portal.css
-          test -s docs/UX_UI_V11_25_RC7.md
+          bash scripts/apply_workshop_os_v11_19.sh upstream
+          python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
+          python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
+          python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
+          python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
+          python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
+
+      - name: Apply v11.25 through secure RC6 baseline
+        run: |
+          set -euo pipefail
+          mkdir -p upstream/firmware
+          cp -R firmware/ui-v11.25 upstream/firmware/
+          python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
+          python apply_workshop_os_temp_no_code_v11_25.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc3.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc4.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc5.py --repo upstream --apply
+          python apply_workshop_os_secure_acceptance_v11_25_rc6.py --repo upstream --apply
+
+      - name: Apply RC7 touch-first presentation authority
+        run: python apply_workshop_os_ui_overhaul_v11_25_rc7.py --repo upstream --apply
+
+      - name: Validate generated RC7 source and inherited security boundary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          css=Path('upstream/web/app.css').read_text()
+          security=Path('upstream/src/security_manager.cpp').read_text()
+          assert 'Workshop OS v11.25 RC7 Touch-First UX Overhaul' in build
+          assert 'WORKSHOP_OS_UI_SCHEMA "UI7"' in build
+          for fp in ['UI7-H','UI7-P','UI7-W','UI7-M','UI7-S']:
+              assert fp in hub, fp
+          assert hub.count('securityPortalCode()') >= 2
+          assert 'TEST / NO CODE' not in hub
+          assert 'HOLD TO APPLY' in hub
+          assert 'HOLD TO STOP' in hub
+          assert 'Workshop OS v11.25 RC7 Touch-First UX Overhaul' in css
+          assert 'return cookieMatches(server);' in security
+          assert 'if (mutating && !sameOrigin(server))' in security
+          for forbidden in ['matchSpoolByColor','matchSpoolByMaterial','resolveSpool']:
+              assert forbidden not in hub, forbidden
+          print('Generated RC7 + inherited safety boundary: PASS')
+          PY
+          node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 RC7
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package RC7 flash artifacts and generated source
+        shell: bash
+        env:
+          CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          OUT='rc7-artifacts'
+          mkdir -p "$OUT/generated-source/src" "$OUT/generated-source/include" "$OUT/generated-source/web" "$OUT/ui-source" "$OUT/docs"
+          cp "$FULL" "$OUT/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-RC7-Touch-First-UX-Full.bin"
+          cp "$APP" "$OUT/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-RC7-Touch-First-UX-OTA.bin"
+          cp upstream/src/smart_hub.cpp "$OUT/generated-source/src/"
+          cp upstream/include/smart_home_build.h "$OUT/generated-source/include/"
+          cp upstream/web/app.css "$OUT/generated-source/web/"
+          cp firmware/ui-v11.25-rc7/*.cppfrag "$OUT/ui-source/"
+          cp docs/UX_UI_V11_25_RC7.md "$OUT/docs/"
+          {
+            echo 'Workshop OS v11.25 RC7 Touch-First UX Overhaul'
+            echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
+            echo 'base=RC6_secure_physical_acceptance'
+            echo 'runtime_fingerprints=UI7-H_UI7-P_UI7-W_UI7-M_UI7-S'
+            echo 'portal_code_auth=PRESERVED'
+            echo 'same_origin_guard=PRESERVED'
+            echo 'inventory_identity_inference=FORBIDDEN'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            echo 'physical_acceptance=REQUIRED'
+            sha256sum "$OUT"/*.bin
+          } | tee "$OUT/validation-report.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workshop-os-v11-25-rc7-touch-first-ux
+          retention-days: 14
+          if-no-files-found: error
+          path: rc7-artifacts/
