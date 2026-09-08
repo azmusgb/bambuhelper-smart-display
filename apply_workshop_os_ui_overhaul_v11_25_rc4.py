@@ -74,15 +74,15 @@ def patch(repo):
     bp.write_text(build,encoding='utf-8')
 
     hp=repo/'src/smart_hub.cpp'; hub=load(hp)
-    # Theme tokens must be declared before any replacement function references them.
+    # Theme tokens must be declared before drawHeader/uiBottomNav and all later RC4 renderers.
     pc=f['PRINTER_COLOR']; fn='static uint16_t hubV1125PrinterColor'
     ix=pc.find(fn)
     if ix<0: raise PatchError('RC4 printer color fragment missing function')
     tokens=pc[:ix].rstrip(); printer_color=pc[ix:]
-    card_sig='static void hubV1125Card('
+    header_sig='static void drawHeader('
     if tokens not in hub:
-        pos=hub.find(card_sig)
-        if pos<0: raise PatchError('RC4 card anchor missing')
+        pos=hub.find(header_sig)
+        if pos<0: raise PatchError('RC4 header anchor missing')
         hub=hub[:pos]+tokens+'\n\n'+hub[pos:]
 
     for sig,key,repl in [
