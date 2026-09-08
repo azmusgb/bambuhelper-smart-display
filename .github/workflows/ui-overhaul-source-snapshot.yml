@@ -38,6 +38,8 @@ jobs:
       - name: Apply v11.25 presentation lineage and final RC5 authority
         run: |
           set -euo pipefail
+          mkdir -p upstream/firmware
+          cp -R firmware/ui-v11.25 upstream/firmware/
           python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
           python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
           python apply_workshop_os_temp_no_code_v11_25.py --repo upstream --apply
