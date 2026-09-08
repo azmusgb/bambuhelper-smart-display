@@ -62,7 +62,7 @@ jobs:
           required=("Validate")
           firmware_required=0
           rc4_required=0
-          rc5_required=0
+          rc6_required=0
           static_required=0
           for f in "${files[@]}"; do
             case "$f" in
@@ -76,8 +76,8 @@ jobs:
                 ;;
             esac
             case "$f" in
-              .github/workflows/ui-overhaul-v11-25-rc5.yml|apply_workshop_os_ui_overhaul_v11_25_rc5.py|assets/v11_25_rc5_portal.css|firmware/ui-v11.25-rc5/*|firmware/ui-v11.25-rc5/**/*|scripts/validate_ui_overhaul_v11_25_rc5.py|scripts/verify_ui_binary_v11_25_rc5.py|scripts/capture-ws350-ui5.zsh|docs/UI_SOURCE_OF_TRUTH_V11_25.md|docs/PHYSICAL_ACCEPTANCE_V11_25_RC5.md)
-                rc5_required=1
+              .github/workflows/ui-overhaul-v11-25-rc5.yml|.github/workflows/ui-overhaul-v11-25-rc6.yml|apply_workshop_os_ui_overhaul_v11_25_rc5.py|apply_workshop_os_secure_acceptance_v11_25_rc6.py|assets/v11_25_rc5_portal.css|firmware/ui-v11.25-rc5/*|firmware/ui-v11.25-rc5/**/*|scripts/validate_ui_overhaul_v11_25_rc5.py|scripts/verify_ui_binary_v11_25_rc5.py|scripts/validate_ui_overhaul_v11_25_rc6.py|scripts/verify_ui_binary_v11_25_rc6.py|scripts/capture-ws350-ui5.zsh|docs/UI_SOURCE_OF_TRUTH_V11_25.md|docs/PHYSICAL_ACCEPTANCE_V11_25_RC5.md|docs/PHYSICAL_ACCEPTANCE_V11_25_RC6.md)
+                rc6_required=1
                 ;;
             esac
             case "$f" in
@@ -92,8 +92,8 @@ jobs:
           if (( rc4_required )); then
             required+=("Workshop OS Firmware Gate — v11.25 Full Device UI Overhaul RC4")
           fi
-          if (( rc5_required )); then
-            required+=("Workshop OS Firmware Gate — v11.25 RC5 Native UI Acceptance")
+          if (( rc6_required )); then
+            required+=("Workshop OS Firmware Gate — v11.25 RC6 Secure Physical Acceptance")
           fi
           if (( static_required )); then
             required+=("Validate accepted static installer")
