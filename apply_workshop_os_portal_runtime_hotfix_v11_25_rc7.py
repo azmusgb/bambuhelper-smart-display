@@ -80,10 +80,23 @@ def patch(repo: Path) -> None:
 
     app = load(repo / "web" / "app.js")
     web = load(repo / "src" / "web_server.cpp")
-    if "_profileCaps.hasDualNozzle" in app:
+
+    profile_guard = "!!(_profileCaps && _profileCaps.hasDualNozzle)"
+    widget_guard = "(Array.isArray(HH_WIDGET_IDS) ? HH_WIDGET_IDS : []).slice()"
+
+    # Verify the guarded forms are present, then remove them before checking that
+    # no raw unsafe reads remain elsewhere. This avoids false positives caused by
+    # the guarded expressions necessarily containing the original property names.
+    if profile_guard not in app:
+        raise PatchError("guarded profile capability expression missing")
+    if "_profileCaps.hasDualNozzle" in app.replace(profile_guard, ""):
         raise PatchError("unguarded _profileCaps.hasDualNozzle remains")
-    if "HH_WIDGET_IDS.slice()" in app:
+
+    if widget_guard not in app:
+        raise PatchError("guarded dashboard widget registry expression missing")
+    if "HH_WIDGET_IDS.slice()" in app.replace(widget_guard, ""):
         raise PatchError("unguarded HH_WIDGET_IDS.slice() remains")
+
     if "[A-HJ-NP-Z2-9]{10}" in web:
         raise PatchError("legacy Safari-sensitive portal-code pattern remains")
     if "[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}" not in web:
