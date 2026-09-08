@@ -1,4 +1,4 @@
-name: Workshop OS v11.25 RC5 Generated Source Snapshot
+name: Workshop OS v11.25 RC6 Generated Source Snapshot
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   snapshot:
-    name: Reconstruct exact RC5 generated source
+    name: Reconstruct exact RC6 generated source
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -35,7 +35,7 @@ jobs:
           python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
           python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
           python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
-      - name: Apply v11.25 presentation lineage and final RC5 authority
+      - name: Apply v11.25 lineage, RC5 UI authority, and RC6 secure overlay
         run: |
           set -euo pipefail
           mkdir -p upstream/firmware
@@ -46,11 +46,12 @@ jobs:
           python apply_workshop_os_ui_overhaul_v11_25_rc3.py --repo upstream --apply
           python apply_workshop_os_ui_overhaul_v11_25_rc4.py --repo upstream --apply
           python apply_workshop_os_ui_overhaul_v11_25_rc5.py --repo upstream --apply
-          python scripts/validate_ui_overhaul_v11_25_rc5.py upstream
-      - name: Package exact generated UI source and hashes
+          python apply_workshop_os_secure_acceptance_v11_25_rc6.py --repo upstream --apply
+          python scripts/validate_ui_overhaul_v11_25_rc6.py upstream
+      - name: Package exact generated source and hashes
         run: |
           set -euo pipefail
-          mkdir -p source-snapshot/src source-snapshot/include source-snapshot/web source-snapshot/ui-authority
+          mkdir -p source-snapshot/src source-snapshot/include source-snapshot/web source-snapshot/ui-authority source-snapshot/secure-overlay
           cp upstream/src/smart_hub.cpp source-snapshot/src/
           cp upstream/src/web_server.cpp source-snapshot/src/
           cp upstream/src/security_manager.cpp source-snapshot/src/
@@ -61,10 +62,13 @@ jobs:
           cp upstream/web/app.css source-snapshot/web/
           cp firmware/ui-v11.25-rc5/*.cppfrag source-snapshot/ui-authority/
           cp assets/v11_25_rc5_portal.css source-snapshot/ui-authority/
+          cp apply_workshop_os_secure_acceptance_v11_25_rc6.py source-snapshot/secure-overlay/
+          cp scripts/validate_ui_overhaul_v11_25_rc6.py source-snapshot/secure-overlay/
           cp docs/UI_SOURCE_OF_TRUTH_V11_25.md source-snapshot/
+          cp docs/PHYSICAL_ACCEPTANCE_V11_25_RC6.md source-snapshot/
           find source-snapshot -type f -print0 | sort -z | xargs -0 sha256sum > source-snapshot/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: workshop-os-v11-25-rc5-generated-source
+          name: workshop-os-v11-25-rc6-generated-source
           retention-days: 7
           path: source-snapshot/
