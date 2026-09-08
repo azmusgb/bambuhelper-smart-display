@@ -63,8 +63,10 @@ jobs:
           cp upstream/web/app.css source-snapshot/web/
           cp firmware/ui-v11.25-rc5/*.cppfrag source-snapshot/ui-authority/
           cp assets/v11_25_rc5_portal.css source-snapshot/ui-authority/
+          cp apply_workshop_os_ui_overhaul_v11_25_rc5.py source-snapshot/secure-overlay/
           cp apply_workshop_os_secure_acceptance_v11_25_rc6.py source-snapshot/secure-overlay/
           cp scripts/validate_ui_overhaul_v11_25_rc6.py source-snapshot/secure-overlay/
+          cp scripts/verify_ui_binary_v11_25_rc6.py source-snapshot/secure-overlay/
           cp docs/UI_SOURCE_OF_TRUTH_V11_25.md source-snapshot/
           cp docs/PHYSICAL_ACCEPTANCE_V11_25_RC6.md source-snapshot/
           find source-snapshot -type f -print0 | sort -z | xargs -0 sha256sum > source-snapshot/SHA256SUMS.txt
