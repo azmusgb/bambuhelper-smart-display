@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Verify the RC6 secure acceptance binary and retained RC5 UI5 assets."""
+"""Verify the RC6 secure acceptance binary and retained RC5 UI5 assets.
+
+Runtime-relevant strings are verified in compiled bytes. Compile-time-only
+security guards are intentionally verified by the source contract validator,
+because a successful preprocessor guard is absent from the resulting binary.
+"""
 from __future__ import annotations
 
 import argparse
@@ -68,7 +73,6 @@ def main() -> int:
         "Stop requires hold", "DEVICE HEALTH", "PORTAL CODE",
         "Workshop OS Secure Sign In", "Secure LAN access", "Sign in securely",
         "portal-code", "stationConnected", "stationIp", "softApIp",
-        "RC6 secure physical acceptance forbids WORKSHOP_OS_TEMP_NO_CODE_LAN",
     ]
     for marker in native_markers:
         require_bytes(app, marker)
@@ -92,6 +96,7 @@ def main() -> int:
         "full": {"path": full_path.name, "bytes": len(full), "sha256": sha256(full),
                  "app_offset": APP_OFFSET, "exact_app_embedding": True},
         "native_markers": native_markers,
+        "source_only_guards": ["RC6 secure physical acceptance forbids WORKSHOP_OS_TEMP_NO_CODE_LAN"],
         "forbidden_markers_absent": ["TEST / NO CODE", "physical-test no-code build requires"],
         "gzip_members": [{"offset": int(m["offset"]), "compressed_bytes": int(m["compressed_bytes"]),
                           "plain_bytes": int(m["plain_bytes"]), "sha256": str(m["sha256"])} for m in members],
@@ -104,7 +109,8 @@ def main() -> int:
     print("RC6 secure compiled binary verification: PASS")
     print("full_contains_exact_app_at_0x10000=PASS")
     print(f"secure_runtime_markers={len(native_markers)}_PASS")
-    print("temp_no_code_markers=ABSENT")
+    print("compile_time_no_code_guard=SOURCE_VALIDATED")
+    print("temp_no_code_runtime_markers=ABSENT")
     print("embedded_rc5_css=EXACT_BYTE_MATCH")
     print(f"app_sha256={report['app']['sha256']}")
     print(f"full_sha256={report['full']['sha256']}")
