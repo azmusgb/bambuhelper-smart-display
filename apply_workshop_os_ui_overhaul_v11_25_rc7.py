@@ -134,12 +134,16 @@ def patch(repo: Path) -> None:
         ("static void drawMore(bool full) {","MORE"),("static void drawSystem(bool full) {","SYSTEM")]:
         hub=replace_block(hub,signature,f[key],key)
     hub=normalize_settings_copy(hub)
-    # RC6 security guarantee: the System screen must still expose the boot-scoped portal code.
     if hub.count("securityPortalCode()")<2: raise PatchError("RC7 lost secure portal-code visibility")
     if "TEST / NO CODE" in hub: raise PatchError("RC7 reintroduced insecure no-code copy")
     for forbidden in ("matchSpoolByColor","matchSpoolByMaterial","resolveSpool"):
         if forbidden in hub: raise PatchError(f"forbidden firmware inventory inference present: {forbidden}")
     hub_path.write_text(hub,encoding="utf-8")
+
+    css_path=repo/"web"/"app.css"; css=load(css_path); layer=load(source_root/"assets"/"v11_25_rc7_portal.css")
+    marker="Workshop OS v11.25 RC7 Touch-First UX Overhaul"
+    if marker not in css: css+="\n\n"+layer.rstrip()+"\n"
+    css_path.write_text(css,encoding="utf-8")
     print("Workshop OS v11.25 RC7 Touch-First UX Overhaul applied")
 
 
