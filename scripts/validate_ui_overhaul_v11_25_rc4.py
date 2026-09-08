@@ -26,8 +26,27 @@ def main():
         if count!=1: raise AssertionError(f'{fn}: expected 1 definition, found {count}')
     for n in ['resolveSpool','matchSpoolByColor','matchSpoolByMaterial']:
         forbid(hub,n,'firmware-side inventory identity inference')
-    require(security,'if (!isAPMode()) return true;','temporary station-LAN no-code mode')
-    require(security,'if (mutating && !sameOrigin(server))','same-origin mutating-request guard')
+
+    # The test marker must be visible in the security translation unit. v11.20
+    # deliberately removed this include, so merely defining the marker in the
+    # build header is not enough.
+    require(security,'#include "smart_home_build.h"','temporary no-code compile visibility')
+    require(security,'#error "v11.25 physical-test no-code build requires WORKSHOP_OS_TEMP_NO_CODE_LAN=1"','temporary no-code compile guard')
+    if security.count('WORKSHOP_OS_TEMP_NO_CODE_LAN') < 4:
+        raise AssertionError('temporary no-code marker must guard both session validation and route authorization')
+
+    # /login uses securitySessionValid(), while protected routes use
+    # securityAuthorize() directly. Both paths must bypass the boot code on STA.
+    require(security,'if (!isAPMode()) return true;','temporary station-LAN session bypass')
+    require(security,'TEMPORARY physical-test mode: station-LAN authentication is bypassed','temporary station-LAN authorization bypass')
+    auth_pos=security.find('bool securityAuthorize(WebServer& server, bool mutating)')
+    bypass_pos=security.find('TEMPORARY physical-test mode: station-LAN authentication is bypassed',auth_pos)
+    ap_pos=security.find('if (apPublicRouteAllowed(server))',auth_pos)
+    if auth_pos<0 or bypass_pos<auth_pos or ap_pos<bypass_pos:
+        raise AssertionError('station-LAN no-code bypass must execute inside securityAuthorize before AP/public-route handling')
+    if security.count('if (mutating && !sameOrigin(server))') < 2:
+        raise AssertionError('same-origin guard must remain in both temporary STA bypass and normal authorization paths')
+
     for n in ['Workshop OS v11.25 RC4 Product Polish','--accent:#22b8a9','--bg:#0f141a','.wk116-printer','.wk116-control','@media (pointer:coarse)','min-height:48px','@media(prefers-reduced-motion:reduce)','@media(forced-colors:active)']:
         require(css,n,'RC4 device CSS')
     if css.rfind('Workshop OS v11.25 RC4 Product Polish') < css.rfind('Workshop OS v11.25 RC3 — premium portal polish'):
@@ -38,6 +57,9 @@ def main():
     print('primary_nav=Home/Printer/Workshop/More')
     print('printer_modes=Status/AMS/Control')
     print('device_css=POLISHED_RESPONSIVE_TOUCH_A11Y')
+    print('station_lan_session_bypass=VALIDATED')
+    print('station_lan_route_authorization_bypass=VALIDATED')
+    print('same_origin_mutation_guard=PRESERVED')
     print('station_lan_device_code=TEMPORARILY_DISABLED_TEST_ONLY')
     print('inventory_identity_inference=FORBIDDEN')
     return 0
