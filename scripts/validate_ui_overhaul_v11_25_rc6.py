@@ -28,6 +28,12 @@ def main() -> int:
     security = (root / "src" / "security_manager.cpp").read_text(encoding="utf-8")
     web = (root / "src" / "web_server.cpp").read_text(encoding="utf-8")
     css = (root / "web" / "app.css").read_text(encoding="utf-8")
+    settings_bytes = (root / "src" / "settings.cpp").read_bytes()
+
+    if b"\x00" in settings_bytes:
+        raise AssertionError("settings.cpp contains an embedded NUL byte; reconstructed source must be warning-clean")
+    settings = settings_bytes.decode("utf-8")
+    require(settings, "'\\0'", "escaped C++ NUL character literal")
 
     for needle in (
         'SMART_HOME_VERSION "v11.25"',
@@ -127,6 +133,7 @@ def main() -> int:
     print("mutating_same_origin_guard=PRESERVED")
     print("temp_no_code=FORBIDDEN")
     print("runtime_auth_observability=EXPLICIT")
+    print("generated_settings_source=NUL_FREE_WARNING_CLEAN")
     return 0
 
 
