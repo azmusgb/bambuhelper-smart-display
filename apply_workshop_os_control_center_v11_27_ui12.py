@@ -136,6 +136,22 @@ def inject_system_navigation(hub: str) -> str:
     return hub[:insert] + code + hub[insert:]
 
 
+def inject_capture_state(hub: str, marker: str, label: str) -> str:
+    """Reset UI12 nested System state without depending on legacy formatting."""
+    start = hub.find(marker)
+    if start < 0 or hub.find(marker, start + 1) >= 0:
+        raise PatchError(f"{label}: marker missing/non-unique: {marker}")
+    end = block_end(hub, start)
+    block = hub[start:end]
+    state = "g_ui12SystemView = 0;"
+    if state in block:
+        return hub
+    brace = hub.find("{", start, end)
+    if brace < 0:
+        raise PatchError(f"{label}: opening brace missing")
+    return hub[:brace + 1] + "\n    " + state + hub[brace + 1:]
+
+
 def patch_capture_contract(repo: Path, hub: str) -> str:
     """Make the physical framebuffer capture surface deterministic for UI12.
 
@@ -144,37 +160,19 @@ def patch_capture_contract(repo: Path, hub: str) -> str:
     catalog advertises the one credential-bearing view so retention tooling can
     redact it before writing any PPM/PNG evidence.
     """
-    hub = once(
+    hub = inject_capture_state(
         hub,
-        '''  if (strcmp(pageName, "system") == 0) {
-    setPage(SCREEN_HUB_SYSTEM);
-    g_networkSettingsView = false;''',
-        '''  if (strcmp(pageName, "system") == 0) {
-    setPage(SCREEN_HUB_SYSTEM);
-    g_ui12SystemView = 0;
-    g_networkSettingsView = false;''',
+        'if (strcmp(pageName, "system") == 0)',
         "UI12 deterministic system capture",
     )
-    hub = once(
+    hub = inject_capture_state(
         hub,
-        '''  if (strcmp(pageName, "system-network") == 0) {
-    setPage(SCREEN_HUB_SYSTEM);
-    g_audioSettingsView = false;''',
-        '''  if (strcmp(pageName, "system-network") == 0) {
-    setPage(SCREEN_HUB_SYSTEM);
-    g_ui12SystemView = 0;
-    g_audioSettingsView = false;''',
+        'if (strcmp(pageName, "system-network") == 0)',
         "UI12 deterministic system-network capture",
     )
-    hub = once(
+    hub = inject_capture_state(
         hub,
-        '''    if (strcmp(pageName, kHardwarePages[i]) == 0) {
-      setPage(SCREEN_HUB_SYSTEM);
-      g_networkSettingsView = false;''',
-        '''    if (strcmp(pageName, kHardwarePages[i]) == 0) {
-      setPage(SCREEN_HUB_SYSTEM);
-      g_ui12SystemView = 0;
-      g_networkSettingsView = false;''',
+        'if (strcmp(pageName, kHardwarePages[i]) == 0)',
         "UI12 deterministic hardware capture",
     )
 
