@@ -26,7 +26,9 @@ UI12 uses five touch-first destinations:
 - **Software Update** — current-build/update-policy presentation only. UI12 does not pretend an on-device installer exists.
 - **System** — health, diagnostics/recovery status, version, and Local Portal handoff.
 
-The primary System screen no longer displays the portal access code.
+The primary System screen does **not** display the portal access code. A visible **Local Portal** action opens a deliberate authenticated-administration subview showing the device's local address and the rotating reboot-scoped access code. This preserves portal usability without exposing credentials on the normal System status surface.
+
+The portal-code presentation is not the authentication authority. Session validation and same-origin mutation enforcement remain in the security layer.
 
 ## Update boundary
 
@@ -41,6 +43,7 @@ Ordinary update UI must not expose Full-image flashing or `0x0` recovery mechani
 - Seven-page guarded network workflow.
 - Guarded destructive printer actions and hold-progress behavior.
 - Portal authentication and same-origin mutation checks.
+- Portal access code visible only in the deliberate Local Portal subview, not the primary System screen.
 - Explicit Unknown inventory identity; no spool inference from printer color/material telemetry.
 - Recovery boundary and stable-release discipline.
 
