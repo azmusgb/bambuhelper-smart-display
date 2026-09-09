@@ -181,7 +181,7 @@ def patch(repo: Path) -> None:
         "UI10-S",
         "C10_ACCENT",
         "Settings",
-        "Printer material",
+        "AMS telemetry - inventory identity remains explicit",
         "Local Access",
     ):
         if marker not in hub:
