@@ -70,8 +70,10 @@ def main() -> int:
         'static const char* labels[4]={"Home","Printer","Tools","Settings"};',
         'drawHeader("Tools",nullptr,2);',
         "hubUi12SettingsRect", "drawUi12Experience", "drawUi12PrinterConnection", "drawUi12SoftwareUpdate",
+        "drawUi12PortalAccess", "hubUi12SystemPortalRect", "g_ui12SystemView",
         '"Experience"', '"Network"', '"Printer Connection"', '"Software Update"', '"System"',
         "for(uint8_t i=0;i<5;i++)if(hubUi12SettingsRect(i).contains(x,y))",
+        "hubUi12SystemPortalRect().contains(x,y)",
         "static const uint8_t HUB_NETWORK_PAGE_COUNT = 7;",
         "Hold to Apply", "Hold to Stop",
         "UI12-H", "UI12-P", "UI12-T", "UI12-M", "UI12-S",
@@ -81,7 +83,13 @@ def main() -> int:
     system = function(hub, "static void drawSystem(bool full) {")
     if "securityPortalCode()" in system:
         raise SystemExit("primary System screen must not expose portal code")
-    need(system, "Advanced diagnostics: authenticated Local Portal", "administration handoff")
+    if "Local Portal" in system and "hubUi12SystemPortalRect" not in system:
+        raise SystemExit("System Local Portal affordance is not explicit/touchable")
+
+    portal = function(hub, "static void drawUi12PortalAccess() {")
+    need(portal, "securityPortalCode()", "deliberate portal access code")
+    need(portal, "Code changes after every reboot", "portal-code lifecycle")
+    need(portal, "Authenticated Administration", "portal purpose")
 
     update = function(hub, "static void drawUi12SoftwareUpdate() {")
     for forbidden in ("Full", "0x0", "Install Now", "Download & Install"):
@@ -90,8 +98,8 @@ def main() -> int:
     need(update, "On-device installation is not enabled in this build", "honest update capability")
 
     # Authentication authority is security_manager.cpp, not a presentation helper
-    # in smart_hub.cpp. UI12 intentionally removes portal-code presentation from
-    # the primary System screen while preserving fail-closed session/origin checks.
+    # in smart_hub.cpp. UI12 moves code visibility behind a deliberate Local Portal
+    # subview while preserving fail-closed session/origin checks.
     for marker in ("return cookieMatches(server);", "if (mutating && !sameOrigin(server))"):
         need(sec, marker, "portal security")
     for marker in ("DROPPED: MQTT offline", "if (!st.connected) return false"):
@@ -114,7 +122,10 @@ def main() -> int:
         raise SystemExit("published candidate artifact identity changed")
 
     fragment = (source_root / "firmware" / "ui-v11.27-ui12" / "more_system.cppfrag").read_text(encoding="utf-8")
-    for required in ("hr(8,44,228,62)", "hr(244,44,W-252,62)", "hr(8,184,W-16,76)", "hr(8,212,112,48)"):
+    for required in (
+        "hr(8,44,228,62)", "hr(244,44,W-252,62)", "hr(8,184,W-16,76)",
+        "hr(8,212,112,48)", "hr(128,212,W-136,48)",
+    ):
         need(fragment, required, "480x320 touch geometry")
 
     print("Workshop OS v11.27 UI12 Control Center validation: PASS")
