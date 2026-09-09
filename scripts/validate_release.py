@@ -28,7 +28,7 @@ ALLOWED_WORKFLOWS = {
     "firmware-candidate.yml",
     "release-gate.yml",
     "release-main.yml",
-    "ui12-control-center.yml",
+    "ui13-appliance-settings.yml",
     "validate.yml",
 }
 REQUIRED = [
