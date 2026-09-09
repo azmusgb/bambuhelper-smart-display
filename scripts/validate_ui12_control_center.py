@@ -36,7 +36,7 @@ def block_end(text: str, start: int) -> int:
 def function(text: str, signature: str) -> str:
     start = text.find(signature)
     if start < 0:
-        raise SystemExit(f"missing function: {signature}")
+        raise SystemExit(f"missing function/block: {signature}")
     return text[start:block_end(text, start)]
 
 
@@ -54,8 +54,10 @@ def main() -> int:
 
     build = (repo / "include" / "smart_home_build.h").read_text(encoding="utf-8")
     hub = (repo / "src" / "smart_hub.cpp").read_text(encoding="utf-8")
+    web = (repo / "src" / "web_server.cpp").read_text(encoding="utf-8")
     sec = (repo / "src" / "security_manager.cpp").read_text(encoding="utf-8")
     mqtt = (repo / "src" / "bambu_mqtt.cpp").read_text(encoding="utf-8")
+    capture = (source_root / "scripts" / "capture-ws350-views.zsh").read_text(encoding="utf-8")
 
     for marker in (
         '#define SMART_HOME_VERSION "v11.27"',
@@ -96,6 +98,48 @@ def main() -> int:
         if forbidden in update:
             raise SystemExit(f"software update UI implies unsupported/recovery behavior: {forbidden}")
     need(update, "On-device installation is not enabled in this build", "honest update capability")
+
+    # The physical-view capture surface must be deterministic for nested UI12
+    # views. Capturing System after Local Portal must reset nested state rather
+    # than accidentally retaining credential-bearing presentation.
+    show = function(hub, "bool smartHubShowPage(const char* pageName) {")
+    for page in ("settings-experience", "settings-printer", "settings-update", "system-portal"):
+        need(show, f'if (strcmp(pageName, "{page}") == 0)', "UI12 deterministic capture route")
+    system_route = function(show, 'if (strcmp(pageName, "system") == 0) {')
+    network_route = function(show, 'if (strcmp(pageName, "system-network") == 0) {')
+    need(system_route, "g_ui12SystemView = 0;", "System capture state reset")
+    need(network_route, "g_ui12SystemView = 0;", "System-network capture state reset")
+    portal_route = function(show, 'if (strcmp(pageName, "system-portal") == 0) {')
+    need(portal_route, "g_ui12SystemView = 1;", "Local Portal capture state")
+    hardware_pos = show.find("static const char* const kHardwarePages[]")
+    if hardware_pos < 0:
+        raise SystemExit("missing hardware capture routes")
+    need(show[hardware_pos:], "g_ui12SystemView = 0;", "hardware capture state reset")
+
+    for marker in (
+        'R"json({"version":2,"views":[',
+        '{"id":"workshop","label":"Tools","group":"Primary"}',
+        '{"id":"more","label":"Settings","group":"Primary"}',
+        '{"id":"settings-experience","label":"Experience","group":"Settings"}',
+        '{"id":"settings-printer","label":"Printer Connection","group":"Settings"}',
+        '{"id":"settings-update","label":"Software Update","group":"Settings"}',
+        '{"id":"system-portal","label":"Local Portal","group":"System","sensitive":"portal-code"}',
+    ):
+        need(web, marker, "UI12 capture catalog v2")
+
+    # Retained visual evidence must be secret-safe for both UI12 catalog v2 and
+    # accepted older catalog v1 firmware. Unknown sensitivity/geometry fails closed.
+    for marker in (
+        "catalog_version = int(sys.argv[6])",
+        "sensitivity != 'portal-code'",
+        "view_id != 'system-portal'",
+        "catalog_version == 1 and view_id == 'system'",
+        "redaction = (236, 146, 472, 192)",
+        "redaction = (330, 196, 468, 230)",
+        "Unsupported capture catalog version",
+        "Raw framebuffer bytes exist only in a mode-0600 temporary file",
+    ):
+        need(capture, marker, "secret-safe UI12 capture tooling")
 
     # Authentication authority is security_manager.cpp, not a presentation helper
     # in smart_hub.cpp. UI12 moves code visibility behind a deliberate Local Portal
