@@ -28,6 +28,7 @@ ALLOWED_WORKFLOWS = {
     "firmware-candidate.yml",
     "release-gate.yml",
     "release-main.yml",
+    "ui12-control-center.yml",
     "validate.yml",
 }
 REQUIRED = [
@@ -79,7 +80,7 @@ def validate_candidate(candidate: object, readme_text: str) -> str:
     if candidate.get("exactHeadCi") != "required":
         fail("candidate.exactHeadCi must be required before promotion")
     if candidate.get("physicalAcceptance") != "required":
-        fail("candidate.physicalAcceptance must be required before promotion")
+        fail("hardware-facing candidate.physicalAcceptance must be required before promotion")
     if name not in readme_text or f"PR #{pr_number}" not in readme_text:
         fail("README must identify the active candidate and PR")
     return f"{version} / PR #{pr_number} / {branch}"
