@@ -80,7 +80,7 @@ HEADER = r'''static uint16_t hubUi13HeaderStateColor(const char* state,bool expl
   return C10_ACCENT;
 }
 
-static void drawHeader(const char* title, const char* right, uint8_t page) {
+static void drawHeader(const char* title,const char* right,uint8_t page) {
   const int16_t W=tft.width(),HH=hubHeaderH();
   const bool online=WiFi.status()==WL_CONNECTED;
   const bool explicitState=right&&right[0];
@@ -103,7 +103,7 @@ def apply(repo: Path) -> None:
     text = path.read_text(encoding="utf-8")
     if "hubUi13HeaderStateColor" in text:
         raise PatchError("UI13 product finish already applied")
-    text = replace_block(text, "static void drawHeader(const char* title, const char* right, uint8_t page) {", HEADER)
+    text = replace_block(text, "static void drawHeader(const char* title,const char* right,uint8_t page) {", HEADER)
     path.write_text(text, encoding="utf-8")
     print("Workshop OS UI13 semantic header product finish applied")
 
