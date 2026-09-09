@@ -123,6 +123,18 @@ Physical framebuffer capture must preserve the existing `sensitive: portal-code`
 
 UI13 does not change inventory authority. Workshop OS may display authoritative device-facing Filament Inventory data, but it must not infer spool identity, owner, quantity, location, printer assignment, or AMS placement from color/material similarity or other unsupported telemetry. Unknown remains `Unknown`.
 
+## Product finish
+
+The final UI13 layer uses the existing restrained dark system palette rather than adding another visual theme. Blue is the normal interaction accent; green is healthy/available; orange is degraded, disconnected, or attention-required; red remains reserved for actual destructive/fault meaning; unknown stays visually muted.
+
+Routine landscape controls expose a **minimum 48 px touch hit area**. Back/primary action controls are 48 px high, stepper `-`/`+` controls retain 52 px width with full-row hit height, and switch hit regions extend beyond their visual thumb/track so the interface is forgiving without looking oversized.
+
+Copy follows a finished-appliance rule: name the user concept, show the current state, and explain only what materially changes the decision. Acceptance-language and implementation jargon such as “visible controls,” “previous/next policy,” board capability names, driver details, wiring details, and internal subsystem terminology do not appear in routine Settings.
+
+Header status color is semantic rather than merely decorative. Healthy/connected states are green, degraded/offline/setup states are orange, unknown is muted, real failures may be red, and unclassified active informational state remains the normal blue accent. Network loss therefore does not look like a destructive fault.
+
+The final product-finish patch is layered **after** the reconstructable UI13 architecture and does not rewrite the historical RC/UI source fragments used for provenance. Deterministic validation separately checks the touch geometry, concise product copy, semantic state colors, single printer-power implementation, truthful update boundary, and absence of a fake device-native installer.
+
 ## Release state
 
 UI13 source identity is `Workshop OS v11.28 UI13 Appliance Settings`.
