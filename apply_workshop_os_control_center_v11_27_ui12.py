@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""Apply Workshop OS v11.27 UI12 Settings / Control Center after v11.26 UI11.
+
+UI12 changes the device information architecture and settings presentation only.
+It preserves printer command semantics, the seven-page guarded network workflow,
+portal authentication, recovery boundaries, inventory non-inference, and the
+published release manifest. It does not implement an on-device OTA installer.
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+
+class PatchError(RuntimeError):
+    pass
+
+
+def load(path: Path) -> str:
+    if not path.is_file():
+        raise PatchError(f"missing {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise PatchError(f"{label}: expected one anchor, found {count}")
+    return text.replace(old, new, 1)
+
+
+def block_end(text: str, start: int) -> int:
+    brace = text.find("{", start)
+    if brace < 0:
+        raise PatchError("opening brace missing")
+    depth = 0
+    string = None
+    escape = False
+    line_comment = False
+    block_comment = False
+    i = brace
+    while i < len(text):
+        c = text[i]
+        n = text[i + 1] if i + 1 < len(text) else ""
+        if line_comment:
+            if c == "\n":
+                line_comment = False
+        elif block_comment:
+            if c == "*" and n == "/":
+                block_comment = False
+                i += 1
+        elif string:
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == string:
+                string = None
+        elif c == "/" and n == "/":
+            line_comment = True
+            i += 1
+        elif c == "/" and n == "*":
+            block_comment = True
+            i += 1
+        elif c in ('"', "'"):
+            string = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    raise PatchError("unterminated block")
+
+
+def replace_block(text: str, signature: str, replacement: str, label: str) -> str:
+    start = text.find(signature)
+    if start < 0 or text.find(signature, start + 1) >= 0:
+        raise PatchError(f"{label}: signature missing/non-unique: {signature}")
+    return text[:start] + replacement.rstrip() + text[block_end(text, start):]
+
+
+def sections(source_root: Path) -> dict[str, str]:
+    path = source_root / "firmware" / "ui-v11.27-ui12" / "more_system.cppfrag"
+    text = load(path)
+    values: dict[str, str] = {}
+    for name in ("MORE", "SYSTEM"):
+        start = f"@@{name}@@"
+        end = f"@@END_{name}@@"
+        if start not in text or end not in text:
+            raise PatchError(f"UI12 fragment missing {name}")
+        values[name] = text.split(start, 1)[1].split(end, 1)[0].strip("\n")
+    return values
+
+
+def patch_more_touch(hub: str) -> str:
+    needle = "for(uint8_t i=0;i<4;i++)if(hubV1125MoreRect(i).contains(x,y)){"
+    start = hub.find(needle)
+    if start < 0 or hub.find(needle, start + 1) >= 0:
+        raise PatchError("More root touch loop missing/non-unique")
+    end = block_end(hub, start)
+    replacement = r'''if(g_ui12SettingsView){
+      if(hubUi12BackRect().contains(x,y)){g_ui12SettingsView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+      if(g_ui12SettingsView==1){
+        if(hubUi12ExperienceRect(0).contains(x,y)){g_displayExperienceView=true;g_displayExperiencePage=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi12ExperienceRect(1).contains(x,y)){g_ui12SettingsView=0;g_networkSettingsView=false;g_audioSettingsView=true;g_audioSettingsPage=0;setPage(SCREEN_HUB_SYSTEM);buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+      }else if(g_ui12SettingsView==2&&hubUi12SubActionRect().contains(x,y)){g_ui12SettingsView=0;setPage(SCREEN_HUB_PRINTER);buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+      return true;
+    }
+    for(uint8_t i=0;i<5;i++)if(hubUi12SettingsRect(i).contains(x,y)){
+      g_displayExperienceView=false;g_toolsView=false;g_ui12SettingsView=0;
+      if(i==0){g_ui12SettingsView=1;g_dirty=true;buzzerPlay(BUZZ_CLICK);}
+      else if(i==1){g_audioSettingsView=false;g_networkSettingsView=true;g_networkSettingsPage=0;g_networkEditLoaded=false;setPage(SCREEN_HUB_SYSTEM);g_dirty=true;buzzerPlay(BUZZ_CLICK);}
+      else if(i==2){g_ui12SettingsView=2;g_dirty=true;buzzerPlay(BUZZ_CLICK);}
+      else if(i==3){g_ui12SettingsView=3;g_dirty=true;buzzerPlay(BUZZ_CLICK);}
+      else{g_audioSettingsView=false;g_networkSettingsView=false;setPage(SCREEN_HUB_SYSTEM);g_dirty=true;buzzerPlay(BUZZ_CLICK);}
+      return true;
+    }'''
+    return hub[:start] + replacement + hub[end:]
+
+
+def inject_system_back(hub: str) -> str:
+    needle = "if(cur==SCREEN_HUB_SYSTEM){"
+    start = hub.find(needle)
+    if start < 0 or hub.find(needle, start + 1) >= 0:
+        raise PatchError("System touch handler missing/non-unique")
+    insert = start + len(needle)
+    code = "\n    if(!g_audioSettingsView&&!g_networkSettingsView&&hubUi12SystemBackRect().contains(x,y)){g_ui12SettingsView=0;setPage(SCREEN_HUB_MORE);buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}"
+    return hub[:insert] + code + hub[insert:]
+
+
+def patch(repo: Path) -> None:
+    source_root = Path(__file__).resolve().parent
+    fragments = sections(source_root)
+
+    build_path = repo / "include" / "smart_home_build.h"
+    build = load(build_path)
+    build = once(build, '#define SMART_HOME_VERSION "v11.25"', '#define SMART_HOME_VERSION "v11.27"', "UI12 version")
+    build = once(build, '#define SMART_HOME_BUILD_LABEL "Workshop OS v11.26 UI11 Cupertino"', '#define SMART_HOME_BUILD_LABEL "Workshop OS v11.27 UI12 Control Center"', "UI12 build label")
+    build = once(build, '#define SMART_HOME_PROFILE "cupertino-ui11"', '#define SMART_HOME_PROFILE "control-center-ui12"', "UI12 profile")
+    build = once(build, '#define WORKSHOP_OS_UI_SCHEMA "UI11"', '#define WORKSHOP_OS_UI_SCHEMA "UI12"', "UI12 schema")
+    if "WORKSHOP_OS_V11_27_UI12" not in build:
+        build += "\n#define WORKSHOP_OS_V11_27_UI12 1\n"
+    build_path.write_text(build, encoding="utf-8")
+
+    hub_path = repo / "src" / "smart_hub.cpp"
+    hub = load(hub_path)
+    hub = once(hub, "bool g_toolsView = false;", "bool g_toolsView = false;\nuint8_t g_ui12SettingsView = 0; // 0 root, 1 experience, 2 printer connection, 3 software update", "UI12 settings state")
+
+    # Any pre-existing route back to More should land on the Settings root.
+    if "setPage(SCREEN_HUB_MORE);" not in hub:
+        raise PatchError("no More navigation routes found")
+    hub = hub.replace("setPage(SCREEN_HUB_MORE);", "g_ui12SettingsView=0;setPage(SCREEN_HUB_MORE);")
+
+    hub = replace_block(hub, "static void drawMore(bool full) {", fragments["MORE"], "UI12 Settings")
+    hub = replace_block(hub, "static void drawSystem(bool full) {", fragments["SYSTEM"], "UI12 System")
+    hub = patch_more_touch(hub)
+    hub = inject_system_back(hub)
+
+    hub = once(hub, 'static const char* labels[4]={"Home","Printer","Workshop","Settings"};', 'static const char* labels[4]={"Home","Printer","Tools","Settings"};', "UI12 bottom navigation")
+    hub = once(hub, 'drawHeader("Workshop",nullptr,2);', 'drawHeader("Tools",nullptr,2);', "UI12 Tools title")
+
+    for old, new in (("UI11-H", "UI12-H"), ("UI11-P", "UI12-P"), ("UI11-W", "UI12-T"), ("UI11-M", "UI12-M"), ("UI11-S", "UI12-S")):
+        hub = once(hub, f'"{old}"', f'"{new}"', f"fingerprint {old}")
+    hub = once(hub, 'default: return "UI11";', 'default: return "UI12";', "default UI fingerprint")
+
+    required = (
+        "hubUi12SettingsRect", "drawUi12Experience", "drawUi12PrinterConnection", "drawUi12SoftwareUpdate",
+        "Printer Connection", "Software Update", "authenticated Local Portal", "HUB_NETWORK_PAGE_COUNT = 7",
+        "Hold to Apply", "securityPortalCode()", "UI12-H", "UI12-P", "UI12-T", "UI12-M", "UI12-S",
+    )
+    for marker in required:
+        if marker not in hub:
+            raise PatchError(f"UI12 lost required marker: {marker}")
+    for forbidden in ("TEST / NO CODE", "matchSpoolByColor", "matchSpoolByMaterial", "resolveSpool"):
+        if forbidden in hub:
+            raise PatchError(f"forbidden UI12 marker present: {forbidden}")
+
+    # Primary System must not expose the portal code; secure code use elsewhere is preserved.
+    sys_start = hub.find("static void drawSystem(bool full) {")
+    sys_end = block_end(hub, sys_start)
+    if "securityPortalCode()" in hub[sys_start:sys_end]:
+        raise PatchError("primary System screen exposes portal code")
+
+    hub_path.write_text(hub, encoding="utf-8")
+    print("Workshop OS v11.27 UI12 Control Center applied")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--apply", action="store_true")
+    args = ap.parse_args()
+    if not args.apply:
+        raise SystemExit("refusing to modify source without --apply")
+    patch(Path(args.repo).resolve())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
