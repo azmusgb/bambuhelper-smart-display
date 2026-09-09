@@ -26,13 +26,17 @@
       }
     },
     "candidate": {
-      "status": "none-published",
-      "release": null,
-      "version": null,
-      "label": null,
-      "acceptance": "not-published",
-      "sourceCommit": null,
-      "ota": null,
+      "status": "published",
+      "release": "workshop-os-v11.26-ui11-cupertino",
+      "version": "11.26",
+      "label": "Workshop OS v11.26 UI11 Cupertino",
+      "acceptance": "unaccepted-hardware-candidate",
+      "sourceCommit": "54e045f9fcf1ca237f850c7cbbc0bf79ac2f89e0",
+      "ota": {
+        "path": "releases/ui11-cupertino/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.26-UI11-Cupertino-OTA.bin",
+        "size": 2321840,
+        "sha256": "ed96f780b58af2fd353f45a4df442abd27d5065c520dff757c346abddeac8fc2"
+      },
       "fullFlash": null
     }
   },
