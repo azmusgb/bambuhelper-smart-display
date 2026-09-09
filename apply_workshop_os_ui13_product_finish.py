@@ -2,8 +2,9 @@
 """Apply final UI13 product-finish polish after the appliance settings patch.
 
 This layer intentionally does not rewrite historical RC/UI fragments. It only
-changes the reconstructed UI13 product surface: explicit state colors become
-semantic and offline/degraded states use warning rather than destructive red.
+changes the reconstructed UI13 product surface: status color becomes semantic,
+disconnected/degraded state uses warning rather than destructive red, and the
+result keeps one coherent visual language across Home, Printer and Settings.
 """
 from __future__ import annotations
 
@@ -13,6 +14,13 @@ from pathlib import Path
 
 class PatchError(RuntimeError):
     pass
+
+
+def once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise PatchError(f"{label}: expected one anchor, found {count}")
+    return text.replace(old, new, 1)
 
 
 def block_end(text: str, start: int) -> int:
@@ -103,9 +111,29 @@ def apply(repo: Path) -> None:
     text = path.read_text(encoding="utf-8")
     if "hubUi13HeaderStateColor" in text:
         raise PatchError("UI13 product finish already applied")
+
     text = replace_block(text, "static void drawHeader(const char* title,const char* right,uint8_t page) {", HEADER)
+    text = once(
+        text,
+        "const uint16_t sc=!configured?C10_MUTED:(!online?C10_RED:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));",
+        "const uint16_t sc=!configured?C10_MUTED:(!online?C10_ORANGE:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));",
+        "Home disconnected semantic color",
+    )
+    text = once(
+        text,
+        "const uint16_t sc=!s.connected?C10_RED:(paused?C10_ORANGE:(s.printing?C10_ACCENT:C10_GREEN));",
+        "const uint16_t sc=!s.connected?C10_ORANGE:(paused?C10_ORANGE:(s.printing?C10_ACCENT:C10_GREEN));",
+        "Printer disconnected semantic color",
+    )
+    text = once(
+        text,
+        "hubV1125Card(r,s.connected?C10_GREEN:C10_RED,false);",
+        "hubV1125Card(r,s.connected?C10_GREEN:C10_ORANGE,false);",
+        "Telemetry disconnected semantic color",
+    )
+
     path.write_text(text, encoding="utf-8")
-    print("Workshop OS UI13 semantic header product finish applied")
+    print("Workshop OS UI13 semantic product finish applied")
 
 
 def main() -> int:
