@@ -1,0 +1,214 @@
+name: Workshop OS UI Gate — v11.25 RC9 Premium Appliance UI
+
+on:
+  pull_request:
+    branches: [workshop-os-v11-25-rc8-physical-polish]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workshop-os-v11-25-ui-rc9-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-validate:
+    name: Reconstruct, validate and build RC9
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Workshop OS repository
+      - uses: actions/checkout@v4
+        name: Checkout pinned BambuHelper baseline
+        with:
+          repository: Keralots/BambuHelper
+          ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
+          path: upstream
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate RC9 source package
+        run: |
+          set -euo pipefail
+          python -m py_compile apply_workshop_os_ui_overhaul_v11_25_rc7.py
+          python -m py_compile apply_workshop_os_portal_runtime_hotfix_v11_25_rc7.py
+          python -m py_compile apply_workshop_os_physical_polish_v11_25_rc8.py
+          python -m py_compile apply_workshop_os_premium_appliance_ui_v11_25_rc9.py
+          python scripts/validate_ui_overhaul_v11_25_rc7.py .
+          python - <<'PY'
+          from pathlib import Path
+          d=Path('firmware/ui-v11.25-rc9')
+          required=['shared.cppfrag','home.cppfrag','printer.cppfrag','workshop.cppfrag','more_system.cppfrag']
+          for name in required:
+              assert (d/name).exists(), name
+          text='\n'.join((d/name).read_text() for name in required)
+          for marker in ['UI9-H','UI9-P','UI9-W','UI9-M','UI9-S','Settings','Printer material','Local Access']:
+              assert marker in text, marker
+          assert 'tft.drawRoundRect' not in (d/'shared.cppfrag').read_text(), 'RC9 shared chrome reintroduced outlined controls'
+          assert 'Tap a section to open it' not in text
+          assert 'L%u/%u' not in text
+          print('RC9 source package: PASS')
+          PY
+
+      - name: Reconstruct inherited v11.23 RC2 source baseline
+        run: |
+          set -euo pipefail
+          bash scripts/apply_workshop_os_v11_19.sh upstream
+          python apply_smart_home_physical_fit_v11_19_1.py --repo upstream --apply
+          python apply_smart_home_portal_auth_v11_20.py --repo upstream --apply
+          python apply_smart_home_display_expert_v11_22.py --repo upstream --apply
+          python apply_smart_home_network_locale_layout_v11_23.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_secure.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py --repo upstream --apply
+          python apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py --repo upstream --apply
+          python apply_smart_home_auth_restore_v11_23_rc2.py --repo upstream --apply
+
+      - name: Apply v11.25 through secure RC6 baseline
+        run: |
+          set -euo pipefail
+          mkdir -p upstream/firmware
+          cp -R firmware/ui-v11.25 upstream/firmware/
+          python apply_workshop_os_ui_overhaul_v11_25.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc2.py --repo upstream --apply
+          python apply_workshop_os_temp_no_code_v11_25.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc3.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc4.py --repo upstream --apply
+          python apply_workshop_os_ui_overhaul_v11_25_rc5.py --repo upstream --apply
+          python apply_workshop_os_secure_acceptance_v11_25_rc6.py --repo upstream --apply
+
+      - name: Apply final RC7 baseline
+        run: |
+          set -euo pipefail
+          python apply_workshop_os_ui_overhaul_v11_25_rc7.py --repo upstream --apply
+          python apply_workshop_os_portal_runtime_hotfix_v11_25_rc7.py --repo upstream --apply
+
+      - name: Apply RC8 physical polish
+        run: python apply_workshop_os_physical_polish_v11_25_rc8.py --repo upstream --apply
+
+      - name: Apply RC9 premium appliance UI
+        run: python apply_workshop_os_premium_appliance_ui_v11_25_rc9.py --repo upstream --apply
+
+      - name: Validate generated RC9 source and inherited safety boundary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          hub=Path('upstream/src/smart_hub.cpp').read_text()
+          build=Path('upstream/include/smart_home_build.h').read_text()
+          app=Path('upstream/web/app.js').read_text()
+          web=Path('upstream/src/web_server.cpp').read_text()
+          security=Path('upstream/src/security_manager.cpp').read_text()
+
+          assert 'Workshop OS v11.25 RC9 Premium Appliance UI' in build
+          assert 'SMART_HOME_PROFILE "premium-appliance-ui"' in build
+          assert 'WORKSHOP_OS_UI_SCHEMA "UI9"' in build
+          assert 'WORKSHOP_OS_V11_25_UI_RC9 1' in build
+          for fp in ['UI9-H','UI9-P','UI9-W','UI9-M','UI9-S']:
+              assert fp in hub, fp
+
+          assert 'static const char* labels[4]={"Home","Printer","Workshop","Settings"};' in hub
+          assert 'drawHeader("Home",nullptr,0)' in hub
+          assert 'drawHeader("Printer",nullptr,1)' in hub
+          assert 'drawHeader("Workshop",nullptr,2)' in hub
+          assert 'drawHeader("Settings",nullptr,3)' in hub
+          assert 'drawHeader("System",overall?"Healthy":"Check",4)' in hub
+          assert 'Printer material' in hub
+          assert 'inventory spool identity may be Unknown' in hub
+          assert 'Tap a section to open it' not in hub
+          assert 'L%u/%u' not in hub
+
+          # RC8 interaction geometry and safety semantics remain authoritative.
+          assert 'static int16_t hubHeaderH() { return 36; }' in hub
+          assert 'static int16_t hubNavH() { return 54; }' in hub
+          assert 'static const uint8_t HUB_NETWORK_PAGE_COUNT = 7;' in hub
+          assert 'Keep Holding' in hub
+          assert 'Hold to Apply' in hub
+          assert hub.count('securityPortalCode()') >= 2
+          assert 'TEST / NO CODE' not in hub
+
+          # Security and browser-runtime protections inherited from RC7/RC8.
+          assert 'return cookieMatches(server);' in security
+          assert 'if (mutating && !sameOrigin(server))' in security
+          profile_guard='!!(_profileCaps && _profileCaps.hasDualNozzle)'
+          widget_guard='(Array.isArray(HH_WIDGET_IDS) ? HH_WIDGET_IDS : []).slice()'
+          assert profile_guard in app
+          assert '_profileCaps.hasDualNozzle' not in app.replace(profile_guard,'')
+          assert widget_guard in app
+          assert 'HH_WIDGET_IDS.slice()' not in app.replace(widget_guard,'')
+          assert "pattern='[A-HJ-NP-Z2-9]{10}'" not in web
+          assert "pattern='[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}'" in web
+
+          for forbidden in ['matchSpoolByColor','matchSpoolByMaterial','resolveSpool']:
+              assert forbidden not in hub, forbidden
+
+          # RC9 visual system intentionally avoids outlined primary chrome.
+          rc9=Path('firmware/ui-v11.25-rc9/shared.cppfrag').read_text()
+          assert 'tft.drawRoundRect' not in rc9
+
+          print('Generated RC9 + inherited safety boundary: PASS')
+          PY
+          node --check upstream/web/app.js
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build WS350 RC9
+        working-directory: upstream
+        run: pio run -e ws_lcd_350
+
+      - name: Regression build shared 320x480 target
+        working-directory: upstream
+        run: pio run -e jc3248w535
+
+      - name: Merge Full image
+        working-directory: upstream
+        run: python merge_bins.py --board ws_lcd_350 --full
+
+      - name: Package RC9 flash artifacts and generated source
+        shell: bash
+        env:
+          CANDIDATE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          FULL="$(find upstream/firmware -type f -name 'BambuHelper-ws_lcd_350-*-Full.bin' | sort | tail -1)"
+          APP='upstream/.pio/build/ws_lcd_350/firmware.bin'
+          OUT='rc9-artifacts'
+          mkdir -p "$OUT/generated-source/src" "$OUT/generated-source/include" "$OUT/generated-source/web" "$OUT/ui-source" "$OUT/docs"
+          cp "$FULL" "$OUT/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-RC9-Premium-Appliance-UI-Full.bin"
+          cp "$APP" "$OUT/BambuHelper-ws_lcd_350-v3.8.1-Workshop-OS-v11.25-RC9-Premium-Appliance-UI-OTA.bin"
+          cp upstream/src/smart_hub.cpp "$OUT/generated-source/src/"
+          cp upstream/src/web_server.cpp "$OUT/generated-source/src/"
+          cp upstream/include/smart_home_build.h "$OUT/generated-source/include/"
+          cp upstream/web/app.css "$OUT/generated-source/web/"
+          cp upstream/web/app.js "$OUT/generated-source/web/"
+          cp firmware/ui-v11.25-rc9/*.cppfrag "$OUT/ui-source/"
+          cp docs/UX_UI_V11_25_RC9.md "$OUT/docs/"
+          {
+            echo 'Workshop OS v11.25 RC9 Premium Appliance UI'
+            echo "candidate_head_sha=${CANDIDATE_HEAD_SHA}"
+            echo 'base=RC8_physical_ui_polish'
+            echo 'runtime_fingerprints=UI9-H_UI9-P_UI9-W_UI9-M_UI9-S'
+            echo 'visible_navigation=Home_Printer_Workshop_Settings'
+            echo 'touch_geometry=RC8_PRESERVED'
+            echo 'network_workflow=RC8_PRESERVED'
+            echo 'guarded_actions=RC8_PRESERVED'
+            echo 'portal_code_auth=PRESERVED'
+            echo 'same_origin_guard=PRESERVED'
+            echo 'portal_runtime_boot_guards=PRESERVED'
+            echo 'safari_portal_code_pattern=PRESERVED'
+            echo 'inventory_identity_inference=FORBIDDEN'
+            echo 'ws350_build=PASS'
+            echo 'jc3248w535_regression=PASS'
+            echo 'physical_acceptance=REQUIRED'
+            sha256sum "$OUT"/*.bin
+          } | tee "$OUT/validation-report.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workshop-os-v11-25-rc9-premium-appliance-ui
+          retention-days: 14
+          if-no-files-found: error
+          path: rc9-artifacts/
