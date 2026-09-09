@@ -20,6 +20,7 @@ python3 "$ROOT/apply_workshop_os_appliance_settings_v11_28_ui13.py" --repo "$BUI
 python3 "$ROOT/apply_workshop_os_ui13_compile_order_fix.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os_ui13_product_finish.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_ui13_appliance_settings.py" --repo "$BUILD"
+python3 "$ROOT/scripts/validate_ui13_product_finish.py" --repo "$BUILD"
 
 if command -v node >/dev/null 2>&1; then
   node --check "$BUILD/web/app.js"
