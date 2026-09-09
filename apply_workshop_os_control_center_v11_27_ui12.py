@@ -168,7 +168,7 @@ def patch(repo: Path) -> None:
     required = (
         "hubUi12SettingsRect", "drawUi12Experience", "drawUi12PrinterConnection", "drawUi12SoftwareUpdate",
         "Printer Connection", "Software Update", "authenticated Local Portal", "HUB_NETWORK_PAGE_COUNT = 7",
-        "Hold to Apply", "securityPortalCode()", "UI12-H", "UI12-P", "UI12-T", "UI12-M", "UI12-S",
+        "Hold to Apply", "UI12-H", "UI12-P", "UI12-T", "UI12-M", "UI12-S",
     )
     for marker in required:
         if marker not in hub:
@@ -177,7 +177,9 @@ def patch(repo: Path) -> None:
         if forbidden in hub:
             raise PatchError(f"forbidden UI12 marker present: {forbidden}")
 
-    # Primary System must not expose the portal code; secure code use elsewhere is preserved.
+    # UI12 deliberately removes the access-code presentation from the primary
+    # System surface. Portal authentication itself is authoritative in
+    # security_manager.cpp and is validated by the dedicated UI12 validator.
     sys_start = hub.find("static void drawSystem(bool full) {")
     sys_end = block_end(hub, sys_start)
     if "securityPortalCode()" in hub[sys_start:sys_end]:
