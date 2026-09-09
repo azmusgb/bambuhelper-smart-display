@@ -165,10 +165,12 @@ def patch_capture_contract(repo: Path, hub: str) -> str:
         'if (strcmp(pageName, "system") == 0)',
         "UI12 deterministic system capture",
     )
+    # v11.23 replaced the original direct system-network branch with a loop over
+    # kNetworkPages. Reset nested System state for every expert network page.
     hub = inject_capture_state(
         hub,
-        'if (strcmp(pageName, "system-network") == 0)',
-        "UI12 deterministic system-network capture",
+        'if(strcmp(pageName,kNetworkPages[i])==0)',
+        "UI12 deterministic network capture",
     )
     hub = inject_capture_state(
         hub,
