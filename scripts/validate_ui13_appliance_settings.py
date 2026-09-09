@@ -94,9 +94,10 @@ def main() -> int:
 
     # Network is intentionally everyday-only. Static addressing remains an
     # advanced Local Portal/service concern and must not appear on normal UI13
-    # Network presentation.
+    # Network presentation. mDNS is intentionally allowed as the simple local
+    # hostname-advertisement toggle; a standalone DNS editor is not.
     network = function(hub, "static void drawUi13Network() {")
-    for forbidden in ("IP ADDRESS", "GATEWAY", "SUBNET", "DNS", "STATIC", "OCTET"):
+    for forbidden in ("IP ADDRESS", "GATEWAY", "SUBNET", '"DNS"', "STATIC", "OCTET"):
         forbid(network, forbidden, "advanced network editor on normal Network screen")
     for marker in ("Wi-Fi", "Local Hostname", "Show IP at Startup", "Local Portal"):
         need(network, marker, "everyday Network surface")
