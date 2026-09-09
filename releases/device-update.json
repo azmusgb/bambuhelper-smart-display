@@ -3,6 +3,7 @@
   "board": "ws_lcd_350",
   "authority": "azmusgb/bambuhelper-smart-display",
   "purpose": "Device-native Workshop OS OTA discovery contract",
+  "artifactBaseUrl": "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/",
   "channels": {
     "stable": {
       "status": "published",
