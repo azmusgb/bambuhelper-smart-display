@@ -102,20 +102,48 @@ static void drawMore(bool full) {
 @@SYSTEM@@
 static HubRect hubUi12SystemBackRect() {
   const int16_t W=tft.width();
-  return hubLandscape()?hr(8,218,112,42):hr(8,366,112,48);
+  return hubLandscape()?hr(8,212,112,48):hr(8,366,112,48);
+}
+
+static HubRect hubUi12SystemPortalRect() {
+  const int16_t W=tft.width();
+  return hubLandscape()?hr(128,212,W-136,48):hr(128,366,W-136,48);
+}
+
+static void drawUi12PortalAccess() {
+  const int16_t W=tft.width();const bool wifi=WiFi.status()==WL_CONNECTED;String ip=wifi?WiFi.localIP().toString():String("Wi-Fi required");
+  tft.fillScreen(C10_BG);drawHeader("Local Portal",wifi?"Ready":"Offline",3);uiBottomNav(3,nullptr);
+  if(hubLandscape()) {
+    HubRect card=hr(8,44,W-16,160);hubV1125Card(card,wifi?C10_ACCENT:C10_ORANGE,true);
+    uiDrawFit("Authenticated Administration",card.x+16,card.y+14,card.w-32,FONT_LARGE,TL_DATUM,C10_TEXT,C10_SURFACE_2);
+    uiDrawFit("Open this device address in a browser on your local network",card.x+16,card.y+58,card.w-32,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE_2);
+    uiDrawFit(ip.c_str(),card.x+16,card.y+84,card.w/2-24,FONT_BODY,TL_DATUM,wifi?C10_ACCENT:C10_ORANGE,C10_SURFACE_2);
+    uiDrawFit("Access Code",card.x+card.w/2,card.y+84,100,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE_2);
+    uiDrawFit(securityPortalCode(),card.x+card.w/2,card.y+110,card.w/2-24,FONT_LARGE,TL_DATUM,C10_TEXT,C10_SURFACE_2);
+    uiDrawFit("Code changes after every reboot",card.x+16,card.y+144,card.w-32,FONT_SMALL,BL_DATUM,C10_MUTED,C10_SURFACE_2);
+  } else {
+    HubRect card=hr(8,52,W-16,296);hubV1125Card(card,wifi?C10_ACCENT:C10_ORANGE,true);
+    uiDrawFit("Authenticated Administration",card.x+16,card.y+18,card.w-32,FONT_LARGE,TL_DATUM,C10_TEXT,C10_SURFACE_2);
+    uiDrawFit("Open this device on your local network",card.x+16,card.y+86,card.w-32,FONT_BODY,TL_DATUM,C10_MUTED,C10_SURFACE_2);
+    uiDrawFit(ip.c_str(),card.x+16,card.y+126,card.w-32,FONT_BODY,TL_DATUM,wifi?C10_ACCENT:C10_ORANGE,C10_SURFACE_2);
+    uiDrawFit("Access Code",card.x+16,card.y+178,card.w-32,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE_2);
+    uiDrawFit(securityPortalCode(),card.x+16,card.y+210,card.w-32,FONT_LARGE,TL_DATUM,C10_TEXT,C10_SURFACE_2);
+    uiDrawFit("Code changes after every reboot",card.x+16,card.y+270,card.w-32,FONT_SMALL,BL_DATUM,C10_MUTED,C10_SURFACE_2);
+  }
+  hubV1125Action(hubUi12SystemBackRect(),"Back",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 
 static void drawSystem(bool full) {
-  if(g_audioSettingsView){drawAudioSettings(full);return;}if(g_networkSettingsView){drawNetworkEssentials(full);return;}
+  if(g_audioSettingsView){drawAudioSettings(full);return;}if(g_networkSettingsView){drawNetworkEssentials(full);return;}if(g_ui12SystemView==1){drawUi12PortalAccess();return;}
   (void)full;const int16_t W=tft.width();tft.fillScreen(C10_BG);const bool wifi=WiFi.status()==WL_CONNECTED,touchOk=hubTouchHealthy(),recoveryOk=recoveryWebReady();const bool overall=wifi&&touchOk&&recoveryOk;drawHeader("System",overall?"Healthy":"Check",3);uiBottomNav(3,nullptr);
   if(hubLandscape()) {
-    HubRect health=hr(8,44,220,124),network=hubSystemNetworkCardRect(),device=hr(236,132,W-244,78),footer=hr(128,218,W-136,42);hubV1125Card(health,overall?C10_GREEN:C10_ORANGE,true);hubV1125Card(network,wifi?C10_GREEN:C10_ORANGE,false);hubV1125Card(device,C10_SEPARATOR,false);hubV1125Card(footer,C10_SEPARATOR,false);
+    HubRect health=hr(8,44,220,124),network=hubSystemNetworkCardRect(),device=hr(236,132,W-244,78);hubV1125Card(health,overall?C10_GREEN:C10_ORANGE,true);hubV1125Card(network,wifi?C10_GREEN:C10_ORANGE,false);hubV1125Card(device,C10_SEPARATOR,false);
     uiDrawFit("Device Health",health.x+14,health.y+12,health.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE_2);uiDrawFit(overall?"Healthy":"Needs Attention",health.x+14,health.y+38,health.w-28,FONT_LARGE,TL_DATUM,overall?C10_GREEN:C10_ORANGE,C10_SURFACE_2);uiDrawFit(touchOk?"Touch: OK":"Touch: Check",health.x+14,health.y+86,90,FONT_SMALL,TL_DATUM,touchOk?C10_TEXT:C10_ORANGE,C10_SURFACE_2);uiDrawFit(recoveryOk?"Recovery: Ready":"Recovery: Starting",health.x+112,health.y+86,health.w-126,FONT_SMALL,TL_DATUM,recoveryOk?C10_TEXT:C10_ORANGE,C10_SURFACE_2);
-    uiDrawFit("Network",network.x+14,network.y+12,network.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);uiDrawFit(wifi?"Connected":"Offline",network.x+14,network.y+40,network.w-28,FONT_BODY,TL_DATUM,wifi?C10_GREEN:C10_ORANGE,C10_SURFACE);uiDrawFit("Tap for network settings",network.x+14,network.y+66,network.w-28,FONT_SMALL,BL_DATUM,C10_MUTED,C10_SURFACE);
-    char ver[32];snprintf(ver,sizeof(ver),"Workshop OS %s",SMART_HOME_VERSION);uiDrawFit("About",device.x+14,device.y+12,device.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);uiDrawFit(ver,device.x+14,device.y+40,device.w-28,FONT_BODY,TL_DATUM,C10_TEXT,C10_SURFACE);uiDrawFit("Advanced diagnostics: authenticated Local Portal",footer.x+12,footer.y+21,footer.w-24,FONT_SMALL,ML_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit("Network",network.x+14,network.y+12,network.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);uiDrawFit(wifi?"Connected":"Offline",network.x+14,network.y+40,network.w-28,FONT_BODY,TL_DATUM,wifi?C10_GREEN:C10_ORANGE,C10_SURFACE);uiDrawFit("Network settings are available from Settings",network.x+14,network.y+66,network.w-28,FONT_SMALL,BL_DATUM,C10_MUTED,C10_SURFACE);
+    char ver[32];snprintf(ver,sizeof(ver),"Workshop OS %s",SMART_HOME_VERSION);uiDrawFit("About",device.x+14,device.y+12,device.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);uiDrawFit(ver,device.x+14,device.y+40,device.w-28,FONT_BODY,TL_DATUM,C10_TEXT,C10_SURFACE);
   } else {
     HubRect health=hr(8,52,W-16,124),network=hr(8,184,W-16,96),device=hr(8,288,W-16,66);hubV1125Card(health,overall?C10_GREEN:C10_ORANGE,true);hubV1125Card(network,wifi?C10_GREEN:C10_ORANGE,false);hubV1125Card(device,C10_SEPARATOR,false);uiDrawFit(overall?"Healthy":"Needs Attention",health.x+14,health.y+42,health.w-28,FONT_LARGE,TL_DATUM,overall?C10_GREEN:C10_ORANGE,C10_SURFACE_2);uiDrawFit(wifi?"Network connected":"Network offline",network.x+14,network.y+36,network.w-28,FONT_BODY,TL_DATUM,wifi?C10_GREEN:C10_ORANGE,C10_SURFACE);char ver[32];snprintf(ver,sizeof(ver),"Workshop OS %s",SMART_HOME_VERSION);uiDrawFit(ver,device.x+14,device.y+30,device.w-28,FONT_BODY,TL_DATUM,C10_TEXT,C10_SURFACE);
   }
-  hubV1125Action(hubUi12SystemBackRect(),"Back",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
+  hubV1125Action(hubUi12SystemBackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi12SystemPortalRect(),"Local Portal",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 @@END_SYSTEM@@
