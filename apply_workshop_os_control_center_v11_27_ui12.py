@@ -136,6 +136,130 @@ def inject_system_navigation(hub: str) -> str:
     return hub[:insert] + code + hub[insert:]
 
 
+def patch_capture_contract(repo: Path, hub: str) -> str:
+    """Make the physical framebuffer capture surface deterministic for UI12.
+
+    The v11.18 capture API predates nested UI12 settings. Add explicit capture
+    routes and reset nested state when older System routes are requested. The
+    catalog advertises the one credential-bearing view so retention tooling can
+    redact it before writing any PPM/PNG evidence.
+    """
+    hub = once(
+        hub,
+        '''  if (strcmp(pageName, "system") == 0) {
+    setPage(SCREEN_HUB_SYSTEM);
+    g_networkSettingsView = false;''',
+        '''  if (strcmp(pageName, "system") == 0) {
+    setPage(SCREEN_HUB_SYSTEM);
+    g_ui12SystemView = 0;
+    g_networkSettingsView = false;''',
+        "UI12 deterministic system capture",
+    )
+    hub = once(
+        hub,
+        '''  if (strcmp(pageName, "system-network") == 0) {
+    setPage(SCREEN_HUB_SYSTEM);
+    g_audioSettingsView = false;''',
+        '''  if (strcmp(pageName, "system-network") == 0) {
+    setPage(SCREEN_HUB_SYSTEM);
+    g_ui12SystemView = 0;
+    g_audioSettingsView = false;''',
+        "UI12 deterministic system-network capture",
+    )
+    hub = once(
+        hub,
+        '''    if (strcmp(pageName, kHardwarePages[i]) == 0) {
+      setPage(SCREEN_HUB_SYSTEM);
+      g_networkSettingsView = false;''',
+        '''    if (strcmp(pageName, kHardwarePages[i]) == 0) {
+      setPage(SCREEN_HUB_SYSTEM);
+      g_ui12SystemView = 0;
+      g_networkSettingsView = false;''',
+        "UI12 deterministic hardware capture",
+    )
+
+    capture_routes = r'''  if (strcmp(pageName, "settings-experience") == 0) {
+    setPage(SCREEN_HUB_MORE);
+    g_toolsView = false;
+    g_displayExperienceView = false;
+    g_displayExperiencePage = 0;
+    g_ui12SystemView = 0;
+    g_ui12SettingsView = 1;
+    g_dirty = true;
+    return true;
+  }
+
+  if (strcmp(pageName, "settings-printer") == 0) {
+    setPage(SCREEN_HUB_MORE);
+    g_toolsView = false;
+    g_displayExperienceView = false;
+    g_displayExperiencePage = 0;
+    g_ui12SystemView = 0;
+    g_ui12SettingsView = 2;
+    g_dirty = true;
+    return true;
+  }
+
+  if (strcmp(pageName, "settings-update") == 0) {
+    setPage(SCREEN_HUB_MORE);
+    g_toolsView = false;
+    g_displayExperienceView = false;
+    g_displayExperiencePage = 0;
+    g_ui12SystemView = 0;
+    g_ui12SettingsView = 3;
+    g_dirty = true;
+    return true;
+  }
+
+  if (strcmp(pageName, "system-portal") == 0) {
+    setPage(SCREEN_HUB_SYSTEM);
+    g_ui12SettingsView = 0;
+    g_networkSettingsView = false;
+    g_audioSettingsView = false;
+    g_audioSettingsPage = 0;
+    g_ui12SystemView = 1;
+    g_dirty = true;
+    return true;
+  }
+
+'''
+    anchor = '  if (strcmp(pageName, "custom") == 0) { setPage(SCREEN_HUB_CUSTOM); return true; }\n'
+    hub = once(hub, anchor, capture_routes + anchor, "UI12 nested capture routes")
+
+    web_path = repo / "src" / "web_server.cpp"
+    web = load(web_path)
+    web = once(
+        web,
+        'R"json({"version":1,"views":[',
+        'R"json({"version":2,"views":[',
+        "UI12 capture catalog version",
+    )
+    web = once(
+        web,
+        '{"id":"workshop","label":"Workshop","group":"Primary"},',
+        '{"id":"workshop","label":"Tools","group":"Primary"},',
+        "UI12 capture Tools label",
+    )
+    web = once(
+        web,
+        '{"id":"more","label":"More","group":"Primary"},',
+        '''{"id":"more","label":"Settings","group":"Primary"},
+    {"id":"settings-experience","label":"Experience","group":"Settings"},
+    {"id":"settings-printer","label":"Printer Connection","group":"Settings"},
+    {"id":"settings-update","label":"Software Update","group":"Settings"},''',
+        "UI12 capture Settings catalog",
+    )
+    web = once(
+        web,
+        '{"id":"system","label":"System","group":"Primary"},',
+        '''{"id":"system","label":"System","group":"Primary"},
+    {"id":"system-portal","label":"Local Portal","group":"System","sensitive":"portal-code"},''',
+        "UI12 sensitive portal capture catalog",
+    )
+    web_path.write_text(web, encoding="utf-8")
+    return hub
+
+
 def patch(repo: Path) -> None:
     source_root = Path(__file__).resolve().parent
     fragments = sections(source_root)
@@ -176,9 +300,15 @@ def patch(repo: Path) -> None:
         hub = once(hub, f'"{old}"', f'"{new}"', f"fingerprint {old}")
     hub = once(hub, 'default: return "UI11";', 'default: return "UI12";', "default UI fingerprint")
 
+    # Extend the existing authenticated physical-view capture contract only after
+    # UI12's global More-route reset has run, so deterministic nested routes keep
+    # the explicit state they assign below.
+    hub = patch_capture_contract(repo, hub)
+
     required = (
         "hubUi12SettingsRect", "drawUi12Experience", "drawUi12PrinterConnection", "drawUi12SoftwareUpdate",
         "drawUi12PortalAccess", "hubUi12SystemPortalRect", "securityPortalCode()",
+        "settings-experience", "settings-printer", "settings-update", "system-portal",
         "Printer Connection", "Software Update", "authenticated Local Portal", "HUB_NETWORK_PAGE_COUNT = 7",
         "Hold to Apply", "UI12-H", "UI12-P", "UI12-T", "UI12-M", "UI12-S",
     )
