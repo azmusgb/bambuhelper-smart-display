@@ -73,7 +73,7 @@ def main() -> int:
         '"Experience"', '"Network"', '"Printer Connection"', '"Software Update"', '"System"',
         "for(uint8_t i=0;i<5;i++)if(hubUi12SettingsRect(i).contains(x,y))",
         "static const uint8_t HUB_NETWORK_PAGE_COUNT = 7;",
-        "Hold to Apply", "Hold to Stop", "securityPortalCode()",
+        "Hold to Apply", "Hold to Stop",
         "UI12-H", "UI12-P", "UI12-T", "UI12-M", "UI12-S",
     ):
         need(hub, marker, "UI12 interaction contract")
@@ -89,6 +89,9 @@ def main() -> int:
             raise SystemExit(f"software update UI implies unsupported/recovery behavior: {forbidden}")
     need(update, "On-device installation is not enabled in this build", "honest update capability")
 
+    # Authentication authority is security_manager.cpp, not a presentation helper
+    # in smart_hub.cpp. UI12 intentionally removes portal-code presentation from
+    # the primary System screen while preserving fail-closed session/origin checks.
     for marker in ("return cookieMatches(server);", "if (mutating && !sameOrigin(server))"):
         need(sec, marker, "portal security")
     for marker in ("DROPPED: MQTT offline", "if (!st.connected) return false"):
