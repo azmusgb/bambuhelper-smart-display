@@ -39,9 +39,9 @@ def main() -> int:
     ):
         need(hub, marker, "48px touch/value geometry")
 
-    # Final header semantics are calm and meaningful: disconnected/degraded is a
-    # warning state, not a destructive/fault red; explicit healthy states are
-    # green; unknown remains muted.
+    # Final state semantics are calm and meaningful across the product. A
+    # disconnected printer/network is a warning/degraded condition, not a
+    # destructive fault. Actual printer alerts may still use red.
     for marker in (
         'static uint16_t hubUi13HeaderStateColor',
         'return online?C10_GREEN:C10_ORANGE;',
@@ -51,9 +51,17 @@ def main() -> int:
         'strcmp(state,"Offline")==0',
         'strcmp(state,"Check Device")==0',
         'strcmp(state,"Unknown")==0) return C10_MUTED;',
+        'const uint16_t sc=!configured?C10_MUTED:(!online?C10_ORANGE:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));',
+        'const uint16_t sc=!s.connected?C10_ORANGE:(paused?C10_ORANGE:(s.printing?C10_ACCENT:C10_GREEN));',
+        'hubV1125Card(r,s.connected?C10_GREEN:C10_ORANGE,false);',
     ):
-        need(hub, marker, "semantic header state")
-    forbid(hub, 'const uint16_t c=right&&right[0]?C10_ACCENT:(online?C10_GREEN:C10_RED);', "legacy non-semantic header color")
+        need(hub, marker, "semantic product state")
+    for marker in (
+        'const uint16_t c=right&&right[0]?C10_ACCENT:(online?C10_GREEN:C10_RED);',
+        'const uint16_t sc=!s.connected?C10_RED:(paused?C10_ORANGE:(s.printing?C10_ACCENT:C10_GREEN));',
+        'hubV1125Card(r,s.connected?C10_GREEN:C10_RED,false);',
+    ):
+        forbid(hub, marker, "legacy alarming disconnected state")
 
     # Product copy should read like a finished appliance, not an engineering
     # acceptance screen. Keep implementation language out of routine settings.
