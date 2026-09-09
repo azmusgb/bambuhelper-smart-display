@@ -173,7 +173,7 @@ def inject_system_touch(hub: str) -> str:
     insert = start + len(needle)
     code = r'''
     if(!g_audioSettingsView&&!g_networkSettingsView){
-      if(g_ui12SystemView==1){if(hubUi13BackRect().contains(x,y)){g_ui12SystemView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;}return true;}
+      if(g_ui12SystemView==1){if(hubUi12SystemBackRect().contains(x,y)){g_ui12SystemView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;}return true;}
       if(g_ui12SystemView==2){
         if(hubUi13MinusRect(0).contains(x,y)){hubStepTimezone(true);return true;}if(hubUi13PlusRect(0).contains(x,y)){hubStepTimezone(false);return true;}
         if(hubUi13ToggleRect(1).contains(x,y)){netSettings.use24h=!netSettings.use24h;saveSettings();buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
@@ -277,11 +277,13 @@ def patch(repo: Path) -> None:
     for marker in required:
         if marker not in hub:
             raise PatchError(f"UI13 missing marker: {marker}")
-    more_touch = hub[hub.find("if(cur==SCREEN_HUB_MORE){"):]
-    more_touch = more_touch[:block_end(more_touch, 0)]
-    if "longPress" in more_touch:
+    settings_start = hub.find("if(g_ui12SettingsView){")
+    if settings_start < 0:
+        raise PatchError("UI13 normal Settings touch block missing")
+    settings_touch = hub[settings_start:block_end(hub, settings_start)]
+    if "longPress" in settings_touch:
         raise PatchError("routine UI13 Settings touch path still depends on longPress")
-    if "g_networkSettingsView=true" in more_touch or "g_audioSettingsView=true" in more_touch:
+    if "g_networkSettingsView=true" in settings_touch or "g_audioSettingsView=true" in settings_touch:
         raise PatchError("normal UI13 Settings still routes into legacy engineering carousels")
     for forbidden in ("matchSpoolByColor", "matchSpoolByMaterial", "resolveSpool", "TEST / NO CODE"):
         if forbidden in hub:
