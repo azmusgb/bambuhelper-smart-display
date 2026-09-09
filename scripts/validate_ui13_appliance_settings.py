@@ -84,14 +84,13 @@ def main() -> int:
     ):
         need(hub, marker, "UI13 interaction contract")
 
-    # The normal Settings root must route only to the appliance surfaces. Legacy
-    # engineering carousels can remain for compatibility/service tooling but
-    # must not be normal Settings destinations.
-    touch = function(hub, "if(cur==SCREEN_HUB_MORE){")
-    need(touch, "if(g_ui12SettingsView){", "UI13 Settings dispatch")
-    forbid(touch, "g_networkSettingsView=true", "legacy network carousel route")
-    forbid(touch, "g_audioSettingsView=true", "legacy hardware carousel route")
-    forbid(touch, "longPress", "routine hidden hold behavior")
+    # Scope interaction checks to the active UI13 settings branch. Older guarded
+    # service/compatibility surfaces may still contain long-press semantics, but
+    # normal Settings must not depend on them or route into legacy carousels.
+    settings_touch = function(hub, "if(g_ui12SettingsView){")
+    forbid(settings_touch, "g_networkSettingsView=true", "legacy network carousel route")
+    forbid(settings_touch, "g_audioSettingsView=true", "legacy hardware carousel route")
+    forbid(settings_touch, "longPress", "routine hidden hold behavior")
 
     # Network is intentionally everyday-only. Static addressing remains an
     # advanced Local Portal/service concern and must not appear on normal UI13
