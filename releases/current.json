@@ -29,8 +29,7 @@
     "acceptanceBranch": "acceptance/v11.28-ui13-appliance-settings",
     "acceptanceIssue": 111,
     "status": "physical-acceptance-required",
-    "exactHeadCi": "passed",
-    "automatedEvidence": "PR #109 exact-head Actions; exact artifact identity and physical handoff are recorded in issue #111",
+    "exactHeadCi": "required",
     "physicalAcceptance": "required"
   },
   "mainState": null,
@@ -48,12 +47,10 @@
       "physicalAcceptance": "passed"
     },
     "candidate": {
-      "exactHeadCi": "passed",
-      "ws350Build": "passed",
-      "shared320x480Regression": "passed",
-      "productFinish": "passed",
-      "artifactIntegrity": "passed",
-      "binaryBoundaryAudit": "passed",
+      "exactHeadCi": "required",
+      "ws350Build": "required",
+      "shared320x480Regression": "required",
+      "productFinish": "required",
       "physicalAcceptance": "required"
     },
     "staticDownload": {
