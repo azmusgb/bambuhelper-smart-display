@@ -55,6 +55,7 @@ jobs:
           python -m py_compile apply_workshop_os_control_center_v11_27_ui12.py
           python -m py_compile apply_workshop_os_appliance_settings_v11_28_ui13.py
           python -m py_compile apply_workshop_os_ui13_compile_order_fix.py
+          python -m py_compile apply_workshop_os_ui13_product_finish.py
           python -m py_compile scripts/validate_ui12_control_center.py
           python -m py_compile scripts/validate_ui13_appliance_settings.py
           bash -n scripts/capture-ws350-views.zsh
@@ -83,6 +84,7 @@ jobs:
             echo "source_head_sha=$HEAD_SHA"
             echo 'result=BUILD_PASS'
             echo 'release_state=IMPLEMENTED_BUILT_TESTED_BY_CI_ONLY'
+            echo 'product_finish=APPLIED'
             echo 'published_candidate=NO'
             echo 'physical_acceptance=REQUIRED'
             echo 'stable_promotion=FORBIDDEN'
