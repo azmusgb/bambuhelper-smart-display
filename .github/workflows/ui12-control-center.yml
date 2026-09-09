@@ -20,6 +20,7 @@ on:
       - 'scripts/run_ui13_local.sh'
       - 'scripts/validate_ui12_control_center.py'
       - 'scripts/validate_ui13_appliance_settings.py'
+      - 'scripts/validate_ui13_product_finish.py'
       - 'docs/UI11_SOURCE_PROVENANCE.md'
       - 'docs/UI12_CONTROL_CENTER.md'
       - 'docs/UI13_APPLIANCE_SETTINGS.md'
@@ -58,6 +59,7 @@ jobs:
           python -m py_compile apply_workshop_os_ui13_product_finish.py
           python -m py_compile scripts/validate_ui12_control_center.py
           python -m py_compile scripts/validate_ui13_appliance_settings.py
+          python -m py_compile scripts/validate_ui13_product_finish.py
           bash -n scripts/capture-ws350-views.zsh
           bash -n scripts/run_rc10_local.sh
           bash -n scripts/run_ui12_local.sh
