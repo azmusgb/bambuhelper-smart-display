@@ -29,7 +29,16 @@
     "acceptanceBranch": "acceptance/v11.28-ui13-appliance-settings",
     "acceptanceIssue": 111,
     "status": "physical-acceptance-required",
-    "exactHeadCi": "required",
+    "sourceHead": "5b3da1a8882912e5193df8f7fad2ddb209b7257c",
+    "exactHeadCi": "passed",
+    "artifact": {
+      "actionsRun": 34364030424,
+      "artifactId": 10109269313,
+      "artifactZipSha256": "90ba10f7f5bd2e8df7059d80d426fcb000512f2c8915bcdeadce4ec7d4f6a450",
+      "otaFilename": "BambuHelper-ws_lcd_350-Workshop-OS-v11.28-UI13-Appliance-Settings-CI-OTA.bin",
+      "otaSize": 2334176,
+      "otaSha256": "8b7ab683879803b37669b675442bc40df4918a7c83947ddff187c9fb4935c0d0"
+    },
     "physicalAcceptance": "required"
   },
   "mainState": null,
@@ -47,10 +56,12 @@
       "physicalAcceptance": "passed"
     },
     "candidate": {
-      "exactHeadCi": "required",
-      "ws350Build": "required",
-      "shared320x480Regression": "required",
-      "productFinish": "required",
+      "exactHeadCi": "passed",
+      "ws350Build": "passed",
+      "shared320x480Regression": "passed",
+      "productFinish": "passed",
+      "artifactIntegrity": "passed",
+      "binaryBoundaryAudit": "passed",
       "physicalAcceptance": "required"
     },
     "staticDownload": {
