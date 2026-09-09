@@ -17,6 +17,7 @@ python3 "$ROOT/apply_workshop_os_control_center_v11_27_ui12.py" --repo "$BUILD" 
 python3 "$ROOT/scripts/validate_ui12_control_center.py" --repo "$BUILD"
 
 python3 "$ROOT/apply_workshop_os_appliance_settings_v11_28_ui13.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os_ui13_compile_order_fix.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_ui13_appliance_settings.py" --repo "$BUILD"
 
 if command -v node >/dev/null 2>&1; then
