@@ -76,6 +76,7 @@ jobs:
             echo 'published_candidate=NO'
             echo 'physical_acceptance=REQUIRED'
             echo 'stable_promotion=FORBIDDEN'
+            echo 'artifact_retention_days=90'
             wc -c < "$OTA" | awk '{print "ota_size=" $1}'
             sha256sum "$OTA" | awk '{print "ota_sha256=" $1}'
           } | tee ui12-gate-artifact/BUILD-REPORT.txt
@@ -83,6 +84,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: workshop-os-v11-27-ui12-control-center-ci
-          retention-days: 14
+          retention-days: 90
           if-no-files-found: error
           path: ui12-gate-artifact/
