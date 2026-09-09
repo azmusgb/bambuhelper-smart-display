@@ -66,7 +66,7 @@ jobs:
 
           required=("Validate")
           firmware_required=0
-          ui12_required=0
+          settings_required=0
           static_required=0
 
           for f in "${files[@]}"; do
@@ -76,8 +76,8 @@ jobs:
                 ;;
             esac
             case "$f" in
-              .github/workflows/ui12-control-center.yml|apply_workshop_os_*.py|apply_smart_home_network_locale_layout_v11_23.py|apply_smart_home_touch_ux_v11_23_rc2_*.py|apply_smart_home_auth_restore_v11_23_rc2.py|firmware/ui-v11.25/*|firmware/ui-v11.25-*/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|assets/v11_25_*.css|scripts/run_rc10_local.sh|scripts/run_ui12_local.sh|scripts/validate_ui12_control_center.py|docs/UI11_SOURCE_PROVENANCE.md|docs/UI12_CONTROL_CENTER.md)
-                ui12_required=1
+              .github/workflows/ui13-appliance-settings.yml|apply_workshop_os_*.py|apply_smart_home_network_locale_layout_v11_23.py|apply_smart_home_touch_ux_v11_23_rc2_*.py|apply_smart_home_auth_restore_v11_23_rc2.py|firmware/ui-v11.25/*|firmware/ui-v11.25-*/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.28-ui13/*|assets/v11_25_*.css|scripts/run_rc10_local.sh|scripts/run_ui12_local.sh|scripts/run_ui13_local.sh|scripts/validate_ui12_control_center.py|scripts/validate_ui13_appliance_settings.py|scripts/validate_ui13_product_finish.py|docs/UI11_SOURCE_PROVENANCE.md|docs/UI12_CONTROL_CENTER.md|docs/UI13_APPLIANCE_SETTINGS.md)
+                settings_required=1
                 ;;
             esac
             case "$f" in
@@ -90,8 +90,8 @@ jobs:
           if (( firmware_required )); then
             required+=("Workshop OS Firmware Gate — v11.22 Display Expert RC1")
           fi
-          if (( ui12_required )); then
-            required+=("Workshop OS UI12 Control Center Gate")
+          if (( settings_required )); then
+            required+=("Workshop OS UI13 Appliance Settings Gate")
           fi
           if (( static_required )); then
             required+=("Validate accepted static installer")
