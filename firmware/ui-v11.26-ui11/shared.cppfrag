@@ -1,16 +1,4 @@
 @@FINGERPRINT_HELPERS@@
-static constexpr uint16_t C10_BG        = 0x0000;
-static constexpr uint16_t C10_SURFACE   = 0x18E3;
-static constexpr uint16_t C10_SURFACE_2 = 0x2965;
-static constexpr uint16_t C10_SURFACE_3 = 0x39C7;
-static constexpr uint16_t C10_SEPARATOR = 0x39C7;
-static constexpr uint16_t C10_TEXT      = 0xFFFF;
-static constexpr uint16_t C10_MUTED     = 0x8C72;
-static constexpr uint16_t C10_ACCENT    = 0x0C3F;
-static constexpr uint16_t C10_GREEN     = 0x368B;
-static constexpr uint16_t C10_ORANGE    = 0xFCE1;
-static constexpr uint16_t C10_RED       = 0xFA27;
-
 static const char* hubV1125UiFingerprint(uint8_t page) {
   switch(page) {
     case 0: return "UI11-H";
@@ -72,6 +60,5 @@ static void drawHeader(const char* title,const char* right,uint8_t page) {
 }
 @@END_HEADER@@
 @@BOTTOM_NAV@@
-static void hubV1125TabIcon(uint8_t i,int16_t cx,int16_t cy,uint16_t c){if(i==0){tft.drawLine(cx-8,cy,cx,cy-7,c);tft.drawLine(cx,cy-7,cx+8,cy,c);tft.drawRect(cx-6,cy,12,9,c);}else if(i==1){tft.drawRect(cx-8,cy-7,16,15,c);tft.drawFastHLine(cx-4,cy+4,8,c);}else if(i==2){tft.drawCircle(cx,cy,5,c);tft.drawFastHLine(cx-9,cy,18,c);tft.drawFastVLine(cx,cy-9,18,c);}else{tft.drawCircle(cx,cy,6,c);tft.drawCircle(cx,cy,2,c);tft.drawFastHLine(cx-10,cy,4,c);tft.drawFastHLine(cx+7,cy,4,c);tft.drawFastVLine(cx,cy-10,4,c);tft.drawFastVLine(cx,cy+7,4,c);}}
 static void uiBottomNav(uint8_t active,const char* nextPage){(void)nextPage;const int16_t y=tft.height()-hubNavH(),W=tft.width();static const char* labels[4]={"Home","Printer","Workshop","Settings"};tft.fillRect(0,y,W,hubNavH(),C10_SURFACE);tft.drawFastHLine(0,y,W,C10_SEPARATOR);for(uint8_t i=0;i<4;i++){HubRect r=hubNavRect(i);const bool selected=i==active;const uint16_t c=selected?C10_ACCENT:C10_MUTED;const int16_t cx=r.x+r.w/2;hubV1125TabIcon(i,cx,r.y+17,c);uiDrawFit(labels[i],cx,r.y+35,r.w-12,FONT_SMALL,TC_DATUM,c,C10_SURFACE);}}
 @@END_BOTTOM_NAV@@
