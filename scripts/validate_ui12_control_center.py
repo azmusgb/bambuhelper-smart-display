@@ -106,9 +106,17 @@ def main() -> int:
     for page in ("settings-experience", "settings-printer", "settings-update", "system-portal"):
         need(show, f'if (strcmp(pageName, "{page}") == 0)', "UI12 deterministic capture route")
     system_route = function(show, 'if (strcmp(pageName, "system") == 0) {')
-    network_route = function(show, 'if (strcmp(pageName, "system-network") == 0) {')
     need(system_route, "g_ui12SystemView = 0;", "System capture state reset")
-    need(network_route, "g_ui12SystemView = 0;", "System-network capture state reset")
+
+    # v11.23 expands system-network into kNetworkPages, so the acceptance check
+    # validates the loop that owns all seven network pages rather than a removed
+    # legacy direct branch.
+    need(show, 'static const char* const kNetworkPages[]', "network capture route table")
+    network_route = function(show, 'if(strcmp(pageName,kNetworkPages[i])==0) {')
+    need(network_route, "g_ui12SystemView = 0;", "Network capture state reset")
+    for page in ("system-network", "system-time-locale", "system-network-address", "system-network-review"):
+        need(show, f'"{page}"', "network capture page")
+
     portal_route = function(show, 'if (strcmp(pageName, "system-portal") == 0) {')
     need(portal_route, "g_ui12SystemView = 1;", "Local Portal capture state")
     hardware_pos = show.find("static const char* const kHardwarePages[]")
