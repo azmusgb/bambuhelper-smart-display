@@ -5,12 +5,12 @@
 ## Required device behavior
 
 1. Fetch `releases/device-update.json` from this repository's raw `main` URL over HTTPS.
-2. Require `schemaVersion == 1` and `board == ws_lcd_350`.
+2. Require `schemaVersion == 1`, `board == ws_lcd_350`, the expected repository authority, and a valid HTTPS `artifactBaseUrl`.
 3. Select the configured `stable` or `candidate` channel. Stable is the default.
-4. Treat `status != published`, missing fields, malformed metadata, board mismatch, or an unknown schema as **no installable update**.
+4. Treat `status != published`, missing fields, malformed metadata, board mismatch, unknown schema, or an invalid artifact base as **no installable update**.
 5. Compare the published version with the running firmware. Never downgrade automatically.
-6. Download only the channel's `ota.path` for an ordinary on-device update.
-7. Require the exact declared byte size and SHA-256 before beginning the OTA write/activation step.
+6. For an ordinary on-device update, resolve the channel's repository-root `ota.path` against `artifactBaseUrl`; do not resolve it relative to the manifest's `/releases/` directory.
+7. Download only that OTA/app image. Require the exact declared byte size and SHA-256 before beginning the OTA write/activation step.
 8. On verification or installation failure, leave the currently bootable firmware authoritative and present an explicit error/retry state.
 9. Reboot only after successful OTA completion. After reboot, report the actual running firmware version rather than assuming installation succeeded.
 
@@ -20,6 +20,12 @@
 - **candidate** — optional hardware-acceptance candidate. It remains `none-published` until an exact candidate OTA artifact, size, hash, source SHA, and release identity have been recorded.
 
 A candidate being built or merged does not make it stable. Stable promotion requires the project's physical-acceptance process.
+
+## Integrity gate
+
+The accepted-static-installer workflow treats `releases/device-update.json` as release metadata. It validates the manifest schema/authority/base URL, cross-checks the stable channel against `release.json`, and recomputes the declared size and SHA-256 from the retained firmware bytes. A published candidate must likewise reference bytes present in the repository and match their exact size/hash.
+
+This prevents a metadata-only change from publishing a stale or nonexistent artifact while still passing the release gate.
 
 ## Recovery boundary
 
