@@ -35,6 +35,9 @@ jobs:
       - name: Validate Workshop OS 12 device contract
         run: python3 scripts/validate_os12_device_contract.py
 
+      - name: Validate Workshop OS 12 platform bridge
+        run: python3 scripts/validate_os12_platform_bridge.py
+
       - name: Compile Workshop OS 12 platform contracts
         run: |
           set -euo pipefail
