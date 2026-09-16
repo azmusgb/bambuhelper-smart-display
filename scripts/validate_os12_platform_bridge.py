@@ -25,6 +25,7 @@ def load_patcher():
 def validate_templates() -> None:
     state = (ROOT / "firmware/platform/workshop_state.hpp").read_text(encoding="utf-8")
     adapter = (ROOT / "firmware/platform/runtime_adapter.hpp").read_text(encoding="utf-8")
+    service = (ROOT / "firmware/platform/service_contracts.hpp").read_text(encoding="utf-8")
     bridge = (ROOT / "firmware/platform/bridge/workshop_platform_bridge.cpp").read_text(encoding="utf-8")
 
     required = {
@@ -34,9 +35,9 @@ def validate_templates() -> None:
         "rollover-safe elapsed": "nowMs - observedAtMs",
         "existing printer authority": "printers[slot].state",
         "existing Wi-Fi authority": "isWiFiConnected()",
-        "no command bridge": "workshopPlatformPoll()",
+        "observation poll seam": "workshopPlatformPoll()",
     }
-    joined = state + adapter + bridge
+    joined = state + adapter + service + bridge
     for label, needle in required.items():
         if needle not in joined:
             fail(f"missing {label}: {needle}")
@@ -55,7 +56,11 @@ def validate_templates() -> None:
         if needle in bridge:
             fail(f"bridge contains forbidden authority/credential marker: {needle}")
 
-    if "namespace workshop::platform" in joined or "[[nodiscard]]" in joined:
+    # `using namespace workshop::platform;` is valid C++11. Reject only the
+    # C++17 nested namespace declaration syntax and attributes we intentionally
+    # avoid in firmware-facing headers.
+    headers = state + adapter + service
+    if "namespace workshop::platform {" in headers or "[[nodiscard]]" in headers:
         fail("platform headers must remain compatible with Arduino C++11")
 
 
@@ -80,7 +85,7 @@ def validate_patcher() -> None:
         )
 
         patcher.apply(repo, ROOT)
-        patcher.apply(repo, ROOT)  # idempotence is required
+        patcher.apply(repo, ROOT)
 
         main = (repo / "src/main.cpp").read_text(encoding="utf-8")
         if main.count('#include "workshop_platform_bridge.h"') != 1:
