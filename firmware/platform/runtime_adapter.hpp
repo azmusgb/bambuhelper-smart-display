@@ -15,7 +15,7 @@ struct LegacyPrinterObservation {
     bool configured{false};
     bool connected{false};
     PrinterActivity activity{PrinterActivity::Unknown};
-    std::uint64_t lastTelemetryAtMs{0};
+    std::uint32_t lastTelemetryAtMs{0};
     std::int16_t nozzleCelsius{0};
     std::int16_t bedCelsius{0};
     std::uint8_t progressPercent{0};
@@ -27,29 +27,28 @@ struct LegacyNetworkObservation {
     bool accessPointMode{false};
     bool localPortalReachable{false};
     bool cloudReachable{false};
-    std::uint64_t observedAtMs{0};
+    std::uint32_t observedAtMs{0};
     std::int16_t rssiDbm{0};
     const char* localAddress{nullptr};
 };
 
+// Unsigned subtraction is intentional: Arduino millis() wraps at 2^32 and this
+// remains correct as long as the freshness horizon is far below half the range.
 [[nodiscard]] constexpr Freshness freshnessFromAge(
-    std::uint64_t observedAtMs,
-    std::uint64_t nowMs,
-    std::uint64_t staleAfterMs) noexcept {
+    std::uint32_t observedAtMs,
+    std::uint32_t nowMs,
+    std::uint32_t staleAfterMs) noexcept {
     if (observedAtMs == 0 || staleAfterMs == 0) {
         return Freshness::Unknown;
     }
-    if (nowMs < observedAtMs) {
-        // millis()/clock rollover or invalid ordering: never manufacture Fresh.
-        return Freshness::Unknown;
-    }
-    return (nowMs - observedAtMs) <= staleAfterMs ? Freshness::Fresh : Freshness::Stale;
+    const std::uint32_t elapsed = nowMs - observedAtMs;
+    return elapsed <= staleAfterMs ? Freshness::Fresh : Freshness::Stale;
 }
 
 [[nodiscard]] inline PrinterState normalizePrinterObservation(
     const LegacyPrinterObservation& observation,
-    std::uint64_t nowMs,
-    std::uint64_t staleAfterMs) noexcept {
+    std::uint32_t nowMs,
+    std::uint32_t staleAfterMs) noexcept {
     PrinterState state;
     state.configured = observation.configured;
     state.connection = observation.connected ? Connectivity::Online : Connectivity::Offline;
