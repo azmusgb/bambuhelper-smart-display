@@ -3,11 +3,12 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace workshop::platform {
+namespace workshop {
+namespace platform {
 
-constexpr std::size_t kLocalAddressLength = 40;
-constexpr std::size_t kProfileIdLength = 40;
-constexpr std::size_t kMaxPrinterSlots = 4;
+static const std::size_t kLocalAddressLength = 40;
+static const std::size_t kProfileIdLength = 40;
+static const std::size_t kMaxPrinterSlots = 4;
 
 enum class Freshness : std::uint8_t {
     Unknown = 0,
@@ -67,8 +68,6 @@ struct NetworkState {
 };
 
 struct InventoryProjectionState {
-    // Inventory truth remains owned by Filament Inventory. Workshop OS stores only
-    // the state of the profile-scoped projection it has received.
     Freshness freshness{Freshness::Unknown};
     std::uint32_t observedAtMs{0};
     char profileId[kProfileIdLength]{};
@@ -95,26 +94,24 @@ struct WorkshopState {
     std::uint64_t revision{0};
 };
 
-[[nodiscard]] constexpr bool isKnown(Freshness value) noexcept {
+inline bool isKnown(Freshness value) {
     return value != Freshness::Unknown;
 }
 
-[[nodiscard]] constexpr bool isUsable(Freshness value) noexcept {
+inline bool isUsable(Freshness value) {
     return value == Freshness::Fresh;
 }
 
-[[nodiscard]] constexpr bool isConnected(Connectivity value) noexcept {
+inline bool isConnected(Connectivity value) {
     return value == Connectivity::Online || value == Connectivity::Degraded;
 }
 
-[[nodiscard]] constexpr bool validPrinterSlot(std::size_t slot) noexcept {
+inline bool validPrinterSlot(std::size_t slot) {
     return slot < kMaxPrinterSlots;
 }
 
-[[nodiscard]] constexpr bool canDispatchPrinterCommand(const WorkshopState& state, std::size_t slot) noexcept {
-    if (!validPrinterSlot(slot)) {
-        return false;
-    }
+inline bool canDispatchPrinterCommand(const WorkshopState& state, std::size_t slot) {
+    if (!validPrinterSlot(slot)) return false;
     const PrinterState& printer = state.printers[slot];
     return printer.configured &&
            printer.commandChannelReady &&
@@ -122,23 +119,20 @@ struct WorkshopState {
            printer.telemetryFreshness != Freshness::Conflicting;
 }
 
-[[nodiscard]] constexpr bool shouldPreempt(EventPriority incoming, EventPriority active) noexcept {
+inline bool shouldPreempt(EventPriority incoming, EventPriority active) {
     return static_cast<std::uint8_t>(incoming) > static_cast<std::uint8_t>(active);
 }
 
-[[nodiscard]] constexpr bool shouldSuspendDecorativeMedia(const WorkshopState& state) noexcept {
-    if (!state.health.uiResponsive || !state.health.printerServiceResponsive) {
-        return true;
-    }
+inline bool shouldSuspendDecorativeMedia(const WorkshopState& state) {
+    if (!state.health.uiResponsive || !state.health.printerServiceResponsive) return true;
     for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) {
         const PrinterActivity activity = state.printers[slot].activity;
         if (activity == PrinterActivity::Preparing ||
             activity == PrinterActivity::Printing ||
-            activity == PrinterActivity::Paused) {
-            return true;
-        }
+            activity == PrinterActivity::Paused) return true;
     }
     return false;
 }
 
-}  // namespace workshop::platform
+}  // namespace platform
+}  // namespace workshop
