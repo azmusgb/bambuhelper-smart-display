@@ -11,47 +11,64 @@ class FakePrinterService final : public IPrinterService {
 public:
     void begin(IStateSink& sink) override {
         sink_ = &sink;
-        publish();
+        for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) {
+            publish(slot);
+        }
     }
 
     void poll(std::uint64_t nowMs) override {
-        state_.observedAtMs = nowMs;
-        publish();
+        for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) {
+            states_[slot].observedAtMs = nowMs;
+            publish(slot);
+        }
     }
 
-    PrinterState snapshot() const override {
-        return state_;
+    PrinterState snapshot(std::size_t slot) const override {
+        if (!validPrinterSlot(slot)) {
+            return PrinterState{};
+        }
+        return states_[slot];
     }
 
-    CommandResult dispatch(PrinterCommand command, bool destructiveGuardSatisfied) override {
-        if (!state_.commandChannelReady || !isConnected(state_.connection)) {
+    CommandResult dispatch(
+        std::size_t slot,
+        PrinterCommand command,
+        bool destructiveGuardSatisfied) override {
+        if (!validPrinterSlot(slot)) {
+            return CommandResult::RejectedInvalidSlot;
+        }
+        const PrinterState& state = states_[slot];
+        if (!state.configured || !state.commandChannelReady || !isConnected(state.connection)) {
             return CommandResult::RejectedUnavailable;
         }
-        if (state_.telemetryFreshness == Freshness::Stale ||
-            state_.telemetryFreshness == Freshness::Unknown ||
-            state_.telemetryFreshness == Freshness::Conflicting) {
+        if (state.telemetryFreshness == Freshness::Stale ||
+            state.telemetryFreshness == Freshness::Unknown ||
+            state.telemetryFreshness == Freshness::Conflicting) {
             return CommandResult::RejectedStaleState;
         }
-        if (command == PrinterCommand::Stop && state_.stopGuardRequired && !destructiveGuardSatisfied) {
+        if (command == PrinterCommand::Stop && state.stopGuardRequired && !destructiveGuardSatisfied) {
             return CommandResult::RejectedGuardRequired;
         }
         return CommandResult::Accepted;
     }
 
-    void setState(const PrinterState& state) {
-        state_ = state;
-        publish();
+    void setState(std::size_t slot, const PrinterState& state) {
+        if (!validPrinterSlot(slot)) {
+            return;
+        }
+        states_[slot] = state;
+        publish(slot);
     }
 
 private:
-    void publish() {
-        if (sink_ != nullptr) {
-            sink_->publishPrinterState(state_);
+    void publish(std::size_t slot) {
+        if (sink_ != nullptr && validPrinterSlot(slot)) {
+            sink_->publishPrinterState(slot, states_[slot]);
         }
     }
 
     IStateSink* sink_{nullptr};
-    PrinterState state_{};
+    PrinterState states_[kMaxPrinterSlots]{};
 };
 
 class FakeNetworkService final : public INetworkService {
@@ -100,8 +117,10 @@ int main() {
 
     printer.begin(store);
     network.begin(store);
-    assert(store.snapshot().revision == 2);
-    assert(!canDispatchPrinterCommand(store.snapshot()));
+    assert(store.snapshot().revision == kMaxPrinterSlots + 1);
+    assert(store.snapshot().configuredPrinterCount == 0);
+    assert(!canDispatchPrinterCommand(store.snapshot(), 0));
+    assert(!canDispatchPrinterCommand(store.snapshot(), kMaxPrinterSlots));
 
     NetworkState connectedNetwork;
     connectedNetwork.wifi = Connectivity::Online;
@@ -112,26 +131,32 @@ int main() {
     assert(isConnected(store.snapshot().network.wifi));
     assert(std::strcmp(store.snapshot().network.localAddress, "192.0.2.10") == 0);
 
-    PrinterState readyPrinter;
-    readyPrinter.connection = Connectivity::Online;
-    readyPrinter.activity = PrinterActivity::Idle;
-    readyPrinter.telemetryFreshness = Freshness::Fresh;
-    readyPrinter.commandChannelReady = true;
-    printer.setState(readyPrinter);
-    assert(canDispatchPrinterCommand(store.snapshot()));
-    assert(printer.dispatch(PrinterCommand::Pause, false) == CommandResult::Accepted);
-    assert(printer.dispatch(PrinterCommand::Stop, false) == CommandResult::RejectedGuardRequired);
-    assert(printer.dispatch(PrinterCommand::Stop, true) == CommandResult::Accepted);
+    PrinterState firstPrinter;
+    firstPrinter.configured = true;
+    firstPrinter.connection = Connectivity::Online;
+    firstPrinter.activity = PrinterActivity::Idle;
+    firstPrinter.telemetryFreshness = Freshness::Fresh;
+    firstPrinter.commandChannelReady = true;
+    printer.setState(0, firstPrinter);
+    assert(store.snapshot().configuredPrinterCount == 1);
+    assert(canDispatchPrinterCommand(store.snapshot(), 0));
+    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::Accepted);
+    assert(printer.dispatch(0, PrinterCommand::Stop, false) == CommandResult::RejectedGuardRequired);
+    assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::Accepted);
 
-    readyPrinter.telemetryFreshness = Freshness::Stale;
-    printer.setState(readyPrinter);
-    assert(!isUsable(store.snapshot().printer.telemetryFreshness));
-    assert(printer.dispatch(PrinterCommand::Pause, false) == CommandResult::RejectedStaleState);
-
-    readyPrinter.telemetryFreshness = Freshness::Fresh;
-    readyPrinter.activity = PrinterActivity::Printing;
-    printer.setState(readyPrinter);
+    PrinterState secondPrinter = firstPrinter;
+    secondPrinter.activity = PrinterActivity::Printing;
+    printer.setState(1, secondPrinter);
+    assert(store.snapshot().configuredPrinterCount == 2);
+    assert(store.setActivePrinter(1));
+    assert(store.snapshot().activePrinterIndex == 1);
     assert(shouldSuspendDecorativeMedia(store.snapshot()));
+
+    firstPrinter.telemetryFreshness = Freshness::Stale;
+    printer.setState(0, firstPrinter);
+    assert(!isUsable(store.snapshot().printers[0].telemetryFreshness));
+    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedStaleState);
+
     assert(shouldPreempt(EventPriority::Critical, EventPriority::Decorative));
     assert(!shouldPreempt(EventPriority::Decorative, EventPriority::Critical));
 
