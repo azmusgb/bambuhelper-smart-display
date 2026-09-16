@@ -1,6 +1,7 @@
 #include "../firmware/platform/service_contracts.hpp"
 
 #include <cassert>
+#include <cstring>
 
 using namespace workshop::platform;
 
@@ -105,10 +106,11 @@ int main() {
     NetworkState connectedNetwork;
     connectedNetwork.wifi = Connectivity::Online;
     connectedNetwork.freshness = Freshness::Fresh;
-    connectedNetwork.localAddress = "192.0.2.10";
+    std::strncpy(connectedNetwork.localAddress, "192.0.2.10", sizeof(connectedNetwork.localAddress) - 1);
     connectedNetwork.localPortalReachable = true;
     network.setState(connectedNetwork);
     assert(isConnected(store.snapshot().network.wifi));
+    assert(std::strcmp(store.snapshot().network.localAddress, "192.0.2.10") == 0);
 
     PrinterState readyPrinter;
     readyPrinter.connection = Connectivity::Online;
@@ -141,7 +143,7 @@ int main() {
     inventory.freshness = Freshness::Unknown;
     store.publishInventoryProjectionState(inventory);
     assert(store.snapshot().inventory.freshness == Freshness::Unknown);
-    assert(store.snapshot().inventory.profileId.empty());
+    assert(store.snapshot().inventory.profileId[0] == '\0');
 
     return 0;
 }
