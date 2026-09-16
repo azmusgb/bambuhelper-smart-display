@@ -36,7 +36,7 @@ public:
     virtual ~IPrinterService() = default;
 
     virtual void begin(IStateSink& sink) = 0;
-    virtual void poll(std::uint64_t nowMs) = 0;
+    virtual void poll(std::uint32_t nowMs) = 0;
     virtual PrinterState snapshot(std::size_t slot) const = 0;
 
     // Destructive actions remain guarded by the caller/UI contract. The service
@@ -52,7 +52,7 @@ public:
     virtual ~INetworkService() = default;
 
     virtual void begin(IStateSink& sink) = 0;
-    virtual void poll(std::uint64_t nowMs) = 0;
+    virtual void poll(std::uint32_t nowMs) = 0;
     virtual NetworkState snapshot() const = 0;
     virtual void requestReconnect() = 0;
 };
