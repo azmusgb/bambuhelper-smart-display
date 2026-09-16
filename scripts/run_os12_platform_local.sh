@@ -16,13 +16,22 @@ python3 "$ROOT/apply_workshop_os12_platform_bridge.py" \
   --apply
 python3 "$ROOT/scripts/validate_os12_platform_bridge.py"
 
-# The bridge is deliberately observation-only in this slice. These source checks
-# ensure the reconstructed runtime contains exactly one integration seam.
+python3 "$ROOT/apply_workshop_os12_ui_state_reads.py" \
+  --repo "$BUILD" \
+  --apply
+python3 "$ROOT/scripts/validate_os12_ui_state_reads.py"
+
+# The bridge remains observation-only for authority. Home and Printer status
+# now consume normalized read-only facts through the platform facade; richer
+# Bambu telemetry and all command dispatch remain on the existing runtime path.
 grep -q '#include "workshop_platform_bridge.h"' "$BUILD/src/main.cpp"
 test "$(grep -c 'workshopPlatformBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopPlatformPoll();' "$BUILD/src/main.cpp")" -eq 1
 test -s "$BUILD/src/workshop_platform_bridge.cpp"
 test -s "$BUILD/include/workshop_platform/workshop_state.hpp"
+grep -q 'workshopPlatformState().configuredPrinterCount>0' "$BUILD/src/smart_hub.cpp"
+grep -q 'workshopPlatformPrinterOnline(os12Slot)' "$BUILD/src/smart_hub.cpp"
+grep -q 'workshopPlatformWifiOnline()' "$BUILD/src/smart_hub.cpp"
 
 if [[ "${1:-}" == "--build" ]]; then
   if ! command -v pio >/dev/null 2>&1; then
@@ -32,7 +41,7 @@ if [[ "${1:-}" == "--build" ]]; then
   fi
   command -v pio >/dev/null 2>&1 || { echo 'FAIL: pio unavailable after install' >&2; exit 1; }
 
-  echo "=== Build WS350 OS12 observation bridge ==="
+  echo "=== Build WS350 OS12 normalized read bridge ==="
   (cd "$BUILD" && pio run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 OS12 image missing' >&2; exit 1; }
 
@@ -42,6 +51,8 @@ if [[ "${1:-}" == "--build" ]]; then
 fi
 
 echo "=== OS12 platform reconstruction complete ==="
-echo "State: observation bridge implemented; no runtime authority migration claimed."
+echo "State: normalized observation bridge + Home/Printer read migration implemented."
+echo "Command authority: unchanged legacy Bambu path."
+echo "Inventory authority: unchanged Filament Inventory path."
 echo "UI13 physical acceptance candidate: untouched."
 echo "Stable promotion: forbidden by this script."
