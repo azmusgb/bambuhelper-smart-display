@@ -35,6 +35,15 @@ jobs:
       - name: Validate Workshop OS 12 device contract
         run: python3 scripts/validate_os12_device_contract.py
 
+      - name: Compile Workshop OS 12 platform contracts
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/workshop-os12-tests
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            tests/workshop_os12_state_smoke.cpp \
+            -o /tmp/workshop-os12-tests/state-smoke
+          /tmp/workshop-os12-tests/state-smoke
+
       - name: Validate shell helpers
         run: |
           bash -n scripts/waveshare-usb.sh
