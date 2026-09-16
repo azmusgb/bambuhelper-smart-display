@@ -8,15 +8,23 @@ on:
     paths:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_non_destructive_controls.py'
+      - 'apply_workshop_os12_guarded_stop.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_non_destructive_controls.py'
+      - 'scripts/validate_os12_guarded_stop.py'
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
     paths:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_non_destructive_controls.py'
+      - 'apply_workshop_os12_guarded_stop.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_non_destructive_controls.py'
+      - 'scripts/validate_os12_guarded_stop.py'
       - '.github/workflows/os12-platform-bridge.yml'
 
 permissions:
@@ -24,7 +32,7 @@ permissions:
 
 jobs:
   build:
-    name: Reconstruct and compile observation bridge
+    name: Reconstruct and compile OS12 control bridge
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
