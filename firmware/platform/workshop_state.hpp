@@ -7,6 +7,7 @@ namespace workshop::platform {
 
 constexpr std::size_t kLocalAddressLength = 40;
 constexpr std::size_t kProfileIdLength = 40;
+constexpr std::size_t kMaxPrinterSlots = 4;
 
 enum class Freshness : std::uint8_t {
     Unknown = 0,
@@ -49,6 +50,7 @@ struct PrinterState {
     std::int16_t nozzleCelsius{0};
     std::int16_t bedCelsius{0};
     std::uint8_t progressPercent{0};
+    bool configured{false};
     bool commandChannelReady{false};
     bool stopGuardRequired{true};
 };
@@ -59,6 +61,7 @@ struct NetworkState {
     std::uint64_t observedAtMs{0};
     std::int16_t rssiDbm{0};
     char localAddress[kLocalAddressLength]{};
+    bool accessPointMode{false};
     bool localPortalReachable{false};
     bool cloudReachable{false};
 };
@@ -83,7 +86,9 @@ struct HealthState {
 };
 
 struct WorkshopState {
-    PrinterState printer{};
+    PrinterState printers[kMaxPrinterSlots]{};
+    std::uint8_t activePrinterIndex{0};
+    std::uint8_t configuredPrinterCount{0};
     NetworkState network{};
     InventoryProjectionState inventory{};
     HealthState health{};
@@ -102,10 +107,19 @@ struct WorkshopState {
     return value == Connectivity::Online || value == Connectivity::Degraded;
 }
 
-[[nodiscard]] constexpr bool canDispatchPrinterCommand(const WorkshopState& state) noexcept {
-    return state.printer.commandChannelReady &&
-           isConnected(state.printer.connection) &&
-           state.printer.telemetryFreshness != Freshness::Conflicting;
+[[nodiscard]] constexpr bool validPrinterSlot(std::size_t slot) noexcept {
+    return slot < kMaxPrinterSlots;
+}
+
+[[nodiscard]] constexpr bool canDispatchPrinterCommand(const WorkshopState& state, std::size_t slot) noexcept {
+    if (!validPrinterSlot(slot)) {
+        return false;
+    }
+    const PrinterState& printer = state.printers[slot];
+    return printer.configured &&
+           printer.commandChannelReady &&
+           isConnected(printer.connection) &&
+           printer.telemetryFreshness != Freshness::Conflicting;
 }
 
 [[nodiscard]] constexpr bool shouldPreempt(EventPriority incoming, EventPriority active) noexcept {
@@ -113,11 +127,18 @@ struct WorkshopState {
 }
 
 [[nodiscard]] constexpr bool shouldSuspendDecorativeMedia(const WorkshopState& state) noexcept {
-    return state.printer.activity == PrinterActivity::Preparing ||
-           state.printer.activity == PrinterActivity::Printing ||
-           state.printer.activity == PrinterActivity::Paused ||
-           !state.health.uiResponsive ||
-           !state.health.printerServiceResponsive;
+    if (!state.health.uiResponsive || !state.health.printerServiceResponsive) {
+        return true;
+    }
+    for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) {
+        const PrinterActivity activity = state.printers[slot].activity;
+        if (activity == PrinterActivity::Preparing ||
+            activity == PrinterActivity::Printing ||
+            activity == PrinterActivity::Paused) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace workshop::platform
