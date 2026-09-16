@@ -29,15 +29,7 @@ public:
 
     CommandResult dispatch(std::size_t slot, PrinterCommand command, bool guardSatisfied) override {
         if (!validPrinterSlot(slot)) return CommandResult::RejectedInvalidSlot;
-        const PrinterState& state = states_[slot];
-        if (!state.configured || !state.commandChannelReady || !isConnected(state.connection)) {
-            return CommandResult::RejectedUnavailable;
-        }
-        if (state.telemetryFreshness != Freshness::Fresh) return CommandResult::RejectedStaleState;
-        if (command == PrinterCommand::Stop && state.stopGuardRequired && !guardSatisfied) {
-            return CommandResult::RejectedGuardRequired;
-        }
-        return CommandResult::Accepted;
+        return validatePrinterCommand(states_[slot], command, guardSatisfied);
     }
 
     void setState(std::size_t slot, const PrinterState& state) {
@@ -110,9 +102,26 @@ int main() {
     printer.setState(0, firstPrinter);
     assert(store.snapshot().configuredPrinterCount == 1);
     assert(canDispatchPrinterCommand(store.snapshot(), 0));
+
+    // Light control is valid while idle; print-state commands are not.
+    assert(printer.dispatch(0, PrinterCommand::ChamberLightOn, false) == CommandResult::Accepted);
+    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedInvalidState);
+    assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedInvalidState);
+    assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::RejectedInvalidState);
+
+    firstObservation.activity = PrinterActivity::Printing;
+    firstPrinter = normalizePrinterObservation(firstObservation, 1500, 1000);
+    printer.setState(0, firstPrinter);
     assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::Accepted);
+    assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedInvalidState);
     assert(printer.dispatch(0, PrinterCommand::Stop, false) == CommandResult::RejectedGuardRequired);
     assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::Accepted);
+
+    firstObservation.activity = PrinterActivity::Paused;
+    firstPrinter = normalizePrinterObservation(firstObservation, 1500, 1000);
+    printer.setState(0, firstPrinter);
+    assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::Accepted);
+    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedInvalidState);
 
     LegacyPrinterObservation secondObservation = firstObservation;
     secondObservation.activity = PrinterActivity::Printing;
@@ -125,7 +134,7 @@ int main() {
     PrinterState stalePrinter = normalizePrinterObservation(firstObservation, 5000, 1000);
     printer.setState(0, stalePrinter);
     assert(!isUsable(store.snapshot().printers[0].telemetryFreshness));
-    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedUnavailable);
+    assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedStaleState);
 
     assert(freshnessFromAge(0, 5000, 1000) == Freshness::Unknown);
     const std::uint32_t nearWrap = std::numeric_limits<std::uint32_t>::max() - 25U;
