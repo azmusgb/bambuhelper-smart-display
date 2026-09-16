@@ -1,0 +1,45 @@
+name: Workshop OS 12 Platform Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/workshop-os12-device-platform-foundation
+    paths:
+      - 'firmware/platform/**'
+      - 'apply_workshop_os12_platform_bridge.py'
+      - 'scripts/run_os12_platform_local.sh'
+      - 'scripts/validate_os12_platform_bridge.py'
+      - '.github/workflows/os12-platform-bridge.yml'
+  pull_request:
+    paths:
+      - 'firmware/platform/**'
+      - 'apply_workshop_os12_platform_bridge.py'
+      - 'scripts/run_os12_platform_local.sh'
+      - 'scripts/validate_os12_platform_bridge.py'
+      - '.github/workflows/os12-platform-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Reconstruct and compile observation bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PlatformIO
+        run: |
+          python3 -m pip install --upgrade platformio
+          pio --version
+
+      - name: Reconstruct UI13 and apply OS12 bridge
+        run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
+
+      - name: Record non-promotion state
+        if: always()
+        run: |
+          echo 'This workflow proves buildability only.'
+          echo 'It does not establish runtime, physical, accepted, or stable state.'
