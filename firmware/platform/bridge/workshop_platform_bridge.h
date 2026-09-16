@@ -1,6 +1,6 @@
 #pragma once
 
-#include "workshop_platform/workshop_state.hpp"
+#include "workshop_platform/service_contracts.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -9,10 +9,15 @@ void workshopPlatformBegin();
 void workshopPlatformPoll();
 const workshop::platform::WorkshopState& workshopPlatformState();
 
+workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
+    std::size_t slot,
+    workshop::platform::PrinterCommand command,
+    bool destructiveGuardSatisfied = false);
+
 // Read-only UI facade over the normalized state store. These helpers let the
 // existing Workshop OS screens migrate incrementally without reaching back into
 // Bambu/Wi-Fi runtime state for facts already normalized by the platform layer.
-// They do not mutate printer state and do not expose inventory authority.
+// They do not mutate inventory truth and do not infer authoritative placement.
 inline const workshop::platform::PrinterState& workshopPlatformPrinterState(std::size_t slot) {
     const workshop::platform::WorkshopState& state = workshopPlatformState();
     static const workshop::platform::PrinterState unknown{};
