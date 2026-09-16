@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/workshop-os12-tests
-          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
             tests/workshop_os12_state_smoke.cpp \
             -o /tmp/workshop-os12-tests/state-smoke
           /tmp/workshop-os12-tests/state-smoke
