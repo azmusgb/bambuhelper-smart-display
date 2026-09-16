@@ -25,8 +25,8 @@ struct LegacyNetworkObservation {
     bool connected{false};
     bool connecting{false};
     bool accessPointMode{false};
-    bool localPortalReachable{false};
-    bool cloudReachable{false};
+    Connectivity localPortal{Connectivity::Unknown};
+    Connectivity cloud{Connectivity::Unknown};
     std::uint32_t observedAtMs{0};
     std::int16_t rssiDbm{0};
     const char* localAddress{nullptr};
@@ -69,8 +69,8 @@ struct LegacyNetworkObservation {
     state.observedAtMs = observation.observedAtMs;
     state.rssiDbm = observation.rssiDbm;
     state.accessPointMode = observation.accessPointMode;
-    state.localPortalReachable = observation.localPortalReachable;
-    state.cloudReachable = observation.cloudReachable;
+    state.localPortal = observation.localPortal;
+    state.cloud = observation.cloud;
 
     if (observation.connected) {
         state.wifi = Connectivity::Online;
