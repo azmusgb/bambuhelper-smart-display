@@ -57,13 +57,13 @@ struct PrinterState {
 
 struct NetworkState {
     Connectivity wifi{Connectivity::Unknown};
+    Connectivity localPortal{Connectivity::Unknown};
+    Connectivity cloud{Connectivity::Unknown};
     Freshness freshness{Freshness::Unknown};
     std::uint32_t observedAtMs{0};
     std::int16_t rssiDbm{0};
     char localAddress[kLocalAddressLength]{};
     bool accessPointMode{false};
-    bool localPortalReachable{false};
-    bool cloudReachable{false};
 };
 
 struct InventoryProjectionState {
