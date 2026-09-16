@@ -38,6 +38,9 @@ jobs:
       - name: Validate Workshop OS 12 platform bridge
         run: python3 scripts/validate_os12_platform_bridge.py
 
+      - name: Validate Workshop OS 12 UI state reads
+        run: python3 scripts/validate_os12_ui_state_reads.py
+
       - name: Compile Workshop OS 12 platform contracts
         run: |
           set -euo pipefail
