@@ -32,6 +32,9 @@ jobs:
       - name: Validate Workshop Companion protocol
         run: python3 scripts/validate_companion_protocol.py
 
+      - name: Validate Workshop OS 12 device contract
+        run: python3 scripts/validate_os12_device_contract.py
+
       - name: Validate shell helpers
         run: |
           bash -n scripts/waveshare-usb.sh
