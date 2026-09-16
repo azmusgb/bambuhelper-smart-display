@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://filamentinventory.netlify.app/contracts/workshop-device-state-v1.schema.json",
+  "title": "Workshop OS Device State v1",
+  "description": "Minimal, redacted, profile-scoped projection from Filament Inventory to Workshop OS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "profileScope",
+    "source",
+    "inventory",
+    "placements",
+    "attention",
+    "readiness"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "profileScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memberId", "scopeType"],
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "scopeType": {
+          "enum": ["private", "shared"]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "freshness", "observedAt"],
+      "properties": {
+        "authority": {
+          "const": "filamentinventory"
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "inventory": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/spoolProjection"
+      },
+      "maxItems": 256
+    },
+    "placements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/placement"
+      },
+      "maxItems": 64
+    },
+    "attention": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/attentionItem"
+      },
+      "maxItems": 64
+    },
+    "readiness": {
+      "$ref": "#/$defs/readiness"
+    }
+  },
+  "$defs": {
+    "freshness": {
+      "enum": ["fresh", "stale", "unknown", "conflicting"]
+    },
+    "evidenceQuality": {
+      "enum": [
+        "measured",
+        "calculated_from_measured",
+        "printer_estimated",
+        "visual_estimate",
+        "imported_estimate",
+        "unknown"
+      ]
+    },
+    "spoolProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spoolId",
+        "material",
+        "color",
+        "remaining",
+        "freshness"
+      ],
+      "properties": {
+        "spoolId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "material": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "color": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "remaining": {
+          "$ref": "#/$defs/quantityProjection"
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        }
+      }
+    },
+    "quantityProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "quality"],
+      "properties": {
+        "state": {
+          "enum": ["known", "unknown", "conflicting"]
+        },
+        "grams": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "quality": {
+          "$ref": "#/$defs/evidenceQuality"
+        },
+        "evidenceId": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "observedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "known"
+              }
+            },
+            "required": ["state"]
+          },
+          "then": {
+            "required": ["grams", "evidenceId"],
+            "properties": {
+              "grams": {
+                "type": "number",
+                "minimum": 0
+              },
+              "evidenceId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": ["unknown", "conflicting"]
+              }
+            },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "grams": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spoolId",
+        "printerId",
+        "pathType",
+        "evidenceId",
+        "observedAt",
+        "freshness"
+      ],
+      "properties": {
+        "spoolId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "printerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "pathType": {
+          "enum": ["ams_slot", "external_spool"]
+        },
+        "feederId": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "slotId": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "pathType": {
+                "const": "ams_slot"
+              }
+            },
+            "required": ["pathType"]
+          },
+          "then": {
+            "required": ["feederId", "slotId"],
+            "properties": {
+              "feederId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "slotId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pathType": {
+                "const": "external_spool"
+              }
+            },
+            "required": ["pathType"]
+          },
+          "then": {
+            "properties": {
+              "slotId": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "attentionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "severity", "message"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "weigh_spool",
+            "low_stock",
+            "stale_inventory",
+            "placement_conflict",
+            "drying_due",
+            "sync_health",
+            "other"
+          ]
+        },
+        "severity": {
+          "enum": ["info", "attention", "warning"]
+        },
+        "spoolId": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "freshness"],
+      "properties": {
+        "status": {
+          "enum": ["ready", "ready_with_caveat", "not_ready", "undetermined"]
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "maxLength": 256
+        },
+        "requirementEvidenceId": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}
