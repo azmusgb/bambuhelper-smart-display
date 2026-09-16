@@ -26,6 +26,46 @@ enum class CommandResult : std::uint8_t {
     FailedTransport,
 };
 
+inline bool printerActivityAllowsCommand(PrinterActivity activity, PrinterCommand command) {
+    switch (command) {
+        case PrinterCommand::Pause:
+            return activity == PrinterActivity::Preparing || activity == PrinterActivity::Printing;
+        case PrinterCommand::Resume:
+            return activity == PrinterActivity::Paused;
+        case PrinterCommand::Stop:
+            return activity == PrinterActivity::Preparing ||
+                   activity == PrinterActivity::Printing ||
+                   activity == PrinterActivity::Paused;
+        case PrinterCommand::ChamberLightOn:
+        case PrinterCommand::ChamberLightOff:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline CommandResult validatePrinterCommand(
+    const PrinterState& state,
+    PrinterCommand command,
+    bool destructiveGuardSatisfied) {
+    if (!state.configured || !isConnected(state.connection)) {
+        return CommandResult::RejectedUnavailable;
+    }
+    if (state.telemetryFreshness != Freshness::Fresh) {
+        return CommandResult::RejectedStaleState;
+    }
+    if (!state.commandChannelReady) {
+        return CommandResult::RejectedUnavailable;
+    }
+    if (!printerActivityAllowsCommand(state.activity, command)) {
+        return CommandResult::RejectedInvalidState;
+    }
+    if (command == PrinterCommand::Stop && state.stopGuardRequired && !destructiveGuardSatisfied) {
+        return CommandResult::RejectedGuardRequired;
+    }
+    return CommandResult::Accepted;
+}
+
 class IStateSink {
 public:
     virtual ~IStateSink() {}
