@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <limits>
 
 using namespace workshop::platform;
 
@@ -17,7 +18,7 @@ public:
         }
     }
 
-    void poll(std::uint64_t nowMs) override {
+    void poll(std::uint32_t nowMs) override {
         for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) {
             states_[slot].observedAtMs = nowMs;
             publish(slot);
@@ -79,7 +80,7 @@ public:
         publish();
     }
 
-    void poll(std::uint64_t nowMs) override {
+    void poll(std::uint32_t nowMs) override {
         state_.observedAtMs = nowMs;
         publish();
     }
@@ -167,7 +168,9 @@ int main() {
     assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedUnavailable);
 
     assert(freshnessFromAge(0, 5000, 1000) == Freshness::Unknown);
-    assert(freshnessFromAge(5000, 4000, 1000) == Freshness::Unknown);
+    const std::uint32_t nearWrap = std::numeric_limits<std::uint32_t>::max() - 25U;
+    assert(freshnessFromAge(nearWrap, 25U, 100U) == Freshness::Fresh);
+    assert(freshnessFromAge(nearWrap, 200U, 100U) == Freshness::Stale);
     assert(shouldPreempt(EventPriority::Critical, EventPriority::Decorative));
     assert(!shouldPreempt(EventPriority::Decorative, EventPriority::Critical));
 
