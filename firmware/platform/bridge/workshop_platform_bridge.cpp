@@ -91,28 +91,6 @@ workshop::platform::NetworkState observeNetwork(std::uint32_t nowMs) {
     return normalizeNetworkObservation(observation);
 }
 
-bool isCommandStateValid(
-    workshop::platform::PrinterActivity activity,
-    workshop::platform::PrinterCommand command) {
-    using workshop::platform::PrinterActivity;
-    using workshop::platform::PrinterCommand;
-    switch (command) {
-        case PrinterCommand::Pause:
-            return activity == PrinterActivity::Preparing || activity == PrinterActivity::Printing;
-        case PrinterCommand::Resume:
-            return activity == PrinterActivity::Paused;
-        case PrinterCommand::Stop:
-            return activity == PrinterActivity::Preparing ||
-                   activity == PrinterActivity::Printing ||
-                   activity == PrinterActivity::Paused;
-        case PrinterCommand::ChamberLightOn:
-        case PrinterCommand::ChamberLightOff:
-            return true;
-        default:
-            return false;
-    }
-}
-
 }  // namespace
 
 void workshopPlatformBegin() {
@@ -147,20 +125,9 @@ workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
     }
 
     const PrinterState& state = workshopPlatformPrinterState(slot);
-    if (!state.configured || !isConnected(state.connection)) {
-        return CommandResult::RejectedUnavailable;
-    }
-    if (state.telemetryFreshness != Freshness::Fresh) {
-        return CommandResult::RejectedStaleState;
-    }
-    if (!state.commandChannelReady) {
-        return CommandResult::RejectedUnavailable;
-    }
-    if (!isCommandStateValid(state.activity, command)) {
-        return CommandResult::RejectedInvalidState;
-    }
-    if (command == PrinterCommand::Stop && state.stopGuardRequired && !destructiveGuardSatisfied) {
-        return CommandResult::RejectedGuardRequired;
+    const CommandResult preflight = validatePrinterCommand(state, command, destructiveGuardSatisfied);
+    if (preflight != CommandResult::Accepted) {
+        return preflight;
     }
 
     switch (command) {
