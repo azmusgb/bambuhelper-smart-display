@@ -8,6 +8,7 @@ control dispatch only and preserves all existing feedback/UX behavior.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 
@@ -15,36 +16,40 @@ class PatchError(RuntimeError):
     pass
 
 
-LIGHT_OLD = 'requestLightCommand(slot,s.lightState!=1);setPrinterFeedback(0,"LIGHT SENT");'
+LIGHT_PATTERN = re.compile(
+    r"requestLightCommand\(\s*slot\s*,\s*s\.lightState\s*!=\s*1\s*\)\s*;"
+)
 LIGHT_NEW = (
     'const workshop::platform::CommandResult os12LightResult=workshopPlatformDispatchPrinterCommand('
     'slot,s.lightState!=1?workshop::platform::PrinterCommand::ChamberLightOn:'
     'workshop::platform::PrinterCommand::ChamberLightOff,false);'
     'if(os12LightResult==workshop::platform::CommandResult::Accepted)'
-    'setPrinterFeedback(0,"LIGHT SENT");'
 )
 
-PAUSE_OLD = (
-    'const bool ok=requestPrinterControlCommand(slot,paused?PRINTER_CTRL_RESUME:PRINTER_CTRL_PAUSE);'
-    'if(ok){setPrinterFeedback(1,paused?"RESUME SENT":"PAUSE SENT");buzzerPlay(BUZZ_CLICK);}'
+PAUSE_PATTERN = re.compile(
+    r"requestPrinterControlCommand\(\s*slot\s*,\s*paused\s*\?\s*PRINTER_CTRL_RESUME\s*:\s*PRINTER_CTRL_PAUSE\s*\)"
 )
 PAUSE_NEW = (
-    'const workshop::platform::CommandResult os12PrintResult=workshopPlatformDispatchPrinterCommand('
-    'slot,paused?workshop::platform::PrinterCommand::Resume:workshop::platform::PrinterCommand::Pause,false);'
-    'if(os12PrintResult==workshop::platform::CommandResult::Accepted)'
-    '{setPrinterFeedback(1,paused?"RESUME SENT":"PAUSE SENT");buzzerPlay(BUZZ_CLICK);}'
+    '(workshopPlatformDispatchPrinterCommand('
+    'slot,paused?workshop::platform::PrinterCommand::Resume:workshop::platform::PrinterCommand::Pause,false)'
+    '==workshop::platform::CommandResult::Accepted)'
 )
 
-STOP_MARKER = 'requestPrinterControlCommand(slot,PRINTER_CTRL_STOP)'
+STOP_PATTERN = re.compile(
+    r"requestPrinterControlCommand\(\s*slot\s*,\s*PRINTER_CTRL_STOP\s*\)"
+)
 
 
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if new in text:
-        return text
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected one source anchor, found {count}")
-    return text.replace(old, new, 1)
+def replace_regex_once(text: str, pattern: re.Pattern[str], new: str, label: str) -> str:
+    # Idempotence: a migrated source no longer contains the direct transport call.
+    matches = list(pattern.finditer(text))
+    if not matches:
+        if new in text:
+            return text
+        raise PatchError(f"{label}: expected one source anchor, found 0")
+    if len(matches) != 1:
+        raise PatchError(f"{label}: expected one source anchor, found {len(matches)}")
+    return pattern.sub(new, text, count=1)
 
 
 def apply(repo: Path) -> None:
@@ -60,15 +65,21 @@ def apply(repo: Path) -> None:
     text = hub_path.read_text(encoding="utf-8")
     if '#include "workshop_platform_bridge.h"' not in text:
         raise PatchError("smart_hub.cpp must include the OS12 platform bridge")
-    if STOP_MARKER not in text:
-        raise PatchError("guarded legacy STOP path missing before non-destructive migration")
+    if len(STOP_PATTERN.findall(text)) != 1:
+        raise PatchError("guarded legacy STOP path must exist exactly once before migration")
 
-    text = replace_once(text, LIGHT_OLD, LIGHT_NEW, "physical light command")
-    text = replace_once(text, PAUSE_OLD, PAUSE_NEW, "physical pause/resume command")
+    # Light is a void legacy call. Replace only that call + semicolon with a
+    # preflighted result and a one-statement `if`, so the already-existing next
+    # feedback statement executes only when the OS12 facade accepted the command.
+    text = replace_regex_once(text, LIGHT_PATTERN, LIGHT_NEW, "physical light command")
+
+    # Pause/Resume already feeds a boolean `ok` in the mature UI. Replace only
+    # the expression, preserving the existing feedback/buzzer block verbatim.
+    text = replace_regex_once(text, PAUSE_PATTERN, PAUSE_NEW, "physical pause/resume command")
 
     # This slice must not absorb STOP. Keeping this assertion in the patcher
     # prevents an accidental broad replacement from weakening the release gate.
-    if text.count(STOP_MARKER) != 1:
+    if len(STOP_PATTERN.findall(text)) != 1:
         raise PatchError("guarded legacy STOP path must remain exactly once")
     if "longPress" not in text:
         raise PatchError("physical STOP long-press guard missing")
