@@ -91,6 +91,28 @@ workshop::platform::NetworkState observeNetwork(std::uint32_t nowMs) {
     return normalizeNetworkObservation(observation);
 }
 
+bool isCommandStateValid(
+    workshop::platform::PrinterActivity activity,
+    workshop::platform::PrinterCommand command) {
+    using workshop::platform::PrinterActivity;
+    using workshop::platform::PrinterCommand;
+    switch (command) {
+        case PrinterCommand::Pause:
+            return activity == PrinterActivity::Preparing || activity == PrinterActivity::Printing;
+        case PrinterCommand::Resume:
+            return activity == PrinterActivity::Paused;
+        case PrinterCommand::Stop:
+            return activity == PrinterActivity::Preparing ||
+                   activity == PrinterActivity::Printing ||
+                   activity == PrinterActivity::Paused;
+        case PrinterCommand::ChamberLightOn:
+        case PrinterCommand::ChamberLightOff:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 void workshopPlatformBegin() {
@@ -112,4 +134,52 @@ void workshopPlatformPoll() {
 
 const workshop::platform::WorkshopState& workshopPlatformState() {
     return g_workshopStateStore.snapshot();
+}
+
+workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
+    std::size_t slot,
+    workshop::platform::PrinterCommand command,
+    bool destructiveGuardSatisfied) {
+    using namespace workshop::platform;
+
+    if (!validPrinterSlot(slot) || slot >= MAX_ACTIVE_PRINTERS) {
+        return CommandResult::RejectedInvalidSlot;
+    }
+
+    const PrinterState& state = workshopPlatformPrinterState(slot);
+    if (!state.configured || !isConnected(state.connection)) {
+        return CommandResult::RejectedUnavailable;
+    }
+    if (state.telemetryFreshness != Freshness::Fresh) {
+        return CommandResult::RejectedStaleState;
+    }
+    if (!state.commandChannelReady) {
+        return CommandResult::RejectedUnavailable;
+    }
+    if (!isCommandStateValid(state.activity, command)) {
+        return CommandResult::RejectedInvalidState;
+    }
+    if (command == PrinterCommand::Stop && state.stopGuardRequired && !destructiveGuardSatisfied) {
+        return CommandResult::RejectedGuardRequired;
+    }
+
+    switch (command) {
+        case PrinterCommand::Pause:
+            return requestPrinterControlCommand(static_cast<uint8_t>(slot), PRINTER_CTRL_PAUSE)
+                ? CommandResult::Accepted : CommandResult::FailedTransport;
+        case PrinterCommand::Resume:
+            return requestPrinterControlCommand(static_cast<uint8_t>(slot), PRINTER_CTRL_RESUME)
+                ? CommandResult::Accepted : CommandResult::FailedTransport;
+        case PrinterCommand::Stop:
+            return requestPrinterControlCommand(static_cast<uint8_t>(slot), PRINTER_CTRL_STOP)
+                ? CommandResult::Accepted : CommandResult::FailedTransport;
+        case PrinterCommand::ChamberLightOn:
+            requestLightCommand(static_cast<uint8_t>(slot), true);
+            return CommandResult::Accepted;
+        case PrinterCommand::ChamberLightOff:
+            requestLightCommand(static_cast<uint8_t>(slot), false);
+            return CommandResult::Accepted;
+        default:
+            return CommandResult::RejectedInvalidState;
+    }
 }
