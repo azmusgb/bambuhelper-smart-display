@@ -35,6 +35,7 @@ python3 "$ROOT/apply_workshop_os12_guarded_stop.py" \
   --repo "$BUILD" \
   --apply
 python3 "$ROOT/scripts/validate_os12_guarded_stop.py"
+python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"
 
 # UI status surfaces consume normalized read-only facts. Physical Light,
 # Pause/Resume, and guarded Stop now dispatch through the OS12 command facade,
@@ -50,10 +51,6 @@ grep -q 'workshopPlatformWifiOnline()' "$BUILD/src/smart_hub.cpp"
 grep -q 'os12Network=workshopPlatformState().network' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformDispatchPrinterCommand' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshop::platform::PrinterCommand::Stop,true' "$BUILD/src/smart_hub.cpp"
-if grep -q 'requestPrinterControlCommand(slot,PRINTER_CTRL_STOP)' "$BUILD/src/smart_hub.cpp"; then
-  echo 'FAIL: direct physical STOP transport call survived OS12 migration' >&2
-  exit 1
-fi
 grep -q 'longPress' "$BUILD/src/smart_hub.cpp"
 
 if [[ "${1:-}" == "--build" ]]; then
@@ -77,6 +74,7 @@ echo "=== OS12 platform reconstruction complete ==="
 echo "State: normalized observation bridge + informational read migration implemented."
 echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu transport."
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
+echo "Control boundary: direct physical Light/Pause/Resume/Stop transport bypasses rejected."
 echo "Power authority: unchanged Tasmota path."
 echo "Inventory authority: unchanged Filament Inventory path."
 echo "UI13 physical acceptance candidate: untouched."
