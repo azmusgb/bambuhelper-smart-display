@@ -13,9 +13,7 @@ class FakePrinterService final : public IPrinterService {
 public:
     void begin(IStateSink& sink) override {
         sink_ = &sink;
-        for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) {
-            publish(slot);
-        }
+        for (std::size_t slot = 0; slot < kMaxPrinterSlots; ++slot) publish(slot);
     }
 
     void poll(std::uint32_t nowMs) override {
@@ -26,47 +24,31 @@ public:
     }
 
     PrinterState snapshot(std::size_t slot) const override {
-        if (!validPrinterSlot(slot)) {
-            return PrinterState{};
-        }
-        return states_[slot];
+        return validPrinterSlot(slot) ? states_[slot] : PrinterState{};
     }
 
-    CommandResult dispatch(
-        std::size_t slot,
-        PrinterCommand command,
-        bool destructiveGuardSatisfied) override {
-        if (!validPrinterSlot(slot)) {
-            return CommandResult::RejectedInvalidSlot;
-        }
+    CommandResult dispatch(std::size_t slot, PrinterCommand command, bool guardSatisfied) override {
+        if (!validPrinterSlot(slot)) return CommandResult::RejectedInvalidSlot;
         const PrinterState& state = states_[slot];
         if (!state.configured || !state.commandChannelReady || !isConnected(state.connection)) {
             return CommandResult::RejectedUnavailable;
         }
-        if (state.telemetryFreshness == Freshness::Stale ||
-            state.telemetryFreshness == Freshness::Unknown ||
-            state.telemetryFreshness == Freshness::Conflicting) {
-            return CommandResult::RejectedStaleState;
-        }
-        if (command == PrinterCommand::Stop && state.stopGuardRequired && !destructiveGuardSatisfied) {
+        if (state.telemetryFreshness != Freshness::Fresh) return CommandResult::RejectedStaleState;
+        if (command == PrinterCommand::Stop && state.stopGuardRequired && !guardSatisfied) {
             return CommandResult::RejectedGuardRequired;
         }
         return CommandResult::Accepted;
     }
 
     void setState(std::size_t slot, const PrinterState& state) {
-        if (!validPrinterSlot(slot)) {
-            return;
-        }
+        if (!validPrinterSlot(slot)) return;
         states_[slot] = state;
         publish(slot);
     }
 
 private:
     void publish(std::size_t slot) {
-        if (sink_ != nullptr && validPrinterSlot(slot)) {
-            sink_->publishPrinterState(slot, states_[slot]);
-        }
+        if (sink_ != nullptr && validPrinterSlot(slot)) sink_->publishPrinterState(slot, states_[slot]);
     }
 
     IStateSink* sink_{nullptr};
@@ -75,37 +57,14 @@ private:
 
 class FakeNetworkService final : public INetworkService {
 public:
-    void begin(IStateSink& sink) override {
-        sink_ = &sink;
-        publish();
-    }
-
-    void poll(std::uint32_t nowMs) override {
-        state_.observedAtMs = nowMs;
-        publish();
-    }
-
-    NetworkState snapshot() const override {
-        return state_;
-    }
-
-    void requestReconnect() override {
-        state_.wifi = Connectivity::Connecting;
-        publish();
-    }
-
-    void setState(const NetworkState& state) {
-        state_ = state;
-        publish();
-    }
+    void begin(IStateSink& sink) override { sink_ = &sink; publish(); }
+    void poll(std::uint32_t nowMs) override { state_.observedAtMs = nowMs; publish(); }
+    NetworkState snapshot() const override { return state_; }
+    void requestReconnect() override { state_.wifi = Connectivity::Connecting; publish(); }
+    void setState(const NetworkState& state) { state_ = state; publish(); }
 
 private:
-    void publish() {
-        if (sink_ != nullptr) {
-            sink_->publishNetworkState(state_);
-        }
-    }
-
+    void publish() { if (sink_ != nullptr) sink_->publishNetworkState(state_); }
     IStateSink* sink_{nullptr};
     NetworkState state_{};
 };
@@ -129,10 +88,12 @@ int main() {
     networkObservation.observedAtMs = 1000;
     networkObservation.rssiDbm = -55;
     networkObservation.localAddress = "192.0.2.10";
-    networkObservation.localPortalReachable = true;
+    networkObservation.localPortal = Connectivity::Online;
     NetworkState connectedNetwork = normalizeNetworkObservation(networkObservation);
     network.setState(connectedNetwork);
     assert(isConnected(store.snapshot().network.wifi));
+    assert(store.snapshot().network.localPortal == Connectivity::Online);
+    assert(store.snapshot().network.cloud == Connectivity::Unknown);
     assert(std::strcmp(store.snapshot().network.localAddress, "192.0.2.10") == 0);
 
     LegacyPrinterObservation firstObservation;
@@ -155,8 +116,7 @@ int main() {
 
     LegacyPrinterObservation secondObservation = firstObservation;
     secondObservation.activity = PrinterActivity::Printing;
-    PrinterState secondPrinter = normalizePrinterObservation(secondObservation, 1500, 1000);
-    printer.setState(1, secondPrinter);
+    printer.setState(1, normalizePrinterObservation(secondObservation, 1500, 1000));
     assert(store.snapshot().configuredPrinterCount == 2);
     assert(store.setActivePrinter(1));
     assert(store.snapshot().activePrinterIndex == 1);
