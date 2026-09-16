@@ -6,7 +6,8 @@
 #include <cstdint>
 #include <cstring>
 
-namespace workshop::platform {
+namespace workshop {
+namespace platform {
 
 // Transitional input only. These observations are populated from the existing
 // Bambu/Wi-Fi runtime; they are not a second authority and contain no inventory
@@ -34,21 +35,19 @@ struct LegacyNetworkObservation {
 
 // Unsigned subtraction is intentional: Arduino millis() wraps at 2^32 and this
 // remains correct as long as the freshness horizon is far below half the range.
-[[nodiscard]] constexpr Freshness freshnessFromAge(
+inline Freshness freshnessFromAge(
     std::uint32_t observedAtMs,
     std::uint32_t nowMs,
-    std::uint32_t staleAfterMs) noexcept {
-    if (observedAtMs == 0 || staleAfterMs == 0) {
-        return Freshness::Unknown;
-    }
+    std::uint32_t staleAfterMs) {
+    if (observedAtMs == 0 || staleAfterMs == 0) return Freshness::Unknown;
     const std::uint32_t elapsed = nowMs - observedAtMs;
     return elapsed <= staleAfterMs ? Freshness::Fresh : Freshness::Stale;
 }
 
-[[nodiscard]] inline PrinterState normalizePrinterObservation(
+inline PrinterState normalizePrinterObservation(
     const LegacyPrinterObservation& observation,
     std::uint32_t nowMs,
-    std::uint32_t staleAfterMs) noexcept {
+    std::uint32_t staleAfterMs) {
     PrinterState state;
     state.configured = observation.configured;
     state.connection = observation.connected ? Connectivity::Online : Connectivity::Offline;
@@ -63,8 +62,7 @@ struct LegacyNetworkObservation {
     return state;
 }
 
-[[nodiscard]] inline NetworkState normalizeNetworkObservation(
-    const LegacyNetworkObservation& observation) noexcept {
+inline NetworkState normalizeNetworkObservation(const LegacyNetworkObservation& observation) {
     NetworkState state;
     state.observedAtMs = observation.observedAtMs;
     state.rssiDbm = observation.rssiDbm;
@@ -90,4 +88,5 @@ struct LegacyNetworkObservation {
     return state;
 }
 
-}  // namespace workshop::platform
+}  // namespace platform
+}  // namespace workshop
