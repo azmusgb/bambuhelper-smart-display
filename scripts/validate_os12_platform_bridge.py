@@ -26,6 +26,7 @@ def validate_templates() -> None:
     state = (ROOT / "firmware/platform/workshop_state.hpp").read_text(encoding="utf-8")
     adapter = (ROOT / "firmware/platform/runtime_adapter.hpp").read_text(encoding="utf-8")
     service = (ROOT / "firmware/platform/service_contracts.hpp").read_text(encoding="utf-8")
+    bridge_h = (ROOT / "firmware/platform/bridge/workshop_platform_bridge.h").read_text(encoding="utf-8")
     bridge = (ROOT / "firmware/platform/bridge/workshop_platform_bridge.cpp").read_text(encoding="utf-8")
 
     required = {
@@ -36,8 +37,14 @@ def validate_templates() -> None:
         "existing printer authority": "printers[slot].state",
         "existing Wi-Fi authority": "isWiFiConnected()",
         "observation poll seam": "workshopPlatformPoll()",
+        "command facade": "workshopPlatformDispatchPrinterCommand",
+        "deterministic command preflight": "validatePrinterCommand",
+        "deferred Bambu command transport": "requestPrinterControlCommand",
+        "existing chamber-light transport": "requestLightCommand",
+        "guard rejection": "RejectedGuardRequired",
+        "invalid-state rejection": "RejectedInvalidState",
     }
-    joined = state + adapter + service + bridge
+    joined = state + adapter + service + bridge_h + bridge
     for label, needle in required.items():
         if needle not in joined:
             fail(f"missing {label}: {needle}")
@@ -59,9 +66,14 @@ def validate_templates() -> None:
     # `using namespace workshop::platform;` is valid C++11. Reject only the
     # C++17 nested namespace declaration syntax and attributes we intentionally
     # avoid in firmware-facing headers.
-    headers = state + adapter + service
+    headers = state + adapter + service + bridge_h
     if "namespace workshop::platform {" in headers or "[[nodiscard]]" in headers:
         fail("platform headers must remain compatible with Arduino C++11")
+
+    stop_guard = service.find("RejectedGuardRequired")
+    accepted = service.find("return CommandResult::Accepted;", stop_guard)
+    if stop_guard < 0 or accepted < 0 or accepted < stop_guard:
+        fail("guarded Stop preflight must reject before command acceptance")
 
 
 def validate_patcher() -> None:
