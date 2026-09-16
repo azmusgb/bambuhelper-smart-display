@@ -71,7 +71,11 @@ workshop::platform::NetworkState observeNetwork(std::uint32_t nowMs) {
     const bool connected = isWiFiConnected();
     const bool accessPoint = isAPMode();
     String localAddress;
-    if (connected || accessPoint) localAddress = WiFi.localIP().toString();
+    if (connected) {
+        localAddress = WiFi.localIP().toString();
+    } else if (accessPoint) {
+        localAddress = WiFi.softAPIP().toString();
+    }
 
     LegacyNetworkObservation observation;
     observation.connected = connected;
