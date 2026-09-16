@@ -1,3 +1,4 @@
+#include "../firmware/platform/runtime_adapter.hpp"
 #include "../firmware/platform/service_contracts.hpp"
 
 #include <cassert>
@@ -122,21 +123,28 @@ int main() {
     assert(!canDispatchPrinterCommand(store.snapshot(), 0));
     assert(!canDispatchPrinterCommand(store.snapshot(), kMaxPrinterSlots));
 
-    NetworkState connectedNetwork;
-    connectedNetwork.wifi = Connectivity::Online;
-    connectedNetwork.freshness = Freshness::Fresh;
-    std::strncpy(connectedNetwork.localAddress, "192.0.2.10", sizeof(connectedNetwork.localAddress) - 1);
-    connectedNetwork.localPortalReachable = true;
+    LegacyNetworkObservation networkObservation;
+    networkObservation.connected = true;
+    networkObservation.observedAtMs = 1000;
+    networkObservation.rssiDbm = -55;
+    networkObservation.localAddress = "192.0.2.10";
+    networkObservation.localPortalReachable = true;
+    NetworkState connectedNetwork = normalizeNetworkObservation(networkObservation);
     network.setState(connectedNetwork);
     assert(isConnected(store.snapshot().network.wifi));
     assert(std::strcmp(store.snapshot().network.localAddress, "192.0.2.10") == 0);
 
-    PrinterState firstPrinter;
-    firstPrinter.configured = true;
-    firstPrinter.connection = Connectivity::Online;
-    firstPrinter.activity = PrinterActivity::Idle;
-    firstPrinter.telemetryFreshness = Freshness::Fresh;
-    firstPrinter.commandChannelReady = true;
+    LegacyPrinterObservation firstObservation;
+    firstObservation.configured = true;
+    firstObservation.connected = true;
+    firstObservation.activity = PrinterActivity::Idle;
+    firstObservation.lastTelemetryAtMs = 1000;
+    firstObservation.nozzleCelsius = 215;
+    firstObservation.bedCelsius = 55;
+    firstObservation.progressPercent = 101;
+    PrinterState firstPrinter = normalizePrinterObservation(firstObservation, 1500, 1000);
+    assert(firstPrinter.telemetryFreshness == Freshness::Fresh);
+    assert(firstPrinter.progressPercent == 100);
     printer.setState(0, firstPrinter);
     assert(store.snapshot().configuredPrinterCount == 1);
     assert(canDispatchPrinterCommand(store.snapshot(), 0));
@@ -144,19 +152,22 @@ int main() {
     assert(printer.dispatch(0, PrinterCommand::Stop, false) == CommandResult::RejectedGuardRequired);
     assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::Accepted);
 
-    PrinterState secondPrinter = firstPrinter;
-    secondPrinter.activity = PrinterActivity::Printing;
+    LegacyPrinterObservation secondObservation = firstObservation;
+    secondObservation.activity = PrinterActivity::Printing;
+    PrinterState secondPrinter = normalizePrinterObservation(secondObservation, 1500, 1000);
     printer.setState(1, secondPrinter);
     assert(store.snapshot().configuredPrinterCount == 2);
     assert(store.setActivePrinter(1));
     assert(store.snapshot().activePrinterIndex == 1);
     assert(shouldSuspendDecorativeMedia(store.snapshot()));
 
-    firstPrinter.telemetryFreshness = Freshness::Stale;
-    printer.setState(0, firstPrinter);
+    PrinterState stalePrinter = normalizePrinterObservation(firstObservation, 5000, 1000);
+    printer.setState(0, stalePrinter);
     assert(!isUsable(store.snapshot().printers[0].telemetryFreshness));
-    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedStaleState);
+    assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedUnavailable);
 
+    assert(freshnessFromAge(0, 5000, 1000) == Freshness::Unknown);
+    assert(freshnessFromAge(5000, 4000, 1000) == Freshness::Unknown);
     assert(shouldPreempt(EventPriority::Critical, EventPriority::Decorative));
     assert(!shouldPreempt(EventPriority::Decorative, EventPriority::Critical));
 
