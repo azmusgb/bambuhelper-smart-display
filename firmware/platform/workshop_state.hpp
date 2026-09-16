@@ -46,7 +46,7 @@ struct PrinterState {
     Connectivity connection{Connectivity::Unknown};
     PrinterActivity activity{PrinterActivity::Unknown};
     Freshness telemetryFreshness{Freshness::Unknown};
-    std::uint64_t observedAtMs{0};
+    std::uint32_t observedAtMs{0};
     std::int16_t nozzleCelsius{0};
     std::int16_t bedCelsius{0};
     std::uint8_t progressPercent{0};
@@ -58,7 +58,7 @@ struct PrinterState {
 struct NetworkState {
     Connectivity wifi{Connectivity::Unknown};
     Freshness freshness{Freshness::Unknown};
-    std::uint64_t observedAtMs{0};
+    std::uint32_t observedAtMs{0};
     std::int16_t rssiDbm{0};
     char localAddress[kLocalAddressLength]{};
     bool accessPointMode{false};
@@ -70,7 +70,7 @@ struct InventoryProjectionState {
     // Inventory truth remains owned by Filament Inventory. Workshop OS stores only
     // the state of the profile-scoped projection it has received.
     Freshness freshness{Freshness::Unknown};
-    std::uint64_t observedAtMs{0};
+    std::uint32_t observedAtMs{0};
     char profileId[kProfileIdLength]{};
     bool available{false};
 };
