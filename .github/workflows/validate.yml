@@ -47,6 +47,9 @@ jobs:
       - name: Validate Workshop OS 12 non-destructive controls
         run: python3 scripts/validate_os12_non_destructive_controls.py
 
+      - name: Validate Workshop OS 12 guarded Stop
+        run: python3 scripts/validate_os12_guarded_stop.py
+
       - name: Compile Workshop OS 12 platform contracts
         run: |
           set -euo pipefail
