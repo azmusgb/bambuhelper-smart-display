@@ -40,10 +40,13 @@ HOME_STATE_NEW = (
 )
 PRINTER_CONFIG_OLD = '  if(!isAnyPrinterConfigured()){'
 PRINTER_CONFIG_NEW = '  if(workshopPlatformState().configuredPrinterCount==0){'
+# UI13 product-finish intentionally changed disconnected printer status from red
+# to warning orange. Match the final reconstructed UI13 source, not the older
+# UI11 fragment, and preserve that semantic color in the normalized replacement.
 PRINTER_STATE_OLD = (
     '  const PrinterSlot& p=displayedPrinter();const BambuState& s=p.state;'
     'const bool paused=s.gcodeStateId==GCODE_PAUSE;const bool active=s.printing||paused;'
-    'const uint16_t sc=!s.connected?C10_RED:(paused?C10_ORANGE:(s.printing?C10_ACCENT:C10_GREEN));'
+    'const uint16_t sc=!s.connected?C10_ORANGE:(paused?C10_ORANGE:(s.printing?C10_ACCENT:C10_GREEN));'
     'const char* state=!s.connected?"Offline":(paused?"Paused":(s.printing?"Printing":"Ready"));\n'
 )
 PRINTER_STATE_NEW = (
@@ -53,7 +56,7 @@ PRINTER_STATE_NEW = (
     'const bool printing=workshopPlatformPrinterPrinting(os12Slot);'
     'const bool active=workshopPlatformPrinterActive(os12Slot);'
     'const bool online=workshopPlatformPrinterOnline(os12Slot);'
-    'const uint16_t sc=!online?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN));'
+    'const uint16_t sc=!online?C10_ORANGE:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN));'
     'const char* state=!online?"Offline":(paused?"Paused":(printing?"Printing":"Ready"));\n'
 )
 
