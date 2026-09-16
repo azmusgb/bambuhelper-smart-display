@@ -21,6 +21,7 @@ enum class CommandResult : std::uint8_t {
     RejectedInvalidSlot,
     RejectedUnavailable,
     RejectedStaleState,
+    RejectedInvalidState,
     RejectedGuardRequired,
     FailedTransport,
 };
