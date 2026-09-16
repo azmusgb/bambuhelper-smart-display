@@ -1,9 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <string>
 
 namespace workshop::platform {
+
+constexpr std::size_t kLocalAddressLength = 40;
+constexpr std::size_t kProfileIdLength = 40;
 
 enum class Freshness : std::uint8_t {
     Unknown = 0,
@@ -55,7 +58,7 @@ struct NetworkState {
     Freshness freshness{Freshness::Unknown};
     std::uint64_t observedAtMs{0};
     std::int16_t rssiDbm{0};
-    std::string localAddress{};
+    char localAddress[kLocalAddressLength]{};
     bool localPortalReachable{false};
     bool cloudReachable{false};
 };
@@ -65,7 +68,7 @@ struct InventoryProjectionState {
     // the state of the profile-scoped projection it has received.
     Freshness freshness{Freshness::Unknown};
     std::uint64_t observedAtMs{0};
-    std::string profileId{};
+    char profileId[kProfileIdLength]{};
     bool available{false};
 };
 
