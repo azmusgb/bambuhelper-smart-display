@@ -36,27 +36,45 @@ def main() -> int:
         "class HardwareBackend",
         "videoDecoderAvailable",
         "psramAvailable",
+        "recordingAvailable",
+        "isSessionActive() const",
+        "hasRecording() const",
     ])
-    require(repo / "include/ws350_media_backend.h", ["class Ws350MediaBackend"])
+    require(repo / "include/ws350_media_backend.h", [
+        "class Ws350MediaBackend",
+        "recordingPlaybackRequested_",
+    ])
     require(repo / "include/workshop_media_runtime.h", ["workshopMediaSnapshot"])
-    require(repo / "src/media_service.cpp", ["MediaError::Busy", "MediaError::OutOfMemory"])
+    require(repo / "src/media_service.cpp", [
+        "MediaError::Busy",
+        "MediaError::OutOfMemory",
+        "refreshBackendFacts",
+    ])
     backend = require(repo / "src/ws350_media_backend.cpp", [
         "BOARD_HAS_ES8311_AUDIO",
         "BOARD_HAS_MICROPHONE",
         "buzzerBackendSetVolume",
         "buzzerBackendMicLevel",
+        "buzzerBackendMicRecordBegin",
+        "buzzerBackendMicRecordPoll",
+        "buzzerBackendMicRecordStop",
+        "buzzerBackendMicPlaybackBegin",
+        "buzzerBackendMicPlaybackPoll",
+        "buzzerBackendMicHasRecording",
         "videoDecoderAvailable = false",
     ])
     require(repo / "src/workshop_media_runtime.cpp", ["gMediaService", "gMediaBackend"])
 
-    # Safety: do not claim video or recording support until a real bounded backend
-    # is present and validated. These false returns are intentional for this slice.
-    if "bool Ws350MediaBackend::beginRecording" not in backend or "return false;" not in backend:
-        raise SystemExit("FAIL: bounded recording must remain fail-closed until implemented")
-    if "bool Ws350MediaBackend::beginMjpeg" not in backend:
-        raise SystemExit("FAIL: MJPEG capability boundary missing")
+    # Recording is now implemented only through the bounded ES8311/PSRAM path.
+    # Video remains fail-closed until a real bounded MJPEG decoder is installed.
+    if "bool Ws350MediaBackend::beginRecording" not in backend:
+        raise SystemExit("FAIL: bounded recording backend missing")
+    if "recordingRequested_ = buzzerBackendMicRecordBegin(maxDurationMs);" not in backend:
+        raise SystemExit("FAIL: recording does not route through the bounded microphone backend")
+    if "bool Ws350MediaBackend::beginMjpeg" not in backend or "videoRequested_ = false;" not in backend:
+        raise SystemExit("FAIL: MJPEG capability must remain fail-closed")
 
-    print("PASS: reconstructed OS12 media runtime/lifecycle boundary")
+    print("PASS: reconstructed OS12 media runtime has bounded recording/playback and fail-closed video")
     return 0
 
 
