@@ -63,6 +63,11 @@ python3 "$ROOT/apply_workshop_os12_media_runtime.py" \
 python3 "$ROOT/scripts/validate_os12_media_service.py"
 python3 "$ROOT/scripts/validate_os12_media_runtime.py" --repo "$BUILD"
 
+python3 "$ROOT/apply_workshop_os12_media_ui.py" \
+  --repo "$BUILD" \
+  --apply
+python3 "$ROOT/scripts/validate_os12_media_ui.py" --repo "$BUILD"
+
 python3 "$ROOT/scripts/validate_os12_device_update.py" \
   --source-root "$ROOT" \
   --repo "$BUILD"
@@ -85,6 +90,9 @@ test -s "$BUILD/src/ws350_media_backend.cpp"
 test -s "$BUILD/src/workshop_media_runtime.cpp"
 test -s "$BUILD/include/workshop_platform/workshop_state.hpp"
 test -s "$BUILD/include/media_service.h"
+grep -q 'drawOs12Media' "$BUILD/src/smart_hub.cpp"
+grep -q 'drawOs12MediaLab' "$BUILD/src/smart_hub.cpp"
+grep -q 'workshopMediaSnapshot()' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformState().configuredPrinterCount>0' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformPrinterOnline(os12Slot)' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformWifiOnline()' "$BUILD/src/smart_hub.cpp"
@@ -115,7 +123,7 @@ if [[ "${1:-}" == "--build" ]]; then
   echo "PlatformIO: $PIO_BIN"
   "$PIO_BIN" --version
 
-  echo "=== Build WS350 OS12 device platform + media runtime ==="
+  echo "=== Build WS350 OS12 device platform + media runtime/UI ==="
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 OS12 image missing' >&2; exit 1; }
 
@@ -133,7 +141,8 @@ echo "Stop UX guard: existing long-press preserved; facade enforces destructive 
 echo "Control boundary: direct physical Light/Pause/Resume/Stop transport bypasses rejected."
 echo "Portal access: exact code alphabet/normalization, bounded login backoff, per-session RAM cookies, and accessible login states implemented."
 echo "Media runtime: centralized MediaService + capability-safe hardware adapter wired into lifecycle."
-echo "Media hardware: capability probes fail closed; no speaker/mic/video capability is invented."
+echo "Media UI: capability-scoped Speaker/Microphone/Media Lab surfaces integrated into UI13 settings flow."
+echo "Media hardware: capability probes fail closed; recording/video remain unavailable until their bounded backends are validated."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
 echo "Full image / offset 0x0: recovery only, never device-native OTA."
