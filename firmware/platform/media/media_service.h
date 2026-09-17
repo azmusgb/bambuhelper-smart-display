@@ -46,12 +46,14 @@ struct RuntimeState {
   RuntimeState()
       : session(SessionState::Idle), lastError(MediaError::None),
         volumePercent(70), muted(false), microphoneLevelPercent(0),
-        audioUnderruns(0), droppedVideoFrames(0), sessionStartedAtMs(0) {}
+        recordingAvailable(false), audioUnderruns(0), droppedVideoFrames(0),
+        sessionStartedAtMs(0) {}
   SessionState session;
   MediaError lastError;
   uint8_t volumePercent;
   bool muted;
   uint8_t microphoneLevelPercent;
+  bool recordingAvailable;
   uint32_t audioUnderruns;
   uint32_t droppedVideoFrames;
   uint32_t sessionStartedAtMs;
@@ -81,6 +83,7 @@ class HardwareBackend {
   // owned by the backend. MediaService uses this only for sessions whose
   // lifetime is backend-driven; the speaker diagnostic has its own deadline.
   virtual bool isSessionActive() const = 0;
+  virtual bool hasRecording() const = 0;
 };
 
 class MediaService {
@@ -112,6 +115,7 @@ class MediaService {
   bool requireCapability(bool available);
   void transition(SessionState next, uint32_t nowMs);
   void clearError();
+  void refreshBackendFacts();
 
   HardwareBackend* backend_;
   Snapshot snapshot_;
