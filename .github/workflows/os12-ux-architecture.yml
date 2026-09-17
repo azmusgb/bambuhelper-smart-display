@@ -1,0 +1,56 @@
+name: Workshop OS 12 UX Architecture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/os12-ux-architecture-overhaul
+    paths:
+      - 'apply_workshop_os12_ux_architecture.py'
+      - 'scripts/run_os12_ux_local.sh'
+      - 'scripts/validate_os12_ux_architecture.py'
+      - '.github/workflows/os12-ux-architecture.yml'
+      - 'firmware/ui-v11.25-rc10/**'
+      - 'firmware/ui-v11.26-ui11/**'
+      - 'firmware/ui-v11.27-ui12/**'
+      - 'firmware/ui-v11.28-ui13/**'
+  pull_request:
+    paths:
+      - 'apply_workshop_os12_ux_architecture.py'
+      - 'scripts/run_os12_ux_local.sh'
+      - 'scripts/validate_os12_ux_architecture.py'
+      - '.github/workflows/os12-ux-architecture.yml'
+      - 'firmware/ui-v11.25-rc10/**'
+      - 'firmware/ui-v11.26-ui11/**'
+      - 'firmware/ui-v11.27-ui12/**'
+      - 'firmware/ui-v11.28-ui13/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Reconstruct and compile hierarchical flat UX
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OS12_RELEASE_VERSION: '12.0.0'
+      OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate script syntax
+        run: |
+          python3 -m py_compile apply_workshop_os12_ux_architecture.py scripts/validate_os12_ux_architecture.py
+          bash -n scripts/run_os12_ux_local.sh
+
+      - name: Reconstruct and build exact-head UX candidate
+        run: BUILD=/tmp/ws350-os12-ux-build bash scripts/run_os12_ux_local.sh --build
+
+      - name: Record non-promotion state
+        if: always()
+        run: |
+          echo 'This workflow proves reconstruction, contract validation, and compile regression only.'
+          echo 'It does not establish runtime, physical, accepted, or stable state.'
+          echo 'Inventory facts remain authoritative only when supplied by Filament Inventory.'
+          echo 'Do not integrate this UX candidate into the canonical bootstrap path until physical 480x320 acceptance passes.'
