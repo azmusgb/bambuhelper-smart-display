@@ -32,8 +32,10 @@ def main() -> int:
         'stopRecording(millis())',
         'playRecording(millis())',
         'Video',
+        'Displayed printer camera',
+        'playMjpeg("printer-camera",millis())',
+        'Tap anywhere to stop',
         'Hardware not detected',
-        'Decoder is not advertised yet',
     ):
         if needle not in text:
             raise SystemExit(f"FAIL: media UI missing {needle!r}")
@@ -42,7 +44,7 @@ def main() -> int:
     for forbidden in ('matchSpoolByColor', 'matchSpoolByMaterial', 'resolveSpool'):
         if forbidden in text:
             raise SystemExit(f"FAIL: media UI introduced forbidden inventory inference {forbidden}")
-    print('PASS: OS12 media touchscreen UI exposes non-blocking speaker/mic plus bounded record/playback and truthful video state')
+    print('PASS: OS12 media touchscreen UI exposes non-blocking speaker/mic, bounded record/playback and fixed-source MJPEG video')
     return 0
 
 
