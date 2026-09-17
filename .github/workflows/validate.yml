@@ -38,6 +38,9 @@ jobs:
       - name: Validate Workshop OS 12 platform bridge
         run: python3 scripts/validate_os12_platform_bridge.py
 
+      - name: Validate Workshop OS 12 media service
+        run: python3 scripts/validate_os12_media_service.py
+
       - name: Validate Workshop OS 12 UI state reads
         run: python3 scripts/validate_os12_ui_state_reads.py
 
@@ -72,7 +75,8 @@ jobs:
             apply_workshop_os12_release_identity.py \
             scripts/validate_os12_device_update.py \
             scripts/prepare_os12_device_candidate.py \
-            scripts/validate_os12_candidate_publisher.py
+            scripts/validate_os12_candidate_publisher.py \
+            scripts/validate_os12_media_service.py
 
       - name: Compile Workshop OS 12 platform contracts
         run: |
