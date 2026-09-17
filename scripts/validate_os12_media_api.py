@@ -38,15 +38,35 @@ def main() -> int:
         if needle not in text:
             raise SystemExit(f"FAIL: media API missing {needle!r}")
 
+    # Existing non-media maintenance routes may legitimately contain a URL or
+    # source argument. The media boundary itself must never accept either, so
+    # scope source-safety checks to the injected media handler block and media
+    # route registrations rather than rejecting unrelated legacy code.
+    handler_start = text.find("// Workshop OS 12 media diagnostics API")
+    handler_end = text.find("\nvoid initWebServer()", handler_start)
+    if handler_start < 0 or handler_end < 0:
+        raise SystemExit("FAIL: media handler block missing")
+    media_handlers = text[handler_start:handler_end]
+
+    init_start = text.find("void initWebServer() {")
+    init_end = text.find("\nvoid handleWebServer()", init_start)
+    if init_start < 0 or init_end < 0:
+        raise SystemExit("FAIL: web route-registration block missing")
+    registration = text[init_start:init_end]
+    media_registration = "\n".join(
+        line for line in registration.splitlines() if "/os12/media/" in line
+    )
+
     for forbidden in (
-        'SECURE_POST("/os12/media/play-url"',
         'server.arg("url")',
         'server.arg("source")',
         'server.arg("duration")',
-        'server.on("/os12/media/',
+        'play-url',
     ):
-        if forbidden in text:
+        if forbidden in media_handlers or forbidden in media_registration:
             raise SystemExit(f"FAIL: media API contains forbidden surface {forbidden!r}")
+    if 'server.on("/os12/media/' in registration:
+        raise SystemExit("FAIL: media mutations bypass authenticated SECURE routes")
 
     print("PASS: OS12 media API is authenticated, source-free and fixes recording to the bounded five-second contract")
     return 0
