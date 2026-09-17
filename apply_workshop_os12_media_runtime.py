@@ -114,15 +114,20 @@ def patch_audio_volume_contract(repo: Path) -> None:
     )
     es8311_path.write_text(source, encoding="utf-8")
 
+    # Validate header and implementation independently. Do not infer the target
+    # file from punctuation: source declarations and definitions can both end
+    # in semicolons internally, which previously caused a false CI failure.
+    if "void buzzerBackendSetVolume(uint8_t percent);" not in header:
+        raise PatchError("ES8311 volume API declaration missing after patch")
     for needle in (
-        "void buzzerBackendSetVolume(uint8_t percent);",
         "volatile uint8_t gCodecVolumePercent = kCodecVolume;",
+        "const uint8_t requestedVolume = gCodecVolumePercent;",
         "void buzzerBackendSetVolume(uint8_t percent)",
+        "gCodecVolumePercent = percent;",
         "esWrite(ES_REG_DAC_32, vol);",
     ):
-        body = header if needle.endswith(";") else source
-        if needle not in body:
-            raise PatchError(f"ES8311 volume contract missing after patch: {needle}")
+        if needle not in source:
+            raise PatchError(f"ES8311 volume implementation missing after patch: {needle}")
 
 
 def apply(repo: Path, source_root: Path) -> None:
