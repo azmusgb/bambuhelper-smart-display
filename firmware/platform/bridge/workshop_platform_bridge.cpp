@@ -107,8 +107,6 @@ workshop::platform::NetworkState observeNetwork(std::uint32_t nowMs) {
     observation.connecting = !connected && !accessPoint;
     observation.accessPointMode = accessPoint;
     observation.localPortal = (connected || accessPoint) ? Connectivity::Online : Connectivity::Unknown;
-    // Wi-Fi reachability is not proof of cloud reachability. Preserve Unknown
-    // until a dedicated cloud-health observation exists.
     observation.cloud = Connectivity::Unknown;
     observation.observedAtMs = nowMs;
     observation.rssiDbm = connected ? static_cast<std::int16_t>(WiFi.RSSI()) : 0;
@@ -156,6 +154,10 @@ void workshopPlatformPoll() {
 
 const workshop::platform::WorkshopState& workshopPlatformState() {
     return g_workshopStateStore.snapshot();
+}
+
+void workshopPlatformPublishUpdateState(const workshop::platform::UpdateState& state) {
+    g_workshopStateStore.publishUpdateState(state);
 }
 
 workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
