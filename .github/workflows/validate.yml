@@ -89,6 +89,7 @@ jobs:
 
       - name: Validate shell helpers
         run: |
+          bash -n scripts/ensure-platformio.sh
           bash -n scripts/waveshare-usb.sh
           bash -n scripts/run_os12_platform_local.sh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
