@@ -53,6 +53,9 @@ jobs:
       - name: Validate Workshop OS 12 portal login hardening
         run: python3 scripts/validate_os12_portal_login.py
 
+      - name: Validate portal runtime acceptance helper syntax
+        run: python3 -m py_compile scripts/accept_os12_portal_runtime.py
+
       - name: Compile Workshop OS 12 platform contracts
         run: |
           set -euo pipefail
