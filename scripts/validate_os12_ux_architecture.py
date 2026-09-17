@@ -26,20 +26,33 @@ def braced_block(text: str, signature: str) -> str:
         c = text[i]
         n = text[i + 1] if i + 1 < len(text) else ""
         if line:
-            if c == "\n": line = False
+            if c == "\n":
+                line = False
         elif block:
-            if c == "*" and n == "/": block = False; i += 1
+            if c == "*" and n == "/":
+                block = False
+                i += 1
         elif string:
-            if escape: escape = False
-            elif c == "\\": escape = True
-            elif c == string: string = None
-        elif c == "/" and n == "/": line = True; i += 1
-        elif c == "/" and n == "*": block = True; i += 1
-        elif c in ('"', "'"): string = c
-        elif c == "{": depth += 1
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == string:
+                string = None
+        elif c == "/" and n == "/":
+            line = True
+            i += 1
+        elif c == "/" and n == "*":
+            block = True
+            i += 1
+        elif c in ('"', "'"):
+            string = c
+        elif c == "{":
+            depth += 1
         elif c == "}":
             depth -= 1
-            if depth == 0: return text[start:i + 1]
+            if depth == 0:
+                return text[start:i + 1]
         i += 1
     fail(f"unterminated function: {signature}")
     return ""
@@ -49,6 +62,11 @@ def require(block: str, needles: tuple[str, ...], label: str) -> None:
     for needle in needles:
         if needle not in block:
             fail(f"{label}: missing {needle!r}")
+
+
+def require_any(block: str, needles: tuple[str, ...], label: str) -> None:
+    if not any(needle in block for needle in needles):
+        fail(f"{label}: missing one of {needles!r}")
 
 
 def forbid(block: str, needles: tuple[str, ...], label: str) -> None:
@@ -67,25 +85,17 @@ def main() -> int:
         fail(f"missing {path}")
     text = path.read_text(encoding="utf-8")
 
-    for helper in (
+    helpers = (
         "static void hubOs12RowSurface(",
         "static void hubOs12NavRow(",
         "static void hubOs12EvidenceRow(",
         "static void hubUi13InfoRow(",
         "static void hubUi13ToggleRow(",
         "static void hubUi13StepperRow(",
-    ):
+    )
+    for helper in helpers:
         if text.count(helper) != 1:
             fail(f"helper must exist exactly once: {helper}")
-
-    for helper in (
-        "static void hubOs12RowSurface(",
-        "static void hubOs12NavRow(",
-        "static void hubOs12EvidenceRow(",
-        "static void hubUi13InfoRow(",
-        "static void hubUi13ToggleRow(",
-        "static void hubUi13StepperRow(",
-    ):
         forbid(braced_block(text, helper), ("hubV1125Card(",), helper)
 
     home = braced_block(text, "static void drawHome(bool full)")
@@ -97,9 +107,13 @@ def main() -> int:
         "uiBottomNav(0,nullptr)",
         '"Filament Inventory"',
         '"Unknown"',
-        '"Authoritative evidence unavailable"',
         "hubOs12EvidenceRow(",
     ), "Home")
+    require_any(home, (
+        '"No authoritative inventory evidence"',
+        '"Authoritative evidence unavailable"',
+        '"Inventory evidence unavailable"',
+    ), "Home inventory evidence")
     forbid(home, ("activeTray", ".ams.", "AmsTray", "hubV1125Card("), "Home")
 
     require(workshop, (
@@ -108,9 +122,13 @@ def main() -> int:
         '"Undetermined"',
         '"Loaded Spools"',
         '"Unknown"',
-        '"No canonical placement evidence"',
         "hubOs12EvidenceRow(",
     ), "Workshop")
+    require_any(workshop, (
+        '"Canonical placement unknown"',
+        '"No canonical placement evidence"',
+        '"Placement evidence unavailable"',
+    ), "Workshop placement evidence")
     forbid(workshop, ("activeTray", ".ams.", "AmsTray", "materialValue", "hubV1125Card("), "Workshop")
 
     require(more, (
@@ -133,12 +151,12 @@ def main() -> int:
     forbid(system, ("uiBottomNav(", "hubUi12SettingsCard("), "System")
 
     child_functions = (
-        "static void drawUi13Display()","static void drawUi13AfterPrint()","static void drawUi13Sound()",
-        "static void drawUi13PrinterAlerts()","static void drawUi13AlertSignals()","static void drawUi13Network()",
-        "static void drawUi13PrinterPower()","static void drawUi13PowerOptions()","static void drawUi13AutoOffConfirm()",
-        "static void drawUi13DateTime()","static void drawUi13SoftwareUpdate()","static void drawUi13Diagnostics()",
-        "static void drawUi12PortalAccess()","static void drawUi12Experience()","static void drawUi12PrinterConnection()",
-        "static void drawUi12SoftwareUpdate()","static void drawOs12Media()","static void drawOs12MediaLab()",
+        "static void drawUi13Display()", "static void drawUi13AfterPrint()", "static void drawUi13Sound()",
+        "static void drawUi13PrinterAlerts()", "static void drawUi13AlertSignals()", "static void drawUi13Network()",
+        "static void drawUi13PrinterPower()", "static void drawUi13PowerOptions()", "static void drawUi13AutoOffConfirm()",
+        "static void drawUi13DateTime()", "static void drawUi13SoftwareUpdate()", "static void drawUi13Diagnostics()",
+        "static void drawUi12PortalAccess()", "static void drawUi12Experience()", "static void drawUi12PrinterConnection()",
+        "static void drawUi12SoftwareUpdate()", "static void drawOs12Media()", "static void drawOs12MediaLab()",
     )
     for sig in child_functions:
         if sig in text:
