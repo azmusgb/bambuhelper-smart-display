@@ -22,8 +22,14 @@ def main() -> int:
     repo = Path(args.repo).resolve()
 
     require(repo / "src/settings.h", ("uint8_t volume;",))
-    require(repo / "src/settings.cpp", ('getUChar("buz_vol"', 'putUChar("buz_vol"'))
-    require(repo / "src/buzzer_backend.h", ("buzzerBackendSetVolume", "buzzerBackendMicLevel"))
+    require(
+        repo / "src/settings.cpp",
+        ('getUChar("buz_vol"', 'putUChar("buz_vol"'),
+    )
+    require(
+        repo / "src/buzzer_backend.h",
+        ("buzzerBackendSetVolume", "buzzerBackendMicLevel"),
+    )
     cpp = require(
         repo / "src/buzzer_backend_es8311.cpp",
         ("ES_REG_DAC_32", "buzzerBackendSetVolume", "buzzerSettings.volume"),
