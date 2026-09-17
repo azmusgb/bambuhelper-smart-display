@@ -52,6 +52,7 @@ cd "$ROOT"
 [[ -d .git ]] || { echo "ERROR: not inside the Workshop OS git repository" >&2; exit 2; }
 [[ -f scripts/run_os12_platform_local.sh ]] || { echo "ERROR: OS12 build helper missing" >&2; exit 2; }
 [[ -f scripts/waveshare-usb.sh ]] || { echo "ERROR: WS350 USB resolver missing" >&2; exit 2; }
+[[ -f scripts/ensure-platformio.sh ]] || { echo "ERROR: PlatformIO setup helper missing" >&2; exit 2; }
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required" >&2; exit 2; }
 
 if [[ "$ALLOW_DIRTY" -ne 1 ]]; then
@@ -71,8 +72,12 @@ printf 'Source SHA: %s\n' "$HEAD_SHA"
 printf 'Build root: %s\n' "$BUILD"
 printf 'Portal probe: %s\n' "$BASE_URL"
 
-export PATH="$HOME/.local/bin:$PATH"
-BUILD="$BUILD" OS12_SOURCE_SHA="$HEAD_SHA" bash scripts/run_os12_platform_local.sh --build
+PIO_BIN="$(ROOT="$ROOT" bash scripts/ensure-platformio.sh)"
+[[ -x "$PIO_BIN" ]] || { echo "ERROR: PlatformIO setup did not return an executable" >&2; exit 4; }
+printf 'PlatformIO: %s\n' "$PIO_BIN"
+"$PIO_BIN" --version
+
+PIO_BIN="$PIO_BIN" BUILD="$BUILD" OS12_SOURCE_SHA="$HEAD_SHA" bash scripts/run_os12_platform_local.sh --build
 
 FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
 PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"
@@ -83,7 +88,7 @@ printf '\n=== Candidate identity ===\n'
 ls -lh "$FIRMWARE" "$PARTITIONS"
 shasum -a 256 "$FIRMWARE"
 
-PORT="$(PYTHON_BIN=python3 bash scripts/waveshare-usb.sh port)"
+PORT="$(PIO_BIN="$PIO_BIN" bash scripts/waveshare-usb.sh port)"
 printf '\n=== Attached device ===\n'
 printf 'Port: %s\n' "$PORT"
 
@@ -185,12 +190,12 @@ echo "The partition layout matched exactly; uploading with the ws_lcd_350 Platfo
 echo "NVS is not erased. Critical pre-flash recovery data is already captured."
 (
   cd "$BUILD"
-  python3 -m platformio run -e ws_lcd_350 -t upload --upload-port "$PORT"
+  "$PIO_BIN" run -e ws_lcd_350 -t upload --upload-port "$PORT"
 )
 
 printf '\n=== Reboot / USB rediscovery ===\n'
 sleep 8
-if NEW_PORT="$(PYTHON_BIN=python3 bash scripts/waveshare-usb.sh port 2>/dev/null)"; then
+if NEW_PORT="$(PIO_BIN="$PIO_BIN" bash scripts/waveshare-usb.sh port 2>/dev/null)"; then
   echo "WS350 USB returned at: $NEW_PORT"
 else
   echo "WS350 has not re-enumerated on USB yet; continue with the network probe after it finishes booting."
