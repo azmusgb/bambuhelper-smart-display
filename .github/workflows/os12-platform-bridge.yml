@@ -8,6 +8,7 @@ on:
     paths:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_media_hardware.py'
       - 'apply_workshop_os12_media_runtime.py'
       - 'apply_workshop_os12_media_ui.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
@@ -20,6 +21,7 @@ on:
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_media_hardware.py'
       - 'scripts/validate_os12_media_service.py'
       - 'scripts/validate_os12_media_runtime.py'
       - 'scripts/validate_os12_media_ui.py'
@@ -41,6 +43,7 @@ on:
     paths:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_media_hardware.py'
       - 'apply_workshop_os12_media_runtime.py'
       - 'apply_workshop_os12_media_ui.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
@@ -53,6 +56,7 @@ on:
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_media_hardware.py'
       - 'scripts/validate_os12_media_service.py'
       - 'scripts/validate_os12_media_runtime.py'
       - 'scripts/validate_os12_media_ui.py'
