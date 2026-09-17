@@ -55,23 +55,36 @@ python3 "$ROOT/apply_workshop_os12_release_identity.py" \
   --version "$OS12_RELEASE_VERSION" \
   --source-sha "$OS12_SOURCE_SHA" \
   --apply
+
+python3 "$ROOT/apply_workshop_os12_media_runtime.py" \
+  --repo "$BUILD" \
+  --source-root "$ROOT" \
+  --apply
+python3 "$ROOT/scripts/validate_os12_media_service.py"
+python3 "$ROOT/scripts/validate_os12_media_runtime.py" --repo "$BUILD"
+
 python3 "$ROOT/scripts/validate_os12_device_update.py" \
   --source-root "$ROOT" \
   --repo "$BUILD"
 
-# UI status surfaces consume normalized read-only facts. Physical Light,
-# Pause/Resume, and guarded Stop dispatch through the OS12 command facade.
-# Device-native online OTA is also centralized behind UpdateService and the
-# authoritative GitHub manifest; the legacy URL-driven /ota/auto route is not
-# registered in the reconstructed OS12 firmware.
+# OS12 owns normalized device state, physical-control policy, local portal
+# hardening, device-native OTA and the media lifecycle. Media capability probes
+# fail closed; unavailable hardware or decoders must remain unavailable.
 grep -q '#include "workshop_platform_bridge.h"' "$BUILD/src/main.cpp"
 test "$(grep -c 'workshopPlatformBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopPlatformPoll();' "$BUILD/src/main.cpp")" -eq 1
+grep -q '#include "workshop_media_runtime.h"' "$BUILD/src/main.cpp"
+test "$(grep -c 'workshopMediaBegin();' "$BUILD/src/main.cpp")" -eq 1
+test "$(grep -c 'workshopMediaPoll();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopUpdateServiceBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopUpdateServiceLoop();' "$BUILD/src/main.cpp")" -eq 1
 test -s "$BUILD/src/workshop_platform_bridge.cpp"
 test -s "$BUILD/src/workshop_update_service.cpp"
+test -s "$BUILD/src/media_service.cpp"
+test -s "$BUILD/src/ws350_media_backend.cpp"
+test -s "$BUILD/src/workshop_media_runtime.cpp"
 test -s "$BUILD/include/workshop_platform/workshop_state.hpp"
+test -s "$BUILD/include/media_service.h"
 grep -q 'workshopPlatformState().configuredPrinterCount>0' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformPrinterOnline(os12Slot)' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformWifiOnline()' "$BUILD/src/smart_hub.cpp"
@@ -102,7 +115,7 @@ if [[ "${1:-}" == "--build" ]]; then
   echo "PlatformIO: $PIO_BIN"
   "$PIO_BIN" --version
 
-  echo "=== Build WS350 OS12 device platform ==="
+  echo "=== Build WS350 OS12 device platform + media runtime ==="
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 OS12 image missing' >&2; exit 1; }
 
@@ -119,6 +132,8 @@ echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu t
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
 echo "Control boundary: direct physical Light/Pause/Resume/Stop transport bypasses rejected."
 echo "Portal access: exact code alphabet/normalization, bounded login backoff, per-session RAM cookies, and accessible login states implemented."
+echo "Media runtime: centralized MediaService + capability-safe hardware adapter wired into lifecycle."
+echo "Media hardware: capability probes fail closed; no speaker/mic/video capability is invented."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
 echo "Full image / offset 0x0: recovery only, never device-native OTA."
