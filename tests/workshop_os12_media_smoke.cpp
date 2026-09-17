@@ -6,7 +6,7 @@ using namespace workshop::media;
 
 class FakeBackend : public HardwareBackend {
  public:
-  FakeBackend() : failNext(false), muted(false), volume(0) {
+  FakeBackend() : failNext(false), muted(false), volume(0), stopCount(0) {
     caps.speakerAvailable = true;
     caps.microphoneAvailable = true;
     caps.videoDecoderAvailable = true;
@@ -18,6 +18,7 @@ class FakeBackend : public HardwareBackend {
   bool failNext;
   bool muted;
   uint8_t volume;
+  unsigned stopCount;
 
   Capabilities probe() override { return caps; }
   bool ok() { if (failNext) { failNext = false; return false; } return true; }
@@ -30,7 +31,7 @@ class FakeBackend : public HardwareBackend {
   bool playRecording() override { return ok(); }
   bool beginMjpeg(const char*) override { return ok(); }
   bool pauseVideo(bool) override { return ok(); }
-  bool stopMedia() override { return ok(); }
+  bool stopMedia() override { ++stopCount; return ok(); }
   void poll() override {}
 };
 
@@ -48,43 +49,51 @@ int main() {
   assert(media.setMuted(true));
   assert(hw.muted);
 
-  assert(media.sampleMicrophone(2));
+  assert(media.testSpeaker(100));
+  assert(media.snapshot().runtime.session == SessionState::PlayingAudio);
+  media.poll(279);
+  assert(media.snapshot().runtime.session == SessionState::PlayingAudio);
+  media.poll(280);
+  assert(media.snapshot().runtime.session == SessionState::Idle);
+  assert(hw.stopCount == 1);
+
+  assert(media.sampleMicrophone(300));
   assert(media.snapshot().runtime.microphoneLevelPercent == 42);
 
-  assert(media.startRecording(5000, 3));
+  assert(media.startRecording(5000, 301));
   assert(media.snapshot().runtime.session == SessionState::Recording);
-  assert(!media.playMjpeg("clip.mjpg", 4));
+  assert(!media.playMjpeg("clip.mjpg", 302));
   assert(media.snapshot().runtime.lastError == MediaError::Busy);
-  assert(media.stopRecording(5));
-  assert(media.playRecording(6));
-  assert(media.stop(7));
+  assert(media.stopRecording(303));
+  assert(media.playRecording(304));
+  assert(media.stop(305));
 
-  assert(!media.playMjpeg(0, 8));
+  assert(!media.playMjpeg(0, 306));
   assert(media.snapshot().runtime.lastError == MediaError::InvalidArgument);
-  assert(media.playMjpeg("clip.mjpg", 9));
-  assert(media.pauseVideo(true, 10));
+  assert(media.playMjpeg("clip.mjpg", 307));
+  assert(media.pauseVideo(true, 308));
   assert(media.snapshot().runtime.session == SessionState::Paused);
   media.noteDroppedVideoFrame();
   media.noteAudioUnderrun();
   assert(media.snapshot().runtime.droppedVideoFrames == 1);
   assert(media.snapshot().runtime.audioUnderruns == 1);
-  assert(media.pauseVideo(false, 11));
-  assert(media.stop(12));
+  assert(media.pauseVideo(false, 309));
+  assert(media.stop(310));
 
   FakeBackend noPsram;
   noPsram.caps.psramAvailable = false;
   MediaService constrained;
-  constrained.begin(&noPsram, 13);
-  assert(!constrained.startRecording(1000, 14));
+  constrained.begin(&noPsram, 311);
+  assert(!constrained.startRecording(1000, 312));
   assert(constrained.snapshot().runtime.lastError == MediaError::OutOfMemory);
-  assert(!constrained.playMjpeg("clip.mjpg", 15));
+  assert(!constrained.playMjpeg("clip.mjpg", 313));
   assert(constrained.snapshot().runtime.lastError == MediaError::OutOfMemory);
 
   FakeBackend broken;
   MediaService faulted;
-  faulted.begin(&broken, 16);
+  faulted.begin(&broken, 314);
   broken.failNext = true;
-  assert(!faulted.testSpeaker(17));
+  assert(!faulted.testSpeaker(315));
   assert(faulted.snapshot().runtime.session == SessionState::Fault);
   assert(faulted.snapshot().runtime.lastError == MediaError::IoFailure);
 
