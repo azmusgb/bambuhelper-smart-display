@@ -39,6 +39,9 @@ python3 "$ROOT/apply_workshop_os12_release_identity.py" --repo "$BUILD" --versio
 python3 "$ROOT/apply_workshop_os12_media_hardware.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_hardware.py" --repo "$BUILD"
 
+python3 "$ROOT/apply_workshop_os12_media_capture.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_media_capture.py" --repo "$BUILD"
+
 python3 "$ROOT/apply_workshop_os12_media_runtime.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_media_service.py"
 python3 "$ROOT/scripts/validate_os12_media_runtime.py" --repo "$BUILD"
@@ -70,6 +73,8 @@ test -s "$BUILD/src/workshop_media_runtime.cpp"
 test -s "$BUILD/include/workshop_platform/workshop_state.hpp"
 test -s "$BUILD/include/media_service.h"
 grep -q 'buzzerBackendSetVolume' "$BUILD/src/buzzer_backend.h"
+grep -q 'buzzerBackendMicRecordBegin' "$BUILD/src/buzzer_backend.h"
+grep -q 'MALLOC_CAP_SPIRAM' "$BUILD/src/buzzer_backend_es8311.cpp"
 grep -q 'buz_vol' "$BUILD/src/settings.cpp"
 grep -q 'drawOs12Media' "$BUILD/src/smart_hub.cpp"
 grep -q 'drawOs12MediaLab' "$BUILD/src/smart_hub.cpp"
@@ -125,11 +130,12 @@ echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu t
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
 echo "Control boundary: direct physical Light/Pause/Resume/Stop transport bypasses rejected."
 echo "Portal access: exact code alphabet/normalization, bounded login backoff, per-session RAM cookies, and accessible login states implemented."
-echo "Media hardware: minimal proven ES8311 volume contract ported; existing mic primitives reused."
+echo "Media hardware: proven ES8311/I2S authority reused with persisted volume and mic primitives."
+echo "Media recording: PSRAM-bounded five-second maximum, poll-driven capture and existing-task playback implemented."
 echo "Media runtime: centralized MediaService + capability-safe hardware adapter wired into lifecycle."
 echo "Media UI: capability-scoped Speaker/Microphone/Media Lab surfaces integrated into UI13 settings flow."
 echo "Media diagnostics API: authenticated status, speaker test, microphone sample and stop; no arbitrary source URL."
-echo "Recording/video: remain unavailable until their bounded backends are implemented and validated."
+echo "Video: remains unavailable until a bounded MJPEG decoder is implemented and validated."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
 echo "Full image / offset 0x0: recovery only, never device-native OTA."
