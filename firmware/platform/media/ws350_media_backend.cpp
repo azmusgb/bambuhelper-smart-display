@@ -43,10 +43,12 @@ Capabilities Ws350MediaBackend::probe() {
   }
 #endif
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
-  // LovyanGFX already owns JPEG decoding for the WS350 display. OS12 reuses
-  // that decoder and the existing bounded Bambu camera frame source rather
-  // than introducing a second graphics or network stack.
-  caps.videoDecoderAvailable = caps.psramAvailable;
+  // LovyanGFX provides the JPEG decoder, but a usable video feature also
+  // requires the displayed printer to expose the existing bounded local JPEG
+  // camera transport. Do not advertise video merely because the LCD can decode
+  // JPEGs; unsupported printer camera transports must remain explicitly
+  // unavailable rather than failing later as DecoderFailure.
+  caps.videoDecoderAvailable = caps.psramAvailable && cameraCanStreamDisplayedPrinter();
 #endif
   return caps;
 }
