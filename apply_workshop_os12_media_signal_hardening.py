@@ -68,6 +68,72 @@ def apply(repo: Path) -> None:
         "ES8311 analog-mic route/gain",
     )
 
+    mic_meter_old = """  int16_t samples[128];
+  int32_t peak = 0;
+  uint32_t deadline = millis() + sampleMs;
+  do {
+    size_t bytesRead = 0;
+    if (i2s_read((i2s_port_t)AUDIO_I2S_PORT, samples, sizeof(samples),
+                 &bytesRead, pdMS_TO_TICKS(25)) != ESP_OK) return -1;
+    size_t count = bytesRead / sizeof(samples[0]);
+    for (size_t i = 0; i < count; ++i) {
+      int32_t v = samples[i];
+      if (v < 0) v = -v;
+      if (v > peak) peak = v;
+    }
+    yield();
+  } while ((int32_t)(deadline - millis()) > 0);
+
+  if (gTargetGain == 0 && gCurrentGain == 0) gIdleStartMs = millis();
+  int level = (int)((peak * 100L) / 32767L);
+  return constrain(level, 0, 100);
+"""
+    mic_meter_new = """  int16_t samples[128];
+  int32_t peak = 0;
+  int16_t minSample = INT16_MAX;
+  int16_t maxSample = INT16_MIN;
+  size_t totalBytes = 0;
+  uint32_t nonZeroSamples = 0;
+  uint32_t totalSamples = 0;
+  uint32_t deadline = millis() + sampleMs;
+  do {
+    size_t bytesRead = 0;
+    if (i2s_read((i2s_port_t)AUDIO_I2S_PORT, samples, sizeof(samples),
+                 &bytesRead, pdMS_TO_TICKS(25)) != ESP_OK) return -1;
+    totalBytes += bytesRead;
+    size_t count = bytesRead / sizeof(samples[0]);
+    totalSamples += (uint32_t)count;
+    for (size_t i = 0; i < count; ++i) {
+      const int16_t sample = samples[i];
+      if (sample != 0) ++nonZeroSamples;
+      if (sample < minSample) minSample = sample;
+      if (sample > maxSample) maxSample = sample;
+      int32_t v = sample;
+      if (v < 0) v = -v;
+      if (v > peak) peak = v;
+    }
+    yield();
+  } while ((int32_t)(deadline - millis()) > 0);
+
+  if (totalSamples == 0) {
+    minSample = 0;
+    maxSample = 0;
+  }
+  Serial.printf(
+      "OS12 mic raw: bytes=%u samples=%u nonzero=%u min=%d max=%d peak=%ld\\n",
+      (unsigned)totalBytes,
+      (unsigned)totalSamples,
+      (unsigned)nonZeroSamples,
+      (int)minSample,
+      (int)maxSample,
+      (long)peak);
+
+  if (gTargetGain == 0 && gCurrentGain == 0) gIdleStartMs = millis();
+  int level = (int)((peak * 100L) / 32767L);
+  return constrain(level, 0, 100);
+"""
+    es = once(es, mic_meter_old, mic_meter_new, "ES8311 raw microphone diagnostics")
+
     media = once(
         media,
         "  speakerTestEndsAtMs_ = nowMs + 180U;\n",
