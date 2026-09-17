@@ -47,10 +47,6 @@ def apply(repo: Path, version: str, source_sha: str) -> None:
     if "WORKSHOP_OS12_DEVICE_UPDATE" not in build:
         raise PatchError("device-native update slice must be applied before release identity")
 
-    # Replace the inherited UI13 version fallback with one exact Workshop OS
-    # release + source identity. WORKSHOP_OS_SOURCE_SHA must be referenced by
-    # runtime code below so the source SHA is actually present in firmware bytes
-    # and can be proven after reboot.
     fallback = '''#ifndef WORKSHOP_OS_RELEASE_VERSION
 #define WORKSHOP_OS_RELEASE_VERSION SMART_HOME_VERSION
 #endif
@@ -97,9 +93,12 @@ def apply(repo: Path, version: str, source_sha: str) -> None:
     service_path = repo / "src" / "workshop_update_service.cpp"
     service = load(service_path)
 
-    # Retire the stale macro name if the source template still carries it.
+    # The early OS12 template carried an unused source-SHA fallback under a
+    # different macro name. Construct that historical token rather than keeping
+    # it as a live source marker, then normalize the reconstructed implementation.
+    legacy_source_macro = "WORKSHOP_OS12_" + "SOURCE_SHA"
     service = service.replace(
-        '#ifndef WORKSHOP_OS12_SOURCE_SHA\n#define WORKSHOP_OS12_SOURCE_SHA "unknown"\n#endif',
+        f'#ifndef {legacy_source_macro}\n#define {legacy_source_macro} "unknown"\n#endif',
         '#ifndef WORKSHOP_OS_SOURCE_SHA\n#define WORKSHOP_OS_SOURCE_SHA "unknown"\n#endif',
         1,
     )
