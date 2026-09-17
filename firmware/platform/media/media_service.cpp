@@ -77,7 +77,13 @@ void MediaService::transition(SessionState next, uint32_t nowMs) {
 void MediaService::clearError() { snapshot_.runtime.lastError = MediaError::None; }
 
 void MediaService::refreshBackendFacts() {
-  snapshot_.runtime.recordingAvailable = backend_ && backend_->hasRecording();
+  if (!backend_) return;
+  // Some media facts depend on current authoritative device state rather than
+  // hardware presence alone. In particular, printer-camera availability can
+  // change when the displayed printer connects/disconnects or changes. Re-probe
+  // the backend so the public capability snapshot never freezes boot-time state.
+  snapshot_.capabilities = backend_->probe();
+  snapshot_.runtime.recordingAvailable = backend_->hasRecording();
 }
 
 bool MediaService::setVolume(uint8_t percent) {
@@ -189,6 +195,7 @@ bool MediaService::playMjpeg(const char* source, uint32_t nowMs) {
     snapshot_.runtime.lastError = MediaError::InvalidArgument;
     return false;
   }
+  refreshBackendFacts();
   if (!requireIdle() || !requireCapability(snapshot_.capabilities.videoDecoderAvailable)) return false;
   if (!snapshot_.capabilities.psramAvailable) {
     snapshot_.runtime.lastError = MediaError::OutOfMemory;
