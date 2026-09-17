@@ -32,6 +32,9 @@ jobs:
       - name: Validate Workshop Companion protocol
         run: python3 scripts/validate_companion_protocol.py
 
+      - name: Validate Workshop UI review contract
+        run: python3 scripts/validate_workshop_ui_review_contract.py
+
       - name: Validate Workshop OS 12 device contract
         run: python3 scripts/validate_os12_device_contract.py
 
@@ -86,7 +89,8 @@ jobs:
             scripts/validate_os12_media_service.py \
             scripts/validate_os12_media_runtime.py \
             scripts/validate_os12_media_ui.py \
-            scripts/validate_os12_media_api.py
+            scripts/validate_os12_media_api.py \
+            scripts/validate_workshop_ui_review_contract.py
 
       - name: Compile Workshop OS 12 platform contracts
         run: |
