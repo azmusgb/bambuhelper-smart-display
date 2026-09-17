@@ -32,6 +32,8 @@ def validate_source(source_root: Path) -> None:
     state = read(source_root / "firmware/platform/workshop_state.hpp")
     bridge = read(source_root / "firmware/platform/bridge/workshop_platform_bridge.h")
     patcher = read(source_root / "apply_workshop_os12_device_update.py")
+    identity = read(source_root / "apply_workshop_os12_release_identity.py")
+    acceptance = read(source_root / "scripts/accept_os12_update_runtime.py")
 
     for needle in (
         "workshopUpdateRequestCheck",
@@ -86,6 +88,26 @@ def validate_source(source_root: Path) -> None:
     ):
         require(patcher, needle, "device update patcher")
 
+    # Exact source provenance is applied after the updater is copied into the
+    # reconstructed source. Require the release-identity patcher to make the
+    # source SHA a compiled runtime value and expose it through the local API.
+    for needle in (
+        '#define WORKSHOP_OS_SOURCE_SHA "{source_sha}"',
+        "char runningSourceCommit[41]{};",
+        "g_runtime.runningSourceCommit",
+        "WORKSHOP_OS_SOURCE_SHA",
+        'doc["runningSourceCommit"] = snap.runningSourceCommit;',
+    ):
+        require(identity, needle, "release source identity patcher")
+    forbid(identity, "WORKSHOP_OS12_SOURCE_SHA", "stale release source macro")
+
+    for needle in (
+        '"runningSourceCommit"',
+        "--install requires --expect-source-sha",
+        'final_status["runningSourceCommit"] == args.expect_source_sha',
+    ):
+        require(acceptance, needle, "real-device source identity acceptance")
+
     manifest_path = source_root / "releases/device-update.json"
     if manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -117,14 +139,18 @@ def validate_reconstructed(repo: Path) -> None:
     build = read(repo / "include/smart_home_build.h")
 
     require(service_h, "workshopUpdateRequestInstall", "reconstructed update API")
+    require(service_h, "char runningSourceCommit[41]{};", "reconstructed running source identity")
     for needle in (
         "printer.telemetryFreshness != Freshness::Fresh",
         "state.progressPercent = snap.progressPercent",
         "state.updateAvailable = snap.updateAvailable",
         "esp_ota_set_boot_partition",
         "setCACertBundle(rootca_crt_bundle_start)",
+        "g_runtime.runningSourceCommit",
+        "WORKSHOP_OS_SOURCE_SHA",
     ):
         require(service, needle, "reconstructed UpdateService")
+    forbid(service, "WORKSHOP_OS12_SOURCE_SHA", "stale running source macro")
     forbid(service, "setInsecure", "reconstructed UpdateService TLS")
     forbid(service.lower(), "signed manifest", "manifest authenticity wording")
 
@@ -149,6 +175,7 @@ def validate_reconstructed(repo: Path) -> None:
         'SECURE_POST("/os12/update/install"',
     ):
         require(init, route, "OS12 update API")
+    require(web, 'doc["runningSourceCommit"] = snap.runningSourceCommit;', "running source status API")
 
     for needle in (
         "workshopPlatformUpdateState()",
@@ -161,6 +188,7 @@ def validate_reconstructed(repo: Path) -> None:
         require(hub, needle, "Software Update touch UI")
 
     require(build, "WORKSHOP_OS12_DEVICE_UPDATE", "OS12 build identity")
+    require(build, "#define WORKSHOP_OS_SOURCE_SHA", "exact running source identity")
 
 
 def main() -> int:
