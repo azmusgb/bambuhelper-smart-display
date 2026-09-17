@@ -29,12 +29,18 @@ def main() -> int:
             "esWrite(ES_REG_SYS_14, 0x1A)",
             "esWrite(ES_REG_ADC_17, 0xC8)",
             "analog mic route=0x%02X adc_gain=0x%02X",
+            "OS12 mic raw: bytes=%u samples=%u nonzero=%u min=%d max=%d peak=%ld",
+            "totalBytes += bytesRead",
+            "nonZeroSamples",
+            "minSample",
+            "maxSample",
         ),
     )
     require(repo / "src/media_service.cpp", ("speakerTestEndsAtMs_ = nowMs + 750U",))
-    require(
+    backend = require(
         repo / "src/ws350_media_backend.cpp",
         (
+            "caps.videoDecoderAvailable = caps.psramAvailable && cameraCanStreamDisplayedPrinter()",
             "OS12 media video: rejected PSRAM unavailable",
             "OS12 media video: rejected displayed-printer camera unavailable",
             "OS12 media video: rejected camera transport did not become active",
@@ -51,7 +57,13 @@ def main() -> int:
     if "esWrite(ES_REG_SYS_14, 0x5A)" in es:
         raise SystemExit("FAIL: DMIC bit must remain clear for the WS350 analog microphone")
 
-    print("PASS: OS12 WS350 analog microphone route/gain, audible speaker diagnostic window, and video startup diagnostics are present")
+    if "caps.videoDecoderAvailable = caps.psramAvailable;" in backend:
+        raise SystemExit("FAIL: WS350 must not advertise video from JPEG decoder presence alone")
+
+    print(
+        "PASS: OS12 WS350 analog microphone route/gain, raw RX diagnostics, audible speaker window, "
+        "and displayed-printer camera capability truth are present"
+    )
     return 0
 
 
