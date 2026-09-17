@@ -56,6 +56,9 @@ jobs:
       - name: Validate Workshop OS 12 device-native updates
         run: python3 scripts/validate_os12_device_update.py --source-root .
 
+      - name: Validate OS12 candidate publication safety
+        run: python3 scripts/validate_os12_candidate_publisher.py
+
       - name: Validate portal runtime acceptance helper syntax
         run: python3 -m py_compile scripts/accept_os12_portal_runtime.py
 
@@ -65,7 +68,8 @@ jobs:
             apply_workshop_os12_device_update.py \
             apply_workshop_os12_release_identity.py \
             scripts/validate_os12_device_update.py \
-            scripts/prepare_os12_device_candidate.py
+            scripts/prepare_os12_device_candidate.py \
+            scripts/validate_os12_candidate_publisher.py
 
       - name: Compile Workshop OS 12 platform contracts
         run: |
