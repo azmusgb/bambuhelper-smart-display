@@ -9,7 +9,9 @@ on:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_media_hardware.py'
+      - 'apply_workshop_os12_media_capture.py'
       - 'apply_workshop_os12_media_runtime.py'
+      - 'apply_workshop_os12_media_signal_hardening.py'
       - 'apply_workshop_os12_media_ui.py'
       - 'apply_workshop_os12_media_api.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
@@ -23,6 +25,8 @@ on:
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_media_hardware.py'
+      - 'scripts/validate_os12_media_capture.py'
+      - 'scripts/validate_os12_media_signal.py'
       - 'scripts/validate_os12_media_service.py'
       - 'scripts/validate_os12_media_runtime.py'
       - 'scripts/validate_os12_media_ui.py'
@@ -49,7 +53,9 @@ on:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_media_hardware.py'
+      - 'apply_workshop_os12_media_capture.py'
       - 'apply_workshop_os12_media_runtime.py'
+      - 'apply_workshop_os12_media_signal_hardening.py'
       - 'apply_workshop_os12_media_ui.py'
       - 'apply_workshop_os12_media_api.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
@@ -63,6 +69,8 @@ on:
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_media_hardware.py'
+      - 'scripts/validate_os12_media_capture.py'
+      - 'scripts/validate_os12_media_signal.py'
       - 'scripts/validate_os12_media_service.py'
       - 'scripts/validate_os12_media_runtime.py'
       - 'scripts/validate_os12_media_ui.py'
@@ -160,6 +168,7 @@ jobs:
             echo "media_service=true"
             echo "media_ui=true"
             echo "media_recording=bounded-five-second"
+            echo "media_signal_hardening=analog-mic-route-gain-diagnostics"
             echo "media_video=fixed-source-printer-camera-jpeg-sequence"
             echo "media_physical_acceptance=false"
             echo "legacy_url_auto_ota_route=false"
@@ -185,6 +194,7 @@ jobs:
         run: |
           echo 'This workflow proves buildability and publishes a CI candidate artifact only.'
           echo 'Media speaker/microphone/recording capability is not physically accepted by this workflow.'
+          echo 'WS350 analog microphone signal-path hardening is implemented/tested but requires physical acceptance.'
           echo 'Fixed-source printer-camera JPEG-sequence video is implemented/built/tested; physical video acceptance is not established by CI.'
           echo 'It does not publish the artifact into the device discovery manifest.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
