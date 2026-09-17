@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Add bounded microphone record/playback to the existing ES8311 authority.
 
-Recording keeps the installed full-duplex I2S driver and the single existing
-ES8311 task running. RX is read into an internal-RAM scratch buffer, then copied
-into PSRAM. This preserves TX clocks for the codec and avoids passing PSRAM
-directly to the legacy I2S read path observed to destabilize the WS350.
+Recording reuses the installed full-duplex I2S driver and the single existing
+ES8311 task. A capture-lifetime pin prevents the donor idle shutdown from
+uninstalling I2S while OS12 is recording. RX is staged through bounded internal
+RAM before being copied into PSRAM.
 """
 from __future__ import annotations
 
@@ -31,6 +31,32 @@ def once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def guard_idle_shutdown(source: str) -> str:
+    guarded = "if (!gOs12CaptureKeepAlive) shutdownAudio();"
+    if guarded in source:
+        return source
+
+    matches: list[int] = []
+    cursor = 0
+    needle = "shutdownAudio();"
+    while True:
+        idx = source.find(needle, cursor)
+        if idx < 0:
+            break
+        context = source[max(0, idx - 800):idx]
+        if "gIdleStartMs" in context:
+            matches.append(idx)
+        cursor = idx + len(needle)
+
+    if len(matches) != 1:
+        raise PatchError(
+            f"ES8311 idle-shutdown guard: expected one idle shutdown call, found {len(matches)}"
+        )
+
+    idx = matches[0]
+    return source[:idx] + guarded + source[idx + len(needle):]
+
+
 CAPTURE_DECLS = """int buzzerBackendMicLevel(uint16_t sampleMs);
 bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs);
 bool buzzerBackendMicRecordPoll();
@@ -46,6 +72,7 @@ uint8_t* gOs12RecordingData = nullptr;
 size_t gOs12RecordingCapacity = 0;
 volatile size_t gOs12RecordingBytes = 0;
 volatile bool gOs12RecordingActive = false;
+volatile bool gOs12CaptureKeepAlive = false;
 uint32_t gOs12RecordingDeadlineMs = 0;
 volatile bool gOs12PlaybackActive = false;
 volatile size_t gOs12PlaybackPosition = 0;
@@ -64,6 +91,7 @@ bool os12DeadlineReached(uint32_t deadlineMs) {
 }
 
 void os12FreeRecording() {
+  gOs12CaptureKeepAlive = false;
   if (gOs12RecordingData) {
     free(gOs12RecordingData);
     gOs12RecordingData = nullptr;
@@ -77,6 +105,8 @@ void os12FreeRecording() {
 
 void os12FinishRecording() {
   gOs12RecordingActive = false;
+  gOs12CaptureKeepAlive = false;
+  gIdleStartMs = millis();
 }
 }
 
@@ -94,9 +124,11 @@ bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs) {
       heap_caps_malloc(capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!gOs12RecordingData) return false;
 
-  // Keep the normal ES8311 task alive and streaming silence. Besides avoiding
-  // task-lifecycle races, this keeps the I2S master clocks running for the
-  // ES8311 ADC while RX is sampled from the main loop.
+  // Pin the installed I2S driver before silencing TX. The donor audio task may
+  // still stream silence, but its normal idle timeout is forbidden from
+  // uninstalling I2S until capture ends.
+  gOs12CaptureKeepAlive = true;
+  gIdleStartMs = millis();
   buzzerBackendStop();
 
   uint8_t scratch[256];
@@ -119,9 +151,10 @@ bool buzzerBackendMicRecordPoll() {
     return false;
   }
 
-  // Never give the legacy I2S receive path a PSRAM destination. Read each
-  // bounded burst into internal task-stack RAM, then copy the completed bytes
-  // into the large PSRAM recording buffer.
+  // Refresh the donor idle timestamp as defense in depth. The authoritative
+  // protection is gOs12CaptureKeepAlive in the audio task's idle-shutdown path.
+  gIdleStartMs = millis();
+
   uint8_t captureScratch[kOs12CaptureBurstBytes];
   for (uint8_t burst = 0; burst < kOs12CaptureBurstsPerPoll; ++burst) {
     const size_t used = gOs12RecordingBytes;
@@ -154,7 +187,7 @@ bool buzzerBackendMicRecordPoll() {
 }
 
 bool buzzerBackendMicRecordStop() {
-  if (gOs12RecordingActive) os12FinishRecording();
+  if (gOs12RecordingActive || gOs12CaptureKeepAlive) os12FinishRecording();
   return gOs12RecordingData != nullptr && gOs12RecordingBytes > 0;
 }
 
@@ -163,7 +196,7 @@ bool buzzerBackendMicHasRecording() {
 }
 
 bool buzzerBackendMicPlaybackBegin() {
-  if (gOs12RecordingActive || !buzzerBackendMicHasRecording()) return false;
+  if (gOs12RecordingActive || gOs12CaptureKeepAlive || !buzzerBackendMicHasRecording()) return false;
   if (!ensureAudioRunning()) return false;
   buzzerBackendStop();
   gOs12PlaybackPosition = 0;
@@ -213,6 +246,8 @@ def apply(repo: Path) -> None:
                       "volatile TaskHandle_t gAudioTask = nullptr;\n" + CAPTURE_STATE + "\n",
                       "capture state")
 
+    source = guard_idle_shutdown(source)
+
     playback_loop = r'''    if (gOs12PlaybackActive && gOs12RecordingData && gOs12PlaybackPosition < gOs12RecordingBytes) {
       const size_t remaining = gOs12RecordingBytes - gOs12PlaybackPosition;
       const size_t copyBytes = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
@@ -248,7 +283,8 @@ def apply(repo: Path) -> None:
     for needle in (
         "MALLOC_CAP_SPIRAM", "kOs12RecordMaxMs = 5000U", "kOs12CaptureBurstsPerPoll = 2U",
         "captureScratch", "memcpy(gOs12RecordingData + used, captureScratch, bytesRead)",
-        "gOs12PlaybackPosition < gOs12RecordingBytes",
+        "gOs12PlaybackPosition < gOs12RecordingBytes", "gOs12CaptureKeepAlive",
+        "if (!gOs12CaptureKeepAlive) shutdownAudio();",
     ):
         if needle not in final_cpp:
             raise PatchError(f"bounded capture implementation missing {needle}")
