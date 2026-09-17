@@ -8,6 +8,7 @@
 void workshopPlatformBegin();
 void workshopPlatformPoll();
 const workshop::platform::WorkshopState& workshopPlatformState();
+void workshopPlatformPublishUpdateState(const workshop::platform::UpdateState& state);
 
 workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
     std::size_t slot,
