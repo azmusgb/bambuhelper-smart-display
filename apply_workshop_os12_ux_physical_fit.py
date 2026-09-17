@@ -189,7 +189,10 @@ def patch_portal_routes(text: str) -> str:
 
     system_action_old = 'if(hubUi13ActionRect().contains(x,y)){g_ui12SystemView=1;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}'
     system_action_new = 'if(hubUi13ActionRect().contains(x,y)){gOs12PortalParent=0;g_ui12SystemView=1;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}'
-    text = replace_once(text, system_action_old, system_action_new, "System -> Local Portal route")
+    system_count = text.count(system_action_old)
+    if system_count != 2:
+        raise PatchError(f"System -> Local Portal routes: expected two anchors, found {system_count}")
+    text = text.replace(system_action_old, system_action_new)
     return text
 
 
