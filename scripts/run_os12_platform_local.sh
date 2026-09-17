@@ -42,13 +42,26 @@ python3 "$ROOT/apply_workshop_os12_portal_login_hardening.py" \
   --apply
 python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 
+python3 "$ROOT/apply_workshop_os12_device_update.py" \
+  --repo "$BUILD" \
+  --source-root "$ROOT" \
+  --apply
+python3 "$ROOT/scripts/validate_os12_device_update.py" \
+  --source-root "$ROOT" \
+  --repo "$BUILD"
+
 # UI status surfaces consume normalized read-only facts. Physical Light,
-# Pause/Resume, and guarded Stop now dispatch through the OS12 command facade,
-# which still uses the existing deferred Bambu MQTT transport underneath.
+# Pause/Resume, and guarded Stop dispatch through the OS12 command facade.
+# Device-native online OTA is also centralized behind UpdateService and the
+# authoritative GitHub manifest; the legacy URL-driven /ota/auto route is not
+# registered in the reconstructed OS12 firmware.
 grep -q '#include "workshop_platform_bridge.h"' "$BUILD/src/main.cpp"
 test "$(grep -c 'workshopPlatformBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopPlatformPoll();' "$BUILD/src/main.cpp")" -eq 1
+test "$(grep -c 'workshopUpdateServiceBegin();' "$BUILD/src/main.cpp")" -eq 1
+test "$(grep -c 'workshopUpdateServiceLoop();' "$BUILD/src/main.cpp")" -eq 1
 test -s "$BUILD/src/workshop_platform_bridge.cpp"
+test -s "$BUILD/src/workshop_update_service.cpp"
 test -s "$BUILD/include/workshop_platform/workshop_state.hpp"
 grep -q 'workshopPlatformState().configuredPrinterCount>0' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformPrinterOnline(os12Slot)' "$BUILD/src/smart_hub.cpp"
@@ -60,6 +73,10 @@ grep -q 'longPress' "$BUILD/src/smart_hub.cpp"
 grep -q 'SecurityLoginResult::RateLimited' "$BUILD/src/security_manager.cpp"
 grep -q "<html lang='en'>" "$BUILD/src/web_server.cpp"
 grep -q "autocomplete='off'" "$BUILD/src/web_server.cpp"
+grep -q 'raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json' "$BUILD/src/workshop_update_service.cpp"
+grep -q 'esp_ota_set_boot_partition' "$BUILD/src/workshop_update_service.cpp"
+grep -q 'workshopUpdateRequestInstall' "$BUILD/src/smart_hub.cpp"
+! sed -n '/void initWebServer()/,/void handleWebServer()/p' "$BUILD/src/web_server.cpp" | grep -q '"/ota/auto"'
 
 if [[ "${1:-}" == "--build" ]]; then
   if ! command -v pio >/dev/null 2>&1; then
@@ -69,7 +86,7 @@ if [[ "${1:-}" == "--build" ]]; then
   fi
   command -v pio >/dev/null 2>&1 || { echo 'FAIL: pio unavailable after install' >&2; exit 1; }
 
-  echo "=== Build WS350 OS12 normalized state/control bridge ==="
+  echo "=== Build WS350 OS12 device platform ==="
   (cd "$BUILD" && pio run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 OS12 image missing' >&2; exit 1; }
 
@@ -84,6 +101,9 @@ echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu t
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
 echo "Control boundary: direct physical Light/Pause/Resume/Stop transport bypasses rejected."
 echo "Portal access: exact code alphabet/normalization, bounded login backoff, per-session RAM cookies, and accessible login states implemented."
+echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
+echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
+echo "Full image / offset 0x0: recovery only, never device-native OTA."
 echo "Power authority: unchanged Tasmota path."
 echo "Inventory authority: unchanged Filament Inventory path."
 echo "UI13 physical acceptance candidate: untouched."
