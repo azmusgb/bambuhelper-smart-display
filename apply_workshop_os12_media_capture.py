@@ -2,9 +2,10 @@
 """Add bounded microphone record/playback to the existing ES8311 authority.
 
 Recording reuses the installed full-duplex I2S driver and the single existing
-ES8311 task. A capture-lifetime pin prevents the donor idle shutdown from
-uninstalling I2S while OS12 is recording. RX is staged through bounded internal
-RAM before being copied into PSRAM.
+ES8311 task. A capture-lifetime pin prevents only the donor audio task's idle
+shutdown from uninstalling I2S while OS12 is recording. Explicit shutdown paths
+remain authoritative. RX is staged through bounded internal RAM before being
+copied into PSRAM.
 """
 from __future__ import annotations
 
@@ -36,24 +37,39 @@ def guard_idle_shutdown(source: str) -> str:
     if guarded in source:
         return source
 
-    matches: list[int] = []
-    cursor = 0
     needle = "shutdownAudio();"
+    candidates: list[int] = []
+    cursor = 0
     while True:
         idx = source.find(needle, cursor)
         if idx < 0:
             break
-        context = source[max(0, idx - 800):idx]
-        if "gIdleStartMs" in context:
-            matches.append(idx)
+        before = source[max(0, idx - 700):idx]
+        after = source[idx + len(needle):idx + len(needle) + 160]
+        if "gIdleStartMs" in before and "break;" in after:
+            candidates.append(idx)
         cursor = idx + len(needle)
 
-    if len(matches) != 1:
+    if len(candidates) != 1:
+        candidates = []
+        cursor = 0
+        while True:
+            idx = source.find(needle, cursor)
+            if idx < 0:
+                break
+            before = source[max(0, idx - 420):idx]
+            if "gIdleStartMs" in before and (
+                "kIdle" in before or "millis() - gIdleStartMs" in before or "millis()-gIdleStartMs" in before
+            ):
+                candidates.append(idx)
+            cursor = idx + len(needle)
+
+    if len(candidates) != 1:
         raise PatchError(
-            f"ES8311 idle-shutdown guard: expected one idle shutdown call, found {len(matches)}"
+            f"ES8311 idle-shutdown guard: expected one idle-timeout shutdown call, found {len(candidates)}"
         )
 
-    idx = matches[0]
+    idx = candidates[0]
     return source[:idx] + guarded + source[idx + len(needle):]
 
 
@@ -124,9 +140,6 @@ bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs) {
       heap_caps_malloc(capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!gOs12RecordingData) return false;
 
-  // Pin the installed I2S driver before silencing TX. The donor audio task may
-  // still stream silence, but its normal idle timeout is forbidden from
-  // uninstalling I2S until capture ends.
   gOs12CaptureKeepAlive = true;
   gIdleStartMs = millis();
   buzzerBackendStop();
@@ -151,8 +164,6 @@ bool buzzerBackendMicRecordPoll() {
     return false;
   }
 
-  // Refresh the donor idle timestamp as defense in depth. The authoritative
-  // protection is gOs12CaptureKeepAlive in the audio task's idle-shutdown path.
   gIdleStartMs = millis();
 
   uint8_t captureScratch[kOs12CaptureBurstBytes];
@@ -294,6 +305,13 @@ def apply(repo: Path) -> None:
     ):
         if forbidden in final_cpp:
             raise PatchError(f"capture retained unsafe task-handoff marker {forbidden}")
+
+    explicit_shutdown = final_cpp.find("void buzzerBackendShutdown()")
+    if explicit_shutdown < 0:
+        raise PatchError("explicit ES8311 shutdown entrypoint missing")
+    explicit_body = final_cpp[explicit_shutdown:explicit_shutdown + 500]
+    if "shutdownAudio();" not in explicit_body or guarded in explicit_body:
+        raise PatchError("explicit ES8311 shutdown must remain unguarded")
 
     print("Workshop OS 12 bounded microphone capture/playback installed")
 
