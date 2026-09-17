@@ -16,13 +16,14 @@ Workshop OS deliberately keeps source acceptance, static distribution, device OT
 | static rollback | **Smart Home v7.2** | Known static rollback pair retained for recovery. |
 | published device OTA candidate | **Workshop OS v11.26 UI11 Cupertino** | Published, unaccepted OTA candidate in `releases/device-update.json`; Full image is not published for this candidate. |
 | source acceptance candidate | **Workshop OS v11.28 UI13 Appliance Settings — PR #109** | Direct-to-`main` source candidate; exact-head CI and physical WS350 acceptance are required. |
+| OS12 platform candidate | **Workshop OS 12.0.0 — PR #118** | Built/tested platform foundation with hardened portal, normalized control/state boundary, guarded Mac USB bootstrap, and device-native GitHub OTA; runtime/physical acceptance still required. |
 | physical acceptance record | **Issue #111** | Canonical checklist and evidence record for the exact frozen UI13 artifact. |
 
 `releases/current.json` is authoritative for accepted source, the active source candidate, `main` state, and the conservative static download channel. `releases/device-update.json` is the versioned device-facing OTA discovery contract and may intentionally lag or differ from the active source candidate until publication is deliberately advanced.
 
 ## Workshop OS v11.28 UI13 Appliance Settings
 
-PR **#109** is the current hardware-facing source candidate. Its goal is not another settings menu; it is a coherent appliance UI for a 480×320 touch device.
+PR **#109** is the frozen UI13 hardware-facing source candidate underneath the OS12 platform branch. Its goal is not another settings menu; it is a coherent appliance UI for a 480×320 touch device.
 
 Primary navigation is:
 
@@ -52,6 +53,26 @@ Routine landscape controls expose at least a **48 px** touch target. Back and pr
 
 Copy is written as product language rather than implementation language. The touchscreen presents what a person needs while standing at the printer; advanced administration stays in the authenticated Local Portal.
 
+## Workshop OS 12 platform candidate
+
+PR **#118** layers the long-lived OS12 platform architecture over frozen UI13 without redefining UI13 acceptance. The current slice includes normalized state/service contracts, physical Light/Pause/Resume/guarded Stop through the OS12 facade, hardened local portal authentication, exact release/source identity, and device-native GitHub OTA.
+
+For a WS350 that is physically attached to a Mac but still running pre-OS12 firmware, the guarded bootstrap helper is:
+
+```bash
+bash scripts/bootstrap_ws350_os12_usb_macos.sh
+```
+
+The default invocation is non-mutating: it builds exact local source, resolves the ESP32-S3 USB port, captures recovery metadata, and byte-compares the live partition table with the expected Workshop OS 16 MB layout. After confirming the actual printer is idle, the guarded mutation form is:
+
+```bash
+bash scripts/bootstrap_ws350_os12_usb_macos.sh --flash --confirm-printer-idle
+```
+
+A partition mismatch stops the operation and must be handled through the approved recovery/full-image migration path rather than forced.
+
+Once OS12 is running, ordinary device-native online updates are manifest-bound GitHub OTA application updates. The authenticated update status API reports both the running release version and exact embedded source SHA so post-reboot acceptance can verify identity, not merely a version label.
+
 ## Safety, truth, and security boundaries
 
 Workshop OS must not invent physical or inventory facts.
@@ -71,7 +92,7 @@ For a normal existing-device update, use the **application/OTA image** on a comp
 
 A **Full** image is a recovery/service artifact and belongs at flash offset `0x0`. Waveshare Home and Workshop OS use incompatible partition layouts; cross-line migration is therefore a deliberate full-image recovery procedure, never an OTA shortcut.
 
-UI13 does **not** pretend that device-native self-install exists when it does not. The touchscreen Software Update screen reports capability honestly and keeps Full-image/recovery mechanics out of normal update UX.
+OS12 implements device-native GitHub OTA through one normalized `UpdateService`: certificate-validated manifest fetch, stable/candidate selection, board/authority/path validation, exact byte-count and SHA-256 verification, inactive application partition staging, and guarded activation/reboot. The historical arbitrary-URL `/ota/auto` path is not an active OS12 update authority.
 
 ## Validation and acceptance
 
@@ -87,7 +108,8 @@ Hardware-facing source changes are expected to pass:
 6. shared `jc3248w535` regression build;
 7. release/merge gate coordination;
 8. exact artifact identity capture;
-9. physical WS350 acceptance.
+9. runtime validation on the physical device;
+10. physical WS350 acceptance.
 
 The lifecycle is kept explicit:
 
@@ -95,25 +117,24 @@ The lifecycle is kept explicit:
 
 CI cannot skip the physical stages.
 
-### UI13 acceptance
-
-Issue **#111** is the canonical physical-acceptance record for PR #109. It locks the exact source SHA, OTA filename, size, SHA-256, Actions artifact identity, automated gate evidence, product-level 480×320 checks, Settings behavior, printer safety, inventory truth boundaries, persistence, recovery, and sanitized framebuffer evidence requirements.
-
-Do not merge or promote UI13 merely because CI is green. If acceptance passes, promotion must preserve the **exact accepted bytes** and provenance; do not rebuild a different binary and call it accepted.
-
 ## Repository map
 
 - `apply_smart_home_*.py` — inherited deterministic firmware evolution inputs.
 - `apply_workshop_os_*.py` — Workshop OS source evolution and product-finish layers.
+- `apply_workshop_os12_*.py` — OS12 platform/control/security/update reconstruction layers.
 - `.bambuhelper-validation/` — verified patch payloads required by selected loaders.
 - `.github/workflows/firmware-candidate.yml` — reusable firmware/hardware gate.
 - `.github/workflows/ui13-appliance-settings.yml` — UI13 reconstruction, product-finish, native build, and exact artifact gate.
+- `.github/workflows/os12-platform-bridge.yml` — OS12 reconstruction/build and exact-head OTA candidate artifact.
 - `.github/workflows/validate.yml` — repository validation.
 - `.github/workflows/release-gate.yml` — release metadata validation and conditional merge-gate coordination.
 - `.github/workflows/release-main.yml` — accepted static-installer integrity gate.
 - `releases/current.json` — accepted-source / active-source-candidate / `main` / static-channel state.
 - `releases/device-update.json` — minimal versioned device-facing OTA discovery contract.
 - `release.json` — conservative static download/rollback catalog.
+- `scripts/bootstrap_ws350_os12_usb_macos.sh` — guarded same-layout Mac USB bootstrap.
+- `scripts/accept_os12_portal_runtime.py` — real-device portal runtime acceptance helper.
+- `scripts/accept_os12_update_runtime.py` — real-device GitHub update/runtime identity acceptance helper.
 - `scripts/capture-ws350-views.zsh` — authenticated credential-safe physical framebuffer capture.
 - `docs/` — architecture, safety, UX, acceptance, and release documentation.
 - `docs/archive/` and `releases/archive/` — historical provenance only.
