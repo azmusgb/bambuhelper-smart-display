@@ -42,6 +42,8 @@ def main() -> int:
             "kOs12CaptureBurstsPerPoll = 2U",
             "gOs12RecordingData",
             "gOs12PlaybackActive",
+            "gOs12CaptureKeepAlive",
+            "if (!gOs12CaptureKeepAlive) shutdownAudio();",
             "captureScratch",
             "memcpy(gOs12RecordingData + used, captureScratch, bytesRead)",
             "gOs12PlaybackPosition < gOs12RecordingBytes",
@@ -72,12 +74,27 @@ def main() -> int:
         raise SystemExit("FAIL: I2S RX must not write directly into the PSRAM recording buffer")
 
     begin = source.find("bool buzzerBackendMicRecordBegin")
+    pin = source.find("gOs12CaptureKeepAlive = true;", begin)
+    refresh = source.find("gIdleStartMs = millis();", pin)
     stop_tone = source.find("buzzerBackendStop();", begin)
     activate = source.find("gOs12RecordingActive = true;", begin)
-    if begin < 0 or stop_tone < 0 or activate < 0 or stop_tone > activate:
-        raise SystemExit("FAIL: recording must keep ES8311 task alive but silence TX before activation")
+    if begin < 0 or pin < 0 or refresh < 0 or stop_tone < 0 or activate < 0:
+        raise SystemExit("FAIL: recording I2S lifetime pin sequence is incomplete")
+    if not (begin < pin < refresh < stop_tone < activate):
+        raise SystemExit("FAIL: I2S lifetime must be pinned before TX silence and recording activation")
 
-    print("PASS: OS12 microphone capture is PSRAM-bounded, poll-driven, keeps I2S clocks alive, and stages RX through internal RAM")
+    poll = source.find("bool buzzerBackendMicRecordPoll")
+    poll_refresh = source.find("gIdleStartMs = millis();", poll)
+    poll_read = source.find("i2s_read((i2s_port_t)AUDIO_I2S_PORT", poll)
+    if poll < 0 or poll_refresh < 0 or poll_read < 0 or poll_refresh > poll_read:
+        raise SystemExit("FAIL: recording poll must refresh audio lifetime before I2S RX")
+
+    finish = source.find("void os12FinishRecording")
+    release = source.find("gOs12CaptureKeepAlive = false;", finish)
+    if finish < 0 or release < 0:
+        raise SystemExit("FAIL: recording completion must release I2S lifetime pin")
+
+    print("PASS: OS12 microphone capture is PSRAM-bounded, poll-driven, pins I2S lifetime during RX, and stages RX through internal RAM")
     return 0
 
 
