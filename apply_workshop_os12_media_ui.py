@@ -26,11 +26,16 @@ static void drawOs12Media() {
 
 static void drawOs12MediaLab() {
   const workshop::media::Snapshot& m=workshopMediaSnapshot();
-  tft.fillScreen(C10_BG);drawHeader("Media Lab","Diagnostics",3);uiBottomNav(3,nullptr);
-  hubUi13InfoRow(hubUi13RowRect(0),"Recording",m.capabilities.microphoneAvailable&&m.capabilities.psramAvailable?"Backend pending":"Unavailable","Bounded capture must be physically validated",C10_MUTED);
-  hubUi13InfoRow(hubUi13RowRect(1),"Video",m.capabilities.videoDecoderAvailable?"Ready":"Unavailable",m.capabilities.videoDecoderAvailable?"MJPEG decoder ready":"Decoder is not advertised yet",m.capabilities.videoDecoderAvailable?C10_GREEN:C10_MUTED);
-  char ram[28];if(m.capabilities.psramAvailable)snprintf(ram,sizeof(ram),"%lu KB",(unsigned long)(m.capabilities.psramFreeBytes/1024U));else strlcpy(ram,"Unavailable",sizeof(ram));
-  hubUi13InfoRow(hubUi13RowRect(2),"PSRAM",ram,"Media working memory",m.capabilities.psramAvailable?C10_GREEN:C10_MUTED);
+  const bool recordReady=m.capabilities.microphoneAvailable&&m.capabilities.psramAvailable;
+  const bool recording=m.runtime.session==workshop::media::SessionState::Recording;
+  const bool playing=m.runtime.session==workshop::media::SessionState::PlayingRecording;
+  tft.fillScreen(C10_BG);drawHeader("Media Lab",workshop::media::sessionStateName(m.runtime.session),3);uiBottomNav(3,nullptr);
+  const char* recordValue=recording?"Recording":(recordReady?"Tap to record":"Unavailable");
+  const char* recordDetail=recordReady?"5 sec max • bounded PSRAM":"Microphone + PSRAM required";
+  hubUi13InfoRow(hubUi13RowRect(0),"Recording",recordValue,recording?"Tap to stop":recordDetail,recording?C10_ORANGE:(recordReady?C10_ACCENT:C10_MUTED));
+  const char* playValue=playing?"Playing":(m.runtime.recordingAvailable?"Tap to play":"No recording");
+  hubUi13InfoRow(hubUi13RowRect(1),"Playback",playValue,playing?"Tap to stop":"Uses the captured local buffer",playing?C10_GREEN:(m.runtime.recordingAvailable?C10_ACCENT:C10_MUTED));
+  hubUi13InfoRow(hubUi13RowRect(2),"Video",m.capabilities.videoDecoderAvailable?"Ready":"Unavailable",m.capabilities.videoDecoderAvailable?"MJPEG decoder ready":"Decoder is not advertised yet",m.capabilities.videoDecoderAvailable?C10_GREEN:C10_MUTED);
   hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Printer Alerts",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 '''
@@ -49,8 +54,27 @@ MEDIA_TOUCH = r'''
         return true;
       }
       if(g_ui12SettingsView==11){
-        if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=10;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
-        if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=6;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        workshop::media::MediaService& media=workshopMediaService();
+        if(hubUi13RowRect(0).contains(x,y)){
+          if(media.snapshot().runtime.session==workshop::media::SessionState::Recording)media.stopRecording(millis());
+          else if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().capabilities.microphoneAvailable&&media.snapshot().capabilities.psramAvailable)media.startRecording(5000U,millis());
+          g_dirty=true;return true;
+        }
+        if(hubUi13RowRect(1).contains(x,y)){
+          if(media.snapshot().runtime.session==workshop::media::SessionState::PlayingRecording)media.stop(millis());
+          else if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().runtime.recordingAvailable)media.playRecording(millis());
+          g_dirty=true;return true;
+        }
+        if(hubUi13BackRect().contains(x,y)){
+          if(media.snapshot().runtime.session==workshop::media::SessionState::Recording)media.stopRecording(millis());
+          else if(media.snapshot().runtime.session!=workshop::media::SessionState::Idle)media.stop(millis());
+          g_ui12SettingsView=10;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;
+        }
+        if(hubUi13ActionRect().contains(x,y)){
+          if(media.snapshot().runtime.session==workshop::media::SessionState::Recording)media.stopRecording(millis());
+          else if(media.snapshot().runtime.session!=workshop::media::SessionState::Idle)media.stop(millis());
+          g_ui12SettingsView=6;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;
+        }
         return true;
       }
 '''
