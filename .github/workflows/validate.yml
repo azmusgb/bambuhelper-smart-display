@@ -59,12 +59,13 @@ jobs:
       - name: Validate portal runtime acceptance helper syntax
         run: python3 -m py_compile scripts/accept_os12_portal_runtime.py
 
-      - name: Validate OS12 patcher syntax
+      - name: Validate OS12 patcher/publication helper syntax
         run: |
           python3 -m py_compile \
             apply_workshop_os12_device_update.py \
             apply_workshop_os12_release_identity.py \
-            scripts/validate_os12_device_update.py
+            scripts/validate_os12_device_update.py \
+            scripts/prepare_os12_device_candidate.py
 
       - name: Compile Workshop OS 12 platform contracts
         run: |
