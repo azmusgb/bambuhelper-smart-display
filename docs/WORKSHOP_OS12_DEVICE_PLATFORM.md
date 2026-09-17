@@ -1,6 +1,6 @@
 # Workshop OS 12 — Device Platform Foundation
 
-Workshop OS 12 evolves the WS350 firmware from a collection of feature screens into a resource-managed workshop appliance. This document defines the first platform boundary only; it does not promote a new firmware release and does not alter the frozen UI13 physical-acceptance evidence.
+Workshop OS 12 evolves the WS350 firmware from a collection of feature screens into a resource-managed workshop appliance. This document defines the platform boundary; it does not promote a new firmware release and does not alter the frozen UI13 physical-acceptance evidence.
 
 ## Source and release boundary
 
@@ -164,6 +164,30 @@ Important distinctions:
 - Inventory placement is authoritative only when the device contract supplies explicit placement evidence.
 - A telemetry match is not placement evidence.
 
+## Local portal authentication boundary
+
+Workshop OS 12 keeps the rotating physical portal code as the local browser authentication factor and hardens the implementation without pretending that the raw-IP HTTP portal provides TLS transport security.
+
+The current OS12 portal contract is:
+
+- the canonical code alphabet is exactly `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` on the server;
+- browser validation accepts the same letters in either case plus digits `2-9`, while the submitted value is normalized to uppercase before the authoritative server comparison;
+- `I`, `O`, `0`, and `1` are rejected on both sides;
+- failed login attempts are tracked per client address with bounded exponential backoff after two unsuccessful attempts, capped at 60 seconds;
+- successful authentication issues a unique RAM-only 128-bit session token rather than sharing one token across every browser;
+- at most six active session slots are retained, each with an eight-hour server-side lifetime and matching cookie `Max-Age`;
+- the cookie remains `HttpOnly` and `SameSite=Strict`; it deliberately does not claim the `Secure` attribute while the direct device portal is served over HTTP;
+- logout revokes only the presenting session instead of silently logging out every other client;
+- a reboot invalidates all sessions naturally because session state is RAM-only and also rotates the physical portal code;
+- same-origin protection for authenticated mutating browser requests remains authoritative;
+- ordinary setup/recovery authorization boundaries from the existing portal security design remain unchanged.
+
+The login surface must expose explicit Ready, Invalid, Rate-limited, and Submitting states. It uses semantic headings/text, `lang`/UTF-8 metadata, associated help/error descriptions, `role="alert"`, `aria-invalid`, an `aria-live` submitting status, disabled/busy controls, keyboard focus treatment, reduced-motion/forced-colors support, and pointer-capability-gated hover polish. `autocomplete="one-time-code"` is not used because this code is read from the WS350 rather than delivered by SMS or email.
+
+Copy describes this as **local device access**, not "secure LAN" or "secure sign-in" while the direct device URL is HTTP. No Bambu account, printer access code, provider credential, or cloud password belongs in this login flow.
+
+Static/compile validation of these contracts is necessary but is not physical acceptance. Actual WS350 testing must still demonstrate wrong-code handling, lowercase entry, rate-limit recovery, multiple independent browser sessions, logout isolation, reboot invalidation, touch/recovery continuity, and normal controls after authentication.
+
 ## Media/video gate
 
 Do not enable rich video merely because the ESP32-S3 can decode frames. Before media becomes a normal feature, physical benchmarking must demonstrate that playback does not materially degrade:
@@ -193,16 +217,19 @@ Exact limits must be measured on hardware before promotion. The platform should 
 
 A media feature that meets its own FPS target while degrading control latency fails acceptance.
 
-## First implementation slice
+## Current implementation slice
 
-The initial foundation slice contains no physical-release claim. It establishes:
+The current OS12 branch contains no physical-release claim. It establishes:
 
-1. this architecture contract
-2. the versioned device-state JSON schema
-3. deterministic validation of the contract/truth boundary
-4. CI execution of that validation
+1. the architecture contract and versioned device-state schema;
+2. deterministic validation of the device truth boundary;
+3. normalized Printer/Network state and service interfaces;
+4. UI/System read migration through the OS12 facade;
+5. Light, Pause, Resume, and guarded Stop routing through OS12 command validation;
+6. local portal validation/session/rate-limit/accessibility hardening;
+7. CI reconstruction and compile gates for the resulting source.
 
-The next code-bearing slice should introduce the firmware-side normalized state and service interfaces into the authoritative build recipe, followed by PrinterService/NetworkService migration before MediaService is enabled.
+Power/update/health expansion remains a later coherent slice and must not introduce parallel authorities.
 
 ## Acceptance rule
 
