@@ -22,6 +22,7 @@ class Ws350MediaBackend : public HardwareBackend {
   bool stopMedia() override;
   void poll() override;
   bool isSessionActive() const override;
+  bool hasRecording() const override;
 
  private:
   uint8_t requestedVolume_;
