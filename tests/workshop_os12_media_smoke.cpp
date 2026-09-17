@@ -6,7 +6,9 @@ using namespace workshop::media;
 
 class FakeBackend : public HardwareBackend {
  public:
-  FakeBackend() : failNext(false), muted(false), active(false), volume(0), stopCount(0) {
+  FakeBackend()
+      : failNext(false), muted(false), active(false), recording(false),
+        volume(0), stopCount(0) {
     caps.speakerAvailable = true;
     caps.microphoneAvailable = true;
     caps.videoDecoderAvailable = true;
@@ -18,6 +20,7 @@ class FakeBackend : public HardwareBackend {
   bool failNext;
   bool muted;
   bool active;
+  bool recording;
   uint8_t volume;
   unsigned stopCount;
 
@@ -27,14 +30,15 @@ class FakeBackend : public HardwareBackend {
   bool setSpeakerMuted(bool m) override { muted = m; return ok(); }
   bool playDiagnosticTone() override { return ok(); }
   bool sampleMicrophoneLevel(uint8_t& p) override { p = 42; return ok(); }
-  bool beginRecording(uint32_t) override { active = ok(); return active; }
-  bool stopRecording() override { active = false; return ok(); }
-  bool playRecording() override { active = ok(); return active; }
+  bool beginRecording(uint32_t) override { recording = false; active = ok(); return active; }
+  bool stopRecording() override { active = false; recording = ok(); return recording; }
+  bool playRecording() override { active = recording && ok(); return active; }
   bool beginMjpeg(const char*) override { active = ok(); return active; }
   bool pauseVideo(bool) override { return ok(); }
   bool stopMedia() override { ++stopCount; active = false; return ok(); }
   void poll() override {}
   bool isSessionActive() const override { return active; }
+  bool hasRecording() const override { return recording; }
 };
 
 int main() {
@@ -45,6 +49,7 @@ int main() {
   assert(media.snapshot().capabilities.speakerAvailable);
   assert(media.snapshot().capabilities.microphoneAvailable);
   assert(media.snapshot().capabilities.videoDecoderAvailable);
+  assert(!media.snapshot().runtime.recordingAvailable);
 
   assert(media.setVolume(90));
   assert(hw.volume == 90);
@@ -67,17 +72,21 @@ int main() {
   assert(!media.playMjpeg("clip.mjpg", 302));
   assert(media.snapshot().runtime.lastError == MediaError::Busy);
   assert(media.stopRecording(303));
+  assert(media.snapshot().runtime.recordingAvailable);
 
   assert(media.startRecording(5000, 304));
+  hw.recording = true;
   hw.active = false;  // bounded backend completed its requested recording.
   media.poll(305);
   assert(media.snapshot().runtime.session == SessionState::Idle);
+  assert(media.snapshot().runtime.recordingAvailable);
 
   assert(media.playRecording(306));
   assert(media.snapshot().runtime.session == SessionState::PlayingRecording);
   hw.active = false;  // DMA playback reached the captured byte count.
   media.poll(307);
   assert(media.snapshot().runtime.session == SessionState::Idle);
+  assert(media.snapshot().runtime.recordingAvailable);
 
   assert(!media.playMjpeg(0, 308));
   assert(media.snapshot().runtime.lastError == MediaError::InvalidArgument);
