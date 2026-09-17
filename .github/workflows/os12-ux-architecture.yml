@@ -5,14 +5,18 @@ on:
   push:
     branches:
       - feature/os12-ux-architecture-overhaul
+      - feature/os12-portal-control-plane-v4
     paths:
       - 'apply_workshop_os12_ux_architecture.py'
       - 'apply_workshop_os12_ux_geometry.py'
       - 'apply_workshop_os12_ux_physical_fit.py'
+      - 'apply_workshop_os12_portal_control_plane.py'
+      - 'contracts/**'
       - 'scripts/run_os12_ux_local.sh'
       - 'scripts/validate_os12_ux_architecture.py'
       - 'scripts/validate_os12_ux_geometry.py'
       - 'scripts/validate_os12_ux_physical_fit.py'
+      - 'scripts/validate_os12_portal_control_plane.py'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/ui-v11.25-rc10/**'
       - 'firmware/ui-v11.26-ui11/**'
@@ -23,10 +27,13 @@ on:
       - 'apply_workshop_os12_ux_architecture.py'
       - 'apply_workshop_os12_ux_geometry.py'
       - 'apply_workshop_os12_ux_physical_fit.py'
+      - 'apply_workshop_os12_portal_control_plane.py'
+      - 'contracts/**'
       - 'scripts/run_os12_ux_local.sh'
       - 'scripts/validate_os12_ux_architecture.py'
       - 'scripts/validate_os12_ux_geometry.py'
       - 'scripts/validate_os12_ux_physical_fit.py'
+      - 'scripts/validate_os12_portal_control_plane.py'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/ui-v11.25-rc10/**'
       - 'firmware/ui-v11.26-ui11/**'
@@ -38,7 +45,7 @@ permissions:
 
 jobs:
   build:
-    name: Reconstruct and compile hierarchical flat UX
+    name: Reconstruct and compile OS12 control plane
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -53,9 +60,12 @@ jobs:
             apply_workshop_os12_ux_architecture.py \
             apply_workshop_os12_ux_geometry.py \
             apply_workshop_os12_ux_physical_fit.py \
+            apply_workshop_os12_portal_control_plane.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
-            scripts/validate_os12_ux_physical_fit.py
+            scripts/validate_os12_ux_physical_fit.py \
+            scripts/validate_os12_portal_control_plane.py
+          python3 -m json.tool contracts/filament-inventory-device-feed-v1.schema.json >/dev/null
           bash -n scripts/run_os12_ux_local.sh
 
       - name: Reconstruct and build exact-head UX candidate
@@ -74,16 +84,18 @@ jobs:
           FW_SHA="$(sha256sum "$OUT/firmware.bin" | awk '{print $1}')"
           FW_SIZE="$(stat -c '%s' "$OUT/firmware.bin")"
           printf '%s  %s\n' "$FW_SHA" firmware.bin > "$OUT/SHA256SUMS.txt"
-          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
+          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "portalArchitecture": "control-plane-v4",\n  "inventoryContract": "device-feed/v1",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
             "$OS12_RELEASE_VERSION" "$OS12_SOURCE_SHA" "$FW_SHA" "$FW_SIZE" > "$OUT/candidate.json"
           echo "firmware_sha256=$FW_SHA" >> "$GITHUB_OUTPUT"
           echo "firmware_size=$FW_SIZE" >> "$GITHUB_OUTPUT"
           {
-            echo '### WS350 exact-head UX candidate'
+            echo '### WS350 exact-head OS12 control-plane candidate'
             echo
             echo "- Source SHA: \`$OS12_SOURCE_SHA\`"
             echo "- Firmware SHA-256: \`$FW_SHA\`"
             echo "- Firmware bytes: \`$FW_SIZE\`"
+            echo '- Portal architecture: control-plane-v4'
+            echo '- Inventory contract: device-feed/v1'
             echo '- Release state: built/tested in CI only'
             echo '- Physical acceptance: required'
             echo '- Accepted: no'
@@ -101,7 +113,7 @@ jobs:
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves reconstruction, hierarchy/geometry/navigation/physical-fit validation, compile regression, and exact artifact identity only.'
+          echo 'This workflow proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
-          echo 'Inventory facts remain authoritative only when supplied by Filament Inventory.'
-          echo 'Do not integrate this UX candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'
+          echo 'Inventory facts remain authoritative only when supplied by the profile-scoped Filament Inventory device-feed contract.'
+          echo 'Do not integrate this candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'
