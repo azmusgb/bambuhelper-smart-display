@@ -21,12 +21,14 @@ class Ws350MediaBackend : public HardwareBackend {
   bool pauseVideo(bool paused) override;
   bool stopMedia() override;
   void poll() override;
+  bool isSessionActive() const override;
 
  private:
   uint8_t requestedVolume_;
   bool muted_;
   uint32_t requestedRecordMs_;
   bool recordingRequested_;
+  bool recordingPlaybackRequested_;
   bool videoRequested_;
   bool videoPaused_;
 };
