@@ -4,6 +4,7 @@
 #include "bambu_state.h"
 #include "config.h"
 #include "settings.h"
+#include "tasmota.h"
 #include "wifi_manager.h"
 #include "workshop_platform/runtime_adapter.hpp"
 #include "workshop_platform/service_contracts.hpp"
@@ -65,6 +66,30 @@ workshop::platform::PrinterState observePrinter(std::size_t slot, std::uint32_t 
     return normalizePrinterObservation(observation, nowMs, staleThresholdForSlot(slot));
 }
 
+workshop::platform::PowerState observePower(std::size_t slot, std::uint32_t nowMs) {
+    using namespace workshop::platform;
+
+    PowerState state;
+    if (slot >= MAX_ACTIVE_PRINTERS || !isPrinterConfigured(static_cast<uint8_t>(slot))) {
+        return state;
+    }
+
+    const std::uint8_t plug = tasmotaControlPlugForSlot(static_cast<uint8_t>(slot));
+    if (plug == 0xFF || !tasmotaSettings[plug].enabled) {
+        return state;
+    }
+
+    TasmotaPlugStatsView stats;
+    tasmotaGetStats(plug, &stats);
+    state.mapped = true;
+    state.observedAtMs = nowMs;
+    state.channelReady = stats.online;
+    state.freshness = stats.online ? Freshness::Fresh : Freshness::Stale;
+    state.stateKnown = stats.powerStateKnown;
+    state.on = stats.powerStateKnown && stats.powerOn;
+    return state;
+}
+
 workshop::platform::NetworkState observeNetwork(std::uint32_t nowMs) {
     using namespace workshop::platform;
 
@@ -91,6 +116,23 @@ workshop::platform::NetworkState observeNetwork(std::uint32_t nowMs) {
     return normalizeNetworkObservation(observation);
 }
 
+workshop::platform::HealthState observeHealth(std::uint32_t nowMs) {
+    using namespace workshop::platform;
+    HealthState state;
+    state.uptimeMs = nowMs;
+    state.freeHeapBytes = static_cast<std::uint32_t>(ESP.getFreeHeap());
+    state.freePsramBytes = static_cast<std::uint32_t>(ESP.getFreePsram());
+    state.uiResponsive = true;
+    state.touchResponsive = true;
+    state.printerServiceResponsive = true;
+    state.networkServiceResponsive = true;
+    state.inventoryServiceResponsive = g_workshopStateStore.snapshot().inventory.available ||
+                                       g_workshopStateStore.snapshot().inventory.freshness == Freshness::Unknown;
+    state.powerServiceResponsive = true;
+    state.updateServiceResponsive = true;
+    return state;
+}
+
 }  // namespace
 
 void workshopPlatformBegin() {
@@ -103,11 +145,13 @@ void workshopPlatformPoll() {
 
     for (std::size_t slot = 0; slot < workshop::platform::kMaxPrinterSlots; ++slot) {
         g_workshopStateStore.publishPrinterState(slot, observePrinter(slot, nowMs));
+        g_workshopStateStore.publishPowerState(slot, observePower(slot, nowMs));
     }
 
     if (activePrinterIndex < MAX_PRINTERS) {
         g_workshopStateStore.setActivePrinter(activePrinterIndex);
     }
+    g_workshopStateStore.publishHealthState(observeHealth(nowMs));
 }
 
 const workshop::platform::WorkshopState& workshopPlatformState() {
@@ -149,4 +193,34 @@ workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
         default:
             return CommandResult::RejectedInvalidState;
     }
+}
+
+workshop::platform::CommandResult workshopPlatformDispatchPowerCommand(
+    std::size_t slot,
+    workshop::platform::PowerCommand command,
+    bool guardSatisfied,
+    bool strongGuardSatisfied) {
+    using namespace workshop::platform;
+
+    if (!validPrinterSlot(slot) || slot >= MAX_ACTIVE_PRINTERS) {
+        return CommandResult::RejectedInvalidSlot;
+    }
+
+    const PowerState& power = workshopPlatformPowerState(slot);
+    const PrinterState& printer = workshopPlatformPrinterState(slot);
+    const CommandResult preflight = validatePowerCommand(
+        power, printer, command, guardSatisfied, strongGuardSatisfied);
+    if (preflight != CommandResult::Accepted) {
+        return preflight;
+    }
+
+    const std::uint8_t plug = tasmotaControlPlugForSlot(static_cast<uint8_t>(slot));
+    if (plug == 0xFF || !tasmotaSettings[plug].enabled) {
+        return CommandResult::RejectedUnavailable;
+    }
+
+    const bool desiredOn = command == PowerCommand::On;
+    return tasmotaSetPower(plug, desiredOn)
+        ? CommandResult::Accepted
+        : CommandResult::FailedTransport;
 }
