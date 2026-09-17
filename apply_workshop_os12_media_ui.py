@@ -42,7 +42,7 @@ MEDIA_TOUCH = r'''
           int v=(int)media.snapshot().runtime.volumePercent+(hubUi13MinusRect(0).contains(x,y)?-10:10);if(v<0)v=0;if(v>100)v=100;
           if(media.setVolume((uint8_t)v)){buzzerSettings.volume=(uint8_t)v;saveBuzzerSettings();buzzerPlay(BUZZ_CLICK);}g_dirty=true;return true;
         }
-        if(hubUi13RowRect(1).contains(x,y)){if(media.snapshot().runtime.session!=workshop::media::SessionState::Idle)media.stop(millis());if(media.testSpeaker(millis())){delay(120);media.stop(millis());}g_dirty=true;return true;}
+        if(hubUi13RowRect(1).contains(x,y)){if(media.snapshot().runtime.session==workshop::media::SessionState::Idle)media.testSpeaker(millis());g_dirty=true;return true;}
         if(hubUi13RowRect(2).contains(x,y)){if(media.snapshot().runtime.session==workshop::media::SessionState::Idle)media.sampleMicrophone(millis());g_dirty=true;return true;}
         if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=2;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
         if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=11;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
