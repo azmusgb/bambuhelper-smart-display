@@ -12,7 +12,8 @@ namespace media {
 
 Ws350MediaBackend::Ws350MediaBackend()
     : requestedVolume_(70), muted_(false), requestedRecordMs_(0),
-      recordingRequested_(false), videoRequested_(false), videoPaused_(false) {}
+      recordingRequested_(false), recordingPlaybackRequested_(false),
+      videoRequested_(false), videoPaused_(false) {}
 
 Capabilities Ws350MediaBackend::probe() {
   Capabilities caps;
@@ -30,8 +31,8 @@ Capabilities Ws350MediaBackend::probe() {
 #endif
   }
 #endif
-  // Video is deliberately unavailable until the bounded MJPEG renderer is
-  // installed. Never advertise a decoder merely because PSRAM exists.
+  // Video remains unavailable until a bounded MJPEG decoder is installed and
+  // validated on the WS350. PSRAM alone is not evidence of decoder capability.
   caps.videoDecoderAvailable = false;
   return caps;
 }
@@ -61,7 +62,8 @@ bool Ws350MediaBackend::setSpeakerMuted(bool muted) {
 
 bool Ws350MediaBackend::playDiagnosticTone() {
 #if defined(BOARD_HAS_ES8311_AUDIO)
-  // Non-blocking: existing ES8311 audio task owns DMA streaming.
+  // Non-blocking: existing ES8311 audio task owns DMA streaming. MediaService
+  // stops this test on its bounded deadline.
   buzzerBackendApplyStep(1047U);
   return true;
 #else
@@ -82,22 +84,41 @@ bool Ws350MediaBackend::sampleMicrophoneLevel(uint8_t& percent) {
 }
 
 bool Ws350MediaBackend::beginRecording(uint32_t maxDurationMs) {
-  // The legacy mic-echo routine performs capture and playback as one blocking
-  // operation. OS12 intentionally refuses to expose that as a recording
-  // session. Native bounded capture is added by the media-capture backend.
+#if defined(BOARD_HAS_MICROPHONE)
   requestedRecordMs_ = maxDurationMs;
-  recordingRequested_ = false;
-  return false;
-}
-
-bool Ws350MediaBackend::stopRecording() {
+  recordingPlaybackRequested_ = false;
+  recordingRequested_ = buzzerBackendMicRecordBegin(maxDurationMs);
+  return recordingRequested_;
+#else
+  (void)maxDurationMs;
   requestedRecordMs_ = 0;
   recordingRequested_ = false;
   return false;
+#endif
+}
+
+bool Ws350MediaBackend::stopRecording() {
+#if defined(BOARD_HAS_MICROPHONE)
+  const bool ok = buzzerBackendMicRecordStop();
+  recordingRequested_ = false;
+  requestedRecordMs_ = 0;
+  return ok;
+#else
+  recordingRequested_ = false;
+  requestedRecordMs_ = 0;
+  return false;
+#endif
 }
 
 bool Ws350MediaBackend::playRecording() {
+#if defined(BOARD_HAS_MICROPHONE) && defined(BOARD_HAS_ES8311_AUDIO)
+  if (!buzzerBackendMicHasRecording()) return false;
+  recordingRequested_ = false;
+  recordingPlaybackRequested_ = buzzerBackendMicPlaybackBegin();
+  return recordingPlaybackRequested_;
+#else
   return false;
+#endif
 }
 
 bool Ws350MediaBackend::beginMjpeg(const char* source) {
@@ -113,10 +134,15 @@ bool Ws350MediaBackend::pauseVideo(bool paused) {
 }
 
 bool Ws350MediaBackend::stopMedia() {
+#if defined(BOARD_HAS_MICROPHONE)
+  if (recordingRequested_) buzzerBackendMicRecordStop();
+  buzzerBackendMicPlaybackStop();
+#endif
 #if defined(BOARD_HAS_ES8311_AUDIO)
   buzzerBackendStop();
 #endif
   recordingRequested_ = false;
+  recordingPlaybackRequested_ = false;
   requestedRecordMs_ = 0;
   videoRequested_ = false;
   videoPaused_ = false;
@@ -124,8 +150,21 @@ bool Ws350MediaBackend::stopMedia() {
 }
 
 void Ws350MediaBackend::poll() {
-  // Audio DMA remains owned by the existing backend. This adapter must never
-  // block printer telemetry, touch handling, OTA, or recovery processing.
+#if defined(BOARD_HAS_MICROPHONE)
+  if (recordingRequested_) {
+    recordingRequested_ = buzzerBackendMicRecordPoll();
+    if (!recordingRequested_) requestedRecordMs_ = 0;
+  }
+  if (recordingPlaybackRequested_) {
+    recordingPlaybackRequested_ = buzzerBackendMicPlaybackPoll();
+  }
+#endif
+  // All low-level capture work is burst-bounded. Printer telemetry, touch,
+  // network, OTA and recovery remain serviced by the main loop between polls.
+}
+
+bool Ws350MediaBackend::isSessionActive() const {
+  return recordingRequested_ || recordingPlaybackRequested_ || videoRequested_;
 }
 
 }  // namespace media
