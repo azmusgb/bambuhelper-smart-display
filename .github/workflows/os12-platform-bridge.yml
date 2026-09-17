@@ -11,14 +11,18 @@ on:
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
+      - 'apply_workshop_os12_device_update.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/validate_os12_device_update.py'
       - 'scripts/accept_os12_portal_runtime.py'
+      - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
+      - 'docs/DEVICE_NATIVE_UPDATES.md'
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
     paths:
@@ -27,14 +31,18 @@ on:
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
+      - 'apply_workshop_os12_device_update.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/validate_os12_device_update.py'
       - 'scripts/accept_os12_portal_runtime.py'
+      - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
+      - 'docs/DEVICE_NATIVE_UPDATES.md'
       - '.github/workflows/os12-platform-bridge.yml'
 
 permissions:
@@ -42,7 +50,7 @@ permissions:
 
 jobs:
   build:
-    name: Reconstruct and compile OS12 control bridge
+    name: Reconstruct and compile OS12 device platform
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -53,7 +61,10 @@ jobs:
           python3 -m pip install --upgrade platformio
           pio --version
 
-      - name: Reconstruct UI13 and apply OS12 bridge
+      - name: Validate device-native update source contract
+        run: python3 scripts/validate_os12_device_update.py --source-root .
+
+      - name: Reconstruct UI13 and apply OS12 platform
         run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
 
       - name: Validate portal runtime helper syntax
@@ -83,9 +94,11 @@ jobs:
             echo "board=ws_lcd_350"
             echo "artifact_type=OTA/application image"
             echo "full_image=false"
+            echo "device_native_update_service=true"
+            echo "legacy_url_auto_ota_route=false"
             echo "physical_acceptance=false"
             echo
-            grep -E 'SMART_HOME_BUILD_LABEL|SMART_HOME_PROFILE|WORKSHOP_OS_UI_SCHEMA|WORKSHOP_OS_V11_28_UI13' \
+            grep -E 'SMART_HOME_BUILD_LABEL|SMART_HOME_PROFILE|WORKSHOP_OS_UI_SCHEMA|WORKSHOP_OS_V11_28_UI13|WORKSHOP_OS12_DEVICE_UPDATE' \
               "$BUILD/include/smart_home_build.h" || true
           } > "$OUT/BUILD-INFO.txt"
 
@@ -103,5 +116,6 @@ jobs:
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves buildability and publishes a candidate OTA artifact only.'
+          echo 'This workflow proves buildability and publishes a CI candidate artifact only.'
+          echo 'It does not publish the artifact into the device discovery manifest.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
