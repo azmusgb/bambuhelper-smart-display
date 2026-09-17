@@ -18,7 +18,7 @@ Implementation/build validation is not physical acceptance. Until the new update
 8. Download only the selected channel's `ota.path` for an ordinary on-device update. Full images are never eligible for this path.
 9. Require the exact declared HTTP content length and exact downloaded byte count. Stream the image only to `esp_ota_get_next_update_partition(nullptr)` while computing SHA-256.
 10. Require the computed SHA-256 to equal the manifest before calling `esp_ota_set_boot_partition`. On download, size, hash, flash, or finalization failure, leave the current boot partition authoritative and restore normal printer connectivity where possible.
-11. Reboot only after the inactive application partition has been written, finalized, hash-verified, and selected as the next boot partition. After reboot, report the actual embedded Workshop OS release version rather than assuming installation succeeded.
+11. Reboot only after the inactive application partition has been written, finalized, hash-verified, and selected as the next boot partition. After reboot, report both the actual embedded Workshop OS release version and exact source commit rather than assuming installation succeeded.
 
 ## Release channels
 
@@ -41,6 +41,8 @@ The authenticated local portal also exposes the same service rather than a secon
 - `POST /os12/update/check`
 - `POST /os12/update/channel` with `channel=stable|candidate`
 - `POST /os12/update/install`
+
+`GET /os12/update/status` reports the exact embedded `runningSourceCommit` in addition to the running release version. Runtime acceptance uses that value to verify that the device rebooted into the expected source identity rather than merely a matching version string.
 
 These routes are local control surfaces over `UpdateService`; they do not accept an arbitrary firmware URL.
 
