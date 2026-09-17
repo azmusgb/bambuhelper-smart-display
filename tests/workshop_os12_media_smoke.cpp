@@ -4,12 +4,20 @@
 
 using namespace workshop::media;
 
-class FakeBackend final : public HardwareBackend {
+class FakeBackend : public HardwareBackend {
  public:
-  Capabilities caps{true, true, true, true, 2U * 1024U * 1024U};
-  bool failNext = false;
-  bool muted = false;
-  uint8_t volume = 0;
+  FakeBackend() : failNext(false), muted(false), volume(0) {
+    caps.speakerAvailable = true;
+    caps.microphoneAvailable = true;
+    caps.videoDecoderAvailable = true;
+    caps.psramAvailable = true;
+    caps.psramFreeBytes = 2U * 1024U * 1024U;
+  }
+
+  Capabilities caps;
+  bool failNext;
+  bool muted;
+  uint8_t volume;
 
   Capabilities probe() override { return caps; }
   bool ok() { if (failNext) { failNext = false; return false; } return true; }
@@ -51,7 +59,7 @@ int main() {
   assert(media.playRecording(6));
   assert(media.stop(7));
 
-  assert(!media.playMjpeg(nullptr, 8));
+  assert(!media.playMjpeg(0, 8));
   assert(media.snapshot().runtime.lastError == MediaError::InvalidArgument);
   assert(media.playMjpeg("clip.mjpg", 9));
   assert(media.pauseVideo(true, 10));
