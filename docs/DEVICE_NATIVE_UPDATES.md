@@ -74,7 +74,7 @@ bash scripts/bootstrap_ws350_os12_usb_macos.sh \
 
 The helper refuses to flash when the partition table differs. It does not erase NVS. A mismatch is a recovery/migration boundary: preserve the captured evidence and use the approved Full image at `0x0` rather than forcing an application/bootstrap upload. `--full-backup` optionally captures the entire 16 MB device flash before mutation.
 
-After the bootstrap installation and reboot, future ordinary candidates can be checked and installed directly from GitHub on the device, subject to the manifest and acceptance rules above.
+After the bootstrap installation and reboot, future ordinary candidates can be checked and installed directly from GitHub on the device, subject to the manifest and acceptance rules above. The bootstrap image itself is not the GitHub-OTA acceptance event; exercise formal OTA acceptance with a strictly newer published candidate so release versions are never reused for different bytes.
 
 ## Preparing a candidate
 
