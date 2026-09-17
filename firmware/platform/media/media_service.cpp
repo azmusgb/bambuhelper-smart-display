@@ -5,11 +5,15 @@ namespace media {
 
 namespace {
 uint8_t clampPercent(uint8_t value) { return value > 100 ? 100 : value; }
+bool deadlineReached(uint32_t nowMs, uint32_t deadlineMs) {
+  return static_cast<int32_t>(nowMs - deadlineMs) >= 0;
+}
 }
 
 void MediaService::begin(HardwareBackend* backend, uint32_t nowMs) {
   backend_ = backend;
   snapshot_ = Snapshot();
+  speakerTestEndsAtMs_ = 0;
   snapshot_.runtime.volumePercent = 70;
   if (!backend_) {
     fail(MediaError::HardwareUnavailable);
@@ -19,8 +23,21 @@ void MediaService::begin(HardwareBackend* backend, uint32_t nowMs) {
   transition(SessionState::Idle, nowMs);
 }
 
-void MediaService::poll(uint32_t) {
-  if (backend_) backend_->poll();
+void MediaService::poll(uint32_t nowMs) {
+  if (!backend_) return;
+  backend_->poll();
+  if (speakerTestEndsAtMs_ != 0 &&
+      snapshot_.runtime.session == SessionState::PlayingAudio &&
+      deadlineReached(nowMs, speakerTestEndsAtMs_)) {
+    speakerTestEndsAtMs_ = 0;
+    transition(SessionState::Stopping, nowMs);
+    if (!backend_->stopMedia()) {
+      fail(MediaError::IoFailure);
+      return;
+    }
+    transition(SessionState::Idle, nowMs);
+    clearError();
+  }
 }
 
 bool MediaService::requireIdle() {
@@ -73,6 +90,7 @@ bool MediaService::testSpeaker(uint32_t nowMs) {
     return false;
   }
   transition(SessionState::PlayingAudio, nowMs);
+  speakerTestEndsAtMs_ = nowMs + 180U;
   clearError();
   return true;
 }
@@ -179,6 +197,7 @@ bool MediaService::stop(uint32_t nowMs) {
     return false;
   }
   if (snapshot_.runtime.session == SessionState::Idle) return true;
+  speakerTestEndsAtMs_ = 0;
   transition(SessionState::Stopping, nowMs);
   if (!backend_->stopMedia()) {
     fail(MediaError::IoFailure);
@@ -193,6 +212,7 @@ void MediaService::noteAudioUnderrun() { ++snapshot_.runtime.audioUnderruns; }
 void MediaService::noteDroppedVideoFrame() { ++snapshot_.runtime.droppedVideoFrames; }
 
 void MediaService::fail(MediaError error) {
+  speakerTestEndsAtMs_ = 0;
   snapshot_.runtime.lastError = error;
   snapshot_.runtime.session = SessionState::Fault;
 }
