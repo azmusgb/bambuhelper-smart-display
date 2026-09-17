@@ -7,7 +7,7 @@ request a manifest check, and validate returned update metadata/state.
 Actual installation requires BOTH --install and --expect-version. The helper
 never accepts an arbitrary firmware URL. If the device reboots successfully it
 prompts for the newly rotated portal code and verifies the reported running
-release version after reconnect.
+release version and exact embedded source SHA after reconnect.
 """
 from __future__ import annotations
 
@@ -63,8 +63,9 @@ def authenticated_client(base_url: str, code: str, label: str) -> Client:
 def validate_status(payload: dict) -> None:
     required = (
         "channel", "phase", "progress", "busy", "updateAvailable",
-        "artifactIdentityVerified", "runningVersion", "availableVersion",
-        "availableLabel", "status", "sourceCommit", "artifactSize", "artifactSha256",
+        "artifactIdentityVerified", "runningVersion", "runningSourceCommit",
+        "availableVersion", "availableLabel", "status", "sourceCommit",
+        "artifactSize", "artifactSha256",
     )
     missing = [key for key in required if key not in payload]
     check(not missing, f"update status missing fields: {', '.join(missing)}")
@@ -73,6 +74,8 @@ def validate_status(payload: dict) -> None:
     check(isinstance(payload["updateAvailable"], bool), "updateAvailable must be boolean")
     check(isinstance(payload["progress"], int) and 0 <= payload["progress"] <= 100, "progress outside 0..100")
     check(isinstance(payload["runningVersion"], str) and payload["runningVersion"], "runningVersion missing")
+    check(HEX40.fullmatch(str(payload["runningSourceCommit"])) is not None,
+          "runningSourceCommit is not an exact 40-character lowercase source SHA")
 
 
 def poll_check(client: Client, timeout: float) -> dict:
@@ -120,10 +123,6 @@ def poll_install_until_reboot(client: Client, base_url: str, timeout: float) -> 
                 raise AcceptanceError(f"device update failed: {payload.get('status', '')}")
             time.sleep(1.0)
         except AcceptanceError as exc:
-            # A transport loss after installation has started can be the reboot.
-            # If the device has already returned so quickly that only the old
-            # authenticated session is invalid, require that we previously saw
-            # RebootRequired before treating a reachable login surface as proof.
             if not saw_install_state:
                 raise
             if "request failed" in str(exc):
@@ -151,6 +150,8 @@ def run(args: argparse.Namespace) -> int:
     check(base_url.startswith(("http://", "https://")), "--base-url must start with http:// or https://")
     if args.install and not args.expect_version:
         raise AcceptanceError("--install requires --expect-version; refusing unconstrained installation")
+    if args.install and not args.expect_source_sha:
+        raise AcceptanceError("--install requires --expect-source-sha; exact running source identity must be constrained")
     if args.expect_source_sha and HEX40.fullmatch(args.expect_source_sha) is None:
         raise AcceptanceError("--expect-source-sha must be exactly 40 lowercase hex characters")
 
@@ -175,7 +176,7 @@ def run(args: argparse.Namespace) -> int:
     if status["phase"] == "Failed":
         raise AcceptanceError(f"GitHub update check failed: {status.get('status', '')}")
     print(f"PASS  GitHub manifest check completed: {status['phase']}")
-    print(f"Running: {status['runningVersion']}")
+    print(f"Running: {status['runningVersion']} @ {status['runningSourceCommit']}")
 
     if status["updateAvailable"]:
         check(status["phase"] == "Available", "updateAvailable true outside Available phase")
@@ -185,7 +186,8 @@ def run(args: argparse.Namespace) -> int:
         print(
             "AVAILABLE "
             f"{status['availableVersion']} | {status['availableLabel']} | "
-            f"{status['artifactSize']} bytes | sha256={status['artifactSha256']}"
+            f"source={status['sourceCommit']} | {status['artifactSize']} bytes | "
+            f"sha256={status['artifactSha256']}"
         )
     else:
         check(status["phase"] == "Idle", f"no update advertised but phase is {status['phase']}")
@@ -198,14 +200,12 @@ def run(args: argparse.Namespace) -> int:
     check(status["updateAvailable"], "--install requested but selected channel has no newer published update")
     check(status["availableVersion"] == args.expect_version,
           f"refusing install: discovered {status['availableVersion']!r}, expected {args.expect_version!r}")
-    if args.expect_source_sha:
-        check(status["sourceCommit"] == args.expect_source_sha,
-              "refusing install: discovered source SHA does not match --expect-source-sha")
+    check(status["sourceCommit"] == args.expect_source_sha,
+          "refusing install: discovered source SHA does not match --expect-source-sha")
 
     print("INSTALL AUTHORIZED BY EXPLICIT EXPECTATION")
     print(f"Expected version: {args.expect_version}")
-    if args.expect_source_sha:
-        print(f"Expected source: {args.expect_source_sha}")
+    print(f"Expected source: {args.expect_source_sha}")
     api(client, "/os12/update/install", method="POST")
     poll_install_until_reboot(client, base_url, args.install_timeout)
     wait_for_login(base_url, args.reboot_timeout)
@@ -221,7 +221,10 @@ def run(args: argparse.Namespace) -> int:
     validate_status(final_status)
     check(final_status["runningVersion"] == args.expect_version,
           f"post-reboot running version is {final_status['runningVersion']!r}, expected {args.expect_version!r}")
+    check(final_status["runningSourceCommit"] == args.expect_source_sha,
+          f"post-reboot running source is {final_status['runningSourceCommit']!r}, expected {args.expect_source_sha!r}")
     print(f"PASS  post-reboot running Workshop OS release is {args.expect_version}")
+    print(f"PASS  post-reboot running source SHA is {args.expect_source_sha}")
     print("RUNTIME GITHUB OTA ACCEPTANCE SUBSET: PASS")
     print("This is runtime evidence only; touchscreen/recovery/control physical acceptance remains separate.")
     return 0
