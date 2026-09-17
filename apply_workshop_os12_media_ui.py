@@ -72,6 +72,49 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def braced_end(text: str, start: int, label: str) -> int:
+    brace = text.find("{", start)
+    if brace < 0:
+        raise PatchError(f"{label}: opening brace missing")
+    depth = 0
+    in_string = False
+    quote = ""
+    escape = False
+    for i in range(brace, len(text)):
+        c = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == quote:
+                in_string = False
+            continue
+        if c in ("'", '"'):
+            in_string = True
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    raise PatchError(f"{label}: closing brace missing")
+
+
+def replace_in_function(text: str, signature: str, old: str, new: str, label: str) -> str:
+    start = text.find(signature)
+    if start < 0 or text.find(signature, start + 1) >= 0:
+        raise PatchError(f"{label}: function signature missing/non-unique")
+    end = braced_end(text, start, label)
+    block = text[start:end]
+    count = block.count(old)
+    if count != 1:
+        raise PatchError(f"{label}: expected one scoped anchor, found {count}")
+    block = block.replace(old, new, 1)
+    return text[:start] + block + text[end:]
+
+
 def apply(repo: Path) -> None:
     hub_path = repo / "src/smart_hub.cpp"
     runtime_h = repo / "include/workshop_media_runtime.h"
@@ -82,8 +125,9 @@ def apply(repo: Path) -> None:
     if "static void drawOs12Media()" not in text:
         text = replace_once(text, "static void drawUi13PrinterAlerts() {", MEDIA_UI + "\nstatic void drawUi13PrinterAlerts() {", "media renderer insertion")
 
-    text = replace_once(
+    text = replace_in_function(
         text,
+        "static void drawUi13Sound()",
         'hubV1125Action(hubUi13ActionRect(),"Printer Alerts",C10_ACCENT,true,false);',
         'hubV1125Action(hubUi13ActionRect(),"Media",C10_ACCENT,true,false);',
         "sound action label",
