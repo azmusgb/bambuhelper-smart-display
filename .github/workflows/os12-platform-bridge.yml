@@ -9,6 +9,7 @@ on:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_media_runtime.py'
+      - 'apply_workshop_os12_media_ui.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
@@ -21,6 +22,7 @@ on:
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_media_service.py'
       - 'scripts/validate_os12_media_runtime.py'
+      - 'scripts/validate_os12_media_ui.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
@@ -40,6 +42,7 @@ on:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_media_runtime.py'
+      - 'apply_workshop_os12_media_ui.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
@@ -52,6 +55,7 @@ on:
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_media_service.py'
       - 'scripts/validate_os12_media_runtime.py'
+      - 'scripts/validate_os12_media_ui.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
@@ -138,6 +142,7 @@ jobs:
             echo "full_image=false"
             echo "device_native_update_service=true"
             echo "media_service=true"
+            echo "media_ui=true"
             echo "media_physical_acceptance=false"
             echo "legacy_url_auto_ota_route=false"
             echo "physical_acceptance=false"
