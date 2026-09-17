@@ -42,11 +42,8 @@ def main() -> int:
             "kOs12CaptureBurstsPerPoll = 2U",
             "gOs12RecordingData",
             "gOs12PlaybackActive",
-            "gOs12CapturePauseRequested",
-            "gOs12CaptureTxPaused",
-            "os12PauseAudioTxForCapture",
-            "os12ResumeAudioTaskAfterCapture",
-            "vTaskDelay(pdMS_TO_TICKS(1))",
+            "captureScratch",
+            "memcpy(gOs12RecordingData + used, captureScratch, bytesRead)",
             "gOs12PlaybackPosition < gOs12RecordingBytes",
             "i2s_read",
         ),
@@ -56,29 +53,31 @@ def main() -> int:
         raise SystemExit("FAIL: legacy mic primitive unexpectedly missing; donor continuity lost")
     if "while (gOs12RecordingActive" in source:
         raise SystemExit("FAIL: capture backend contains an unbounded active-recording loop")
-    if "vTaskDelete(task)" in source:
-        raise SystemExit("FAIL: capture must not force-delete the live ES8311 task")
 
     capture_api = source[source.find("bool buzzerBackendMicRecordBegin"):]
     if "delay(" in capture_api:
         raise SystemExit("FAIL: OS12 capture API must not add delay-based recording")
 
-    pause_request = source.find("gOs12CapturePauseRequested = true;", source.find("bool os12PauseAudioTxForCapture"))
-    pause_ack = source.find("while (!gOs12CaptureTxPaused", pause_request)
-    activate = source.find("gOs12RecordingActive = true;", source.find("bool buzzerBackendMicRecordBegin"))
-    if pause_request < 0 or pause_ack < 0 or activate < 0:
-        raise SystemExit("FAIL: capture pause/ack handoff is incomplete")
+    for forbidden in (
+        "gOs12CapturePauseRequested",
+        "gOs12CaptureTxPaused",
+        "os12PauseAudioTxForCapture",
+        "vTaskDelete(task)",
+    ):
+        if forbidden in source:
+            raise SystemExit(f"FAIL: recording path retained unsafe task-handoff marker {forbidden}")
 
-    task_loop = source.find("if (gOs12CapturePauseRequested)")
-    ack_set = source.find("gOs12CaptureTxPaused = true;", task_loop)
-    ack_clear = source.find("gOs12CaptureTxPaused = false;", ack_set)
-    if task_loop < 0 or ack_set < 0 or ack_clear < 0:
-        raise SystemExit("FAIL: ES8311 task must cooperatively acknowledge capture pause and resume")
+    direct_psram_read = "i2s_read((i2s_port_t)AUDIO_I2S_PORT,\n                                  gOs12RecordingData + used"
+    if direct_psram_read in source:
+        raise SystemExit("FAIL: I2S RX must not write directly into the PSRAM recording buffer")
 
-    if "if (gOs12RecordingActive || gOs12CapturePauseRequested) os12FinishRecording();" not in source:
-        raise SystemExit("FAIL: explicit recording stop must release capture ownership")
+    begin = source.find("bool buzzerBackendMicRecordBegin")
+    stop_tone = source.find("buzzerBackendStop();", begin)
+    activate = source.find("gOs12RecordingActive = true;", begin)
+    if begin < 0 or stop_tone < 0 or activate < 0 or stop_tone > activate:
+        raise SystemExit("FAIL: recording must keep ES8311 task alive but silence TX before activation")
 
-    print("PASS: OS12 microphone capture is PSRAM-bounded, poll-driven and uses cooperative single-owner I2S handoff")
+    print("PASS: OS12 microphone capture is PSRAM-bounded, poll-driven, keeps I2S clocks alive, and stages RX through internal RAM")
     return 0
 
 
