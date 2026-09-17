@@ -76,6 +76,19 @@ int main() {
     assert(!canDispatchPrinterCommand(store.snapshot(), kMaxPrinterSlots));
     assert(!canDispatchPowerCommand(store.snapshot(), 0));
 
+    CommandOperationState pending = pendingCommandOperation();
+    assert(pending.phase == OperationPhase::Pending);
+    assert(!pending.retryable);
+    CommandOperationState success = commandOperationFromResult(CommandResult::Accepted);
+    assert(success.phase == OperationPhase::Success);
+    assert(!success.retryable);
+    CommandOperationState staleFeedback = commandOperationFromResult(CommandResult::RejectedStaleState);
+    assert(staleFeedback.phase == OperationPhase::RecoverableError);
+    assert(staleFeedback.retryable);
+    CommandOperationState invalidStateFeedback = commandOperationFromResult(CommandResult::RejectedInvalidState);
+    assert(invalidStateFeedback.phase == OperationPhase::RecoverableError);
+    assert(!invalidStateFeedback.retryable);
+
     LegacyNetworkObservation networkObservation;
     networkObservation.connected = true;
     networkObservation.observedAtMs = 1000;
@@ -109,6 +122,13 @@ int main() {
     assert(printer.dispatch(0, PrinterCommand::Pause, false) == CommandResult::RejectedInvalidState);
     assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedInvalidState);
     assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::RejectedInvalidState);
+
+    PrinterState noCommandChannel = firstPrinter;
+    noCommandChannel.commandChannelReady = false;
+    printer.setState(0, noCommandChannel);
+    assert(printer.dispatch(0, PrinterCommand::ChamberLightOn, false) == CommandResult::RejectedCommandChannelUnavailable);
+    assert(commandOperationFromResult(CommandResult::RejectedCommandChannelUnavailable).retryable);
+    printer.setState(0, firstPrinter);
 
     // Power has its own authoritative state. Mapping without a ready/fresh
     // channel is never sufficient to authorize a command.
@@ -162,7 +182,7 @@ int main() {
     assert(validatePowerCommand(stalePower, firstPrinter, PowerCommand::On, false, false) == CommandResult::RejectedStaleState);
     stalePower.freshness = Freshness::Fresh;
     stalePower.channelReady = false;
-    assert(validatePowerCommand(stalePower, firstPrinter, PowerCommand::On, false, false) == CommandResult::RejectedUnavailable);
+    assert(validatePowerCommand(stalePower, firstPrinter, PowerCommand::On, false, false) == CommandResult::RejectedCommandChannelUnavailable);
 
     assert(freshnessFromAge(0, 5000, 1000) == Freshness::Unknown);
     const std::uint32_t nearWrap = std::numeric_limits<std::uint32_t>::max() - 25U;
