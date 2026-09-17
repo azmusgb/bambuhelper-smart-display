@@ -74,6 +74,7 @@ int main() {
     assert(store.snapshot().configuredPrinterCount == 0);
     assert(!canDispatchPrinterCommand(store.snapshot(), 0));
     assert(!canDispatchPrinterCommand(store.snapshot(), kMaxPrinterSlots));
+    assert(!canDispatchPowerCommand(store.snapshot(), 0));
 
     LegacyNetworkObservation networkObservation;
     networkObservation.connected = true;
@@ -109,6 +110,21 @@ int main() {
     assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedInvalidState);
     assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::RejectedInvalidState);
 
+    // Power has its own authoritative state. Mapping without a ready/fresh
+    // channel is never sufficient to authorize a command.
+    PowerState power;
+    power.mapped = true;
+    power.channelReady = true;
+    power.freshness = Freshness::Fresh;
+    power.stateKnown = true;
+    power.on = true;
+    store.publishPowerState(0, power);
+    assert(store.snapshot().capabilities.power);
+    assert(canDispatchPowerCommand(store.snapshot(), 0));
+    assert(validatePowerCommand(power, firstPrinter, PowerCommand::On, false, false) == CommandResult::Accepted);
+    assert(validatePowerCommand(power, firstPrinter, PowerCommand::Off, false, false) == CommandResult::RejectedGuardRequired);
+    assert(validatePowerCommand(power, firstPrinter, PowerCommand::Off, true, false) == CommandResult::Accepted);
+
     firstObservation.activity = PrinterActivity::Printing;
     firstPrinter = normalizePrinterObservation(firstObservation, 1500, 1000);
     printer.setState(0, firstPrinter);
@@ -116,6 +132,8 @@ int main() {
     assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedInvalidState);
     assert(printer.dispatch(0, PrinterCommand::Stop, false) == CommandResult::RejectedGuardRequired);
     assert(printer.dispatch(0, PrinterCommand::Stop, true) == CommandResult::Accepted);
+    assert(validatePowerCommand(power, firstPrinter, PowerCommand::Off, true, false) == CommandResult::RejectedStrongGuardRequired);
+    assert(validatePowerCommand(power, firstPrinter, PowerCommand::Off, true, true) == CommandResult::Accepted);
 
     firstObservation.activity = PrinterActivity::Paused;
     firstPrinter = normalizePrinterObservation(firstObservation, 1500, 1000);
@@ -135,6 +153,16 @@ int main() {
     printer.setState(0, stalePrinter);
     assert(!isUsable(store.snapshot().printers[0].telemetryFreshness));
     assert(printer.dispatch(0, PrinterCommand::Resume, false) == CommandResult::RejectedStaleState);
+    assert(validatePowerCommand(power, stalePrinter, PowerCommand::Off, true, false) == CommandResult::RejectedStrongGuardRequired);
+    assert(validatePowerCommand(power, stalePrinter, PowerCommand::Off, true, true) == CommandResult::Accepted);
+    assert(validatePowerCommand(power, stalePrinter, PowerCommand::On, false, false) == CommandResult::Accepted);
+
+    PowerState stalePower = power;
+    stalePower.freshness = Freshness::Stale;
+    assert(validatePowerCommand(stalePower, firstPrinter, PowerCommand::On, false, false) == CommandResult::RejectedStaleState);
+    stalePower.freshness = Freshness::Fresh;
+    stalePower.channelReady = false;
+    assert(validatePowerCommand(stalePower, firstPrinter, PowerCommand::On, false, false) == CommandResult::RejectedUnavailable);
 
     assert(freshnessFromAge(0, 5000, 1000) == Freshness::Unknown);
     const std::uint32_t nearWrap = std::numeric_limits<std::uint32_t>::max() - 25U;
@@ -152,6 +180,30 @@ int main() {
     store.publishInventoryProjectionState(inventory);
     assert(store.snapshot().inventory.freshness == Freshness::Unknown);
     assert(store.snapshot().inventory.profileId[0] == '\0');
+
+    UpdateState update;
+    update.channel = UpdateChannel::Candidate;
+    update.phase = UpdatePhase::Available;
+    update.manifestFreshness = Freshness::Fresh;
+    update.otaSupported = true;
+    update.recoveryFullImageSupported = true;
+    update.artifactIdentityVerified = true;
+    update.rollbackAvailable = true;
+    store.publishUpdateState(update);
+    assert(store.snapshot().capabilities.update);
+    assert(store.snapshot().update.recoveryFullImageSupported);
+
+    // Decorative media must yield to local control health even while printers
+    // are otherwise idle.
+    firstObservation.activity = PrinterActivity::Idle;
+    firstPrinter = normalizePrinterObservation(firstObservation, 1500, 1000);
+    printer.setState(0, firstPrinter);
+    secondObservation.activity = PrinterActivity::Idle;
+    printer.setState(1, normalizePrinterObservation(secondObservation, 1500, 1000));
+    HealthState health;
+    health.touchResponsive = false;
+    store.publishHealthState(health);
+    assert(shouldSuspendDecorativeMedia(store.snapshot()));
 
     return 0;
 }
