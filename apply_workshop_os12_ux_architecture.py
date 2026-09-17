@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 """Apply the OS12 hierarchical UX architecture pass to reconstructed WS350 UI.
 
-Goals:
-- bottom navigation only on root destinations
-- flattened list-style settings surfaces
-- three interaction families: navigation row, command button, setting row
-- materially reduced card/elevation nesting
-- evidence-oriented Home and Workshop surfaces without inventing inventory facts
+This is a composition/navigation refactor only. It preserves printer-control,
+recovery, update, media, and inventory authority boundaries.
 """
 from __future__ import annotations
 
@@ -29,28 +25,43 @@ def braced_end(text: str, start: int, label: str) -> int:
     if brace < 0:
         raise PatchError(f"{label}: opening brace missing")
     depth = 0
-    in_string = False
-    quote = ""
+    string = None
     escape = False
-    for i in range(brace, len(text)):
+    line_comment = False
+    block_comment = False
+    i = brace
+    while i < len(text):
         c = text[i]
-        if in_string:
+        n = text[i + 1] if i + 1 < len(text) else ""
+        if line_comment:
+            if c == "\n":
+                line_comment = False
+        elif block_comment:
+            if c == "*" and n == "/":
+                block_comment = False
+                i += 1
+        elif string:
             if escape:
                 escape = False
             elif c == "\\":
                 escape = True
-            elif c == quote:
-                in_string = False
-            continue
-        if c in ("'", '"'):
-            in_string = True
-            quote = c
+            elif c == string:
+                string = None
+        elif c == "/" and n == "/":
+            line_comment = True
+            i += 1
+        elif c == "/" and n == "*":
+            block_comment = True
+            i += 1
+        elif c in ('"', "'"):
+            string = c
         elif c == "{":
             depth += 1
         elif c == "}":
             depth -= 1
             if depth == 0:
                 return i + 1
+        i += 1
     raise PatchError(f"{label}: closing brace missing")
 
 
@@ -64,19 +75,19 @@ def function_block(text: str, signature: str) -> tuple[int, int, str]:
 
 def replace_function(text: str, signature: str, replacement: str) -> str:
     start, end, _ = function_block(text, signature)
-    return text[:start] + replacement + text[end:]
+    return text[:start] + replacement.strip() + text[end:]
 
 
 def remove_bottom_nav(text: str, signature: str) -> str:
     start, end, block = function_block(text, signature)
-    count = block.count("uiBottomNav(3,nullptr);")
-    if count == 0:
+    if "uiBottomNav(" not in block:
         return text
-    block = block.replace("uiBottomNav(3,nullptr);", "")
+    import re
+    block = re.sub(r"\s*uiBottomNav\([^;]+;", "", block)
     return text[:start] + block + text[end:]
 
 
-FLAT_HELPERS = r'''
+BASE_HELPERS = r'''
 static void hubOs12RowSurface(const HubRect& r) {
   tft.fillRect(r.x,r.y,r.w,r.h,C10_BG);
   tft.drawFastHLine(r.x+12,r.y+r.h-1,r.w-24,C10_SEPARATOR);
@@ -84,18 +95,26 @@ static void hubOs12RowSurface(const HubRect& r) {
 
 static void hubOs12NavRow(const HubRect& r,const char* title,const char* detail,uint16_t valueColor=C10_MUTED) {
   hubOs12RowSurface(r);
-  uiDrawFit(title,r.x+14,r.y+10,r.w-70,FONT_BODY,TL_DATUM,C10_TEXT,C10_BG);
-  uiDrawFit(detail,r.x+14,r.y+r.h-10,r.w-70,FONT_SMALL,BL_DATUM,valueColor,C10_BG);
+  uiDrawFit(title,r.x+14,r.y+9,r.w-68,FONT_BODY,TL_DATUM,C10_TEXT,C10_BG);
+  uiDrawFit(detail,r.x+14,r.y+r.h-9,r.w-68,FONT_SMALL,BL_DATUM,valueColor,C10_BG);
   uiDrawFit(">",r.x+r.w-18,r.y+r.h/2,20,FONT_BODY,MR_DATUM,C10_ACCENT,C10_BG);
 }
 
-static void hubUi13InfoRow(const HubRect& r,const char* label,const char* value,const char* detail,uint16_t accent=C10_ACCENT) {
+static void hubOs12EvidenceRow(const HubRect& r,const char* title,const char* value,const char* detail,uint16_t valueColor=C10_MUTED) {
   hubOs12RowSurface(r);
-  uiDrawFit(label,r.x+12,r.y+8,r.w-150,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
-  uiDrawFit(value,r.x+12,r.y+26,r.w-150,FONT_BODY,TL_DATUM,accent,C10_BG);
-  uiDrawFit(detail,r.x+r.w-140,r.y+r.h/2,128,FONT_SMALL,MR_DATUM,C10_MUTED,C10_BG);
+  uiDrawFit(title,r.x+14,r.y+8,r.w-160,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
+  uiDrawFit(value,r.x+14,r.y+27,r.w-160,FONT_BODY,TL_DATUM,valueColor,C10_BG);
+  uiDrawFit(detail,r.x+r.w-146,r.y+r.h/2,132,FONT_SMALL,MR_DATUM,C10_MUTED,C10_BG);
 }
+'''
 
+INFO_ROW = r'''
+static void hubUi13InfoRow(const HubRect& r,const char* label,const char* value,const char* detail,uint16_t accent=C10_ACCENT) {
+  hubOs12EvidenceRow(r,label,value,detail,accent);
+}
+'''
+
+TOGGLE_ROW = r'''
 static void hubUi13ToggleRow(const HubRect& r,const char* label,const char* detail,bool on,uint16_t accent=C10_ACCENT) {
   hubOs12RowSurface(r);
   uiDrawFit(label,r.x+12,r.y+8,r.w-108,FONT_BODY,TL_DATUM,C10_TEXT,C10_BG);
@@ -107,7 +126,9 @@ static void hubUi13ToggleRow(const HubRect& r,const char* label,const char* deta
   const int16_t cx=on?(sw.x+sw.w-4-d/2):(sw.x+4+d/2);
   tft.fillCircle(cx,sw.y+sw.h/2,d/2,C10_TEXT);
 }
+'''
 
+STEPPER_ROW = r'''
 static void hubUi13StepperRow(const HubRect& r,const char* label,const char* value,const char* detail,uint16_t accent=C10_ACCENT) {
   hubOs12RowSurface(r);
   uiDrawFit(label,r.x+12,r.y+8,r.w-248,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
@@ -121,7 +142,17 @@ static void hubUi13StepperRow(const HubRect& r,const char* label,const char* val
 }
 '''
 
-HOME = r'''static void drawHome(bool full) {
+SETTINGS_RECTS = r'''
+static HubRect hubUi12SettingsRect(uint8_t i) {
+  const int16_t W=tft.width();
+  if(i>=4)return hr(0,0,0,0);
+  if(hubLandscape())return hr(8,48+i*50,W-16,48);
+  return hr(8,58+i*76,W-16,70);
+}
+'''
+
+HOME = r'''
+static void drawHome(bool full) {
   (void)full;
   const int16_t W=tft.width();
   const bool configured=isAnyPrinterConfigured();
@@ -129,153 +160,138 @@ HOME = r'''static void drawHome(bool full) {
   const BambuState* s=p?&p->state:nullptr;
   if(g_ambientEnabled&&g_ambientActive){drawAmbientHome(p,s);return;}
   tft.fillScreen(C10_BG);drawHeader("Home",nullptr,0);uiBottomNav(0,nullptr);
-
   const bool paused=s&&s->gcodeStateId==GCODE_PAUSE;
   const bool printing=s&&s->printing;
   const bool online=s&&s->connected;
   const bool alert=s&&uiHmsCount(*s)>0;
   const uint16_t stateColor=!configured?C10_MUTED:(!online?C10_RED:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));
   const char* state=!configured?"Set Up":(!online?"Offline":(alert?"Needs Attention":(paused?"Paused":(printing?"Printing":"Ready"))));
-
   if(hubLandscape()) {
-    HubRect printer=hr(8,46,W-16,70);
-    HubRect job=hr(8,116,W-16,70);
-    HubRect inventory=hr(8,186,W-16,66);
-    hubOs12RowSurface(printer);hubOs12RowSurface(job);hubOs12RowSurface(inventory);
-    uiDrawFit(p&&p->config.name[0]?p->config.name:"Printer",printer.x+14,printer.y+9,printer.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
-    uiDrawFit(state,printer.x+14,printer.y+31,printer.w-28,FONT_LARGE,TL_DATUM,stateColor,C10_BG);
-
-    if(printing||paused){
-      uiDrawFit(jobDisplayName(*s),job.x+14,job.y+8,job.w-140,FONT_BODY,TL_DATUM,C10_TEXT,C10_BG);
-      char meta[40],rem[20];formatDuration(s->remainingMinutes,rem,sizeof(rem));snprintf(meta,sizeof(meta),"%u%% - %s left",(unsigned)s->progress,rem);
-      uiDrawFit(meta,job.x+14,job.y+37,job.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
-    } else {
-      uiDrawFit("Current print",job.x+14,job.y+8,job.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
-      uiDrawFit(online?"None":"Unknown",job.x+14,job.y+31,job.w-28,FONT_BODY,TL_DATUM,online?C10_TEXT:C10_MUTED,C10_BG);
-    }
-
-    uiDrawFit("Filament Inventory",inventory.x+14,inventory.y+8,180,FONT_SMALL,TL_DATUM,C10_MUTED,C10_BG);
-    uiDrawFit("Unknown",inventory.x+14,inventory.y+31,120,FONT_BODY,TL_DATUM,C10_MUTED,C10_BG);
-    uiDrawFit("Authoritative device feed not available",inventory.x+150,inventory.y+33,inventory.w-164,FONT_SMALL,ML_DATUM,C10_MUTED,C10_BG);
+    HubRect printer=hr(8,46,W-16,66),job=hr(8,112,W-16,70),inventory=hr(8,182,W-16,70);
+    hubOs12EvidenceRow(printer,p&&p->config.name[0]?p->config.name:"Printer",state,online?"Live printer state":"Connection state",stateColor);
+    if(printing||paused){char meta[40],rem[20];formatDuration(s->remainingMinutes,rem,sizeof(rem));snprintf(meta,sizeof(meta),"%u%% - %s left",(unsigned)s->progress,rem);hubOs12EvidenceRow(job,"Current Print",jobDisplayName(*s),meta,C10_TEXT);}
+    else hubOs12EvidenceRow(job,"Current Print",online?"None":"Unknown",online?"Printer idle":"Printer unavailable",online?C10_TEXT:C10_MUTED);
+    hubOs12EvidenceRow(inventory,"Filament Inventory","Unknown","Inventory evidence unavailable",C10_MUTED);
+  } else {
+    HubRect printer=hr(8,54,W-16,88),job=hr(8,142,W-16,100),inventory=hr(8,242,W-16,100);
+    hubOs12EvidenceRow(printer,p&&p->config.name[0]?p->config.name:"Printer",state,online?"Live state":"Connection",stateColor);
+    hubOs12EvidenceRow(job,"Current Print",printing||paused?jobDisplayName(*s):(online?"None":"Unknown"),printing||paused?"Active job":"Printer state",C10_TEXT);
+    hubOs12EvidenceRow(inventory,"Filament Inventory","Unknown","Inventory evidence unavailable",C10_MUTED);
   }
   hubMarkFrameDirty();g_dirty=false;
-}'''
+}
+'''
 
-WORKSHOP = r'''static void drawWorkshop(bool full) {
+WORKSHOP = r'''
+static void drawWorkshop(bool full) {
   (void)full;
   const int16_t W=tft.width();
   tft.fillScreen(C10_BG);drawHeader("Workshop",nullptr,2);uiBottomNav(2,nullptr);
   const BambuState* s=isAnyPrinterConfigured()?&displayedPrinter().state:nullptr;
+  const bool printerAlert=s&&uiHmsCount(*s)>0;
   if(hubLandscape()) {
-    HubRect attention=hr(8,46,W-16,52);
-    HubRect readiness=hr(8,98,W-16,52);
-    HubRect loaded=hr(8,150,W-16,52);
-    HubRect inventory=hr(8,202,W-16,50);
-    hubOs12NavRow(attention,"Needs Attention",s&&uiHmsCount(*s)>0?"Printer alerts present":"No authoritative inventory alerts",s&&uiHmsCount(*s)>0?C10_ORANGE:C10_MUTED);
-    hubOs12NavRow(readiness,"Print Readiness","Undetermined",C10_MUTED);
-    hubOs12NavRow(loaded,"Loaded Spools","Unknown",C10_MUTED);
-    hubOs12NavRow(inventory,"Inventory","Unknown - awaiting Filament Inventory device feed",C10_MUTED);
+    HubRect attention=hr(8,48,W-16,50),readiness=hr(8,98,W-16,50),loaded=hr(8,148,W-16,50),inventory=hr(8,198,W-16,50);
+    hubOs12EvidenceRow(attention,"Needs Attention",printerAlert?"Printer alert":"Unknown",printerAlert?"Printer evidence":"Inventory evidence unavailable",printerAlert?C10_ORANGE:C10_MUTED);
+    hubOs12EvidenceRow(readiness,"Print Readiness","Undetermined","Requirements/evidence unavailable",C10_MUTED);
+    hubOs12EvidenceRow(loaded,"Loaded Spools","Unknown","No canonical placement evidence",C10_MUTED);
+    hubOs12EvidenceRow(inventory,"Inventory","Unknown","Awaiting authoritative inventory evidence",C10_MUTED);
+  } else {
+    HubRect attention=hr(8,56,W-16,78),readiness=hr(8,134,W-16,78),loaded=hr(8,212,W-16,78),inventory=hr(8,290,W-16,78);
+    hubOs12EvidenceRow(attention,"Needs Attention",printerAlert?"Printer alert":"Unknown","Evidence status",printerAlert?C10_ORANGE:C10_MUTED);
+    hubOs12EvidenceRow(readiness,"Print Readiness","Undetermined","Requirements unknown",C10_MUTED);
+    hubOs12EvidenceRow(loaded,"Loaded Spools","Unknown","Placement evidence unavailable",C10_MUTED);
+    hubOs12EvidenceRow(inventory,"Inventory","Unknown","Authoritative evidence unavailable",C10_MUTED);
   }
   hubMarkFrameDirty();g_dirty=false;
-}'''
+}
+'''
 
 
 def apply(repo: Path) -> None:
     path = repo / "src/smart_hub.cpp"
     text = load(path)
 
-    # Install the flattened component vocabulary immediately before Home.
     if "static void hubOs12RowSurface(" not in text:
-        anchor = "static void drawHome(bool full)"
-        pos = text.find(anchor)
+        pos = text.find("static void drawHome(bool full)")
         if pos < 0:
             raise PatchError("Home renderer anchor missing")
-        text = text[:pos] + FLAT_HELPERS + "\n" + text[pos:]
+        text = text[:pos] + BASE_HELPERS + "\n" + text[pos:]
 
-    # Replace the three UI13 setting-row implementations with the flat variants.
-    for sig, replacement in (
-        ("static void hubUi13InfoRow(", FLAT_HELPERS[FLAT_HELPERS.find("static void hubUi13InfoRow("):FLAT_HELPERS.find("static void hubUi13ToggleRow(")].strip()),
-        ("static void hubUi13ToggleRow(", FLAT_HELPERS[FLAT_HELPERS.find("static void hubUi13ToggleRow("):FLAT_HELPERS.find("static void hubUi13StepperRow(")].strip()),
-        ("static void hubUi13StepperRow(", FLAT_HELPERS[FLAT_HELPERS.find("static void hubUi13StepperRow("):].strip()),
-    ):
-        if text.find(sig) >= 0:
-            text = replace_function(text, sig, replacement)
+    text = replace_function(text,"static void hubUi13InfoRow(",INFO_ROW)
+    text = replace_function(text,"static void hubUi13ToggleRow(",TOGGLE_ROW)
+    text = replace_function(text,"static void hubUi13StepperRow(",STEPPER_ROW)
+    text = replace_function(text,"static HubRect hubUi12SettingsRect(",SETTINGS_RECTS)
 
-    # Child/configuration screens must not render the global bottom navigation.
     child_functions = (
-        "static void drawUi13Display()",
-        "static void drawUi13AfterPrint()",
-        "static void drawUi13Sound()",
-        "static void drawUi13PrinterAlerts()",
-        "static void drawUi13AlertSignals()",
-        "static void drawUi13Network()",
-        "static void drawUi13PrinterPower()",
-        "static void drawUi13PowerOptions()",
-        "static void drawUi13AutoOffConfirm()",
-        "static void drawUi13DateTime()",
-        "static void drawUi13SoftwareUpdate()",
-        "static void drawUi13Diagnostics()",
-        "static void drawUi12PortalAccess()",
-        "static void drawUi12Experience()",
-        "static void drawUi12PrinterConnection()",
-        "static void drawUi12SoftwareUpdate()",
-        "static void drawOs12Media()",
-        "static void drawOs12MediaLab()",
+        "static void drawUi13Display()","static void drawUi13AfterPrint()","static void drawUi13Sound()",
+        "static void drawUi13PrinterAlerts()","static void drawUi13AlertSignals()","static void drawUi13Network()",
+        "static void drawUi13PrinterPower()","static void drawUi13PowerOptions()","static void drawUi13AutoOffConfirm()",
+        "static void drawUi13DateTime()","static void drawUi13SoftwareUpdate()","static void drawUi13Diagnostics()",
+        "static void drawUi12PortalAccess()","static void drawUi12Experience()","static void drawUi12PrinterConnection()",
+        "static void drawUi12SoftwareUpdate()","static void drawOs12Media()","static void drawOs12MediaLab()",
         "static void drawSystem(bool full)",
     )
     for sig in child_functions:
         if text.find(sig) >= 0:
-            text = remove_bottom_nav(text, sig)
+            text = remove_bottom_nav(text,sig)
 
-    # Flatten the More root without changing its existing touch-routing geometry.
-    _, _, more = function_block(text, "static void drawMore(bool full)")
-    more = more.replace("hubUi12SettingsCard(hubUi12SettingsRect(0),\"Display & Appearance\",\"Brightness, standby, after print\",C10_ACCENT,false);",
-                        "hubOs12NavRow(hubUi12SettingsRect(0),\"Display & Appearance\",\"Brightness, standby, after print\",C10_MUTED);")
-    more = more.replace("hubUi12SettingsCard(hubUi12SettingsRect(1),\"Sounds & Alerts\",\"Sounds, touch feedback, printer alerts\",C10_ACCENT,false);",
-                        "hubOs12NavRow(hubUi12SettingsRect(1),\"Sound & Microphone\",\"Volume, microphone, event sounds\",C10_MUTED);")
-    more = more.replace("hubUi12SettingsCard(hubUi12SettingsRect(2),\"Network\",wifi?\"Connected\":\"Offline\",wifi?C10_GREEN:C10_ORANGE,false);",
-                        "hubOs12NavRow(hubUi12SettingsRect(2),\"Network\",wifi?\"Connected\":\"Offline\",wifi?C10_GREEN:C10_ORANGE);")
-    more = more.replace("hubUi12SettingsCard(hubUi12SettingsRect(3),\"Printer & Power\",!configured?\"Not configured\":(printerConnected?\"Connected\":\"Offline\"),printerConnected?C10_GREEN:(configured?C10_ORANGE:C10_MUTED),false);",
-                        "hubOs12NavRow(hubUi12SettingsRect(3),\"Printer & Power\",!configured?\"Not configured\":(printerConnected?\"Connected\":\"Offline\"),printerConnected?C10_GREEN:(configured?C10_ORANGE:C10_MUTED));")
-    more = more.replace("hubUi12SettingsCard(hubUi12SettingsRect(4),\"System\",deviceHealthy?\"Ready\":\"Needs attention\",deviceHealthy?C10_GREEN:C10_ORANGE,true);",
-                        "hubOs12NavRow(hubUi12SettingsRect(4),\"System\",deviceHealthy?\"Ready\":\"Needs attention\",deviceHealthy?C10_GREEN:C10_ORANGE);")
-    start, end, _ = function_block(text, "static void drawMore(bool full)")
-    text = text[:start] + more + text[end:]
+    start,end,more=function_block(text,"static void drawMore(bool full)")
+    replacements = (
+        ('hubUi12SettingsCard(hubUi12SettingsRect(0),"Display & Appearance","Brightness, standby, after print",C10_ACCENT,false);','hubOs12NavRow(hubUi12SettingsRect(0),"Display & Appearance","Brightness, standby, after print",C10_MUTED);'),
+        ('hubUi12SettingsCard(hubUi12SettingsRect(1),"Sounds & Alerts","Sounds, touch feedback, printer alerts",C10_ACCENT,false);','hubOs12NavRow(hubUi12SettingsRect(1),"Sound & Microphone","Volume, microphone, event sounds",C10_MUTED);'),
+        ('hubUi12SettingsCard(hubUi12SettingsRect(2),"Network",wifi?"Connected":"Offline",wifi?C10_GREEN:C10_ORANGE,false);','hubOs12NavRow(hubUi12SettingsRect(2),"Network",wifi?"Connected":"Offline",wifi?C10_GREEN:C10_ORANGE);'),
+        ('hubUi12SettingsCard(hubUi12SettingsRect(3),"Printer & Power",!configured?"Not configured":(printerConnected?"Connected":"Offline"),printerConnected?C10_GREEN:(configured?C10_ORANGE:C10_MUTED),false);','hubOs12NavRow(hubUi12SettingsRect(3),"System",deviceHealthy?"Ready":"Needs attention",deviceHealthy?C10_GREEN:C10_ORANGE);'),
+        ('hubUi12SettingsCard(hubUi12SettingsRect(4),"System",deviceHealthy?"Ready":"Needs attention",deviceHealthy?C10_GREEN:C10_ORANGE,true);',''),
+    )
+    for old,new in replacements:
+        if old not in more:
+            raise PatchError(f"More flatten anchor missing: {old[:48]}")
+        more=more.replace(old,new,1)
+    text=text[:start]+more+text[end:]
 
-    # Make System visually list-based while preserving existing touch rectangles.
-    _, _, system = function_block(text, "static void drawSystem(bool full)")
-    system = system.replace("hubUi12SettingsCard(hubUi13SystemCardRect(0),\"Device Health\",deviceHealthy?\"Healthy\":\"Needs attention\",deviceHealthy?C10_GREEN:C10_ORANGE,false);",
-                            "hubOs12NavRow(hubUi13SystemCardRect(0),\"Device Health\",deviceHealthy?\"Healthy\":\"Needs attention\",deviceHealthy?C10_GREEN:C10_ORANGE);")
-    system = system.replace("hubUi12SettingsCard(hubUi13SystemCardRect(1),\"Connectivity\",!wifi?\"Offline\":(printerOk?\"Network + printer\":\"Network connected\"),wifi?C10_GREEN:C10_ORANGE,false);",
-                            "hubOs12NavRow(hubUi13SystemCardRect(1),\"Connectivity\",!wifi?\"Offline\":(printerOk?\"Network + printer\":\"Network connected\"),wifi?C10_GREEN:C10_ORANGE);")
-    system = system.replace("hubUi12SettingsCard(hubUi13SystemCardRect(2),\"Date & Time\",hubTimezoneLabel(),C10_ACCENT,false);",
-                            "hubOs12NavRow(hubUi13SystemCardRect(2),\"Date & Time\",hubTimezoneLabel(),C10_MUTED);")
-    system = system.replace("hubUi12SettingsCard(hubUi13SystemCardRect(3),\"Software Update\",\"Version and update options\",C10_ACCENT,false);",
-                            "hubOs12NavRow(hubUi13SystemCardRect(3),\"Software Update\",\"Version and update options\",C10_MUTED);")
-    start, end, _ = function_block(text, "static void drawSystem(bool full)")
-    text = text[:start] + system + text[end:]
+    start,end,system=function_block(text,"static void drawSystem(bool full)")
+    system_replacements = (
+        ('hubUi12SettingsCard(hubUi13SystemCardRect(0),"Device Health",deviceHealthy?"Healthy":"Needs attention",deviceHealthy?C10_GREEN:C10_ORANGE,false);','hubOs12NavRow(hubUi13SystemCardRect(0),"Device Health",deviceHealthy?"Healthy":"Needs attention",deviceHealthy?C10_GREEN:C10_ORANGE);'),
+        ('hubUi12SettingsCard(hubUi13SystemCardRect(1),"Connectivity",!wifi?"Offline":(printerOk?"Network + printer":"Network connected"),wifi?C10_GREEN:C10_ORANGE,false);','hubOs12NavRow(hubUi13SystemCardRect(1),"Printer & Power",!configured?"Not configured":(printerOk?"Connected":"Offline"),printerOk?C10_GREEN:(configured?C10_ORANGE:C10_MUTED));'),
+        ('hubUi12SettingsCard(hubUi13SystemCardRect(2),"Date & Time",hubTimezoneLabel(),C10_ACCENT,false);','hubOs12NavRow(hubUi13SystemCardRect(2),"Date & Time",hubTimezoneLabel(),C10_MUTED);'),
+        ('hubUi12SettingsCard(hubUi13SystemCardRect(3),"Software Update","Version and update options",C10_ACCENT,false);','hubOs12NavRow(hubUi13SystemCardRect(3),"Software Update","Version and update options",C10_MUTED);'),
+    )
+    for old,new in system_replacements:
+        if old not in system:
+            raise PatchError(f"System flatten anchor missing: {old[:48]}")
+        system=system.replace(old,new,1)
+    text=text[:start]+system+text[end:]
 
-    # Root operational screens become evidence-first. Unknown stays explicit.
-    text = replace_function(text, "static void drawHome(bool full)", HOME)
-    text = replace_function(text, "static void drawWorkshop(bool full)", WORKSHOP)
+    root_old='for(uint8_t i=0;i<5;i++)if(hubUi12SettingsRect(i).contains(x,y)){' 
+    root_new='for(uint8_t i=0;i<4;i++)if(hubUi12SettingsRect(i).contains(x,y)){' 
+    if root_old not in text:
+        raise PatchError("More root touch loop anchor missing")
+    text=text.replace(root_old,root_new,1)
+    old_route='if(i<4){g_ui12SettingsView=(uint8_t)(i+1U);buzzerPlay(BUZZ_CLICK);g_dirty=true;}\n      else{g_ui12SettingsView=0;setPage(SCREEN_HUB_SYSTEM);buzzerPlay(BUZZ_CLICK);g_dirty=true;}'
+    new_route='if(i<3){g_ui12SettingsView=(uint8_t)(i+1U);buzzerPlay(BUZZ_CLICK);g_dirty=true;}\n      else{g_ui12SettingsView=0;setPage(SCREEN_HUB_SYSTEM);buzzerPlay(BUZZ_CLICK);g_dirty=true;}'
+    if old_route not in text:
+        raise PatchError("More root routing anchor missing")
+    text=text.replace(old_route,new_route,1)
 
-    path.write_text(text, encoding="utf-8")
+    old_system_route='else if(i==1){g_ui12SettingsView=3;setPage(SCREEN_HUB_MORE);}'
+    new_system_route='else if(i==1){g_ui12SettingsView=4;setPage(SCREEN_HUB_MORE);}'
+    if old_system_route not in text:
+        raise PatchError("System Printer & Power routing anchor missing")
+    text=text.replace(old_system_route,new_system_route,1)
+
+    text=replace_function(text,"static void drawHome(bool full)",HOME)
+    text=replace_function(text,"static void drawWorkshop(bool full)",WORKSHOP)
+
+    path.write_text(text,encoding="utf-8")
     print("Workshop OS 12 UX architecture overhaul installed")
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", required=True)
-    ap.add_argument("--apply", action="store_true")
-    args = ap.parse_args()
-    if not args.apply:
-        raise SystemExit("refusing to modify source without --apply")
-    try:
-        apply(Path(args.repo).resolve())
-    except PatchError as exc:
-        raise SystemExit(f"FAIL: {exc}") from exc
+    ap=argparse.ArgumentParser();ap.add_argument("--repo",required=True);ap.add_argument("--apply",action="store_true");args=ap.parse_args()
+    if not args.apply: raise SystemExit("refusing to modify source without --apply")
+    try: apply(Path(args.repo).resolve())
+    except PatchError as exc: raise SystemExit(f"FAIL: {exc}") from exc
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
