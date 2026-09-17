@@ -37,6 +37,10 @@ inline const workshop::platform::PowerState& workshopPlatformPowerState(std::siz
     return workshop::platform::validPrinterSlot(slot) ? state.power[slot] : unknown;
 }
 
+inline const workshop::platform::UpdateState& workshopPlatformUpdateState() {
+    return workshopPlatformState().update;
+}
+
 inline bool workshopPlatformPrinterConfigured(std::size_t slot) {
     return workshopPlatformPrinterState(slot).configured;
 }
