@@ -7,8 +7,10 @@ on:
       - feature/os12-ux-architecture-overhaul
     paths:
       - 'apply_workshop_os12_ux_architecture.py'
+      - 'apply_workshop_os12_ux_geometry.py'
       - 'scripts/run_os12_ux_local.sh'
       - 'scripts/validate_os12_ux_architecture.py'
+      - 'scripts/validate_os12_ux_geometry.py'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/ui-v11.25-rc10/**'
       - 'firmware/ui-v11.26-ui11/**'
@@ -17,8 +19,10 @@ on:
   pull_request:
     paths:
       - 'apply_workshop_os12_ux_architecture.py'
+      - 'apply_workshop_os12_ux_geometry.py'
       - 'scripts/run_os12_ux_local.sh'
       - 'scripts/validate_os12_ux_architecture.py'
+      - 'scripts/validate_os12_ux_geometry.py'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/ui-v11.25-rc10/**'
       - 'firmware/ui-v11.26-ui11/**'
@@ -41,7 +45,11 @@ jobs:
 
       - name: Validate script syntax
         run: |
-          python3 -m py_compile apply_workshop_os12_ux_architecture.py scripts/validate_os12_ux_architecture.py
+          python3 -m py_compile \
+            apply_workshop_os12_ux_architecture.py \
+            apply_workshop_os12_ux_geometry.py \
+            scripts/validate_os12_ux_architecture.py \
+            scripts/validate_os12_ux_geometry.py
           bash -n scripts/run_os12_ux_local.sh
 
       - name: Reconstruct and build exact-head UX candidate
@@ -50,7 +58,7 @@ jobs:
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves reconstruction, contract validation, and compile regression only.'
+          echo 'This workflow proves reconstruction, hierarchy/geometry contract validation, and compile regression only.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
           echo 'Inventory facts remain authoritative only when supplied by Filament Inventory.'
           echo 'Do not integrate this UX candidate into the canonical bootstrap path until physical 480x320 acceptance passes.'
