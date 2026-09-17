@@ -1,6 +1,7 @@
 #include "media_service.h"
 
-namespace workshop::media {
+namespace workshop {
+namespace media {
 
 namespace {
 uint8_t clampPercent(uint8_t value) { return value > 100 ? 100 : value; }
@@ -8,7 +9,7 @@ uint8_t clampPercent(uint8_t value) { return value > 100 ? 100 : value; }
 
 void MediaService::begin(HardwareBackend* backend, uint32_t nowMs) {
   backend_ = backend;
-  snapshot_ = Snapshot{};
+  snapshot_ = Snapshot();
   snapshot_.runtime.volumePercent = 70;
   if (!backend_) {
     fail(MediaError::HardwareUnavailable);
@@ -158,7 +159,7 @@ bool MediaService::playMjpeg(const char* source, uint32_t nowMs) {
 }
 
 bool MediaService::pauseVideo(bool paused, uint32_t nowMs) {
-  const auto current = snapshot_.runtime.session;
+  const SessionState current = snapshot_.runtime.session;
   if (!backend_ || (current != SessionState::PlayingVideo && current != SessionState::Paused)) {
     snapshot_.runtime.lastError = MediaError::InvalidArgument;
     return false;
@@ -226,4 +227,5 @@ const char* mediaErrorName(MediaError error) {
   return "Unknown";
 }
 
-}  // namespace workshop::media
+}  // namespace media
+}  // namespace workshop
