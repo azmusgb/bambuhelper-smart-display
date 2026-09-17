@@ -35,6 +35,15 @@ def copy_exact(source: Path, destination: Path) -> None:
     shutil.copyfile(source, destination)
 
 
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    if new in text:
+        return text
+    count = text.count(old)
+    if count != 1:
+        raise PatchError(f"{label}: expected one anchor, found {count}")
+    return text.replace(old, new, 1)
+
+
 def insert_once(text: str, anchor: str, addition: str, label: str) -> str:
     if addition.strip() in text:
         return text
@@ -42,6 +51,78 @@ def insert_once(text: str, anchor: str, addition: str, label: str) -> str:
     if count != 1:
         raise PatchError(f"{label}: expected one anchor, found {count}")
     return text.replace(anchor, anchor + addition, 1)
+
+
+def insert_before_once(text: str, anchor: str, addition: str, label: str) -> str:
+    if addition.strip() in text:
+        return text
+    count = text.count(anchor)
+    if count != 1:
+        raise PatchError(f"{label}: expected one anchor, found {count}")
+    return text.replace(anchor, addition + anchor, 1)
+
+
+def patch_audio_volume_contract(repo: Path) -> None:
+    """Extend the existing ES8311 backend; never create a parallel audio path."""
+    header_path = repo / "src" / "buzzer_backend.h"
+    es8311_path = repo / "src" / "buzzer_backend_es8311.cpp"
+    if not header_path.is_file() or not es8311_path.is_file():
+        raise PatchError("reconstructed ES8311 audio backend is missing")
+
+    header = header_path.read_text(encoding="utf-8")
+    header = replace_once(
+        header,
+        "void buzzerBackendShutdown();\n",
+        "void buzzerBackendSetVolume(uint8_t percent);\nvoid buzzerBackendShutdown();\n",
+        "ES8311 volume API declaration",
+    )
+    header_path.write_text(header, encoding="utf-8")
+
+    source = es8311_path.read_text(encoding="utf-8")
+    source = replace_once(
+        source,
+        "constexpr uint8_t  kCodecVolume    = 75;            // percent\n",
+        "constexpr uint8_t  kCodecVolume    = 75;            // percent\n"
+        "volatile uint8_t gCodecVolumePercent = kCodecVolume;\n",
+        "ES8311 mutable volume state",
+    )
+    source = replace_once(
+        source,
+        "  uint8_t vol = (kCodecVolume == 0) ? 0 : (uint8_t)(((kCodecVolume * 256) / 100) - 1);\n",
+        "  const uint8_t requestedVolume = gCodecVolumePercent;\n"
+        "  uint8_t vol = (requestedVolume == 0) ? 0 : (uint8_t)(((requestedVolume * 256) / 100) - 1);\n",
+        "ES8311 startup volume",
+    )
+
+    volume_function = """void buzzerBackendSetVolume(uint8_t percent) {
+  if (percent > 100U) percent = 100U;
+  gCodecVolumePercent = percent;
+  if (!gCodecReady) return;
+
+  const uint8_t vol = (percent == 0U)
+      ? 0U
+      : (uint8_t)(((uint16_t)percent * 256U) / 100U - 1U);
+  esWrite(ES_REG_DAC_32, vol);
+}
+
+"""
+    source = insert_before_once(
+        source,
+        "void buzzerBackendShutdown() {\n",
+        volume_function,
+        "ES8311 runtime volume implementation",
+    )
+    es8311_path.write_text(source, encoding="utf-8")
+
+    for needle in (
+        "void buzzerBackendSetVolume(uint8_t percent);",
+        "volatile uint8_t gCodecVolumePercent = kCodecVolume;",
+        "void buzzerBackendSetVolume(uint8_t percent)",
+        "esWrite(ES_REG_DAC_32, vol);",
+    ):
+        body = header if needle.endswith(";") else source
+        if needle not in body:
+            raise PatchError(f"ES8311 volume contract missing after patch: {needle}")
 
 
 def apply(repo: Path, source_root: Path) -> None:
@@ -55,12 +136,10 @@ def apply(repo: Path, source_root: Path) -> None:
     if "WORKSHOP_OS_RELEASE_VERSION" not in build_text:
         raise PatchError("OS12 media runtime must be applied after release identity")
 
-    # The OS12 backend intentionally reuses the proven ES8311 volume/tone API.
-    # If this contract disappears from the reconstructed baseline, fail instead
-    # of silently creating a second audio implementation.
-    buzzer_text = buzzer_h.read_text(encoding="utf-8")
-    if "buzzerBackendSetVolume" not in buzzer_text:
-        raise PatchError("reconstructed audio backend lacks buzzerBackendSetVolume contract")
+    # Extend the existing proven ES8311 backend with one narrow runtime-volume
+    # contract. This keeps audio authority in buzzer_backend_es8311.cpp instead
+    # of creating a second codec implementation inside MediaService.
+    patch_audio_volume_contract(repo)
 
     media_root = source_root / "firmware" / "platform" / "media"
     for name in MEDIA_HEADERS:
