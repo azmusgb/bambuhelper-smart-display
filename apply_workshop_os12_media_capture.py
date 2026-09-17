@@ -310,7 +310,7 @@ def apply(repo: Path) -> None:
     if explicit_shutdown < 0:
         raise PatchError("explicit ES8311 shutdown entrypoint missing")
     explicit_body = final_cpp[explicit_shutdown:explicit_shutdown + 500]
-    if "shutdownAudio();" not in explicit_body or guarded in explicit_body:
+    if "shutdownAudio();" not in explicit_body or "if (!gOs12CaptureKeepAlive) shutdownAudio();" in explicit_body:
         raise PatchError("explicit ES8311 shutdown must remain unguarded")
 
     print("Workshop OS 12 bounded microphone capture/playback installed")
