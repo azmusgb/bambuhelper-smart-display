@@ -8,6 +8,12 @@ uint8_t clampPercent(uint8_t value) { return value > 100 ? 100 : value; }
 bool deadlineReached(uint32_t nowMs, uint32_t deadlineMs) {
   return static_cast<int32_t>(nowMs - deadlineMs) >= 0;
 }
+bool backendDrivenSession(SessionState state) {
+  return state == SessionState::Recording ||
+         state == SessionState::PlayingRecording ||
+         state == SessionState::PlayingVideo ||
+         state == SessionState::Paused;
+}
 }
 
 void MediaService::begin(HardwareBackend* backend, uint32_t nowMs) {
@@ -35,6 +41,13 @@ void MediaService::poll(uint32_t nowMs) {
       fail(MediaError::IoFailure);
       return;
     }
+    transition(SessionState::Idle, nowMs);
+    clearError();
+    return;
+  }
+
+  if (backendDrivenSession(snapshot_.runtime.session) &&
+      !backend_->isSessionActive()) {
     transition(SessionState::Idle, nowMs);
     clearError();
   }
