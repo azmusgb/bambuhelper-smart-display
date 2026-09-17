@@ -41,6 +41,7 @@ on:
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'
       - '.github/workflows/validate.yml'
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
@@ -80,6 +81,7 @@ on:
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'
       - '.github/workflows/validate.yml'
       - '.github/workflows/os12-platform-bridge.yml'
 
