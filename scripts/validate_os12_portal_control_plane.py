@@ -51,10 +51,8 @@ def main() -> int:
     for risky in ('ACTIVE MATERIAL','Waiting for AMS / external spool data'):
         forbid(html,risky,'authoritative-looking printer telemetry')
 
-    # Correctness: no duplicate style attribute from known defect and no nested check-row label pattern.
     forbid(html,'id="cl_passWrap" style="display:none" style="display:none"','duplicate style attribute')
     if '<label class="check-row"' in html and '<label for=' in html:
-        # All check-row structures must use span content after v4 repair.
         import re
         nested=re.search(r'<label class="check-row"[^>]*>\s*<input[^>]*>\s*<label\s+for=',html,re.S)
         if nested:
@@ -68,7 +66,13 @@ def main() -> int:
     need(sec,'if (!mutating && !securityPortalCodeRequired()) return true;','read-only open policy')
     need(sec,'if (mutating && !sameOrigin(server))','mutation same-origin gate')
     need(sec,'if (cookieMatches(server)) return true;','mutation session gate')
-    forbid(sec,'WORKSHOP_OS_TEMP_NO_CODE_LAN','compile-time no-code bypass')
+
+    # RC6 deliberately keeps a compile-time error mentioning the old temporary
+    # marker. That is a fail-closed guard, not an active bypass. Reject the
+    # historical bypass behavior itself and require the RC6 guard to remain.
+    need(sec,'RC6 secure physical acceptance forbids WORKSHOP_OS_TEMP_NO_CODE_LAN','legacy bypass fail-closed guard')
+    forbid(sec,'if (!isAPMode()) return true;','station-LAN blanket auth bypass')
+    forbid(sec,'TEMPORARY physical-test mode: station-LAN authentication is bypassed','legacy no-code implementation')
 
     for marker in ('handlePortalSecurityStatus','handlePortalSecuritySave','/api/portal-security','securityResetPortalPolicy(); // OS12 secure factory default'):
         need(web,marker,'portal security API/reset behavior')
