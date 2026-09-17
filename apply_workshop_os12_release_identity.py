@@ -3,8 +3,8 @@
 
 OS12 needs a release version independent from the frozen UI13 implementation
 version. The device updater compares this release version to the manifest and
-reports the source commit that produced the binary. Publishing workflows must
-never reuse a release version for different bytes.
+reports the exact source commit that produced the running binary. Publishing
+workflows must never reuse a release version for different bytes.
 """
 from __future__ import annotations
 
@@ -27,6 +27,15 @@ def load(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    if new in text:
+        return text
+    count = text.count(old)
+    if count != 1:
+        raise PatchError(f"{label}: expected one anchor, found {count}")
+    return text.replace(old, new, 1)
+
+
 def apply(repo: Path, version: str, source_sha: str) -> None:
     if not VERSION_RE.fullmatch(version):
         raise PatchError("release version must be numeric MAJOR.MINOR.PATCH")
@@ -38,9 +47,10 @@ def apply(repo: Path, version: str, source_sha: str) -> None:
     if "WORKSHOP_OS12_DEVICE_UPDATE" not in build:
         raise PatchError("device-native update slice must be applied before release identity")
 
-    # The device-update patcher installs a fallback macro. Replace it with one
-    # exact identity for this build so post-reboot reporting and future update
-    # comparison refer to the bytes that were actually built.
+    # Replace the inherited UI13 version fallback with one exact Workshop OS
+    # release + source identity. WORKSHOP_OS_SOURCE_SHA must be referenced by
+    # runtime code below so the source SHA is actually present in firmware bytes
+    # and can be proven after reboot.
     fallback = '''#ifndef WORKSHOP_OS_RELEASE_VERSION
 #define WORKSHOP_OS_RELEASE_VERSION SMART_HOME_VERSION
 #endif
@@ -73,16 +83,66 @@ def apply(repo: Path, version: str, source_sha: str) -> None:
             build += f'\n#define WORKSHOP_OS_SOURCE_SHA "{source_sha}"\n'
     build_path.write_text(build, encoding="utf-8")
 
+    header_path = repo / "include" / "workshop_update_service.h"
+    header = load(header_path)
+    header = replace_once(
+        header,
+        '    char runningVersion[workshop::platform::kVersionLabelLength]{};\n',
+        '    char runningVersion[workshop::platform::kVersionLabelLength]{};\n'
+        '    char runningSourceCommit[41]{};\n',
+        "running source identity field",
+    )
+    header_path.write_text(header, encoding="utf-8")
+
     service_path = repo / "src" / "workshop_update_service.cpp"
     service = load(service_path)
+
+    # Retire the stale macro name if the source template still carries it.
+    service = service.replace(
+        '#ifndef WORKSHOP_OS12_SOURCE_SHA\n#define WORKSHOP_OS12_SOURCE_SHA "unknown"\n#endif',
+        '#ifndef WORKSHOP_OS_SOURCE_SHA\n#define WORKSHOP_OS_SOURCE_SHA "unknown"\n#endif',
+        1,
+    )
+
     count = service.count("SMART_HOME_VERSION")
     if count != 2:
         raise PatchError(f"expected two SMART_HOME_VERSION update-service references, found {count}")
     service = service.replace("SMART_HOME_VERSION", "WORKSHOP_OS_RELEASE_VERSION")
+
+    source_anchor = (
+        '    copyText(g_runtime.runningVersion, sizeof(g_runtime.runningVersion), '
+        'WORKSHOP_OS_RELEASE_VERSION);\n'
+    )
+    source_publish = (
+        source_anchor
+        + '    copyText(g_runtime.runningSourceCommit, sizeof(g_runtime.runningSourceCommit), '
+        'WORKSHOP_OS_SOURCE_SHA);\n'
+    )
+    service = replace_once(
+        service,
+        source_anchor,
+        source_publish,
+        "running source identity publication",
+    )
     service_path.write_text(service, encoding="utf-8")
+
+    web_path = repo / "src" / "web_server.cpp"
+    web = load(web_path)
+    web = replace_once(
+        web,
+        '  doc["runningVersion"] = snap.runningVersion;\n',
+        '  doc["runningVersion"] = snap.runningVersion;\n'
+        '  doc["runningSourceCommit"] = snap.runningSourceCommit;\n',
+        "running source identity API",
+    )
+    web_path.write_text(web, encoding="utf-8")
 
     if service.count("WORKSHOP_OS_RELEASE_VERSION") != 2:
         raise PatchError("release version was not applied to both update comparison/reporting paths")
+    if service.count("WORKSHOP_OS_SOURCE_SHA") < 2:
+        raise PatchError("running source SHA is not compiled into update runtime")
+    if "runningSourceCommit" not in header or "runningSourceCommit" not in web:
+        raise PatchError("running source SHA is not exposed through the runtime status contract")
 
     print(f"Workshop OS release identity: {version} @ {source_sha}")
 
