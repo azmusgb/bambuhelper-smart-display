@@ -25,6 +25,8 @@ class Ws350MediaBackend : public HardwareBackend {
   bool hasRecording() const override;
 
  private:
+  void renderLatestCameraFrame(uint32_t nowMs);
+
   uint8_t requestedVolume_;
   bool muted_;
   uint32_t requestedRecordMs_;
@@ -32,6 +34,8 @@ class Ws350MediaBackend : public HardwareBackend {
   bool recordingPlaybackRequested_;
   bool videoRequested_;
   bool videoPaused_;
+  uint32_t videoLastFrameId_;
+  uint32_t videoLastRenderAtMs_;
 };
 
 }  // namespace media
