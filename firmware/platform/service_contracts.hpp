@@ -26,11 +26,62 @@ enum class CommandResult : std::uint8_t {
     RejectedInvalidSlot,
     RejectedUnavailable,
     RejectedStaleState,
+    RejectedCommandChannelUnavailable,
     RejectedInvalidState,
     RejectedGuardRequired,
     RejectedStrongGuardRequired,
     FailedTransport,
 };
+
+// Canonical operation feedback states for touch/browser presentation. The UI
+// may enter Pending before dispatch, then derive the terminal presentation from
+// the authoritative command result. FatalError is reserved for failures that
+// require explicit intervention/recovery; ordinary command rejection and
+// transport failure remain recoverable and must never be presented as success.
+enum class OperationPhase : std::uint8_t {
+    Idle = 0,
+    Pending,
+    Success,
+    RecoverableError,
+    FatalError,
+};
+
+struct CommandOperationState {
+    OperationPhase phase{OperationPhase::Idle};
+    CommandResult result{CommandResult::Accepted};
+    bool retryable{false};
+};
+
+inline CommandOperationState pendingCommandOperation() {
+    CommandOperationState state;
+    state.phase = OperationPhase::Pending;
+    state.retryable = false;
+    return state;
+}
+
+inline CommandOperationState commandOperationFromResult(CommandResult result) {
+    CommandOperationState state;
+    state.result = result;
+    if (result == CommandResult::Accepted) {
+        state.phase = OperationPhase::Success;
+        state.retryable = false;
+        return state;
+    }
+
+    state.phase = OperationPhase::RecoverableError;
+    switch (result) {
+        case CommandResult::RejectedUnavailable:
+        case CommandResult::RejectedStaleState:
+        case CommandResult::RejectedCommandChannelUnavailable:
+        case CommandResult::FailedTransport:
+            state.retryable = true;
+            break;
+        default:
+            state.retryable = false;
+            break;
+    }
+    return state;
+}
 
 inline bool printerActivityAllowsCommand(PrinterActivity activity, PrinterCommand command) {
     switch (command) {
@@ -61,7 +112,7 @@ inline CommandResult validatePrinterCommand(
         return CommandResult::RejectedStaleState;
     }
     if (!state.commandChannelReady) {
-        return CommandResult::RejectedUnavailable;
+        return CommandResult::RejectedCommandChannelUnavailable;
     }
     if (!printerActivityAllowsCommand(state.activity, command)) {
         return CommandResult::RejectedInvalidState;
@@ -82,8 +133,11 @@ inline CommandResult validatePowerCommand(
     PowerCommand command,
     bool guardSatisfied,
     bool strongGuardSatisfied) {
-    if (!power.mapped || !power.channelReady) {
+    if (!power.mapped) {
         return CommandResult::RejectedUnavailable;
+    }
+    if (!power.channelReady) {
+        return CommandResult::RejectedCommandChannelUnavailable;
     }
     if (power.freshness != Freshness::Fresh) {
         return CommandResult::RejectedStaleState;
