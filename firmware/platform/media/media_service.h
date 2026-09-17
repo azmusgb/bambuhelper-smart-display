@@ -81,7 +81,7 @@ class HardwareBackend {
 
 class MediaService {
  public:
-  MediaService() : backend_(0), snapshot_() {}
+  MediaService() : backend_(0), snapshot_(), speakerTestEndsAtMs_(0) {}
 
   void begin(HardwareBackend* backend, uint32_t nowMs = 0);
   void poll(uint32_t nowMs);
@@ -111,6 +111,7 @@ class MediaService {
 
   HardwareBackend* backend_;
   Snapshot snapshot_;
+  uint32_t speakerTestEndsAtMs_;
 };
 
 const char* sessionStateName(SessionState state);
