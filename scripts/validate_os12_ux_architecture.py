@@ -97,7 +97,7 @@ def main() -> int:
         "uiBottomNav(0,nullptr)",
         '"Filament Inventory"',
         '"Unknown"',
-        '"Inventory evidence unavailable"',
+        '"Authoritative evidence unavailable"',
         "hubOs12EvidenceRow(",
     ), "Home")
     forbid(home, ("activeTray", ".ams.", "AmsTray", "hubV1125Card("), "Home")
@@ -145,7 +145,12 @@ def main() -> int:
             forbid(braced_block(text, sig), ("uiBottomNav(",), sig)
 
     settings_rect = braced_block(text, "static HubRect hubUi12SettingsRect(")
-    require(settings_rect, ("if(i>=4)", "48+i*50", "W-16,48"), "More touch geometry")
+    require(settings_rect, (
+        "if(i>=4)",
+        "OS12_CONTENT_TOP+i*OS12_ROW_H",
+        "W-OS12_MARGIN_X*2",
+        "OS12_ROW_H",
+    ), "More touch geometry")
 
     require(text, (
         "for(uint8_t i=0;i<4;i++)if(hubUi12SettingsRect(i).contains(x,y))",
