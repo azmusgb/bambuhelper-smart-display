@@ -16,8 +16,8 @@ import getpass
 import json
 import os
 import re
+import sys
 import time
-import urllib.error
 
 from accept_os12_portal_runtime import (
     AcceptanceError,
@@ -91,10 +91,19 @@ def poll_check(client: Client, timeout: float) -> dict:
     raise AcceptanceError("timed out waiting for GitHub update check")
 
 
+def login_surface_reachable(base_url: str) -> bool:
+    try:
+        response = Client(base_url).request("/login", timeout=3.0)
+    except AcceptanceError:
+        return False
+    return response.status == 200 and "Workshop OS" in response.body
+
+
 def poll_install_until_reboot(client: Client, base_url: str, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     last_phase = None
     saw_install_state = False
+    saw_reboot_required = False
     while time.monotonic() < deadline:
         try:
             payload = api(client, "/os12/update/status")
@@ -105,44 +114,45 @@ def poll_install_until_reboot(client: Client, base_url: str, timeout: float) -> 
                 last_phase = phase
             if phase in ("Downloading", "Verifying", "Installing", "RebootRequired"):
                 saw_install_state = True
+            if phase == "RebootRequired":
+                saw_reboot_required = True
             if phase == "Failed":
                 raise AcceptanceError(f"device update failed: {payload.get('status', '')}")
             time.sleep(1.0)
         except AcceptanceError as exc:
-            # A reachable HTTP error is a real failure. A transport drop after
-            # staging is expected because the device is rebooting; probe with a
-            # fresh unauthenticated client before deciding.
+            # A transport loss after installation has started can be the reboot.
+            # If the device has already returned so quickly that only the old
+            # authenticated session is invalid, require that we previously saw
+            # RebootRequired before treating a reachable login surface as proof.
             if not saw_install_state:
                 raise
-            probe = Client(base_url)
-            try:
-                probe.request("/login", timeout=3.0)
-            except AcceptanceError:
+            if "request failed" in str(exc):
                 print("STATE rebooting: device temporarily unreachable")
                 return
-            if "request failed" not in str(exc):
-                raise
+            if saw_reboot_required and login_surface_reachable(base_url):
+                print("STATE rebooted: previous authenticated session invalidated")
+                return
+            raise
     raise AcceptanceError("timed out waiting for update installation/reboot")
 
 
 def wait_for_login(base_url: str, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        try:
-            response = Client(base_url).request("/login", timeout=3.0)
-            if response.status == 200:
-                print("PASS  WS350 reachable after reboot")
-                return
-        except AcceptanceError:
-            pass
+        if login_surface_reachable(base_url):
+            print("PASS  WS350 reachable after reboot")
+            return
         time.sleep(2.0)
     raise AcceptanceError("WS350 did not return to the login surface after reboot")
 
 
 def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
+    check(base_url.startswith(("http://", "https://")), "--base-url must start with http:// or https://")
     if args.install and not args.expect_version:
         raise AcceptanceError("--install requires --expect-version; refusing unconstrained installation")
+    if args.expect_source_sha and HEX40.fullmatch(args.expect_source_sha) is None:
+        raise AcceptanceError("--expect-source-sha must be exactly 40 lowercase hex characters")
 
     print(f"Target: {base_url}")
     assert_login_markup(Client(base_url))
@@ -162,6 +172,8 @@ def run(args: argparse.Namespace) -> int:
 
     api(client, "/os12/update/check", method="POST")
     status = poll_check(client, args.check_timeout)
+    if status["phase"] == "Failed":
+        raise AcceptanceError(f"GitHub update check failed: {status.get('status', '')}")
     print(f"PASS  GitHub manifest check completed: {status['phase']}")
     print(f"Running: {status['runningVersion']}")
 
@@ -234,5 +246,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    import sys
     raise SystemExit(main())
