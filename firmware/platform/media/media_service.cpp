@@ -26,12 +26,14 @@ void MediaService::begin(HardwareBackend* backend, uint32_t nowMs) {
     return;
   }
   snapshot_.capabilities = backend_->probe();
+  refreshBackendFacts();
   transition(SessionState::Idle, nowMs);
 }
 
 void MediaService::poll(uint32_t nowMs) {
   if (!backend_) return;
   backend_->poll();
+  refreshBackendFacts();
   if (speakerTestEndsAtMs_ != 0 &&
       snapshot_.runtime.session == SessionState::PlayingAudio &&
       deadlineReached(nowMs, speakerTestEndsAtMs_)) {
@@ -41,6 +43,7 @@ void MediaService::poll(uint32_t nowMs) {
       fail(MediaError::IoFailure);
       return;
     }
+    refreshBackendFacts();
     transition(SessionState::Idle, nowMs);
     clearError();
     return;
@@ -48,6 +51,7 @@ void MediaService::poll(uint32_t nowMs) {
 
   if (backendDrivenSession(snapshot_.runtime.session) &&
       !backend_->isSessionActive()) {
+    refreshBackendFacts();
     transition(SessionState::Idle, nowMs);
     clearError();
   }
@@ -71,6 +75,10 @@ void MediaService::transition(SessionState next, uint32_t nowMs) {
 }
 
 void MediaService::clearError() { snapshot_.runtime.lastError = MediaError::None; }
+
+void MediaService::refreshBackendFacts() {
+  snapshot_.runtime.recordingAvailable = backend_ && backend_->hasRecording();
+}
 
 bool MediaService::setVolume(uint8_t percent) {
   if (!requireCapability(snapshot_.capabilities.speakerAvailable)) return false;
@@ -137,6 +145,7 @@ bool MediaService::startRecording(uint32_t maxDurationMs, uint32_t nowMs) {
     fail(MediaError::IoFailure);
     return false;
   }
+  refreshBackendFacts();
   transition(SessionState::Recording, nowMs);
   clearError();
   return true;
@@ -152,6 +161,7 @@ bool MediaService::stopRecording(uint32_t nowMs) {
     fail(MediaError::IoFailure);
     return false;
   }
+  refreshBackendFacts();
   transition(SessionState::Idle, nowMs);
   clearError();
   return true;
@@ -159,6 +169,11 @@ bool MediaService::stopRecording(uint32_t nowMs) {
 
 bool MediaService::playRecording(uint32_t nowMs) {
   if (!requireIdle() || !requireCapability(snapshot_.capabilities.speakerAvailable)) return false;
+  refreshBackendFacts();
+  if (!snapshot_.runtime.recordingAvailable) {
+    snapshot_.runtime.lastError = MediaError::InvalidArgument;
+    return false;
+  }
   transition(SessionState::Starting, nowMs);
   if (!backend_->playRecording()) {
     fail(MediaError::IoFailure);
@@ -216,6 +231,7 @@ bool MediaService::stop(uint32_t nowMs) {
     fail(MediaError::IoFailure);
     return false;
   }
+  refreshBackendFacts();
   transition(SessionState::Idle, nowMs);
   clearError();
   return true;
