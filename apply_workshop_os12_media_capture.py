@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Add bounded non-blocking microphone record/playback to the existing ES8311 backend.
+"""Add bounded microphone record/playback to the existing ES8311 authority.
 
-This extends the single proven buzzer_backend_es8311.cpp I2S authority. It does
-not create a second I2S driver or audio task. Capture is PSRAM-bounded and
-serviced incrementally from Workshop OS polling. While RX capture is active the
-existing ES8311 TX task is explicitly suspended so a single task owns the I2S
-peripheral at a time; the normal audio task is restored when capture ends.
-Playback is consumed by that existing ES8311 task.
+Recording keeps the installed full-duplex I2S driver and the single existing
+ES8311 task. The TX task cooperatively pauses and acknowledges quiescence before
+main-loop RX capture starts; no live FreeRTOS task is force-deleted.
 """
 from __future__ import annotations
 
@@ -44,8 +41,6 @@ void buzzerBackendMicPlaybackStop();
 """
 
 CAPTURE_STATE = r'''
-// OS12 bounded microphone capture/playback. The buffer is deliberately capped
-// to five seconds of the existing 16 kHz / 16-bit / stereo I2S stream.
 uint8_t* gOs12RecordingData = nullptr;
 size_t gOs12RecordingCapacity = 0;
 volatile size_t gOs12RecordingBytes = 0;
@@ -53,7 +48,8 @@ volatile bool gOs12RecordingActive = false;
 uint32_t gOs12RecordingDeadlineMs = 0;
 volatile bool gOs12PlaybackActive = false;
 volatile size_t gOs12PlaybackPosition = 0;
-volatile bool gOs12CaptureOwnsAudioTask = false;
+volatile bool gOs12CapturePauseRequested = false;
+volatile bool gOs12CaptureTxPaused = false;
 '''
 
 CAPTURE_API = r'''
@@ -69,25 +65,21 @@ bool os12DeadlineReached(uint32_t deadlineMs) {
 }
 
 void os12ResumeAudioTaskAfterCapture() {
-  if (!gOs12CaptureOwnsAudioTask) return;
-  gOs12CaptureOwnsAudioTask = false;
-  // Reuse the existing ES8311 authority. ensureAudioRunning() recreates the
-  // normal TX task if needed; it does not install a competing I2S driver.
-  (void)ensureAudioRunning();
+  gOs12CapturePauseRequested = false;
 }
 
-void os12SuspendAudioTaskForCapture() {
-  // The legacy v11.24 microphone diagnostic proved the safe pattern: do not
-  // read RX concurrently with the normal ES8311 TX task. Keep the installed
-  // full-duplex driver, but temporarily stop its producer task while capture
-  // polls RX from the main loop.
+bool os12PauseAudioTxForCapture() {
   buzzerBackendStop();
-  TaskHandle_t task = (TaskHandle_t)gAudioTask;
-  if (task) {
-    gAudioTask = nullptr;
-    vTaskDelete(task);
+  gOs12CapturePauseRequested = true;
+  const uint32_t started = millis();
+  while (!gOs12CaptureTxPaused && (millis() - started) < 120U) {
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
-  gOs12CaptureOwnsAudioTask = true;
+  if (!gOs12CaptureTxPaused) {
+    gOs12CapturePauseRequested = false;
+    return false;
+  }
+  return true;
 }
 
 void os12FreeRecording() {
@@ -123,9 +115,11 @@ bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs) {
       heap_caps_malloc(capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!gOs12RecordingData) return false;
 
-  os12SuspendAudioTaskForCapture();
+  if (!os12PauseAudioTxForCapture()) {
+    os12FreeRecording();
+    return false;
+  }
 
-  // Drain stale RX DMA without blocking so capture starts at the user action.
   uint8_t scratch[256];
   for (uint8_t i = 0; i < 4U; ++i) {
     size_t drained = 0;
@@ -176,7 +170,7 @@ bool buzzerBackendMicRecordPoll() {
 }
 
 bool buzzerBackendMicRecordStop() {
-  if (gOs12RecordingActive || gOs12CaptureOwnsAudioTask) os12FinishRecording();
+  if (gOs12RecordingActive || gOs12CapturePauseRequested) os12FinishRecording();
   return gOs12RecordingData != nullptr && gOs12RecordingBytes > 0;
 }
 
@@ -185,7 +179,7 @@ bool buzzerBackendMicHasRecording() {
 }
 
 bool buzzerBackendMicPlaybackBegin() {
-  if (gOs12RecordingActive || gOs12CaptureOwnsAudioTask || !buzzerBackendMicHasRecording()) return false;
+  if (gOs12RecordingActive || gOs12CapturePauseRequested || !buzzerBackendMicHasRecording()) return false;
   if (!ensureAudioRunning()) return false;
   buzzerBackendStop();
   gOs12PlaybackPosition = 0;
@@ -221,34 +215,29 @@ def apply(repo: Path) -> None:
     source = load(source_path)
 
     if "buzzerBackendMicRecordBegin" not in header:
-        header = once(
-            header,
-            "int buzzerBackendMicLevel(uint16_t sampleMs);\n",
-            CAPTURE_DECLS,
-            "microphone capture API declarations",
-        )
+        header = once(header, "int buzzerBackendMicLevel(uint16_t sampleMs);\n", CAPTURE_DECLS,
+                      "microphone capture API declarations")
         header_path.write_text(header, encoding="utf-8")
 
     if "#include <esp_heap_caps.h>" not in source:
-        source = once(
-            source,
-            "#include <math.h>\n",
-            "#include <math.h>\n#include <esp_heap_caps.h>\n#include <string.h>\n",
-            "capture dependencies",
-        )
+        source = once(source, "#include <math.h>\n",
+                      "#include <math.h>\n#include <esp_heap_caps.h>\n#include <string.h>\n",
+                      "capture dependencies")
 
     if "gOs12RecordingData" not in source:
-        source = once(
-            source,
-            "volatile TaskHandle_t gAudioTask = nullptr;\n",
-            "volatile TaskHandle_t gAudioTask = nullptr;\n" + CAPTURE_STATE + "\n",
-            "capture state",
-        )
+        source = once(source, "volatile TaskHandle_t gAudioTask = nullptr;\n",
+                      "volatile TaskHandle_t gAudioTask = nullptr;\n" + CAPTURE_STATE + "\n",
+                      "capture state")
 
-    # The single existing ES8311 audio task remains the only TX producer. During
-    # recording playback it copies the captured raw I2S frames instead of tone
-    # frames, then automatically resumes normal tone/silence generation.
-    playback_loop = r'''    if (gOs12PlaybackActive && gOs12RecordingData && gOs12PlaybackPosition < gOs12RecordingBytes) {
+    playback_loop = r'''    if (gOs12CapturePauseRequested) {
+      gOs12CaptureTxPaused = true;
+      while (gOs12CapturePauseRequested && !gShutdownRequested) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+      }
+      gOs12CaptureTxPaused = false;
+      continue;
+    }
+    if (gOs12PlaybackActive && gOs12RecordingData && gOs12PlaybackPosition < gOs12RecordingBytes) {
       const size_t remaining = gOs12RecordingBytes - gOs12PlaybackPosition;
       const size_t copyBytes = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
       memset(chunk, 0, sizeof(chunk));
@@ -260,12 +249,8 @@ def apply(repo: Path) -> None:
     }
     size_t written = 0;'''
     if "gOs12PlaybackPosition < gOs12RecordingBytes" not in source:
-        source = once(
-            source,
-            "    fillChunk(chunk);\n    size_t written = 0;",
-            playback_loop,
-            "audio task recording playback",
-        )
+        source = once(source, "    fillChunk(chunk);\n    size_t written = 0;", playback_loop,
+                      "audio task capture handoff/playback")
 
     if "bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs)" not in source:
         marker = "#endif // BOARD_HAS_ES8311_AUDIO"
@@ -278,27 +263,21 @@ def apply(repo: Path) -> None:
     final_h = load(header_path)
     final_cpp = load(source_path)
     for needle in (
-        "buzzerBackendMicRecordBegin",
-        "buzzerBackendMicRecordPoll",
-        "buzzerBackendMicRecordStop",
-        "buzzerBackendMicHasRecording",
-        "buzzerBackendMicPlaybackBegin",
-        "buzzerBackendMicPlaybackPoll",
-        "buzzerBackendMicPlaybackStop",
+        "buzzerBackendMicRecordBegin", "buzzerBackendMicRecordPoll", "buzzerBackendMicRecordStop",
+        "buzzerBackendMicHasRecording", "buzzerBackendMicPlaybackBegin",
+        "buzzerBackendMicPlaybackPoll", "buzzerBackendMicPlaybackStop",
     ):
         if needle not in final_h or needle not in final_cpp:
             raise PatchError(f"bounded capture contract missing {needle}")
     for needle in (
-        "MALLOC_CAP_SPIRAM",
-        "kOs12RecordMaxMs = 5000U",
-        "kOs12CaptureBurstsPerPoll = 2U",
-        "gOs12CaptureOwnsAudioTask",
-        "vTaskDelete(task)",
-        "os12ResumeAudioTaskAfterCapture",
+        "MALLOC_CAP_SPIRAM", "kOs12RecordMaxMs = 5000U", "kOs12CaptureBurstsPerPoll = 2U",
+        "gOs12CapturePauseRequested", "gOs12CaptureTxPaused", "os12PauseAudioTxForCapture",
         "gOs12PlaybackPosition < gOs12RecordingBytes",
     ):
         if needle not in final_cpp:
             raise PatchError(f"bounded capture implementation missing {needle}")
+    if "vTaskDelete(task)" in final_cpp:
+        raise PatchError("capture must not force-delete the live ES8311 task")
 
     print("Workshop OS 12 bounded microphone capture/playback installed")
 
