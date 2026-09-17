@@ -8,6 +8,11 @@ reboot observations still require the actual WS350 acceptance procedure.
 The portal code is read from WORKSHOP_OS_PORTAL_CODE or entered with getpass. It
 is never printed and is never written to disk by this script. Prefer the prompt
 over passing credentials on a command line, where shell history can retain them.
+
+Important: the device compatibility probe runs before requesting the portal code.
+If the WS350 is still running an older firmware image, this helper exits with an
+explicit firmware-mismatch diagnosis instead of asking for a credential it cannot
+use against that build.
 """
 from __future__ import annotations
 
@@ -58,7 +63,7 @@ class Client:
         url = urllib.parse.urljoin(self.base_url + "/", path.lstrip("/"))
         data = None
         request_headers = {
-            "User-Agent": "WorkshopOS-Portal-Acceptance/1",
+            "User-Agent": "WorkshopOS-Portal-Acceptance/2",
             "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
         }
         if headers:
@@ -75,7 +80,16 @@ class Client:
             body = exc.read().decode("utf-8", errors="replace")
             return Response(exc.code, body, exc.headers, exc.geturl())
         except urllib.error.URLError as exc:
-            raise AcceptanceError(f"request failed for {url}: {exc.reason}") from exc
+            reason = str(exc.reason)
+            hint = ""
+            lower = reason.lower()
+            if "network is unreachable" in lower or "no route" in lower:
+                hint = (
+                    " The Mac currently has no route to the WS350. Confirm the Mac and "
+                    "device are on the same LAN, then verify with: route -n get "
+                    + urllib.parse.urlparse(self.base_url).hostname
+                )
+            raise AcceptanceError(f"request failed for {url}: {reason}.{hint}") from exc
 
 
 def check(condition: bool, message: str) -> None:
@@ -97,10 +111,37 @@ def protected_root_is_open(client: Client) -> bool:
     return response.status == 200 and final_path != "/login"
 
 
+def firmware_mismatch_reason(text: str) -> str | None:
+    legacy_markers = (
+        "Workshop OS Secure Sign In",
+        "Secure LAN access",
+        "Sign in securely",
+        "autocomplete='one-time-code'",
+        "font-weight:820",
+        "font-weight:850",
+    )
+    found = [marker for marker in legacy_markers if marker in text]
+    if found:
+        return "legacy login markers are still present: " + ", ".join(found[:3])
+    if "<html lang='en'>" not in text or "<meta charset='utf-8'>" not in text:
+        return "OS12 hardened login document markers are absent"
+    return None
+
+
 def assert_login_markup(client: Client) -> None:
     response = client.request("/login")
     check(response.status == 200, f"GET /login returned HTTP {response.status}")
     text = response.body
+
+    mismatch = firmware_mismatch_reason(text)
+    if mismatch:
+        raise AcceptanceError(
+            "device is reachable, but it is not running the OS12 portal-hardened "
+            f"firmware ({mismatch}). The Git branch can be current while the WS350 "
+            "still runs an older image. Build and install the current OS12 OTA "
+            "application image, then rerun this acceptance helper."
+        )
+
     required = (
         "<html lang='en'>",
         "<meta charset='utf-8'>",
@@ -120,9 +161,10 @@ def assert_login_markup(client: Client) -> None:
         "font-weight:850",
     )
     for marker in required:
-        check(marker in text, f"login page missing expected marker: {marker}")
+        check(marker in text, f"login page missing expected OS12 marker: {marker}")
     for marker in forbidden:
         check(marker not in text, f"login page still contains stale marker: {marker}")
+    print("PASS  device is serving the OS12 hardened login surface")
     print("PASS  login markup/accessibility contract")
 
 
@@ -140,8 +182,6 @@ def wrong_valid_code(code: str) -> str:
 
 
 def exercise_rate_limit(client: Client, code: str) -> None:
-    # One malformed-alphabet attempt plus valid-shape wrong attempts prove that
-    # server-side validation participates in the same failure/backoff boundary.
     attempts = ["I" * CODE_LEN, wrong_valid_code(code), wrong_valid_code(code)]
     limited: Response | None = None
     for candidate in attempts:
@@ -152,7 +192,6 @@ def exercise_rate_limit(client: Client, code: str) -> None:
             break
 
     if limited is None:
-        # The current policy allows two free failures, so the third should block.
         response = client.request("/login", method="POST", form={"code": wrong_valid_code(code)})
         check(response.status == 429, f"expected HTTP 429 after repeated failures, got {response.status}")
         limited = response
@@ -166,8 +205,6 @@ def exercise_rate_limit(client: Client, code: str) -> None:
     check("Too many unsuccessful attempts" in limited.body, "rate-limit page omitted visible error state")
     check("role='alert'" in limited.body, "rate-limit error is not exposed as an alert")
     print(f"PASS  bounded login backoff engaged (Retry-After={retry_after}s)")
-
-    # Wait only as long as the device told us. Never hammer a locked device.
     time.sleep(retry_after + 1)
 
 
@@ -197,27 +234,28 @@ def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
     check(base_url.startswith(("http://", "https://")), "--base-url must start with http:// or https://")
 
-    raw_code = os.environ.get("WORKSHOP_OS_PORTAL_CODE")
-    if not raw_code:
-        raw_code = getpass.getpass("Current portal code shown on WS350 System screen: ")
-    code = normalized_code(raw_code)
-    raw_code = ""  # drop the original reference promptly
-
     print(f"Target: {base_url}")
-    print("Credential handling: portal code will not be printed or written by this script")
-
     probe = Client(base_url)
     assert_login_markup(probe)
     assert_unauthenticated_gate(base_url)
 
+    if args.probe_only:
+        print("PROBE: PASS — device is ready for OS12 portal runtime acceptance")
+        return 0
+
+    raw_code = os.environ.get("WORKSHOP_OS_PORTAL_CODE")
+    if not raw_code:
+        raw_code = getpass.getpass("Current portal code shown on WS350 System screen: ")
+    code = normalized_code(raw_code)
+    raw_code = ""
+    print("Credential handling: portal code will not be printed or written by this script")
+
     if args.exercise_rate_limit:
         exercise_rate_limit(probe, code)
 
-    # Lowercase submission proves the actual value path, not CSS text-transform.
     session_a = Client(base_url)
     login(session_a, code.lower(), "lowercase normalization + session A")
 
-    # A second independent browser must receive a separate valid session.
     session_b = Client(base_url)
     login(session_b, code, "independent session B")
 
@@ -241,6 +279,11 @@ def main() -> int:
         "--base-url",
         default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"),
         help="Workshop OS device URL (default: WORKSHOP_OS_URL or http://10.0.0.124)",
+    )
+    parser.add_argument(
+        "--probe-only",
+        action="store_true",
+        help="check reachability and confirm the device serves the OS12 hardened login without asking for a portal code",
     )
     parser.add_argument(
         "--exercise-rate-limit",
