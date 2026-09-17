@@ -8,6 +8,7 @@ on:
     paths:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_media_runtime.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
@@ -18,6 +19,8 @@ on:
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_media_service.py'
+      - 'scripts/validate_os12_media_runtime.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
@@ -36,6 +39,7 @@ on:
     paths:
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_media_runtime.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
@@ -46,6 +50,8 @@ on:
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_media_service.py'
+      - 'scripts/validate_os12_media_runtime.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
@@ -85,6 +91,9 @@ jobs:
 
       - name: Validate candidate publication safety
         run: python3 scripts/validate_os12_candidate_publisher.py
+
+      - name: Validate media service contracts
+        run: python3 scripts/validate_os12_media_service.py
 
       - name: Reconstruct UI13 and apply OS12 platform
         run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
@@ -128,6 +137,8 @@ jobs:
             echo "artifact_type=OTA/application image"
             echo "full_image=false"
             echo "device_native_update_service=true"
+            echo "media_service=true"
+            echo "media_physical_acceptance=false"
             echo "legacy_url_auto_ota_route=false"
             echo "physical_acceptance=false"
             echo
@@ -150,5 +161,6 @@ jobs:
         if: always()
         run: |
           echo 'This workflow proves buildability and publishes a CI candidate artifact only.'
+          echo 'Media capability is not physically accepted by this workflow.'
           echo 'It does not publish the artifact into the device discovery manifest.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
