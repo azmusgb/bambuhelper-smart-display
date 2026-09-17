@@ -14,68 +14,42 @@ echo "OS12_RELEASE_VERSION=$OS12_RELEASE_VERSION"
 echo "OS12_SOURCE_SHA=$OS12_SOURCE_SHA"
 
 BUILD="$BUILD" bash "$ROOT/scripts/run_ui13_local.sh"
-python3 "$ROOT/apply_workshop_os12_platform_bridge.py" \
-  --repo "$BUILD" \
-  --source-root "$ROOT" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_platform_bridge.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_platform_bridge.py"
 
-python3 "$ROOT/apply_workshop_os12_ui_state_reads.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_ui_state_reads.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_ui_state_reads.py"
 
-python3 "$ROOT/apply_workshop_os12_system_state_reads.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_system_state_reads.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_system_state_reads.py"
 
-python3 "$ROOT/apply_workshop_os12_non_destructive_controls.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_non_destructive_controls.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_non_destructive_controls.py"
 
-python3 "$ROOT/apply_workshop_os12_guarded_stop.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_guarded_stop.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_guarded_stop.py"
 python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"
 
-python3 "$ROOT/apply_workshop_os12_portal_login_hardening.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_portal_login_hardening.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 
-python3 "$ROOT/apply_workshop_os12_device_update.py" \
-  --repo "$BUILD" \
-  --source-root "$ROOT" \
-  --apply
-python3 "$ROOT/apply_workshop_os12_release_identity.py" \
-  --repo "$BUILD" \
-  --version "$OS12_RELEASE_VERSION" \
-  --source-sha "$OS12_SOURCE_SHA" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_device_update.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/apply_workshop_os12_release_identity.py" --repo "$BUILD" --version "$OS12_RELEASE_VERSION" --source-sha "$OS12_SOURCE_SHA" --apply
 
-python3 "$ROOT/apply_workshop_os12_media_hardware.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_media_hardware.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_hardware.py" --repo "$BUILD"
 
-python3 "$ROOT/apply_workshop_os12_media_runtime.py" \
-  --repo "$BUILD" \
-  --source-root "$ROOT" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_media_runtime.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_media_service.py"
 python3 "$ROOT/scripts/validate_os12_media_runtime.py" --repo "$BUILD"
 
-python3 "$ROOT/apply_workshop_os12_media_ui.py" \
-  --repo "$BUILD" \
-  --apply
+python3 "$ROOT/apply_workshop_os12_media_ui.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_ui.py" --repo "$BUILD"
 
-python3 "$ROOT/scripts/validate_os12_device_update.py" \
-  --source-root "$ROOT" \
-  --repo "$BUILD"
+python3 "$ROOT/apply_workshop_os12_media_api.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_media_api.py" --repo "$BUILD"
+
+python3 "$ROOT/scripts/validate_os12_device_update.py" --source-root "$ROOT" --repo "$BUILD"
 
 # OS12 owns normalized device state, physical-control policy, local portal
 # hardening, device-native OTA and the media lifecycle. Media capability probes
@@ -100,6 +74,9 @@ grep -q 'buz_vol' "$BUILD/src/settings.cpp"
 grep -q 'drawOs12Media' "$BUILD/src/smart_hub.cpp"
 grep -q 'drawOs12MediaLab' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopMediaSnapshot()' "$BUILD/src/smart_hub.cpp"
+grep -q 'SECURE_GET("/os12/media/status"' "$BUILD/src/web_server.cpp"
+grep -q 'SECURE_POST("/os12/media/speaker-test"' "$BUILD/src/web_server.cpp"
+grep -q 'SECURE_POST("/os12/media/microphone-sample"' "$BUILD/src/web_server.cpp"
 grep -q 'workshopPlatformState().configuredPrinterCount>0' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformPrinterOnline(os12Slot)' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformWifiOnline()' "$BUILD/src/smart_hub.cpp"
@@ -123,6 +100,7 @@ grep -q 'doc\["runningSourceCommit"\] = snap.runningSourceCommit;' "$BUILD/src/w
 ! grep -q 'WORKSHOP_OS12_SOURCE_SHA' "$BUILD/src/workshop_update_service.cpp"
 ! grep -q 'SMART_HOME_VERSION' "$BUILD/src/workshop_update_service.cpp"
 ! sed -n '/void initWebServer()/,/void handleWebServer()/p' "$BUILD/src/web_server.cpp" | grep -q '"/ota/auto"'
+! sed -n '/void initWebServer()/,/void handleWebServer()/p' "$BUILD/src/web_server.cpp" | grep -q 'server.on("/os12/media/'
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
@@ -130,7 +108,7 @@ if [[ "${1:-}" == "--build" ]]; then
   echo "PlatformIO: $PIO_BIN"
   "$PIO_BIN" --version
 
-  echo "=== Build WS350 OS12 device platform + media runtime/UI ==="
+  echo "=== Build WS350 OS12 device platform + media runtime/UI/API ==="
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 OS12 image missing' >&2; exit 1; }
 
@@ -150,6 +128,7 @@ echo "Portal access: exact code alphabet/normalization, bounded login backoff, p
 echo "Media hardware: minimal proven ES8311 volume contract ported; existing mic primitives reused."
 echo "Media runtime: centralized MediaService + capability-safe hardware adapter wired into lifecycle."
 echo "Media UI: capability-scoped Speaker/Microphone/Media Lab surfaces integrated into UI13 settings flow."
+echo "Media diagnostics API: authenticated status, speaker test, microphone sample and stop; no arbitrary source URL."
 echo "Recording/video: remain unavailable until their bounded backends are implemented and validated."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
