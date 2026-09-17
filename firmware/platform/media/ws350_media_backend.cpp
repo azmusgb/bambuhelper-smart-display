@@ -1,7 +1,10 @@
 #include "ws350_media_backend.h"
 
 #include <Arduino.h>
+#include <cstring>
 #include "buzzer_backend.h"
+#include "camera_client.h"
+#include "display_ui.h"
 
 #if defined(ESP32)
 #include <esp_heap_caps.h>
@@ -10,10 +13,18 @@
 namespace workshop {
 namespace media {
 
+namespace {
+static const char kPrinterCameraSource[] = "printer-camera";
+static const uint32_t kVideoFrameIntervalMs = 125U;  // 8 fps ceiling.
+static const float kBambuCameraWidth = 1280.0f;
+static const float kBambuCameraHeight = 720.0f;
+}
+
 Ws350MediaBackend::Ws350MediaBackend()
     : requestedVolume_(70), muted_(false), requestedRecordMs_(0),
       recordingRequested_(false), recordingPlaybackRequested_(false),
-      videoRequested_(false), videoPaused_(false) {}
+      videoRequested_(false), videoPaused_(false), videoLastFrameId_(0),
+      videoLastRenderAtMs_(0) {}
 
 Capabilities Ws350MediaBackend::probe() {
   Capabilities caps;
@@ -31,9 +42,12 @@ Capabilities Ws350MediaBackend::probe() {
 #endif
   }
 #endif
-  // Video remains unavailable until a bounded MJPEG decoder is installed and
-  // validated on the WS350. PSRAM alone is not evidence of decoder capability.
-  caps.videoDecoderAvailable = false;
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
+  // LovyanGFX already owns JPEG decoding for the WS350 display. OS12 reuses
+  // that decoder and the existing bounded Bambu camera frame source rather
+  // than introducing a second graphics or network stack.
+  caps.videoDecoderAvailable = caps.psramAvailable;
+#endif
   return caps;
 }
 
@@ -122,15 +136,62 @@ bool Ws350MediaBackend::playRecording() {
 }
 
 bool Ws350MediaBackend::beginMjpeg(const char* source) {
-  (void)source;
-  videoRequested_ = false;
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
+  if (!source || std::strcmp(source, kPrinterCameraSource) != 0) return false;
+  if (!psramFound() || !cameraCanStreamDisplayedPrinter()) return false;
+
+  // The existing camera client remains the sole network authority. It already
+  // bounds input to two 200 KB PSRAM JPEG buffers and publishes only complete
+  // SOI..EOI frames. MediaService owns only playback lifecycle and pacing.
+  cameraBegin();
+  if (!cameraActive()) return false;
+  videoRequested_ = true;
   videoPaused_ = false;
+  videoLastFrameId_ = 0;
+  videoLastRenderAtMs_ = 0;
+  return true;
+#else
+  (void)source;
   return false;
+#endif
 }
 
 bool Ws350MediaBackend::pauseVideo(bool paused) {
-  (void)paused;
-  return false;
+  if (!videoRequested_) return false;
+  videoPaused_ = paused;
+  return true;
+}
+
+void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
+  if (!videoRequested_ || videoPaused_) return;
+  if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
+
+  const uint8_t* frame = 0;
+  size_t frameLen = 0;
+  uint32_t frameId = 0;
+  if (!cameraGetLatestFrame(&frame, &frameLen, &frameId) || !frame || frameLen == 0) return;
+  if (frameId == videoLastFrameId_) return;
+
+  const float sw = static_cast<float>(tft.width());
+  const float sh = static_cast<float>(tft.height());
+  float scale = sw / kBambuCameraWidth;
+  const float heightScale = sh / kBambuCameraHeight;
+  if (heightScale < scale) scale = heightScale;
+  if (scale <= 0.0f) return;
+
+  const int drawW = static_cast<int>(kBambuCameraWidth * scale);
+  const int drawH = static_cast<int>(kBambuCameraHeight * scale);
+  const int x = (tft.width() - drawW) / 2;
+  const int y = (tft.height() - drawH) / 2;
+  tft.fillScreen(TFT_BLACK);
+  tft.drawJpg(frame, static_cast<uint32_t>(frameLen), x, y, 0, 0, 0, 0, scale, scale);
+  markFrameDirty();
+  videoLastFrameId_ = frameId;
+  videoLastRenderAtMs_ = nowMs;
+#else
+  (void)nowMs;
+#endif
 }
 
 bool Ws350MediaBackend::stopMedia() {
@@ -141,11 +202,14 @@ bool Ws350MediaBackend::stopMedia() {
 #if defined(BOARD_HAS_ES8311_AUDIO)
   buzzerBackendStop();
 #endif
+  if (videoRequested_) cameraStop();
   recordingRequested_ = false;
   recordingPlaybackRequested_ = false;
   requestedRecordMs_ = 0;
   videoRequested_ = false;
   videoPaused_ = false;
+  videoLastFrameId_ = 0;
+  videoLastRenderAtMs_ = 0;
   return true;
 }
 
@@ -159,7 +223,18 @@ void Ws350MediaBackend::poll() {
     recordingPlaybackRequested_ = buzzerBackendMicPlaybackPoll();
   }
 #endif
-  // All low-level capture work is burst-bounded. Printer telemetry, touch,
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
+  if (videoRequested_) {
+    cameraService();
+    if (!cameraActive()) {
+      videoRequested_ = false;
+      videoPaused_ = false;
+    } else {
+      renderLatestCameraFrame(millis());
+    }
+  }
+#endif
+  // All low-level capture/video work is bounded. Printer telemetry, touch,
   // network, OTA and recovery remain serviced by the main loop between polls.
 }
 
