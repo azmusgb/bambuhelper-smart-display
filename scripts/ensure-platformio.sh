@@ -12,12 +12,11 @@ VENV="$TOOL_ROOT/platformio"
 # PlatformIO environment; never install into or weaken the system Python.
 ensure_platformio_esptool_runtime() {
   local penv_python="$HOME/.platformio/penv/bin/python"
-  local esptool_py="$HOME/.platformio/packages/tool-esptoolpy/esptool.py"
 
-  # The package may not be installed until the first ESP32 build. In that case
-  # there is nothing to repair yet; the bootstrap helper will call us again
-  # after PlatformIO has populated its packages.
-  [[ -x "$penv_python" && -f "$esptool_py" ]] || return 0
+  # Global/Homebrew PlatformIO normally owns this isolated penv. Provision the
+  # dependency before the ESP32 package is populated so a first bootstrap run
+  # cannot build successfully and then fail at the direct chip probe.
+  [[ -x "$penv_python" ]] || return 0
 
   if "$penv_python" -c 'import intelhex' >/dev/null 2>&1; then
     return 0
