@@ -21,8 +21,10 @@ bash "$ROOT/scripts/run_os12_platform_local.sh"
 
 python3 "$ROOT/apply_workshop_os12_ux_architecture.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_ux_geometry.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os12_ux_physical_fit.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_ux_architecture.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_geometry.py" --repo "$BUILD"
+python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
@@ -30,7 +32,7 @@ if [[ "${1:-}" == "--build" ]]; then
   echo "PlatformIO: $PIO_BIN"
   "$PIO_BIN" --version
 
-  echo "=== Build WS350 OS12 UX architecture + geometry candidate ==="
+  echo "=== Build WS350 OS12 UX v3 physical-fit candidate ==="
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 UX image missing' >&2; exit 1; }
 
@@ -41,10 +43,11 @@ fi
 
 echo "=== OS12 UX architecture reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
-echo "UX state: hierarchical-flat-v2 geometry polish implemented."
-echo "Root navigation: Home / Printer / Workshop / More retained."
+echo "UX state: hierarchical-flat-v3 physical-fit/navigation corrections implemented."
+echo "Root navigation: Home / Printer / Workshop / More enforced in reconstructed firmware."
+echo "Local Portal: Network and System routes converge deterministically with exact-parent Back behavior."
 echo "Child/config navigation: global bottom navigation removed from migrated screens."
-echo "Geometry: 12px side margin, 52px canonical rows/actions, aligned trailing evidence/value column."
+echo "Geometry: 12px side margin, 52px canonical rows/actions, compact two-line physical evidence composition."
 echo "Components: navigation row, command button, setting row/evidence row vocabulary."
 echo "Home/Workshop: explicit Unknown/Undetermined where Filament Inventory evidence is unavailable."
 echo "Inventory authority: unchanged; no spool identity, quantity, placement, or readiness is inferred."
