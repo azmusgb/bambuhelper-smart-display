@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Expose the OS12 MediaService through a narrow authenticated diagnostics API.
+"""Expose OS12 MediaService through a narrow authenticated diagnostics API.
 
 The API never accepts arbitrary media URLs and does not create a second media
 implementation. It reports MediaService truth and invokes only bounded local
-speaker/microphone diagnostics.
+speaker/microphone/recording diagnostics.
 """
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["volumePercent"] = snap.runtime.volumePercent;
   doc["muted"] = snap.runtime.muted;
   doc["microphoneLevelPercent"] = snap.runtime.microphoneLevelPercent;
+  doc["recordingAvailable"] = snap.runtime.recordingAvailable;
   doc["audioUnderruns"] = snap.runtime.audioUnderruns;
   doc["droppedVideoFrames"] = snap.runtime.droppedVideoFrames;
   String json;
@@ -56,6 +57,24 @@ static void handleWorkshopMediaMicrophoneSample() {
   sendWorkshopMediaStatus(sampled ? 200 : 409);
 }
 
+static void handleWorkshopMediaRecordStart() {
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool started = media.startRecording(5000U, millis());
+  sendWorkshopMediaStatus(started ? 202 : 409);
+}
+
+static void handleWorkshopMediaRecordStop() {
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool stopped = media.stopRecording(millis());
+  sendWorkshopMediaStatus(stopped ? 200 : 409);
+}
+
+static void handleWorkshopMediaRecordPlay() {
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool started = media.playRecording(millis());
+  sendWorkshopMediaStatus(started ? 202 : 409);
+}
+
 static void handleWorkshopMediaStop() {
   workshop::media::MediaService& media = workshopMediaService();
   const bool stopped = media.stop(millis());
@@ -63,7 +82,7 @@ static void handleWorkshopMediaStop() {
 }
 '''
 
-ROUTES = '''  SECURE_GET("/os12/media/status", handleWorkshopMediaStatus);\n  SECURE_POST("/os12/media/speaker-test", handleWorkshopMediaSpeakerTest);\n  SECURE_POST("/os12/media/microphone-sample", handleWorkshopMediaMicrophoneSample);\n  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n'''
+ROUTES = '''  SECURE_GET("/os12/media/status", handleWorkshopMediaStatus);\n  SECURE_POST("/os12/media/speaker-test", handleWorkshopMediaSpeakerTest);\n  SECURE_POST("/os12/media/microphone-sample", handleWorkshopMediaMicrophoneSample);\n  SECURE_POST("/os12/media/record/start", handleWorkshopMediaRecordStart);\n  SECURE_POST("/os12/media/record/stop", handleWorkshopMediaRecordStop);\n  SECURE_POST("/os12/media/record/play", handleWorkshopMediaRecordPlay);\n  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n'''
 
 
 def load(path: Path) -> str:
@@ -102,6 +121,9 @@ def apply(repo: Path) -> None:
         '/os12/media/status',
         '/os12/media/speaker-test',
         '/os12/media/microphone-sample',
+        '/os12/media/record/start',
+        '/os12/media/record/stop',
+        '/os12/media/record/play',
         '/os12/media/stop',
     ):
         if text.count(route) != 1:
