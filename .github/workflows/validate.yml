@@ -66,7 +66,9 @@ jobs:
         run: |
           python3 -m py_compile \
             scripts/accept_os12_portal_runtime.py \
-            scripts/accept_os12_update_runtime.py
+            scripts/accept_os12_update_runtime.py \
+            scripts/accept_os12_media_runtime.py \
+            scripts/accept_os12_media_physical.py
 
       - name: Validate OS12 patcher/publication helper syntax
         run: |
@@ -74,7 +76,6 @@ jobs:
             apply_workshop_os12_device_update.py \
             apply_workshop_os12_release_identity.py \
             apply_workshop_os12_media_hardware.py \
-            apply_workshop_os12_media_capture.py \
             apply_workshop_os12_media_runtime.py \
             apply_workshop_os12_media_ui.py \
             apply_workshop_os12_media_api.py \
@@ -82,7 +83,6 @@ jobs:
             scripts/prepare_os12_device_candidate.py \
             scripts/validate_os12_candidate_publisher.py \
             scripts/validate_os12_media_hardware.py \
-            scripts/validate_os12_media_capture.py \
             scripts/validate_os12_media_service.py \
             scripts/validate_os12_media_runtime.py \
             scripts/validate_os12_media_ui.py \
