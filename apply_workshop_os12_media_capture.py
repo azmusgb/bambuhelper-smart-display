@@ -2,10 +2,10 @@
 """Add bounded microphone record/playback to the existing ES8311 authority.
 
 Recording reuses the installed full-duplex I2S driver and the single existing
-ES8311 task. A capture-lifetime pin prevents only the donor audio task's idle
-shutdown from uninstalling I2S while OS12 is recording. Explicit shutdown paths
-remain authoritative. RX is staged through bounded internal RAM before being
-copied into PSRAM.
+ES8311 task. A media-lifetime pin prevents only the donor audio task's idle
+shutdown from uninstalling I2S while OS12 is recording or playing a retained
+recording. Explicit shutdown paths remain authoritative. RX is staged through
+bounded internal RAM before being copied into PSRAM.
 """
 from __future__ import annotations
 
@@ -188,6 +188,8 @@ bool buzzerBackendMicHasRecording() {
 bool buzzerBackendMicPlaybackBegin() {
   if (gOs12RecordingActive || gOs12CaptureKeepAlive || !buzzerBackendMicHasRecording()) return false;
   if (!ensureAudioRunning()) return false;
+  gOs12CaptureKeepAlive = true;
+  gIdleStartMs = millis();
   buzzerBackendStop();
   gOs12PlaybackPosition = 0;
   gOs12PlaybackActive = true;
@@ -195,12 +197,15 @@ bool buzzerBackendMicPlaybackBegin() {
 }
 
 bool buzzerBackendMicPlaybackPoll() {
+  if (gOs12PlaybackActive) gIdleStartMs = millis();
   return gOs12PlaybackActive;
 }
 
 void buzzerBackendMicPlaybackStop() {
   gOs12PlaybackActive = false;
   gOs12PlaybackPosition = 0;
+  gOs12CaptureKeepAlive = false;
+  gIdleStartMs = millis();
 }
 #else
 bool buzzerBackendMicRecordBegin(uint32_t) { return false; }
@@ -239,6 +244,22 @@ def apply(repo: Path) -> None:
     source = guard_idle_shutdown(source)
 
     playback_loop = r'''    if (gOs12PlaybackActive && gOs12RecordingData && gOs12PlaybackPosition < gOs12RecordingBytes) {
+      gIdleStartMs = millis();
+      const size_t remaining = gOs12RecordingBytes - gOs12PlaybackPosition;
+      const size_t copyBytes = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
+      memset(chunk, 0, sizeof(chunk));
+      memcpy(chunk, gOs12RecordingData + gOs12PlaybackPosition, copyBytes);
+      gOs12PlaybackPosition += copyBytes;
+      if (gOs12PlaybackPosition >= gOs12RecordingBytes) {
+        gOs12PlaybackActive = false;
+        gOs12CaptureKeepAlive = false;
+        gIdleStartMs = millis();
+      }
+    } else {
+      fillChunk(chunk);
+    }
+    size_t written = 0;'''
+    old_playback_loop = r'''    if (gOs12PlaybackActive && gOs12RecordingData && gOs12PlaybackPosition < gOs12RecordingBytes) {
       const size_t remaining = gOs12RecordingBytes - gOs12PlaybackPosition;
       const size_t copyBytes = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
       memset(chunk, 0, sizeof(chunk));
@@ -249,7 +270,9 @@ def apply(repo: Path) -> None:
       fillChunk(chunk);
     }
     size_t written = 0;'''
-    if "gOs12PlaybackPosition < gOs12RecordingBytes" not in source:
+    if old_playback_loop in source:
+        source = source.replace(old_playback_loop, playback_loop, 1)
+    elif "gOs12PlaybackPosition < gOs12RecordingBytes" not in source:
         source = once(source, "    fillChunk(chunk);\n    size_t written = 0;", playback_loop,
                       "audio task recording playback")
 
@@ -258,6 +281,12 @@ def apply(repo: Path) -> None:
         if source.count(marker) != 1:
             raise PatchError("ES8311 backend endif missing/non-unique")
         source = source.replace(marker, CAPTURE_API + marker, 1)
+    else:
+        api_begin = source.find("bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs)")
+        api_end = source.find("#else\nbool buzzerBackendMicRecordBegin(uint32_t)", api_begin)
+        if api_begin < 0 or api_end < 0:
+            raise PatchError("existing capture API block missing/non-unique")
+        source = source[:api_begin] + CAPTURE_API[CAPTURE_API.find("bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs)"):CAPTURE_API.find("#else\nbool buzzerBackendMicRecordBegin(uint32_t)")] + source[api_end:]
 
     source_path.write_text(source, encoding="utf-8")
 
@@ -275,6 +304,8 @@ def apply(repo: Path) -> None:
         "captureScratch", "memcpy(gOs12RecordingData + used, captureScratch, bytesRead)",
         "gOs12PlaybackPosition < gOs12RecordingBytes", "gOs12CaptureKeepAlive",
         "if (!gOs12CaptureKeepAlive) shutdownAudio();",
+        "if (gOs12PlaybackActive) gIdleStartMs = millis();",
+        "gOs12PlaybackActive = false;\n        gOs12CaptureKeepAlive = false;",
     ):
         if needle not in final_cpp:
             raise PatchError(f"bounded capture implementation missing {needle}")
