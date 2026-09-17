@@ -9,6 +9,10 @@ namespace platform {
 static const std::size_t kLocalAddressLength = 40;
 static const std::size_t kProfileIdLength = 40;
 static const std::size_t kVersionLabelLength = 48;
+static const std::size_t kUpdateLabelLength = 80;
+static const std::size_t kUpdateMessageLength = 112;
+static const std::size_t kSourceCommitLength = 41;
+static const std::size_t kSha256HexLength = 65;
 static const std::size_t kMaxPrinterSlots = 4;
 
 enum class Freshness : std::uint8_t {
@@ -107,13 +111,24 @@ struct InventoryProjectionState {
     bool available{false};
 };
 
+// UpdateState is the normalized device-facing view of UpdateService. It records
+// only metadata validated by the authoritative manifest and runtime phase.
+// Full-image recovery is deliberately separate from normal device OTA.
 struct UpdateState {
     UpdateChannel channel{UpdateChannel::Unknown};
     UpdatePhase phase{UpdatePhase::Unknown};
     Freshness manifestFreshness{Freshness::Unknown};
     char runningVersion[kVersionLabelLength]{};
     char availableVersion[kVersionLabelLength]{};
+    char availableLabel[kUpdateLabelLength]{};
+    char statusMessage[kUpdateMessageLength]{};
+    char sourceCommit[kSourceCommitLength]{};
+    char artifactSha256[kSha256HexLength]{};
+    std::uint32_t artifactSize{0};
+    std::uint8_t progressPercent{0};
     bool otaSupported{false};
+    bool busy{false};
+    bool updateAvailable{false};
     bool recoveryFullImageSupported{false};
     bool artifactIdentityVerified{false};
     bool rollbackAvailable{false};
