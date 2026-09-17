@@ -3,11 +3,15 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-platform-build}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.0.0}"
+OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
 echo "=== Workshop OS 12 device-platform reconstruction ==="
 echo "ROOT=$ROOT"
 echo "BUILD=$BUILD"
+echo "OS12_RELEASE_VERSION=$OS12_RELEASE_VERSION"
+echo "OS12_SOURCE_SHA=$OS12_SOURCE_SHA"
 
 BUILD="$BUILD" bash "$ROOT/scripts/run_ui13_local.sh"
 python3 "$ROOT/apply_workshop_os12_platform_bridge.py" \
@@ -46,6 +50,11 @@ python3 "$ROOT/apply_workshop_os12_device_update.py" \
   --repo "$BUILD" \
   --source-root "$ROOT" \
   --apply
+python3 "$ROOT/apply_workshop_os12_release_identity.py" \
+  --repo "$BUILD" \
+  --version "$OS12_RELEASE_VERSION" \
+  --source-sha "$OS12_SOURCE_SHA" \
+  --apply
 python3 "$ROOT/scripts/validate_os12_device_update.py" \
   --source-root "$ROOT" \
   --repo "$BUILD"
@@ -76,6 +85,10 @@ grep -q "autocomplete='off'" "$BUILD/src/web_server.cpp"
 grep -q 'raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json' "$BUILD/src/workshop_update_service.cpp"
 grep -q 'esp_ota_set_boot_partition' "$BUILD/src/workshop_update_service.cpp"
 grep -q 'workshopUpdateRequestInstall' "$BUILD/src/smart_hub.cpp"
+grep -q "#define WORKSHOP_OS_RELEASE_VERSION \"$OS12_RELEASE_VERSION\"" "$BUILD/include/smart_home_build.h"
+grep -q "#define WORKSHOP_OS_SOURCE_SHA \"$OS12_SOURCE_SHA\"" "$BUILD/include/smart_home_build.h"
+test "$(grep -c 'WORKSHOP_OS_RELEASE_VERSION' "$BUILD/src/workshop_update_service.cpp")" -eq 2
+! grep -q 'SMART_HOME_VERSION' "$BUILD/src/workshop_update_service.cpp"
 ! sed -n '/void initWebServer()/,/void handleWebServer()/p' "$BUILD/src/web_server.cpp" | grep -q '"/ota/auto"'
 
 if [[ "${1:-}" == "--build" ]]; then
@@ -96,6 +109,7 @@ if [[ "${1:-}" == "--build" ]]; then
 fi
 
 echo "=== OS12 platform reconstruction complete ==="
+echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
 echo "State: normalized observation bridge + informational read migration implemented."
 echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu transport."
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
