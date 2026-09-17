@@ -36,12 +36,16 @@ def main() -> int:
         "class HardwareBackend",
         "PlayingAudio",
         "Recording",
+        "PlayingRecording",
         "PlayingVideo",
         "Paused",
         "speakerAvailable",
         "microphoneAvailable",
         "videoDecoderAvailable",
         "psramAvailable",
+        "recordingAvailable",
+        "isSessionActive() const",
+        "hasRecording() const",
         "audioUnderruns",
         "droppedVideoFrames",
     ])
@@ -51,19 +55,33 @@ def main() -> int:
         "MediaError::Busy",
         "MediaError::OutOfMemory",
         "beginRecording",
+        "playRecording",
+        "refreshBackendFacts",
+        "backend_->hasRecording()",
+        "backend_->isSessionActive()",
         "beginMjpeg",
         "pauseVideo",
         "stopMedia",
     ])
-    require(BACKEND_H, ["class Ws350MediaBackend", "HardwareBackend"])
+    require(BACKEND_H, [
+        "class Ws350MediaBackend",
+        "HardwareBackend",
+        "recordingPlaybackRequested_",
+        "isSessionActive() const override",
+        "hasRecording() const override",
+    ])
     require(BACKEND_CPP, [
         "BOARD_HAS_ES8311_AUDIO",
         "BOARD_HAS_MICROPHONE",
         "buzzerBackendSetVolume",
         "buzzerBackendMicLevel",
+        "buzzerBackendMicRecordBegin",
+        "buzzerBackendMicRecordPoll",
+        "buzzerBackendMicPlaybackBegin",
+        "buzzerBackendMicPlaybackPoll",
+        "buzzerBackendMicHasRecording",
         "psramFound()",
         "videoDecoderAvailable = false",
-        "Never advertise a decoder",
     ])
     require(RUNTIME_H, ["workshopMediaBegin", "workshopMediaPoll", "workshopMediaSnapshot"])
     require(RUNTIME_CPP, ["gMediaService", "gMediaBackend", "millis()"])
@@ -74,10 +92,13 @@ def main() -> int:
         "workshopMediaPoll();",
     ])
     require(TEST, [
-        "assert(!media.playMjpeg(\"clip.mjpg\", 4))",
+        'assert(!media.playMjpeg("clip.mjpg"',
         "MediaError::Busy",
         "MediaError::OutOfMemory",
         "SessionState::Fault",
+        "recordingAvailable",
+        "isSessionActive() const override",
+        "hasRecording() const override",
     ])
 
     with tempfile.TemporaryDirectory(prefix="os12-media-") as td:
@@ -89,7 +110,7 @@ def main() -> int:
         subprocess.run(cmd, check=True, cwd=ROOT)
         subprocess.run([str(binary)], check=True, cwd=ROOT)
 
-    print("PASS: OS12 media service, backend boundary, lifecycle and C++11 contracts")
+    print("PASS: OS12 media service, async recording lifecycle, backend boundary and C++11 contracts")
     return 0
 
 
