@@ -33,44 +33,23 @@ def once(text: str, old: str, new: str, label: str) -> str:
 
 
 def guard_idle_shutdown(source: str) -> str:
-    guarded = "if (!gOs12CaptureKeepAlive) shutdownAudio();"
-    if guarded in source:
+    guarded_block = """    } else if (millis() - gIdleStartMs >= kIdleTimeoutMs) {
+      if (!gOs12CaptureKeepAlive) shutdownAudio();
+    }
+"""
+    if guarded_block in source:
         return source
 
-    needle = "shutdownAudio();"
-    candidates: list[int] = []
-    cursor = 0
-    while True:
-        idx = source.find(needle, cursor)
-        if idx < 0:
-            break
-        before = source[max(0, idx - 700):idx]
-        after = source[idx + len(needle):idx + len(needle) + 160]
-        if "gIdleStartMs" in before and "break;" in after:
-            candidates.append(idx)
-        cursor = idx + len(needle)
-
-    if len(candidates) != 1:
-        candidates = []
-        cursor = 0
-        while True:
-            idx = source.find(needle, cursor)
-            if idx < 0:
-                break
-            before = source[max(0, idx - 420):idx]
-            if "gIdleStartMs" in before and (
-                "kIdle" in before or "millis() - gIdleStartMs" in before or "millis()-gIdleStartMs" in before
-            ):
-                candidates.append(idx)
-            cursor = idx + len(needle)
-
-    if len(candidates) != 1:
+    donor_block = """    } else if (millis() - gIdleStartMs >= kIdleTimeoutMs) {
+      shutdownAudio();
+    }
+"""
+    count = source.count(donor_block)
+    if count != 1:
         raise PatchError(
-            f"ES8311 idle-shutdown guard: expected one idle-timeout shutdown call, found {len(candidates)}"
+            f"ES8311 idle-shutdown guard: expected exact buzzerBackendTick idle-timeout block once, found {count}"
         )
-
-    idx = candidates[0]
-    return source[:idx] + guarded + source[idx + len(needle):]
+    return source.replace(donor_block, guarded_block, 1)
 
 
 CAPTURE_DECLS = """int buzzerBackendMicLevel(uint16_t sampleMs);
@@ -317,16 +296,10 @@ def apply(repo: Path) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", required=True)
-    ap.add_argument("--apply", action="store_true")
-    args = ap.parse_args()
-    if not args.apply:
-        raise SystemExit("refusing to modify source without --apply")
-    try:
-        apply(Path(args.repo).resolve())
-    except PatchError as exc:
-        raise SystemExit(str(exc)) from exc
+    ap=argparse.ArgumentParser();ap.add_argument("--repo",required=True);ap.add_argument("--apply",action="store_true");args=ap.parse_args()
+    if not args.apply: raise SystemExit("refusing to modify source without --apply")
+    try: apply(Path(args.repo).resolve())
+    except PatchError as exc: raise SystemExit(str(exc)) from exc
     return 0
 
 
