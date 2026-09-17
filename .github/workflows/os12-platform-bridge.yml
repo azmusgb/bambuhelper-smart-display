@@ -12,6 +12,7 @@ on:
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
       - 'apply_workshop_os12_device_update.py'
+      - 'apply_workshop_os12_release_identity.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
@@ -32,6 +33,7 @@ on:
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
       - 'apply_workshop_os12_device_update.py'
+      - 'apply_workshop_os12_release_identity.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
@@ -53,6 +55,9 @@ jobs:
     name: Reconstruct and compile OS12 device platform
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      OS12_RELEASE_VERSION: '12.0.0'
+      OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -80,16 +85,18 @@ jobs:
           OUT=/tmp/workshop-os12-ws350-ota
           rm -rf "$OUT"
           mkdir -p "$OUT"
-          cp "$SOURCE" "$OUT/Workshop-OS12-WS350-${GITHUB_SHA}.bin"
+          NAME="Workshop-OS-${OS12_RELEASE_VERSION}-WS350-${OS12_SOURCE_SHA}.bin"
+          cp "$SOURCE" "$OUT/$NAME"
           (
             cd "$OUT"
-            sha256sum "Workshop-OS12-WS350-${GITHUB_SHA}.bin" > SHA256SUMS.txt
+            sha256sum "$NAME" > SHA256SUMS.txt
           )
 
           {
             echo "release_state=built-tested-candidate-only"
+            echo "release_version=${OS12_RELEASE_VERSION}"
             echo "repository=${GITHUB_REPOSITORY}"
-            echo "head_sha=${GITHUB_SHA}"
+            echo "source_sha=${OS12_SOURCE_SHA}"
             echo "workflow_run=${GITHUB_RUN_ID}"
             echo "board=ws_lcd_350"
             echo "artifact_type=OTA/application image"
@@ -98,7 +105,7 @@ jobs:
             echo "legacy_url_auto_ota_route=false"
             echo "physical_acceptance=false"
             echo
-            grep -E 'SMART_HOME_BUILD_LABEL|SMART_HOME_PROFILE|WORKSHOP_OS_UI_SCHEMA|WORKSHOP_OS_V11_28_UI13|WORKSHOP_OS12_DEVICE_UPDATE' \
+            grep -E 'SMART_HOME_BUILD_LABEL|SMART_HOME_PROFILE|WORKSHOP_OS_UI_SCHEMA|WORKSHOP_OS_V11_28_UI13|WORKSHOP_OS12_DEVICE_UPDATE|WORKSHOP_OS_RELEASE_VERSION|WORKSHOP_OS_SOURCE_SHA' \
               "$BUILD/include/smart_home_build.h" || true
           } > "$OUT/BUILD-INFO.txt"
 
@@ -108,7 +115,7 @@ jobs:
       - name: Upload exact-head WS350 OTA candidate
         uses: actions/upload-artifact@v4
         with:
-          name: workshop-os12-ws350-ota-${{ github.sha }}
+          name: workshop-os12-ws350-ota-${{ env.OS12_SOURCE_SHA }}
           path: /tmp/workshop-os12-ws350-ota/
           if-no-files-found: error
           retention-days: 14
