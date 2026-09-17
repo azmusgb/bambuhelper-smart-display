@@ -88,6 +88,11 @@ grep -q 'workshopUpdateRequestInstall' "$BUILD/src/smart_hub.cpp"
 grep -q "#define WORKSHOP_OS_RELEASE_VERSION \"$OS12_RELEASE_VERSION\"" "$BUILD/include/smart_home_build.h"
 grep -q "#define WORKSHOP_OS_SOURCE_SHA \"$OS12_SOURCE_SHA\"" "$BUILD/include/smart_home_build.h"
 test "$(grep -c 'WORKSHOP_OS_RELEASE_VERSION' "$BUILD/src/workshop_update_service.cpp")" -eq 2
+grep -q 'WORKSHOP_OS_SOURCE_SHA' "$BUILD/src/workshop_update_service.cpp"
+grep -q 'g_runtime.runningSourceCommit' "$BUILD/src/workshop_update_service.cpp"
+grep -q 'char runningSourceCommit\[41\]' "$BUILD/include/workshop_update_service.h"
+grep -q 'doc\["runningSourceCommit"\] = snap.runningSourceCommit;' "$BUILD/src/web_server.cpp"
+! grep -q 'WORKSHOP_OS12_SOURCE_SHA' "$BUILD/src/workshop_update_service.cpp"
 ! grep -q 'SMART_HOME_VERSION' "$BUILD/src/workshop_update_service.cpp"
 ! sed -n '/void initWebServer()/,/void handleWebServer()/p' "$BUILD/src/web_server.cpp" | grep -q '"/ota/auto"'
 
@@ -110,6 +115,7 @@ fi
 
 echo "=== OS12 platform reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
+echo "Source provenance: compiled into runtime status and required by post-reboot acceptance."
 echo "State: normalized observation bridge + informational read migration implemented."
 echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu transport."
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
