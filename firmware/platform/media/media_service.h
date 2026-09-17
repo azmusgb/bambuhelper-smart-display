@@ -77,6 +77,10 @@ class HardwareBackend {
   virtual bool pauseVideo(bool paused) = 0;
   virtual bool stopMedia() = 0;
   virtual void poll() = 0;
+  // True while an asynchronous recording/playback/video operation is still
+  // owned by the backend. MediaService uses this only for sessions whose
+  // lifetime is backend-driven; the speaker diagnostic has its own deadline.
+  virtual bool isSessionActive() const = 0;
 };
 
 class MediaService {
