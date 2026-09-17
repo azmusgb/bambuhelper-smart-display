@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # Resolve the Waveshare ESP32-S3 USB JTAG/serial device without depending on
 # macOS-assigned /dev/cu.usbmodem#### numbering.
-#
-# Defaults to Espressif USB JTAG/serial VID:PID 303A:1001. If more than one
-# matching device is attached, set WAVESHARE_USB_SERIAL to the board serial
-# reported by `python -m platformio device list`.
 
+ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VID_PID="${WAVESHARE_VID_PID:-303A:1001}"
 USB_SERIAL="${WAVESHARE_USB_SERIAL:-}"
-PYTHON_BIN="${PYTHON_BIN:-python}"
 MONITOR_BAUD="${WAVESHARE_MONITOR_BAUD:-115200}"
+PIO_BIN="${PIO_BIN:-}"
 
 usage() {
   cat <<'EOF'
@@ -19,30 +17,36 @@ Usage:
   bash scripts/waveshare-usb.sh port
   bash scripts/waveshare-usb.sh list
   bash scripts/waveshare-usb.sh monitor
+  bash scripts/waveshare-usb.sh diagnose
 
 Environment overrides:
   WAVESHARE_USB_SERIAL=<serial>   Select one board when multiple matches exist
   WAVESHARE_VID_PID=303A:1001    Override USB VID:PID
   WAVESHARE_MONITOR_BAUD=115200  Override serial-monitor baud rate
-  PYTHON_BIN=python              Python executable to use
-
-Examples:
-  PORT="$(bash scripts/waveshare-usb.sh port)"
-  echo "$PORT"
-
-  bash scripts/waveshare-usb.sh monitor
-
-  WAVESHARE_USB_SERIAL='A4:CB:8F:DB:30:90' \
-    bash scripts/waveshare-usb.sh monitor
+  PIO_BIN=/path/to/pio           Explicit PlatformIO executable
 EOF
 }
 
-platformio_list() {
-  if ! "$PYTHON_BIN" -m platformio device list 2>/dev/null; then
-    echo "ERROR: PlatformIO is unavailable through '$PYTHON_BIN -m platformio'." >&2
-    echo "Activate the project/ESPTool environment and try again." >&2
-    return 1
+resolve_platformio() {
+  if [[ -n "$PIO_BIN" && -x "$PIO_BIN" ]]; then
+    return 0
   fi
+  if command -v pio >/dev/null 2>&1; then
+    PIO_BIN="$(command -v pio)"
+    return 0
+  fi
+  if [[ -x "$SCRIPT_DIR/ensure-platformio.sh" ]]; then
+    PIO_BIN="$(ROOT="$ROOT" bash "$SCRIPT_DIR/ensure-platformio.sh")"
+    [[ -x "$PIO_BIN" ]] && return 0
+  fi
+  echo "ERROR: PlatformIO could not be resolved." >&2
+  echo "Run: bash scripts/ensure-platformio.sh" >&2
+  return 1
+}
+
+platformio_list() {
+  resolve_platformio
+  "$PIO_BIN" device list
 }
 
 detect_ports() {
@@ -60,11 +64,42 @@ detect_ports() {
   ' <<<"$listing"
 }
 
+usb_diagnostics() {
+  echo "=== PlatformIO serial devices ==="
+  platformio_list || true
+  echo
+  echo "=== macOS /dev/cu.* ==="
+  compgen -G '/dev/cu.*' 2>/dev/null || ls -1 /dev/cu.* 2>/dev/null || echo "(none)"
+  echo
+  echo "=== macOS USB summary ==="
+  if command -v system_profiler >/dev/null 2>&1; then
+    system_profiler SPUSBDataType 2>/dev/null | grep -A12 -B2 -Ei 'Espressif|303a|USB JTAG|serial|Waveshare' || true
+  else
+    echo "system_profiler unavailable"
+  fi
+}
+
 resolve_port() {
+  local listing
+  if ! listing="$(platformio_list)"; then
+    echo "ERROR: unable to enumerate serial devices because PlatformIO failed." >&2
+    return 1
+  fi
+
   local -a ports=()
   while IFS= read -r port; do
     [[ -n "$port" ]] && ports+=("$port")
-  done < <(detect_ports)
+  done < <(
+    awk -v vid="$VID_PID" -v serial="$USB_SERIAL" '
+      /^\/dev\/(cu|tty)\./ { port=$1; next }
+      /^Hardware ID:/ {
+        if (index($0, "USB VID:PID=" vid) > 0 &&
+            (serial == "" || index($0, "SER=" serial) > 0)) {
+          print port
+        }
+      }
+    ' <<<"$listing"
+  )
 
   if (( ${#ports[@]} == 1 )); then
     printf '%s\n' "${ports[0]}"
@@ -77,18 +112,17 @@ resolve_port() {
       echo "Requested serial: $USB_SERIAL" >&2
     fi
     echo >&2
-    echo "Available serial devices:" >&2
-    platformio_list >&2 || true
+    echo "$listing" >&2
+    echo >&2
+    echo "If the display is powered but no Espressif serial device appears, check that the USB cable carries data." >&2
+    echo "Then reconnect the WS350 directly to the Mac and run:" >&2
+    echo "  bash scripts/waveshare-usb.sh diagnose" >&2
     return 2
   fi
 
   echo "ERROR: Multiple matching Espressif USB devices were found:" >&2
   printf '  %s\n' "${ports[@]}" >&2
-  echo >&2
-  echo "Set WAVESHARE_USB_SERIAL to the desired board serial, for example:" >&2
-  echo "  WAVESHARE_USB_SERIAL='<serial>' bash scripts/waveshare-usb.sh monitor" >&2
-  echo >&2
-  platformio_list >&2 || true
+  echo "Set WAVESHARE_USB_SERIAL to select the intended board." >&2
   return 3
 }
 
@@ -101,12 +135,16 @@ case "$command" in
     platformio_list
     ;;
   monitor)
+    resolve_platformio
     port="$(resolve_port)"
     echo "Waveshare detected at: $port" >&2
-    exec "$PYTHON_BIN" -m platformio device monitor \
+    exec "$PIO_BIN" device monitor \
       --port "$port" \
       --baud "$MONITOR_BAUD" \
       --filter time
+    ;;
+  diagnose)
+    usb_diagnostics
     ;;
   -h|--help|help)
     usage
