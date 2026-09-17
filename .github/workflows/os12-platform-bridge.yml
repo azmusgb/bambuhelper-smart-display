@@ -14,6 +14,7 @@ on:
       - 'apply_workshop_os12_device_update.py'
       - 'apply_workshop_os12_release_identity.py'
       - 'scripts/run_os12_platform_local.sh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
@@ -39,6 +40,7 @@ on:
       - 'apply_workshop_os12_device_update.py'
       - 'apply_workshop_os12_release_identity.py'
       - 'scripts/run_os12_platform_local.sh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
@@ -88,6 +90,9 @@ jobs:
           python3 -m py_compile \
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_update_runtime.py
+
+      - name: Validate USB bootstrap helper syntax
+        run: bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
 
       - name: Package exact-head WS350 OTA candidate
         run: |
