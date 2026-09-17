@@ -52,9 +52,27 @@ Legacy Waveshare Home recovery remains available until the Workshop OS replaceme
 
 ## Bootstrap requirement
 
-A WS350 running firmware from before this OS12 UpdateService cannot acquire the new updater by using a feature it does not yet have. The first installation is therefore a **bootstrap OTA** using the existing authenticated local firmware-upload path (or the approved USB recovery path only when partition migration is actually required).
+A WS350 running firmware from before this OS12 UpdateService cannot acquire the new updater by using a feature it does not yet have. The first installation is therefore a **bootstrap update** using the existing authenticated local firmware-upload path, or a guarded USB bootstrap when the device is physically attached to a Mac. The approved USB recovery/full-image path is required when the partition layout differs.
 
-After that bootstrap installation and reboot, future ordinary candidates can be checked and installed directly from GitHub on the device, subject to the manifest and acceptance rules above.
+For an attached WS350 on the existing Workshop OS 16 MB layout, use:
+
+```bash
+bash scripts/bootstrap_ws350_os12_usb_macos.sh
+```
+
+The default run builds the exact local OS12 source, resolves the ESP32-S3 USB device, probes the chip, captures partition/NVS/OTA metadata for recovery, and compares the live partition table byte-for-byte with the expected reconstructed layout. It does **not** modify firmware.
+
+After confirming the printer itself is idle, the guarded install form is:
+
+```bash
+bash scripts/bootstrap_ws350_os12_usb_macos.sh \
+  --flash \
+  --confirm-printer-idle
+```
+
+The helper refuses to flash when the partition table differs. It does not erase NVS. A mismatch is a recovery/migration boundary: preserve the captured evidence and use the approved Full image at `0x0` rather than forcing an application/bootstrap upload. `--full-backup` optionally captures the entire 16 MB device flash before mutation.
+
+After the bootstrap installation and reboot, future ordinary candidates can be checked and installed directly from GitHub on the device, subject to the manifest and acceptance rules above.
 
 ## Preparing a candidate
 
