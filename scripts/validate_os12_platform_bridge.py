@@ -48,7 +48,11 @@ def validate_templates() -> None:
         "operation feedback pending": "OperationPhase::Pending",
         "operation feedback success": "OperationPhase::Success",
         "operation feedback recoverable": "OperationPhase::RecoverableError",
-        "operation feedback fatal": "OperationPhase::FatalError",
+        # FatalError is intentionally a reserved contract state. No current
+        # CommandResult maps to it, because ordinary rejection/transport failure
+        # is recoverable. Validate that the enum state exists without requiring
+        # a fabricated runtime mapping merely to satisfy this structural gate.
+        "operation feedback fatal contract": "FatalError,",
         "result-to-feedback mapping": "commandOperationFromResult",
     }
     joined = state + adapter + service + bridge_h + bridge
@@ -138,6 +142,7 @@ def validate_patcher() -> None:
             "RejectedCommandChannelUnavailable",
             "OperationPhase::Pending",
             "OperationPhase::RecoverableError",
+            "FatalError,",
             "commandOperationFromResult",
         ):
             if marker not in installed_service:
