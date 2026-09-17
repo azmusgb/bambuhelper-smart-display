@@ -20,10 +20,13 @@ on:
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
       - 'scripts/validate_os12_device_update.py'
+      - 'scripts/prepare_os12_device_candidate.py'
+      - 'scripts/validate_os12_candidate_publisher.py'
       - 'scripts/accept_os12_portal_runtime.py'
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - '.github/workflows/validate.yml'
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
     paths:
@@ -41,10 +44,13 @@ on:
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
       - 'scripts/validate_os12_device_update.py'
+      - 'scripts/prepare_os12_device_candidate.py'
+      - 'scripts/validate_os12_candidate_publisher.py'
       - 'scripts/accept_os12_portal_runtime.py'
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - '.github/workflows/validate.yml'
       - '.github/workflows/os12-platform-bridge.yml'
 
 permissions:
@@ -68,6 +74,9 @@ jobs:
 
       - name: Validate device-native update source contract
         run: python3 scripts/validate_os12_device_update.py --source-root .
+
+      - name: Validate candidate publication safety
+        run: python3 scripts/validate_os12_candidate_publisher.py
 
       - name: Reconstruct UI13 and apply OS12 platform
         run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
