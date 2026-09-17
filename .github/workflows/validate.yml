@@ -63,6 +63,7 @@ jobs:
         run: |
           python3 -m py_compile \
             apply_workshop_os12_device_update.py \
+            apply_workshop_os12_release_identity.py \
             scripts/validate_os12_device_update.py
 
       - name: Compile Workshop OS 12 platform contracts
