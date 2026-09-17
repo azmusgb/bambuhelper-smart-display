@@ -3,7 +3,7 @@
 
 The API never accepts arbitrary media URLs and does not create a second media
 implementation. It reports MediaService truth and invokes only bounded local
-speaker/microphone/recording diagnostics.
+speaker/microphone/recording/video diagnostics.
 """
 from __future__ import annotations
 
@@ -75,6 +75,26 @@ static void handleWorkshopMediaRecordPlay() {
   sendWorkshopMediaStatus(started ? 202 : 409);
 }
 
+static void handleWorkshopMediaVideoStart() {
+  workshop::media::MediaService& media = workshopMediaService();
+  // Fixed source only: the existing displayed-printer camera authority owns
+  // transport and bounded JPEG frame publication. No URL/path input is accepted.
+  const bool started = media.playMjpeg("printer-camera", millis());
+  sendWorkshopMediaStatus(started ? 202 : 409);
+}
+
+static void handleWorkshopMediaVideoPause() {
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool paused = media.pauseVideo(true, millis());
+  sendWorkshopMediaStatus(paused ? 200 : 409);
+}
+
+static void handleWorkshopMediaVideoResume() {
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool resumed = media.pauseVideo(false, millis());
+  sendWorkshopMediaStatus(resumed ? 200 : 409);
+}
+
 static void handleWorkshopMediaStop() {
   workshop::media::MediaService& media = workshopMediaService();
   const bool stopped = media.stop(millis());
@@ -82,7 +102,7 @@ static void handleWorkshopMediaStop() {
 }
 '''
 
-ROUTES = '''  SECURE_GET("/os12/media/status", handleWorkshopMediaStatus);\n  SECURE_POST("/os12/media/speaker-test", handleWorkshopMediaSpeakerTest);\n  SECURE_POST("/os12/media/microphone-sample", handleWorkshopMediaMicrophoneSample);\n  SECURE_POST("/os12/media/record/start", handleWorkshopMediaRecordStart);\n  SECURE_POST("/os12/media/record/stop", handleWorkshopMediaRecordStop);\n  SECURE_POST("/os12/media/record/play", handleWorkshopMediaRecordPlay);\n  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n'''
+ROUTES = '''  SECURE_GET("/os12/media/status", handleWorkshopMediaStatus);\n  SECURE_POST("/os12/media/speaker-test", handleWorkshopMediaSpeakerTest);\n  SECURE_POST("/os12/media/microphone-sample", handleWorkshopMediaMicrophoneSample);\n  SECURE_POST("/os12/media/record/start", handleWorkshopMediaRecordStart);\n  SECURE_POST("/os12/media/record/stop", handleWorkshopMediaRecordStop);\n  SECURE_POST("/os12/media/record/play", handleWorkshopMediaRecordPlay);\n  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n  SECURE_POST("/os12/media/video/pause", handleWorkshopMediaVideoPause);\n  SECURE_POST("/os12/media/video/resume", handleWorkshopMediaVideoResume);\n  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n'''
 
 
 def load(path: Path) -> str:
@@ -124,6 +144,9 @@ def apply(repo: Path) -> None:
         '/os12/media/record/start',
         '/os12/media/record/stop',
         '/os12/media/record/play',
+        '/os12/media/video/start',
+        '/os12/media/video/pause',
+        '/os12/media/video/resume',
         '/os12/media/stop',
     ):
         if text.count(route) != 1:
