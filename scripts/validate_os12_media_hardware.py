@@ -16,15 +16,24 @@ def require(path: Path, needles: tuple[str, ...]) -> str:
 
 
 def main() -> int:
-    ap=argparse.ArgumentParser();ap.add_argument("--repo",required=True);args=ap.parse_args()
-    repo=Path(args.repo).resolve()
-    require(repo/"src/settings.h", ("uint8_t volume;",))
-    require(repo/"src/settings.cpp", ('getUChar("buz_vol"', 'putUChar("buz_vol"')))
-    require(repo/"src/buzzer_backend.h", ("buzzerBackendSetVolume", "buzzerBackendMicLevel"))
-    cpp=require(repo/"src/buzzer_backend_es8311.cpp", ("ES_REG_DAC_32", "buzzerBackendSetVolume", "buzzerSettings.volume"))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", required=True)
+    args = ap.parse_args()
+    repo = Path(args.repo).resolve()
+
+    require(repo / "src/settings.h", ("uint8_t volume;",))
+    require(repo / "src/settings.cpp", ('getUChar("buz_vol"', 'putUChar("buz_vol"'))
+    require(repo / "src/buzzer_backend.h", ("buzzerBackendSetVolume", "buzzerBackendMicLevel"))
+    cpp = require(
+        repo / "src/buzzer_backend_es8311.cpp",
+        ("ES_REG_DAC_32", "buzzerBackendSetVolume", "buzzerSettings.volume"),
+    )
     if "kCodecVolume" in cpp:
         raise SystemExit("FAIL: fixed ES8311 volume constant still active")
+
     print("PASS: OS12 media hardware reuses ES8311/microphone primitives with persisted volume")
     return 0
 
-if __name__=="__main__": raise SystemExit(main())
+
+if __name__ == "__main__":
+    raise SystemExit(main())
