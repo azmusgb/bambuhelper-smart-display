@@ -22,8 +22,10 @@ def forbid(text:str, needle:str, label:str) -> None:
 def main() -> int:
     ap=argparse.ArgumentParser()
     ap.add_argument('--repo',required=True)
+    ap.add_argument('--contract',required=True)
     args=ap.parse_args()
     root=Path(args.repo).resolve()
+    contract=Path(args.contract).resolve()
 
     html=(root/'include/web_pages.h').read_text(encoding='utf-8')
     js=(root/'web/app.js').read_text(encoding='utf-8')
@@ -67,9 +69,6 @@ def main() -> int:
     need(sec,'if (mutating && !sameOrigin(server))','mutation same-origin gate')
     need(sec,'if (cookieMatches(server)) return true;','mutation session gate')
 
-    # RC6 deliberately keeps a compile-time error mentioning the old temporary
-    # marker. That is a fail-closed guard, not an active bypass. Reject the
-    # historical bypass behavior itself and require the RC6 guard to remain.
     need(sec,'RC6 secure physical acceptance forbids WORKSHOP_OS_TEMP_NO_CODE_LAN','legacy bypass fail-closed guard')
     forbid(sec,'if (!isAPMode()) return true;','station-LAN blanket auth bypass')
     forbid(sec,'TEMPORARY physical-test mode: station-LAN authentication is bypassed','legacy no-code implementation')
@@ -81,10 +80,9 @@ def main() -> int:
     for marker in ('WORKSHOP_OS_PORTAL_CONTROL_PLANE_V4 1','WORKSHOP_OS_DEVICE_FEED_SCHEMA 1'):
         need(build,marker,'build identity')
 
-    schema=root/'contracts/filament-inventory-device-feed-v1.schema.json'
-    if not schema.exists():
-        raise ValidationError('device-feed v1 schema mirror missing')
-    schema_text=schema.read_text(encoding='utf-8')
+    if not contract.exists():
+        raise ValidationError(f'device-feed v1 schema mirror missing: {contract}')
+    schema_text=contract.read_text(encoding='utf-8')
     for marker in ('"schemaVersion"','"quantity"','"placement"','"readiness"','"unknowns"','"attention"','"CalculatedFromMeasured"'):
         need(schema_text,marker,'device feed contract')
 
