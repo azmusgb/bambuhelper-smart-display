@@ -67,6 +67,9 @@ def main() -> int:
         "class Ws350MediaBackend",
         "HardwareBackend",
         "recordingPlaybackRequested_",
+        "videoLastFrameId_",
+        "videoLastRenderAtMs_",
+        "renderLatestCameraFrame",
         "isSessionActive() const override",
         "hasRecording() const override",
     ])
@@ -81,7 +84,19 @@ def main() -> int:
         "buzzerBackendMicPlaybackPoll",
         "buzzerBackendMicHasRecording",
         "psramFound()",
-        "videoDecoderAvailable = false",
+        'kPrinterCameraSource[] = "printer-camera"',
+        "cameraCanStreamDisplayedPrinter()",
+        "cameraBegin()",
+        "cameraGetLatestFrame",
+        "tft.drawJpg",
+        "kVideoFrameIntervalMs = 125U",
+        "videoDecoderAvailable = caps.psramAvailable",
+    ])
+    forbid(BACKEND_CPP, [
+        "WiFiClient",
+        "HTTPClient",
+        "setInsecure",
+        "server.arg",
     ])
     require(RUNTIME_H, ["workshopMediaBegin", "workshopMediaPoll", "workshopMediaSnapshot"])
     require(RUNTIME_CPP, ["gMediaService", "gMediaBackend", "millis()"])
@@ -110,7 +125,7 @@ def main() -> int:
         subprocess.run(cmd, check=True, cwd=ROOT)
         subprocess.run([str(binary)], check=True, cwd=ROOT)
 
-    print("PASS: OS12 media service, async recording lifecycle, backend boundary and C++11 contracts")
+    print("PASS: OS12 media service, async recording lifecycle, bounded fixed-source MJPEG boundary and C++11 contracts")
     return 0
 
 
