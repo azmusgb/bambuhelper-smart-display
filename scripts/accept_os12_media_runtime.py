@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Exercise the Workshop OS 12 media contract against a real WS350.
 
-The default mode is read-only and validates capability/state reporting. Passing
---exercise runs the bounded speaker test, microphone activity sample, five-second
-recording and local playback path. This proves runtime behavior only; hearing the
-speaker, judging microphone quality, video quality, touch responsiveness and the
-absence of electrical noise remain physical acceptance observations.
+Default mode is read-only. --exercise runs speaker, microphone and bounded
+record/playback. --exercise-video runs the fixed-source displayed-printer camera
+video lifecycle. These are runtime checks only; hearing/seeing media quality and
+touch responsiveness remain physical acceptance observations.
 """
 from __future__ import annotations
 
@@ -25,13 +24,19 @@ from accept_os12_portal_runtime import (
 )
 
 TERMINAL = {"Idle", "Fault"}
-ACTIVE = {"Starting", "PlayingAudio", "Recording", "PlayingRecording", "PlayingVideo", "Paused", "Stopping"}
+ACTIVE = {
+    "Starting", "PlayingAudio", "Recording", "PlayingRecording",
+    "PlayingVideo", "Paused", "Stopping",
+}
 
 
 def api(client: Client, path: str, *, method: str = "GET") -> dict:
     headers = {"X-BambuHelper-Client": "1", "Accept": "application/json"}
     response = client.request(path, method=method, headers=headers, timeout=15.0)
-    check(response.status in (200, 202, 409), f"{method} {path} returned HTTP {response.status}: {response.body[:200]}")
+    check(
+        response.status in (200, 202, 409),
+        f"{method} {path} returned HTTP {response.status}: {response.body[:200]}",
+    )
     try:
         payload = json.loads(response.body)
     except json.JSONDecodeError as exc:
@@ -50,14 +55,22 @@ def validate_status(payload: dict) -> None:
     )
     missing = [key for key in required if key not in payload]
     check(not missing, f"media status missing fields: {', '.join(missing)}")
-    check(str(payload["session"]) in TERMINAL | ACTIVE, f"unknown media session {payload['session']!r}")
-    for key in ("speakerAvailable", "microphoneAvailable", "videoDecoderAvailable", "psramAvailable", "muted", "recordingAvailable"):
+    check(str(payload["session"]) in TERMINAL | ACTIVE,
+          f"unknown media session {payload['session']!r}")
+    for key in (
+        "speakerAvailable", "microphoneAvailable", "videoDecoderAvailable",
+        "psramAvailable", "muted", "recordingAvailable",
+    ):
         check(isinstance(payload[key], bool), f"{key} must be boolean")
     for key in ("volumePercent", "microphoneLevelPercent"):
-        check(isinstance(payload[key], int) and 0 <= payload[key] <= 100, f"{key} outside 0..100")
-    check(isinstance(payload["psramFreeBytes"], int) and payload["psramFreeBytes"] >= 0, "invalid PSRAM byte count")
-    check(isinstance(payload["audioUnderruns"], int) and payload["audioUnderruns"] >= 0, "invalid audio underrun count")
-    check(isinstance(payload["droppedVideoFrames"], int) and payload["droppedVideoFrames"] >= 0, "invalid dropped-frame count")
+        check(isinstance(payload[key], int) and 0 <= payload[key] <= 100,
+              f"{key} outside 0..100")
+    check(isinstance(payload["psramFreeBytes"], int) and payload["psramFreeBytes"] >= 0,
+          "invalid PSRAM byte count")
+    check(isinstance(payload["audioUnderruns"], int) and payload["audioUnderruns"] >= 0,
+          "invalid audio underrun count")
+    check(isinstance(payload["droppedVideoFrames"], int) and payload["droppedVideoFrames"] >= 0,
+          "invalid dropped-frame count")
 
 
 def status(client: Client) -> dict:
@@ -92,9 +105,87 @@ def read_code() -> str:
     return code
 
 
+def exercise_audio(client: Client, initial: dict) -> None:
+    check(initial["speakerAvailable"], "--exercise requested but speaker is not available")
+    speaker = api(client, "/os12/media/speaker-test", method="POST")
+    validate_status(speaker)
+    check(speaker["_http_status"] == 202, f"speaker test refused: {speaker['error']}")
+    wait_for_session(client, {"Idle"}, 3.0)
+    print("PASS  bounded non-blocking speaker-test lifecycle")
+
+    check(initial["microphoneAvailable"],
+          "--exercise requested but microphone is not available")
+    mic = api(client, "/os12/media/microphone-sample", method="POST")
+    validate_status(mic)
+    check(mic["_http_status"] == 200,
+          f"microphone sample refused: {mic['error']}")
+    print(f"PASS  microphone activity sample returned {mic['microphoneLevelPercent']}%")
+
+    check(initial["psramAvailable"],
+          "recording requires PSRAM but device reports unavailable")
+    rec = api(client, "/os12/media/record/start", method="POST")
+    validate_status(rec)
+    check(rec["_http_status"] == 202 and rec["session"] == "Recording",
+          f"record start refused: {rec['error']}")
+    print("STATE Recording: bounded five-second capture started")
+    completed = wait_for_session(client, {"Idle"}, 7.0)
+    check(completed["recordingAvailable"],
+          "recording completed without a retained local recording")
+    print("PASS  five-second PSRAM recording completed")
+
+    play = api(client, "/os12/media/record/play", method="POST")
+    validate_status(play)
+    check(play["_http_status"] == 202 and play["session"] == "PlayingRecording",
+          f"recording playback refused: {play['error']}")
+    wait_for_session(client, {"Idle"}, 7.0)
+    print("PASS  local recording playback completed")
+
+
+def exercise_video(client: Client, initial: dict) -> None:
+    check(initial["videoDecoderAvailable"],
+          "--exercise-video requested but video capability is unavailable")
+    check(initial["psramAvailable"],
+          "--exercise-video requested but PSRAM is unavailable")
+
+    start = api(client, "/os12/media/video/start", method="POST")
+    validate_status(start)
+    check(
+        start["_http_status"] == 202 and start["session"] == "PlayingVideo",
+        "video start refused: " + str(start["error"]) +
+        " (displayed printer must expose a streamable local camera)",
+    )
+    print("STATE PlayingVideo: displayed-printer camera started")
+
+    time.sleep(2.0)
+    live = status(client)
+    check(live["session"] == "PlayingVideo",
+          f"video did not remain active: {live['session']}")
+
+    pause = api(client, "/os12/media/video/pause", method="POST")
+    validate_status(pause)
+    check(pause["_http_status"] == 200 and pause["session"] == "Paused",
+          f"video pause refused: {pause['error']}")
+    print("STATE Paused: video paused")
+    time.sleep(0.5)
+
+    resume = api(client, "/os12/media/video/resume", method="POST")
+    validate_status(resume)
+    check(resume["_http_status"] == 200 and resume["session"] == "PlayingVideo",
+          f"video resume refused: {resume['error']}")
+    print("STATE PlayingVideo: video resumed")
+    time.sleep(0.5)
+
+    stop = api(client, "/os12/media/stop", method="POST")
+    validate_status(stop)
+    check(stop["_http_status"] == 200 and stop["session"] == "Idle",
+          f"video stop refused: {stop['error']}")
+    print("PASS  bounded printer-camera video start/pause/resume/stop lifecycle")
+
+
 def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
-    check(base_url.startswith(("http://", "https://")), "--base-url must start with http:// or https://")
+    check(base_url.startswith(("http://", "https://")),
+          "--base-url must start with http:// or https://")
     print(f"Target: {base_url}")
     assert_login_markup(Client(base_url))
 
@@ -111,54 +202,58 @@ def run(args: argparse.Namespace) -> int:
         f"video={initial['videoDecoderAvailable']} "
         f"psram={initial['psramAvailable']} ({initial['psramFreeBytes']} bytes free)"
     )
-    check(initial["session"] != "Fault", f"media status begins in Fault: {initial['error']}")
+    check(initial["session"] != "Fault",
+          f"media status begins in Fault: {initial['error']}")
     print("PASS  media status/capability contract")
 
-    if not args.exercise:
+    if not args.exercise and not args.exercise_video:
         print("RUNTIME MEDIA PROBE: PASS (read-only)")
-        print("Physical speaker/microphone/video acceptance was not performed.")
+        print("Physical media acceptance was not performed.")
         return 0
 
-    check(initial["speakerAvailable"], "--exercise requested but speaker is not available")
-    speaker = api(client, "/os12/media/speaker-test", method="POST")
-    validate_status(speaker)
-    check(speaker["_http_status"] == 202, f"speaker test refused: {speaker['error']}")
-    wait_for_session(client, {"Idle"}, 3.0)
-    print("PASS  bounded non-blocking speaker-test lifecycle")
-
-    check(initial["microphoneAvailable"], "--exercise requested but microphone is not available")
-    mic = api(client, "/os12/media/microphone-sample", method="POST")
-    validate_status(mic)
-    check(mic["_http_status"] == 200, f"microphone sample refused: {mic['error']}")
-    print(f"PASS  microphone activity sample returned {mic['microphoneLevelPercent']}%")
-
-    check(initial["psramAvailable"], "recording requires PSRAM but device reports unavailable")
-    rec = api(client, "/os12/media/record/start", method="POST")
-    validate_status(rec)
-    check(rec["_http_status"] == 202 and rec["session"] == "Recording", f"record start refused: {rec['error']}")
-    print("STATE Recording: bounded five-second capture started")
-    completed = wait_for_session(client, {"Idle"}, 7.0)
-    check(completed["recordingAvailable"], "recording completed without a retained local recording")
-    print("PASS  five-second PSRAM recording completed")
-
-    play = api(client, "/os12/media/record/play", method="POST")
-    validate_status(play)
-    check(play["_http_status"] == 202 and play["session"] == "PlayingRecording", f"recording playback refused: {play['error']}")
-    wait_for_session(client, {"Idle"}, 7.0)
-    print("PASS  local recording playback completed")
+    if args.exercise:
+        exercise_audio(client, initial)
+    if args.exercise_video:
+        idle = status(client)
+        check(idle["session"] == "Idle",
+              f"video exercise requires Idle media service, got {idle['session']}")
+        exercise_video(client, idle)
 
     final = status(client)
-    check(final["recordingAvailable"], "playback unexpectedly discarded the retained recording")
-    print(f"COUNTERS underruns={final['audioUnderruns']} droppedVideoFrames={final['droppedVideoFrames']}")
+    check(final["session"] == "Idle",
+          f"media exercise did not finish Idle: {final['session']}")
+    if args.exercise:
+        check(final["recordingAvailable"],
+              "playback unexpectedly discarded the retained recording")
+    print(
+        f"COUNTERS underruns={final['audioUnderruns']} "
+        f"droppedVideoFrames={final['droppedVideoFrames']}"
+    )
     print("RUNTIME MEDIA ACCEPTANCE SUBSET: PASS")
-    print("This proves API/runtime behavior only. Physical hearing, microphone quality, touch responsiveness and video remain separate acceptance observations.")
+    print(
+        "This proves API/runtime behavior only. Speaker quality, microphone quality, "
+        "visible video motion/pause, touch responsiveness and printer-health observations "
+        "remain physical acceptance checks."
+    )
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
-    ap.add_argument("--exercise", action="store_true", help="exercise speaker, microphone and five-second record/playback")
+    ap.add_argument(
+        "--base-url",
+        default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"),
+    )
+    ap.add_argument(
+        "--exercise",
+        action="store_true",
+        help="exercise speaker, microphone and five-second record/playback",
+    )
+    ap.add_argument(
+        "--exercise-video",
+        action="store_true",
+        help="exercise fixed-source displayed-printer camera start/pause/resume/stop",
+    )
     args = ap.parse_args()
     try:
         return run(args)
