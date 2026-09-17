@@ -10,11 +10,14 @@ on:
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
+      - 'apply_workshop_os12_portal_login_hardening.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
+      - 'scripts/validate_os12_portal_login.py'
+      - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
     paths:
@@ -22,11 +25,14 @@ on:
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
+      - 'apply_workshop_os12_portal_login_hardening.py'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/validate_os12_platform_bridge.py'
       - 'scripts/validate_os12_non_destructive_controls.py'
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
+      - 'scripts/validate_os12_portal_login.py'
+      - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - '.github/workflows/os12-platform-bridge.yml'
 
 permissions:
