@@ -3,8 +3,10 @@
 
 This extends the single proven buzzer_backend_es8311.cpp I2S authority. It does
 not create a second I2S driver or audio task. Capture is PSRAM-bounded and
-serviced incrementally from Workshop OS polling; playback is consumed by the
-existing ES8311 audio task so printer/touch/network loops stay responsive.
+serviced incrementally from Workshop OS polling. While RX capture is active the
+existing ES8311 TX task is explicitly suspended so a single task owns the I2S
+peripheral at a time; the normal audio task is restored when capture ends.
+Playback is consumed by that existing ES8311 task.
 """
 from __future__ import annotations
 
@@ -51,6 +53,7 @@ volatile bool gOs12RecordingActive = false;
 uint32_t gOs12RecordingDeadlineMs = 0;
 volatile bool gOs12PlaybackActive = false;
 volatile size_t gOs12PlaybackPosition = 0;
+volatile bool gOs12CaptureOwnsAudioTask = false;
 '''
 
 CAPTURE_API = r'''
@@ -58,14 +61,37 @@ CAPTURE_API = r'''
 namespace {
 constexpr uint32_t kOs12RecordMinMs = 250U;
 constexpr uint32_t kOs12RecordMaxMs = 5000U;
-constexpr size_t kOs12CaptureBurstBytes = 2048U;
-constexpr uint8_t kOs12CaptureBurstsPerPoll = 4U;
+constexpr size_t kOs12CaptureBurstBytes = 1024U;
+constexpr uint8_t kOs12CaptureBurstsPerPoll = 2U;
 
 bool os12DeadlineReached(uint32_t deadlineMs) {
   return (int32_t)(millis() - deadlineMs) >= 0;
 }
 
+void os12ResumeAudioTaskAfterCapture() {
+  if (!gOs12CaptureOwnsAudioTask) return;
+  gOs12CaptureOwnsAudioTask = false;
+  // Reuse the existing ES8311 authority. ensureAudioRunning() recreates the
+  // normal TX task if needed; it does not install a competing I2S driver.
+  (void)ensureAudioRunning();
+}
+
+void os12SuspendAudioTaskForCapture() {
+  // The legacy v11.24 microphone diagnostic proved the safe pattern: do not
+  // read RX concurrently with the normal ES8311 TX task. Keep the installed
+  // full-duplex driver, but temporarily stop its producer task while capture
+  // polls RX from the main loop.
+  buzzerBackendStop();
+  TaskHandle_t task = (TaskHandle_t)gAudioTask;
+  if (task) {
+    gAudioTask = nullptr;
+    vTaskDelete(task);
+  }
+  gOs12CaptureOwnsAudioTask = true;
+}
+
 void os12FreeRecording() {
+  os12ResumeAudioTaskAfterCapture();
   if (gOs12RecordingData) {
     free(gOs12RecordingData);
     gOs12RecordingData = nullptr;
@@ -75,6 +101,11 @@ void os12FreeRecording() {
   gOs12RecordingActive = false;
   gOs12PlaybackActive = false;
   gOs12PlaybackPosition = 0;
+}
+
+void os12FinishRecording() {
+  gOs12RecordingActive = false;
+  os12ResumeAudioTaskAfterCapture();
 }
 }
 
@@ -92,14 +123,15 @@ bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs) {
       heap_caps_malloc(capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!gOs12RecordingData) return false;
 
-  // Drain stale RX DMA without blocking so the capture starts at the user action.
+  os12SuspendAudioTaskForCapture();
+
+  // Drain stale RX DMA without blocking so capture starts at the user action.
   uint8_t scratch[256];
   for (uint8_t i = 0; i < 4U; ++i) {
     size_t drained = 0;
     if (i2s_read((i2s_port_t)AUDIO_I2S_PORT, scratch, sizeof(scratch), &drained, 0) != ESP_OK || drained == 0) break;
   }
 
-  buzzerBackendStop();
   gOs12RecordingCapacity = capacity;
   gOs12RecordingBytes = 0;
   gOs12RecordingDeadlineMs = millis() + maxDurationMs;
@@ -110,14 +142,14 @@ bool buzzerBackendMicRecordBegin(uint32_t maxDurationMs) {
 bool buzzerBackendMicRecordPoll() {
   if (!gOs12RecordingActive) return false;
   if (!gOs12RecordingData || gOs12RecordingCapacity == 0 || os12DeadlineReached(gOs12RecordingDeadlineMs)) {
-    gOs12RecordingActive = false;
+    os12FinishRecording();
     return false;
   }
 
   for (uint8_t burst = 0; burst < kOs12CaptureBurstsPerPoll; ++burst) {
     const size_t used = gOs12RecordingBytes;
     if (used >= gOs12RecordingCapacity) {
-      gOs12RecordingActive = false;
+      os12FinishRecording();
       break;
     }
     const size_t remaining = gOs12RecordingCapacity - used;
@@ -129,21 +161,22 @@ bool buzzerBackendMicRecordPoll() {
                                   &bytesRead,
                                   0);
     if (rc != ESP_OK) {
-      gOs12RecordingActive = false;
+      os12FinishRecording();
       break;
     }
     if (bytesRead == 0) break;
     gOs12RecordingBytes = used + bytesRead;
   }
 
-  if (gOs12RecordingBytes >= gOs12RecordingCapacity || os12DeadlineReached(gOs12RecordingDeadlineMs)) {
-    gOs12RecordingActive = false;
+  if (gOs12RecordingActive &&
+      (gOs12RecordingBytes >= gOs12RecordingCapacity || os12DeadlineReached(gOs12RecordingDeadlineMs))) {
+    os12FinishRecording();
   }
   return gOs12RecordingActive;
 }
 
 bool buzzerBackendMicRecordStop() {
-  gOs12RecordingActive = false;
+  if (gOs12RecordingActive || gOs12CaptureOwnsAudioTask) os12FinishRecording();
   return gOs12RecordingData != nullptr && gOs12RecordingBytes > 0;
 }
 
@@ -152,7 +185,7 @@ bool buzzerBackendMicHasRecording() {
 }
 
 bool buzzerBackendMicPlaybackBegin() {
-  if (gOs12RecordingActive || !buzzerBackendMicHasRecording()) return false;
+  if (gOs12RecordingActive || gOs12CaptureOwnsAudioTask || !buzzerBackendMicHasRecording()) return false;
   if (!ensureAudioRunning()) return false;
   buzzerBackendStop();
   gOs12PlaybackPosition = 0;
@@ -258,7 +291,10 @@ def apply(repo: Path) -> None:
     for needle in (
         "MALLOC_CAP_SPIRAM",
         "kOs12RecordMaxMs = 5000U",
-        "kOs12CaptureBurstsPerPoll = 4U",
+        "kOs12CaptureBurstsPerPoll = 2U",
+        "gOs12CaptureOwnsAudioTask",
+        "vTaskDelete(task)",
+        "os12ResumeAudioTaskAfterCapture",
         "gOs12PlaybackPosition < gOs12RecordingBytes",
     ):
         if needle not in final_cpp:
