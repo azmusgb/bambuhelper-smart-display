@@ -59,8 +59,11 @@ jobs:
       - name: Validate OS12 candidate publication safety
         run: python3 scripts/validate_os12_candidate_publisher.py
 
-      - name: Validate portal runtime acceptance helper syntax
-        run: python3 -m py_compile scripts/accept_os12_portal_runtime.py
+      - name: Validate runtime acceptance helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/accept_os12_portal_runtime.py \
+            scripts/accept_os12_update_runtime.py
 
       - name: Validate OS12 patcher/publication helper syntax
         run: |
