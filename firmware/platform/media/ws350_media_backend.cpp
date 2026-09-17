@@ -167,5 +167,13 @@ bool Ws350MediaBackend::isSessionActive() const {
   return recordingRequested_ || recordingPlaybackRequested_ || videoRequested_;
 }
 
+bool Ws350MediaBackend::hasRecording() const {
+#if defined(BOARD_HAS_MICROPHONE)
+  return buzzerBackendMicHasRecording();
+#else
+  return false;
+#endif
+}
+
 }  // namespace media
 }  // namespace workshop
