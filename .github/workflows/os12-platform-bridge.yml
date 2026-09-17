@@ -17,6 +17,7 @@ on:
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/accept_os12_portal_runtime.py'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
@@ -32,6 +33,7 @@ on:
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/accept_os12_portal_runtime.py'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - '.github/workflows/os12-platform-bridge.yml'
 
@@ -53,6 +55,9 @@ jobs:
 
       - name: Reconstruct UI13 and apply OS12 bridge
         run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
+
+      - name: Validate portal runtime helper syntax
+        run: python3 -m py_compile scripts/accept_os12_portal_runtime.py
 
       - name: Record non-promotion state
         if: always()
