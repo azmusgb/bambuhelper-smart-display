@@ -35,7 +35,7 @@ resolve_platformio() {
     PIO_BIN="$(command -v pio)"
     return 0
   fi
-  if [[ -x "$SCRIPT_DIR/ensure-platformio.sh" ]]; then
+  if [[ -f "$SCRIPT_DIR/ensure-platformio.sh" ]]; then
     PIO_BIN="$(ROOT="$ROOT" bash "$SCRIPT_DIR/ensure-platformio.sh")"
     [[ -x "$PIO_BIN" ]] && return 0
   fi
@@ -49,27 +49,12 @@ platformio_list() {
   "$PIO_BIN" device list
 }
 
-detect_ports() {
-  local listing
-  listing="$(platformio_list)" || return 1
-
-  awk -v vid="$VID_PID" -v serial="$USB_SERIAL" '
-    /^\/dev\/(cu|tty)\./ { port=$1; next }
-    /^Hardware ID:/ {
-      if (index($0, "USB VID:PID=" vid) > 0 &&
-          (serial == "" || index($0, "SER=" serial) > 0)) {
-        print port
-      }
-    }
-  ' <<<"$listing"
-}
-
 usb_diagnostics() {
   echo "=== PlatformIO serial devices ==="
   platformio_list || true
   echo
   echo "=== macOS /dev/cu.* ==="
-  compgen -G '/dev/cu.*' 2>/dev/null || ls -1 /dev/cu.* 2>/dev/null || echo "(none)"
+  ls -1 /dev/cu.* 2>/dev/null || echo "(none)"
   echo
   echo "=== macOS USB summary ==="
   if command -v system_profiler >/dev/null 2>&1; then
