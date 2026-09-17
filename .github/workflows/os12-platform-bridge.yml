@@ -23,6 +23,7 @@ on:
       - 'scripts/prepare_os12_device_candidate.py'
       - 'scripts/validate_os12_candidate_publisher.py'
       - 'scripts/accept_os12_portal_runtime.py'
+      - 'scripts/accept_os12_update_runtime.py'
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
@@ -47,6 +48,7 @@ on:
       - 'scripts/prepare_os12_device_candidate.py'
       - 'scripts/validate_os12_candidate_publisher.py'
       - 'scripts/accept_os12_portal_runtime.py'
+      - 'scripts/accept_os12_update_runtime.py'
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
@@ -81,8 +83,11 @@ jobs:
       - name: Reconstruct UI13 and apply OS12 platform
         run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
 
-      - name: Validate portal runtime helper syntax
-        run: python3 -m py_compile scripts/accept_os12_portal_runtime.py
+      - name: Validate runtime acceptance helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/accept_os12_portal_runtime.py \
+            scripts/accept_os12_update_runtime.py
 
       - name: Package exact-head WS350 OTA candidate
         run: |
