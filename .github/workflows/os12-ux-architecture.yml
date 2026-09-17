@@ -61,10 +61,47 @@ jobs:
       - name: Reconstruct and build exact-head UX candidate
         run: BUILD=/tmp/ws350-os12-ux-build bash scripts/run_os12_ux_local.sh --build
 
+      - name: Package exact WS350 physical candidate
+        id: candidate
+        run: |
+          set -euo pipefail
+          SRC=/tmp/ws350-os12-ux-build/.pio/build/ws_lcd_350/firmware.bin
+          OUT=/tmp/os12-ux-ws350-candidate
+          test -s "$SRC"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          cp "$SRC" "$OUT/firmware.bin"
+          FW_SHA="$(sha256sum "$OUT/firmware.bin" | awk '{print $1}')"
+          FW_SIZE="$(stat -c '%s' "$OUT/firmware.bin")"
+          printf '%s  %s\n' "$FW_SHA" firmware.bin > "$OUT/SHA256SUMS.txt"
+          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
+            "$OS12_RELEASE_VERSION" "$OS12_SOURCE_SHA" "$FW_SHA" "$FW_SIZE" > "$OUT/candidate.json"
+          echo "firmware_sha256=$FW_SHA" >> "$GITHUB_OUTPUT"
+          echo "firmware_size=$FW_SIZE" >> "$GITHUB_OUTPUT"
+          {
+            echo '### WS350 exact-head UX candidate'
+            echo
+            echo "- Source SHA: \`$OS12_SOURCE_SHA\`"
+            echo "- Firmware SHA-256: \`$FW_SHA\`"
+            echo "- Firmware bytes: \`$FW_SIZE\`"
+            echo '- Release state: built/tested in CI only'
+            echo '- Physical acceptance: required'
+            echo '- Accepted: no'
+            echo '- Stable: no'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload exact WS350 candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: os12-ux-ws350-${{ env.OS12_SOURCE_SHA }}
+          path: /tmp/os12-ux-ws350-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves reconstruction, hierarchy/geometry/navigation/physical-fit validation, and compile regression only.'
+          echo 'This workflow proves reconstruction, hierarchy/geometry/navigation/physical-fit validation, compile regression, and exact artifact identity only.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
           echo 'Inventory facts remain authoritative only when supplied by Filament Inventory.'
-          echo 'Do not integrate this UX candidate into the canonical bootstrap path until physical 480x320 acceptance passes.'
+          echo 'Do not integrate this UX candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'
