@@ -92,24 +92,39 @@ PORT="$(PIO_BIN="$PIO_BIN" bash scripts/waveshare-usb.sh port)"
 printf '\n=== Attached device ===\n'
 printf 'Port: %s\n' "$PORT"
 
-find_esptool() {
-  if python3 -c 'import esptool' >/dev/null 2>&1; then
-    printf '%s\n' "python3|-m|esptool"
+ensure_esptool_runtime() {
+  local tool_root="${WORKSHOP_TOOL_ROOT:-$ROOT/.workshop-tools}"
+  local venv="$tool_root/esptool"
+  local py="$venv/bin/python"
+
+  if [[ -x "$py" ]] && "$py" -c 'import esptool, intelhex' >/dev/null 2>&1; then
+    printf '%s\n' "$py|-m|esptool"
     return 0
   fi
-  local p="$HOME/.platformio/packages/tool-esptoolpy/esptool.py"
-  if [[ -f "$p" ]]; then
-    local py="$HOME/.platformio/penv/bin/python"
-    [[ -x "$py" ]] || py="python3"
-    printf '%s\n' "$py|$p"
-    return 0
+
+  echo "Provisioning isolated esptool runtime at $venv" >&2
+  mkdir -p "$tool_root"
+  if [[ ! -x "$py" ]]; then
+    python3 -m venv "$venv"
   fi
-  return 1
+
+  "$py" -m pip install \
+    --disable-pip-version-check \
+    --upgrade \
+    'pip>=24,<26' \
+    'esptool==4.9.0' \
+    'intelhex>=2.3,<3' >&2
+
+  "$py" -c 'import esptool, intelhex' >/dev/null 2>&1 || {
+    echo "ERROR: isolated esptool runtime is incomplete after provisioning." >&2
+    return 1
+  }
+
+  printf '%s\n' "$py|-m|esptool"
 }
 
-ESP_SPEC="$(find_esptool)" || {
-  echo "ERROR: esptool was not found after the PlatformIO build." >&2
-  echo "Expected either the Python esptool module or PlatformIO tool-esptoolpy." >&2
+ESP_SPEC="$(ensure_esptool_runtime)" || {
+  echo "ERROR: unable to provision a complete isolated esptool runtime." >&2
   exit 5
 }
 IFS='|' read -r -a ESPTOOL <<<"$ESP_SPEC"
@@ -227,8 +242,10 @@ Recovery capture: $BACKUP_DIR
 
 Next runtime gates once the device is reachable:
   python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --exercise-rate-limit
+  python3 scripts/accept_os12_media_runtime.py --base-url "$BASE_URL" --exercise --exercise-video
+  python3 scripts/accept_os12_media_physical.py --base-url "$BASE_URL"
   python3 scripts/accept_os12_update_runtime.py --base-url "$BASE_URL" --channel candidate
 
 Do not call the device accepted/stable yet. Touch/navigation, recovery, printer-control,
-and GitHub OTA behavior still require real-device acceptance.
+media quality and GitHub OTA behavior still require real-device acceptance.
 EOF
