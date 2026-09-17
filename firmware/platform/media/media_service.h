@@ -3,7 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace workshop::media {
+namespace workshop {
+namespace media {
 
 enum class SessionState : uint8_t {
   Idle = 0,
@@ -30,32 +31,40 @@ enum class MediaError : uint8_t {
 };
 
 struct Capabilities {
-  bool speakerAvailable = false;
-  bool microphoneAvailable = false;
-  bool videoDecoderAvailable = false;
-  bool psramAvailable = false;
-  size_t psramFreeBytes = 0;
+  Capabilities()
+      : speakerAvailable(false), microphoneAvailable(false),
+        videoDecoderAvailable(false), psramAvailable(false),
+        psramFreeBytes(0) {}
+  bool speakerAvailable;
+  bool microphoneAvailable;
+  bool videoDecoderAvailable;
+  bool psramAvailable;
+  size_t psramFreeBytes;
 };
 
 struct RuntimeState {
-  SessionState session = SessionState::Idle;
-  MediaError lastError = MediaError::None;
-  uint8_t volumePercent = 70;
-  bool muted = false;
-  uint8_t microphoneLevelPercent = 0;
-  uint32_t audioUnderruns = 0;
-  uint32_t droppedVideoFrames = 0;
-  uint32_t sessionStartedAtMs = 0;
+  RuntimeState()
+      : session(SessionState::Idle), lastError(MediaError::None),
+        volumePercent(70), muted(false), microphoneLevelPercent(0),
+        audioUnderruns(0), droppedVideoFrames(0), sessionStartedAtMs(0) {}
+  SessionState session;
+  MediaError lastError;
+  uint8_t volumePercent;
+  bool muted;
+  uint8_t microphoneLevelPercent;
+  uint32_t audioUnderruns;
+  uint32_t droppedVideoFrames;
+  uint32_t sessionStartedAtMs;
 };
 
 struct Snapshot {
-  Capabilities capabilities{};
-  RuntimeState runtime{};
+  Capabilities capabilities;
+  RuntimeState runtime;
 };
 
 class HardwareBackend {
  public:
-  virtual ~HardwareBackend() = default;
+  virtual ~HardwareBackend() {}
   virtual Capabilities probe() = 0;
   virtual bool setSpeakerVolume(uint8_t percent) = 0;
   virtual bool setSpeakerMuted(bool muted) = 0;
@@ -72,6 +81,8 @@ class HardwareBackend {
 
 class MediaService {
  public:
+  MediaService() : backend_(0), snapshot_() {}
+
   void begin(HardwareBackend* backend, uint32_t nowMs = 0);
   void poll(uint32_t nowMs);
 
@@ -98,11 +109,12 @@ class MediaService {
   void transition(SessionState next, uint32_t nowMs);
   void clearError();
 
-  HardwareBackend* backend_ = nullptr;
-  Snapshot snapshot_{};
+  HardwareBackend* backend_;
+  Snapshot snapshot_;
 };
 
 const char* sessionStateName(SessionState state);
 const char* mediaErrorName(MediaError error);
 
-}  // namespace workshop::media
+}  // namespace media
+}  // namespace workshop
