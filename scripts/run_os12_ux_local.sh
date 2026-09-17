@@ -26,7 +26,9 @@ python3 "$ROOT/apply_workshop_os12_portal_control_plane.py" --repo "$BUILD" --ap
 python3 "$ROOT/scripts/validate_os12_ux_architecture.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_geometry.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
-python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" --repo "$BUILD"
+python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
+  --repo "$BUILD" \
+  --contract "$ROOT/contracts/filament-inventory-device-feed-v1.schema.json"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
