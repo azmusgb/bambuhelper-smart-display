@@ -43,6 +43,8 @@ python3 "$ROOT/apply_workshop_os12_media_capture.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_capture.py" --repo "$BUILD"
 
 python3 "$ROOT/apply_workshop_os12_media_runtime.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/apply_workshop_os12_media_signal_hardening.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_media_signal.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_media_service.py"
 python3 "$ROOT/scripts/validate_os12_media_runtime.py" --repo "$BUILD"
 
@@ -54,9 +56,6 @@ python3 "$ROOT/scripts/validate_os12_media_api.py" --repo "$BUILD"
 
 python3 "$ROOT/scripts/validate_os12_device_update.py" --source-root "$ROOT" --repo "$BUILD"
 
-# OS12 owns normalized device state, physical-control policy, local portal,
-# device-native OTA and the media lifecycle. Video is fixed to the existing
-# displayed-printer camera authority; no arbitrary network media source exists.
 grep -q '#include "workshop_platform_bridge.h"' "$BUILD/src/main.cpp"
 test "$(grep -c 'workshopPlatformBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopPlatformPoll();' "$BUILD/src/main.cpp")" -eq 1
@@ -75,6 +74,10 @@ test -s "$BUILD/include/media_service.h"
 grep -q 'buzzerBackendSetVolume' "$BUILD/src/buzzer_backend.h"
 grep -q 'buzzerBackendMicRecordBegin' "$BUILD/src/buzzer_backend.h"
 grep -q 'MALLOC_CAP_SPIRAM' "$BUILD/src/buzzer_backend_es8311.cpp"
+grep -q 'esWrite(ES_REG_SYS_14, 0x1A)' "$BUILD/src/buzzer_backend_es8311.cpp"
+grep -q 'esWrite(ES_REG_ADC_17, 0xC8)' "$BUILD/src/buzzer_backend_es8311.cpp"
+grep -q 'speakerTestEndsAtMs_ = nowMs + 750U' "$BUILD/src/media_service.cpp"
+grep -q 'OS12 media video: rejected displayed-printer camera unavailable' "$BUILD/src/ws350_media_backend.cpp"
 grep -q 'buz_vol' "$BUILD/src/settings.cpp"
 grep -q 'drawOs12Media' "$BUILD/src/smart_hub.cpp"
 grep -q 'drawOs12MediaLab' "$BUILD/src/smart_hub.cpp"
@@ -136,12 +139,12 @@ echo "Physical Light/Pause/Resume/Stop: OS12 facade -> existing deferred Bambu t
 echo "Stop UX guard: existing long-press preserved; facade enforces destructive guard contract."
 echo "Control boundary: direct physical Light/Pause/Resume/Stop transport bypasses rejected."
 echo "Portal access: exact code alphabet/normalization, bounded login backoff, per-session RAM cookies, and accessible login states implemented."
-echo "Media hardware: proven ES8311/I2S authority reused with persisted volume and mic primitives."
+echo "Media hardware: ES8311/I2S authority reused; WS350 analog mic route/gain explicitly configured and physically pending."
 echo "Media recording: PSRAM-bounded five-second maximum, poll-driven capture and existing-task playback implemented."
 echo "Media runtime: centralized MediaService + capability-safe hardware adapter wired into lifecycle."
 echo "Media UI: capability-scoped Speaker/Microphone/Media Lab surfaces integrated into UI13 settings flow."
 echo "Media diagnostics API: authenticated bounded audio/recording/video lifecycle routes; no arbitrary media URL."
-echo "Video: displayed-printer camera JPEG sequence via existing camera client + LovyanGFX drawJpg, paced to max 8 fps; physical acceptance pending."
+echo "Video: displayed-printer camera JPEG sequence via existing camera client + LovyanGFX drawJpg, paced to max 8 fps; startup diagnostics added; physical acceptance pending."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
 echo "Full image / offset 0x0: recovery only, never device-native OTA."
