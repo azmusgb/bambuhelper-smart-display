@@ -13,6 +13,8 @@ on:
       - 'apply_workshop_os12_portal_login_hardening.py'
       - 'apply_workshop_os12_device_update.py'
       - 'apply_workshop_os12_release_identity.py'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/waveshare-usb.sh'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
@@ -39,6 +41,8 @@ on:
       - 'apply_workshop_os12_portal_login_hardening.py'
       - 'apply_workshop_os12_device_update.py'
       - 'apply_workshop_os12_release_identity.py'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/waveshare-usb.sh'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/validate_os12_platform_bridge.py'
@@ -91,8 +95,11 @@ jobs:
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_update_runtime.py
 
-      - name: Validate USB bootstrap helper syntax
-        run: bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
+      - name: Validate USB/bootstrap helper syntax
+        run: |
+          bash -n scripts/ensure-platformio.sh
+          bash -n scripts/waveshare-usb.sh
+          bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
 
       - name: Package exact-head WS350 OTA candidate
         run: |
