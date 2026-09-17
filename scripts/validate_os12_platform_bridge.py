@@ -43,6 +43,13 @@ def validate_templates() -> None:
         "existing chamber-light transport": "requestLightCommand",
         "guard rejection": "RejectedGuardRequired",
         "invalid-state rejection": "RejectedInvalidState",
+        "explicit command-channel rejection": "RejectedCommandChannelUnavailable",
+        "operation feedback idle": "OperationPhase::Idle",
+        "operation feedback pending": "OperationPhase::Pending",
+        "operation feedback success": "OperationPhase::Success",
+        "operation feedback recoverable": "OperationPhase::RecoverableError",
+        "operation feedback fatal": "OperationPhase::FatalError",
+        "result-to-feedback mapping": "commandOperationFromResult",
     }
     joined = state + adapter + service + bridge_h + bridge
     for label, needle in required.items():
@@ -74,6 +81,15 @@ def validate_templates() -> None:
     accepted = service.find("return CommandResult::Accepted;", stop_guard)
     if stop_guard < 0 or accepted < 0 or accepted < stop_guard:
         fail("guarded Stop preflight must reject before command acceptance")
+
+    channel_guard = service.find("if (!state.commandChannelReady)")
+    channel_reject = service.find("RejectedCommandChannelUnavailable", channel_guard)
+    activity_guard = service.find("printerActivityAllowsCommand", channel_guard)
+    if channel_guard < 0 or channel_reject < 0 or activity_guard < 0 or channel_reject > activity_guard:
+        fail("printer command-channel readiness must fail closed before activity eligibility")
+
+    if "FailedTransport" not in service or "state.retryable = true" not in service:
+        fail("recoverable transport failures must participate in operation feedback")
 
 
 def validate_patcher() -> None:
@@ -116,6 +132,16 @@ def validate_patcher() -> None:
         ):
             if not (repo / path).is_file():
                 fail(f"patcher failed to install {path}")
+
+        installed_service = (repo / "include/workshop_platform/service_contracts.hpp").read_text(encoding="utf-8")
+        for marker in (
+            "RejectedCommandChannelUnavailable",
+            "OperationPhase::Pending",
+            "OperationPhase::RecoverableError",
+            "commandOperationFromResult",
+        ):
+            if marker not in installed_service:
+                fail(f"reconstructed source lost command feedback marker: {marker}")
 
 
 def main() -> int:
