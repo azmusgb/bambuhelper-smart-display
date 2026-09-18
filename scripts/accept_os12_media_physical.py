@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Interactive physical acceptance for Workshop OS 12 media on a real WS350.
 
-This helper drives the bounded media diagnostics, asks the operator to confirm
+This helper drives bounded media diagnostics, asks the operator to confirm
 physical observations, and writes an evidence bundle. It never stores the portal
 code and it cannot promote the firmware or mark the whole OS stable.
+
+Evidence is written even when a runtime AcceptanceError aborts the sequence, so
+failed physical runs remain auditable rather than disappearing before final save.
 """
 from __future__ import annotations
 
@@ -20,9 +23,9 @@ from accept_os12_portal_runtime import (
     assert_login_markup,
     check,
     login,
+    protected_root_is_open,
 )
 from accept_os12_media_runtime import (
-    api,
     exercise_audio,
     exercise_video,
     read_code,
@@ -71,108 +74,172 @@ def output_path(arg: str | None, stamp: str) -> Path:
     )
 
 
+def public_status(payload: dict | None) -> dict | None:
+    if payload is None:
+        return None
+    return {k: v for k, v in payload.items() if not k.startswith("_")}
+
+
+def write_evidence(destination: Path, evidence: dict) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
     check(base_url.startswith(("http://", "https://")),
           "--base-url must start with http:// or https://")
-    assert_login_markup(Client(base_url))
-
-    code = read_code()
-    client = Client(base_url)
-    login(client, code, "physical media acceptance session")
-    code = ""
-
-    identity = update_identity(client)
-    initial = status(client)
-    check(initial["session"] == "Idle",
-          f"physical acceptance must start Idle, got {initial['session']}")
-    for key in (
-        "speakerAvailable", "microphoneAvailable",
-        "videoDecoderAvailable", "psramAvailable",
-    ):
-        check(initial[key], f"required media capability is unavailable: {key}")
-
-    print(
-        "Running: "
-        f"{identity['runningVersion']} @ {identity['runningSourceCommit']}"
-    )
-    print("\nAUDIO / MICROPHONE\n------------------")
-    exercise_audio(client, initial)
-
-    observations: dict[str, bool] = {}
-    observations["speaker_tone_clean"] = yes_no(
-        "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
-    )
-    observations["microphone_level_responds"] = yes_no(
-        "Did the microphone level respond when you made sound near the device?"
-    )
-    observations["recording_intelligible"] = yes_no(
-        "Was the five-second microphone recording intelligible during playback?"
-    )
-    observations["audio_no_obvious_noise_or_instability"] = yes_no(
-        "Did audio/recording complete without obvious electrical noise, reboot, hang, or UI freeze?"
-    )
-
-    print("\nVIDEO\n-----")
-    exercise_video(client, status(client))
-    observations["video_visible_motion"] = yes_no(
-        "Did the displayed-printer camera visibly update during video playback?"
-    )
-    observations["video_pause_resume_visible"] = yes_no(
-        "Did Pause visibly freeze the image and Resume continue live motion?"
-    )
-    observations["touch_responsive_during_video"] = yes_no(
-        "Did touchscreen interaction remain responsive while video was active?"
-    )
-    observations["printer_telemetry_continued"] = yes_no(
-        "Did printer telemetry continue updating during/after media use?"
-    )
-    observations["printer_controls_healthy"] = yes_no(
-        "Did normal non-destructive printer controls remain usable after media use?"
-    )
-    observations["device_network_healthy"] = yes_no(
-        "Is the WS350 still reachable on the LAN after stopping media?"
-    )
-    observations["no_reboot_or_watchdog"] = yes_no(
-        "Did the device avoid unexpected reboot, watchdog reset, or recovery entry?"
-    )
-
-    final = status(client)
-    runtime_ok = final["session"] == "Idle" and final["error"] == "None"
-    all_observations = all(observations.values())
-    passed = runtime_ok and all_observations
 
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y%m%d-%H%M%S")
+    destination = output_path(args.output, stamp)
     evidence = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "kind": "workshop-os12-media-physical-acceptance",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
-        "runtimeIdentity": identity,
-        "initialMediaStatus": {k: v for k, v in initial.items() if not k.startswith("_")},
-        "finalMediaStatus": {k: v for k, v in final.items() if not k.startswith("_")},
-        "observations": observations,
-        "runtimeIdleAndClean": runtime_ok,
-        "passed": passed,
+        "runtimeIdentity": None,
+        "initialMediaStatus": None,
+        "finalMediaStatus": None,
+        "observations": {},
+        "runtimeIdleAndClean": False,
+        "passed": False,
+        "completed": False,
+        "failure": None,
+        "portalMode": "unknown",
         "scope": "media physical acceptance only; not whole-device stable acceptance",
     }
-    destination = output_path(args.output, stamp)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    print(f"\nEvidence: {destination}")
-    if passed:
-        print("PHYSICAL MEDIA ACCEPTANCE: PASS")
-        print("Scope is media only. This does not promote Workshop OS to accepted or stable.")
-        return 0
+    client = Client(base_url)
+    initial = None
+    final = None
+    observations: dict[str, bool] = evidence["observations"]
 
-    failed = [name for name, ok in observations.items() if not ok]
-    if not runtime_ok:
-        failed.append("final_runtime_idle_and_clean")
-    print("PHYSICAL MEDIA ACCEPTANCE: FAIL / PENDING")
-    print("Failed observations: " + ", ".join(failed))
-    return 1
+    try:
+        assert_login_markup(client)
+        if protected_root_is_open(client):
+            evidence["portalMode"] = "temporary-open-lan"
+            print("DEV OPEN  portal/session code bypass is active for this physical-test build")
+        else:
+            evidence["portalMode"] = "portal-code"
+            code = read_code()
+            login(client, code, "physical media acceptance session")
+            code = ""
+
+        identity = update_identity(client)
+        evidence["runtimeIdentity"] = identity
+
+        initial = status(client)
+        evidence["initialMediaStatus"] = public_status(initial)
+        check(initial["session"] == "Idle",
+              f"physical acceptance must start Idle, got {initial['session']}")
+        for key in (
+            "speakerAvailable", "microphoneAvailable",
+            "videoDecoderAvailable", "psramAvailable",
+        ):
+            check(initial[key], f"required media capability is unavailable: {key}")
+
+        print(
+            "Running: "
+            f"{identity['runningVersion']} @ {identity['runningSourceCommit']}"
+        )
+        print("\nAUDIO / MICROPHONE\n------------------")
+        exercise_audio(client, initial)
+
+        observations["speaker_tone_clean"] = yes_no(
+            "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
+        )
+        observations["microphone_level_responds"] = yes_no(
+            "Did the microphone level respond when you made sound near the device?"
+        )
+        observations["recording_intelligible"] = yes_no(
+            "Was the five-second microphone recording intelligible during playback?"
+        )
+        observations["audio_no_obvious_noise_or_instability"] = yes_no(
+            "Did audio/recording complete without obvious electrical noise, reboot, hang, or UI freeze?"
+        )
+
+        print("\nVIDEO\n-----")
+        exercise_video(client, status(client))
+        observations["video_visible_motion"] = yes_no(
+            "Did the displayed-printer camera visibly update during video playback?"
+        )
+        observations["video_pause_resume_visible"] = yes_no(
+            "Did Pause visibly freeze the image and Resume continue live motion?"
+        )
+        observations["touch_responsive_during_video"] = yes_no(
+            "Did touchscreen interaction remain responsive while video was active?"
+        )
+        observations["printer_telemetry_continued"] = yes_no(
+            "Did printer telemetry continue updating during/after media use?"
+        )
+        observations["printer_controls_healthy"] = yes_no(
+            "Did normal non-destructive printer controls remain usable after media use?"
+        )
+        observations["device_network_healthy"] = yes_no(
+            "Is the WS350 still reachable on the LAN after stopping media?"
+        )
+        observations["no_reboot_or_watchdog"] = yes_no(
+            "Did the device avoid unexpected reboot, watchdog reset, or recovery entry?"
+        )
+
+        final = status(client)
+        evidence["finalMediaStatus"] = public_status(final)
+        runtime_ok = final["session"] == "Idle" and final["error"] == "None"
+        evidence["runtimeIdleAndClean"] = runtime_ok
+        evidence["completed"] = True
+
+        all_observations = all(observations.values())
+        passed = runtime_ok and all_observations
+        evidence["passed"] = passed
+        write_evidence(destination, evidence)
+
+        print(f"\nEvidence: {destination}")
+        if passed:
+            print("PHYSICAL MEDIA ACCEPTANCE: PASS")
+            print("Scope is media only. This does not promote Workshop OS to accepted or stable.")
+            return 0
+
+        failed = [name for name, ok in observations.items() if not ok]
+        if not runtime_ok:
+            failed.append("final_runtime_idle_and_clean")
+        print("PHYSICAL MEDIA ACCEPTANCE: FAIL / PENDING")
+        print("Failed observations: " + ", ".join(failed))
+        return 1
+
+    except AcceptanceError as exc:
+        evidence["failure"] = str(exc)
+        try:
+            final = status(client)
+        except Exception as status_exc:
+            evidence["finalStatusCaptureError"] = str(status_exc)
+        else:
+            evidence["finalMediaStatus"] = public_status(final)
+            evidence["runtimeIdleAndClean"] = (
+                final["session"] == "Idle" and final["error"] == "None"
+            )
+        write_evidence(destination, evidence)
+        print(f"\nEvidence: {destination}")
+        print(f"FAIL: {exc}")
+        return 1
+    except (KeyboardInterrupt, EOFError):
+        evidence["failure"] = "operator_aborted"
+        try:
+            final = status(client)
+        except Exception as status_exc:
+            evidence["finalStatusCaptureError"] = str(status_exc)
+        else:
+            evidence["finalMediaStatus"] = public_status(final)
+            evidence["runtimeIdleAndClean"] = (
+                final["session"] == "Idle" and final["error"] == "None"
+            )
+        write_evidence(destination, evidence)
+        print(f"\nEvidence: {destination}")
+        print("PHYSICAL MEDIA ACCEPTANCE: ABORTED")
+        return 130
 
 
 def main() -> int:
