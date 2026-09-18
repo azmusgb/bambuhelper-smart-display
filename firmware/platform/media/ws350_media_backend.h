@@ -39,6 +39,8 @@ class Ws350MediaBackend : public HardwareBackend {
   const VideoDiagnostics& videoDiagnostics() const { return videoDiagnostics_; }
 
  private:
+  enum class VideoSource : uint8_t { None = 0, Demo, PrinterCamera };
+  void renderDemoFrame(uint32_t nowMs);
   void renderLatestCameraFrame(uint32_t nowMs);
 
   uint8_t requestedVolume_;
@@ -48,6 +50,7 @@ class Ws350MediaBackend : public HardwareBackend {
   bool recordingPlaybackRequested_;
   bool videoRequested_;
   bool videoPaused_;
+  VideoSource videoSource_;
   uint32_t videoLastFrameId_;
   uint32_t videoLastRenderAtMs_;
   VideoDiagnostics videoDiagnostics_;
