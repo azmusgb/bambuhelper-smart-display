@@ -96,9 +96,8 @@ static void handleWorkshopMediaRecordPlay() {
 
 static void handleWorkshopMediaVideoStart() {
   workshop::media::MediaService& media = workshopMediaService();
-  // Fixed source only: the existing displayed-printer camera authority owns
-  // transport and bounded JPEG frame publication. No URL/path input is accepted.
-  const bool started = media.playMjpeg("printer-camera", millis());
+  // Fixed built-in source only. Video is a WS350 media capability; no arbitrary URL/path input is accepted.
+  const bool started = media.playMjpeg("demo-video", millis());
   sendWorkshopMediaStatus(started ? 202 : 409);
 }
 
