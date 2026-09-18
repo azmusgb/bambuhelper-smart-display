@@ -92,6 +92,11 @@ def main() -> int:
     if "WiFiClient" in backend or "HTTPClient" in backend:
         raise SystemExit("FAIL: media backend created a second network transport authority")
 
+    if 'if (videoLastFrameId_ == 0U)' not in backend:
+        raise SystemExit("FAIL: demo video must initialize its static scene exactly once per session")
+    if 'tft.fillRect(previousX, previousY, 56, 56, TFT_BLACK);' not in backend:
+        raise SystemExit("FAIL: demo video must use bounded dirty-region motion updates")
+
     print("PASS: reconstructed OS12 media runtime has bounded recording/playback, device-owned demo video, and source-scoped printer camera rendering")
     return 0
 
