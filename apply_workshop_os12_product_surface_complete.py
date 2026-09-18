@@ -177,8 +177,9 @@ static void drawUi13Sound() {
   tft.fillScreen(C10_BG);drawHeader("Sound & Media",nullptr,3);
   hubUi13ToggleRow(hubUi13RowRect(0),"Event Sounds","Print and device events",buzzerSettings.enabled,C10_ACCENT);
   hubUi13ToggleRow(hubUi13RowRect(1),"Touch Sounds","Immediate tap feedback",buzzerSettings.buttonClick,C10_ACCENT);
-  hubUi13ToggleRow(hubUi13RowRect(2),"Bed Cooled Alert","Notify when the bed cools",buzzerSettings.bedCooldownAlert,C10_ACCENT);
-  hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Media",C10_ACCENT,true,false);
+  hubUi13InfoRow(hubUi13RowRect(2),"Media","Open","Speaker, microphone, recorder and video",C10_ACCENT);
+  hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);
+  hubV1125Action(hubUi13ActionRect(),"Printer Alerts",C10_ACCENT,true,false);
   hubMarkFrameDirty();g_dirty=false;
 }
 '''
@@ -317,6 +318,26 @@ def apply(repo:Path)->None:
         ("static void drawUi12PortalAccess()",PORTAL),
     ):
         text=replace_function(text,sig,repl)
+    sound_touch_old = '''      if(g_ui12SettingsView==2){
+        if(hubUi13ToggleRect(0).contains(x,y)){buzzerSettings.enabled=!buzzerSettings.enabled;saveBuzzerSettings();initBuzzer();buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13ToggleRect(1).contains(x,y)){buzzerSettings.buttonClick=!buzzerSettings.buttonClick;saveBuzzerSettings();buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13ToggleRect(2).contains(x,y)){buzzerSettings.bedCooldownAlert=!buzzerSettings.bedCooldownAlert;saveBuzzerSettings();buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=10;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        return true;
+      }'''
+    sound_touch_new = '''      if(g_ui12SettingsView==2){
+        if(hubUi13ToggleRect(0).contains(x,y)){buzzerSettings.enabled=!buzzerSettings.enabled;saveBuzzerSettings();initBuzzer();buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13ToggleRect(1).contains(x,y)){buzzerSettings.buttonClick=!buzzerSettings.buttonClick;saveBuzzerSettings();buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13RowRect(2).contains(x,y)){g_ui12SettingsView=10;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=6;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
+        return true;
+      }'''
+    if sound_touch_old not in text:
+        raise PatchError("Sound & Media touch routing anchor missing")
+    text=text.replace(sound_touch_old,sound_touch_new,1)
+
     p.write_text(text,encoding="utf-8")
     print("Workshop OS 12 Home/Workshop/More/System product surfaces completed")
 
