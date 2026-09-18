@@ -54,7 +54,6 @@ python3 "$ROOT/apply_workshop_os12_media_ui.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_ui.py" --repo "$BUILD"
 
 python3 "$ROOT/apply_workshop_os12_media_api.py" --repo "$BUILD" --apply
-python3 "$ROOT/apply_workshop_os12_media_acceptance_ui_driver.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_api.py" --repo "$BUILD"
 
 python3 "$ROOT/scripts/validate_os12_device_update.py" --source-root "$ROOT" --repo "$BUILD"
@@ -94,6 +93,7 @@ grep -q 'SECURE_POST("/os12/media/microphone-sample"' "$BUILD/src/web_server.cpp
 grep -q 'SECURE_POST("/os12/media/video/start"' "$BUILD/src/web_server.cpp"
 grep -q 'SECURE_POST("/os12/media/video/pause"' "$BUILD/src/web_server.cpp"
 grep -q 'SECURE_POST("/os12/media/video/resume"' "$BUILD/src/web_server.cpp"
+! grep -q '/os12/media/acceptance/show-' "$BUILD/src/web_server.cpp"
 grep -q 'workshopPlatformState().configuredPrinterCount>0' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformPrinterOnline(os12Slot)' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopPlatformWifiOnline()' "$BUILD/src/smart_hub.cpp"
@@ -147,6 +147,7 @@ echo "Media recording: PSRAM-bounded five-second maximum, poll-driven capture an
 echo "Media runtime: centralized MediaService + capability-safe hardware adapter wired into lifecycle."
 echo "Media UI: capability-scoped Speaker/Microphone/Media Lab surfaces integrated into UI13 settings flow."
 echo "Media diagnostics API: authenticated bounded audio/recording/video lifecycle routes; no arbitrary media URL."
+echo "Media physical acceptance navigation: canonical /hub/views + /hub/show router only; no parallel acceptance UI route."
 echo "Video: displayed-printer camera JPEG sequence via existing camera client + LovyanGFX drawJpg, paced to max 8 fps; startup diagnostics added; physical acceptance pending."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
