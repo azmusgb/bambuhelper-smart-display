@@ -14,6 +14,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -26,10 +27,12 @@ from accept_os12_portal_runtime import (
     protected_root_is_open,
 )
 from accept_os12_media_runtime import (
-    exercise_audio,
+    api,
     exercise_video,
     read_code,
     status,
+    validate_status,
+    wait_for_session,
 )
 
 
@@ -86,6 +89,62 @@ def write_evidence(destination: Path, evidence: dict) -> None:
         json.dumps(evidence, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def show_native_media_view(client: Client, view: str) -> None:
+    routes = {
+        "media": "/os12/media/acceptance/show-media",
+        "lab": "/os12/media/acceptance/show-lab",
+    }
+    check(view in routes, f"unknown native media acceptance view: {view}")
+    payload = api(client, routes[view], method="POST")
+    validate_status(payload)
+    check(payload["_http_status"] == 200,
+          f"device refused native {view} view navigation")
+    label = "Media" if view == "media" else "Media Lab"
+    print(f"DEVICE VIEW {label}: native touchscreen view selected")
+    time.sleep(0.45)
+
+
+def exercise_audio_visible(client: Client, initial: dict) -> None:
+    show_native_media_view(client, "media")
+
+    check(initial["speakerAvailable"], "speaker is not available")
+    speaker = api(client, "/os12/media/speaker-test", method="POST")
+    validate_status(speaker)
+    check(speaker["_http_status"] == 202,
+          f"speaker test refused: {speaker['error']}")
+    wait_for_session(client, {"Idle"}, 3.0)
+    print("PASS  bounded speaker-test lifecycle while native Media view is visible")
+
+    check(initial["microphoneAvailable"], "microphone is not available")
+    mic = api(client, "/os12/media/microphone-sample", method="POST")
+    validate_status(mic)
+    check(mic["_http_status"] == 200,
+          f"microphone sample refused: {mic['error']}")
+    print(
+        "PASS  microphone sample while native Media view is visible: "
+        f"{mic['microphoneLevelPercent']}%"
+    )
+
+    show_native_media_view(client, "lab")
+    check(initial["psramAvailable"], "recording requires PSRAM")
+    rec = api(client, "/os12/media/record/start", method="POST")
+    validate_status(rec)
+    check(rec["_http_status"] == 202 and rec["session"] == "Recording",
+          f"record start refused: {rec['error']}")
+    print("STATE Recording: native Media Lab visible; bounded five-second capture started")
+    completed = wait_for_session(client, {"Idle"}, 7.0)
+    check(completed["recordingAvailable"],
+          "recording completed without a retained local recording")
+    print("PASS  five-second PSRAM recording completed")
+
+    play = api(client, "/os12/media/record/play", method="POST")
+    validate_status(play)
+    check(play["_http_status"] == 202 and play["session"] == "PlayingRecording",
+          f"recording playback refused: {play['error']}")
+    wait_for_session(client, {"Idle"}, 7.0)
+    print("PASS  local recording playback completed while native Media Lab is visible")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -147,7 +206,7 @@ def run(args: argparse.Namespace) -> int:
             f"{identity['runningVersion']} @ {identity['runningSourceCommit']}"
         )
         print("\nAUDIO / MICROPHONE\n------------------")
-        exercise_audio(client, initial)
+        exercise_audio_visible(client, initial)
 
         observations["speaker_tone_clean"] = yes_no(
             "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
@@ -163,6 +222,7 @@ def run(args: argparse.Namespace) -> int:
         )
 
         print("\nVIDEO\n-----")
+        show_native_media_view(client, "lab")
         exercise_video(client, status(client))
         observations["video_visible_motion"] = yes_no(
             "Did the displayed-printer camera visibly update during video playback?"
@@ -227,15 +287,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
     except (KeyboardInterrupt, EOFError):
         evidence["failure"] = "operator_aborted"
-        try:
-            final = status(client)
-        except Exception as status_exc:
-            evidence["finalStatusCaptureError"] = str(status_exc)
-        else:
-            evidence["finalMediaStatus"] = public_status(final)
-            evidence["runtimeIdleAndClean"] = (
-                final["session"] == "Idle" and final["error"] == "None"
-            )
+        evidence["finalStatusCaptureSkipped"] = True
         write_evidence(destination, evidence)
         print(f"\nEvidence: {destination}")
         print("PHYSICAL MEDIA ACCEPTANCE: ABORTED")
