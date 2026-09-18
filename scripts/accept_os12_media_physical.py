@@ -91,23 +91,87 @@ def write_evidence(destination: Path, evidence: dict) -> None:
     )
 
 
-def show_native_media_view(client: Client, view: str) -> None:
-    routes = {
-        "media": "/os12/media/acceptance/show-media",
-        "lab": "/os12/media/acceptance/show-lab",
+def native_view_catalog(client: Client) -> list[dict]:
+    response = client.request(
+        "/hub/views",
+        headers={"X-BambuHelper-Client": "1", "Accept": "application/json"},
+        timeout=10.0,
+    )
+    check(response.status == 200,
+          f"GET /hub/views returned HTTP {response.status}")
+    try:
+        payload = json.loads(response.body)
+    except json.JSONDecodeError as exc:
+        raise AcceptanceError("native view catalog did not return JSON") from exc
+    views = payload.get("views")
+    check(isinstance(views, list) and views,
+          "native view catalog contains no views")
+    return views
+
+
+def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
+    wanted = {
+        "media": ("media", "media"),
+        "lab": ("media-lab", "media lab"),
     }
-    check(view in routes, f"unknown native media acceptance view: {view}")
-    payload = api(client, routes[view], method="POST")
-    validate_status(payload)
-    check(payload["_http_status"] == 200,
-          f"device refused native {view} view navigation")
-    label = "Media" if view == "media" else "Media Lab"
-    print(f"DEVICE VIEW {label}: native touchscreen view selected")
+    check(view in wanted, f"unknown native media acceptance view: {view}")
+    preferred_id, preferred_label = wanted[view]
+    views = native_view_catalog(client)
+
+    for item in views:
+        view_id = str(item.get("id", "")).strip()
+        label = str(item.get("label", "")).strip()
+        if view_id.lower() == preferred_id or label.lower() == preferred_label:
+            return view_id, label or ("Media" if view == "media" else "Media Lab")
+
+    available = ", ".join(
+        str(item.get("id", "")).strip()
+        for item in views
+        if item.get("id")
+    )
+    raise AcceptanceError(
+        f"native {view} view is absent from /hub/views; available ids: {available}"
+    )
+
+
+def show_native_media_view(
+    client: Client,
+    view: str,
+    navigation_log: list[dict],
+) -> None:
+    view_id, label = resolve_native_media_view(client, view)
+    response = client.request(
+        "/hub/show",
+        method="POST",
+        form={"page": view_id},
+        headers={"X-BambuHelper-Client": "1", "Accept": "application/json,text/plain,*/*"},
+        timeout=10.0,
+    )
+    accepted = response.status == 200
+    navigation_log.append({
+        "requestedView": view,
+        "catalogViewId": view_id,
+        "catalogLabel": label,
+        "httpStatus": response.status,
+        "accepted": accepted,
+        "route": "/hub/show",
+    })
+    check(accepted,
+          f"native view router refused {label} ({view_id}) with HTTP {response.status}")
+    print(f"DEVICE VIEW {label}: canonical /hub/show navigation accepted ({view_id})")
     time.sleep(0.45)
 
 
-def exercise_audio_visible(client: Client, initial: dict) -> None:
-    show_native_media_view(client, "media")
+def exercise_audio_visible(
+    client: Client,
+    initial: dict,
+    navigation_log: list[dict],
+    observations: dict[str, bool],
+) -> None:
+    show_native_media_view(client, "media", navigation_log)
+    observations["native_media_view_visible"] = yes_no(
+        "Did the native Media screen appear on the WS350?"
+    )
 
     check(initial["speakerAvailable"], "speaker is not available")
     speaker = api(client, "/os12/media/speaker-test", method="POST")
@@ -127,7 +191,10 @@ def exercise_audio_visible(client: Client, initial: dict) -> None:
         f"{mic['microphoneLevelPercent']}%"
     )
 
-    show_native_media_view(client, "lab")
+    show_native_media_view(client, "lab", navigation_log)
+    observations["native_media_lab_view_visible"] = yes_no(
+        "Did the native Media Lab screen appear on the WS350?"
+    )
     check(initial["psramAvailable"], "recording requires PSRAM")
     rec = api(client, "/os12/media/record/start", method="POST")
     validate_status(rec)
@@ -156,7 +223,7 @@ def run(args: argparse.Namespace) -> int:
     stamp = now.strftime("%Y%m%d-%H%M%S")
     destination = output_path(args.output, stamp)
     evidence = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "kind": "workshop-os12-media-physical-acceptance",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
@@ -164,6 +231,7 @@ def run(args: argparse.Namespace) -> int:
         "initialMediaStatus": None,
         "finalMediaStatus": None,
         "observations": {},
+        "navigationObservations": [],
         "runtimeIdleAndClean": False,
         "passed": False,
         "completed": False,
@@ -176,6 +244,7 @@ def run(args: argparse.Namespace) -> int:
     initial = None
     final = None
     observations: dict[str, bool] = evidence["observations"]
+    navigation_log: list[dict] = evidence["navigationObservations"]
 
     try:
         assert_login_markup(client)
@@ -206,7 +275,7 @@ def run(args: argparse.Namespace) -> int:
             f"{identity['runningVersion']} @ {identity['runningSourceCommit']}"
         )
         print("\nAUDIO / MICROPHONE\n------------------")
-        exercise_audio_visible(client, initial)
+        exercise_audio_visible(client, initial, navigation_log, observations)
 
         observations["speaker_tone_clean"] = yes_no(
             "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
@@ -222,7 +291,7 @@ def run(args: argparse.Namespace) -> int:
         )
 
         print("\nVIDEO\n-----")
-        show_native_media_view(client, "lab")
+        show_native_media_view(client, "lab", navigation_log)
         exercise_video(client, status(client))
         observations["video_visible_motion"] = yes_no(
             "Did the displayed-printer camera visibly update during video playback?"
