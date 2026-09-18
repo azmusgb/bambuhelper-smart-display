@@ -22,10 +22,12 @@ bash "$ROOT/scripts/run_os12_platform_local.sh"
 python3 "$ROOT/apply_workshop_os12_ux_architecture.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_ux_geometry.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_ux_physical_fit.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os12_ui_finish.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_portal_control_plane.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_ux_architecture.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_geometry.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
+python3 "$ROOT/scripts/validate_os12_ui_finish.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
   --repo "$BUILD" \
   --contract "$ROOT/contracts/filament-inventory-device-feed-v1.schema.json"
@@ -47,7 +49,7 @@ fi
 
 echo "=== OS12 portal control-plane reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
-echo "Root portal IA: Home / Printer / Workshop / More."
+echo "Root portal IA: Home / Printer / Workshop / More; shared WS350 UI finish applied across roots, child views, controls, tabs, media, telemetry and AMS."
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
 echo "Portal security: persisted requirePortalCode policy; secure default ON; OFF opens read-only LAN browsing only."
 echo "Mutation security: same-origin + authenticated portal session required."
