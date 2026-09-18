@@ -35,6 +35,7 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["recordingAvailable"] = snap.runtime.recordingAvailable;
   doc["audioUnderruns"] = snap.runtime.audioUnderruns;
   doc["droppedVideoFrames"] = snap.runtime.droppedVideoFrames;
+  doc["deviceUptimeMs"] = (uint32_t)millis();
   const bool printerConfigured = isAnyPrinterConfigured();
   const PrinterSlot* printer = printerConfigured ? &displayedPrinter() : nullptr;
   doc["printerConfigured"] = printerConfigured;
