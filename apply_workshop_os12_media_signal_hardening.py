@@ -31,11 +31,41 @@ def once(text: str, old: str, new: str, label: str) -> str:
 
 
 def apply(repo: Path) -> None:
+    header_path = repo / "src/buzzer_backend.h"
     es_path = repo / "src/buzzer_backend_es8311.cpp"
     media_path = repo / "src/media_service.cpp"
 
+    header = load(header_path)
     es = load(es_path)
     media = load(media_path)
+
+    diagnostics_decl = """bool buzzerBackendCodecReady();
+bool buzzerBackendI2sReady();
+bool buzzerBackendAudioRunning();
+uint32_t buzzerBackendMicLastBytes();
+uint32_t buzzerBackendMicLastSamples();
+uint32_t buzzerBackendMicLastNonZeroSamples();
+uint32_t buzzerBackendMicLastPeak();
+"""
+    if "buzzerBackendCodecReady" not in header:
+        header = once(
+            header,
+            "int buzzerBackendMicLevel(uint16_t sampleMs);\n",
+            "int buzzerBackendMicLevel(uint16_t sampleMs);\n" + diagnostics_decl,
+            "ES8311 media diagnostic declarations",
+        )
+
+    if "gOs12MicLastPeak" not in es:
+        es = once(
+            es,
+            "bool     gAmpEnabled  = false;\n",
+            "bool     gAmpEnabled  = false;\n"
+            "uint32_t gOs12MicLastBytes = 0;\n"
+            "uint32_t gOs12MicLastSamples = 0;\n"
+            "uint32_t gOs12MicLastNonZeroSamples = 0;\n"
+            "uint32_t gOs12MicLastPeak = 0;\n",
+            "ES8311 media diagnostic state",
+        )
 
     es = once(
         es,
@@ -117,6 +147,10 @@ def apply(repo: Path) -> None:
     minSample = 0;
     maxSample = 0;
   }
+  gOs12MicLastBytes = (uint32_t)totalBytes;
+  gOs12MicLastSamples = totalSamples;
+  gOs12MicLastNonZeroSamples = nonZeroSamples;
+  gOs12MicLastPeak = (uint32_t)peak;
   Serial.printf(
       "OS12 mic raw: bytes=%u samples=%u nonzero=%u min=%d max=%d peak=%ld\\n",
       (unsigned)totalBytes,
@@ -139,8 +173,37 @@ def apply(repo: Path) -> None:
         "physical speaker diagnostic duration",
     )
 
+    diagnostics_impl = r'''
+bool buzzerBackendCodecReady() { return gCodecReady; }
+bool buzzerBackendI2sReady() { return gI2sReady; }
+bool buzzerBackendAudioRunning() { return gAudioState == AUDIO_RUNNING; }
+uint32_t buzzerBackendMicLastBytes() { return gOs12MicLastBytes; }
+uint32_t buzzerBackendMicLastSamples() { return gOs12MicLastSamples; }
+uint32_t buzzerBackendMicLastNonZeroSamples() { return gOs12MicLastNonZeroSamples; }
+uint32_t buzzerBackendMicLastPeak() { return gOs12MicLastPeak; }
+
+'''
+    if "bool buzzerBackendCodecReady()" not in es:
+        marker = "#endif // BOARD_HAS_ES8311_AUDIO"
+        if es.count(marker) != 1:
+            raise PatchError("ES8311 backend endif missing/non-unique for diagnostics")
+        es = es.replace(marker, diagnostics_impl + marker, 1)
+
+    header_path.write_text(header, encoding="utf-8")
     es_path.write_text(es, encoding="utf-8")
     media_path.write_text(media, encoding="utf-8")
+
+    for needle in (
+        "buzzerBackendCodecReady",
+        "buzzerBackendI2sReady",
+        "buzzerBackendAudioRunning",
+        "buzzerBackendMicLastBytes",
+        "buzzerBackendMicLastSamples",
+        "buzzerBackendMicLastNonZeroSamples",
+        "buzzerBackendMicLastPeak",
+    ):
+        if needle not in header or needle not in es:
+            raise PatchError(f"media diagnostic contract missing {needle}")
 
     print("Workshop OS 12 media signal-path hardening installed")
 
