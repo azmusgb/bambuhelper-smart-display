@@ -24,12 +24,14 @@ python3 "$ROOT/apply_workshop_os12_ux_geometry.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_ux_physical_fit.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_ui_finish.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_product_surface.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os12_product_surface_complete.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_portal_control_plane.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_ux_architecture.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_geometry.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ui_finish.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface.py" --repo "$BUILD"
+python3 "$ROOT/scripts/validate_os12_product_surface_complete.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
   --repo "$BUILD" \
   --contract "$ROOT/contracts/filament-inventory-device-feed-v1.schema.json"
