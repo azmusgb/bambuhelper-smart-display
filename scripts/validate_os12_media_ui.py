@@ -19,7 +19,7 @@ def main() -> int:
         'static void drawOs12MediaLab()',
         'static void drawOs12VideoViewer()',
         'g_ui12SettingsView==12',
-        'Waiting for live printer frames...',
+        'Workshop OS media playback',
         '"Stop"',
         '"Pause"',
         '"Resume"',
@@ -38,8 +38,8 @@ def main() -> int:
         'stopRecording(millis())',
         'playRecording(millis())',
         'Video',
-        'Displayed printer camera',
-        'playMjpeg("printer-camera",millis())',
+        'Printer: live',
+        'playMjpeg("demo-video",millis())',
         'gOs12VideoViewerPrimed',
         'Hardware not detected',
     ):
@@ -50,7 +50,7 @@ def main() -> int:
     for forbidden in ('matchSpoolByColor', 'matchSpoolByMaterial', 'resolveSpool'):
         if forbidden in text:
             raise SystemExit(f"FAIL: media UI introduced forbidden inventory inference {forbidden}")
-    print('PASS: OS12 media touchscreen UI exposes non-blocking speaker/mic, bounded record/playback and fixed-source MJPEG video')
+    print('PASS: OS12 media touchscreen UI exposes speaker/mic plus printer-independent WS350 video demo and read-only camera telemetry')
     return 0
 
 
