@@ -226,7 +226,8 @@ def patch_capture_catalog(web: str) -> str:
     normalized_web = web.replace('\\\"', '"')
     has_media = '"id":"media"' in normalized_web
     has_media_lab = '"id":"media-lab"' in normalized_web
-    if not has_media or not has_media_lab:
+    has_media_video = '"id":"media-video"' in normalized_web
+    if not has_media or not has_media_lab or not has_media_video:
         lines = web.splitlines(keepends=True)
         insert_at = None
         escaped = False
@@ -248,6 +249,7 @@ def patch_capture_catalog(web: str) -> str:
             entries = [
                 '    {"id":"media","label":"Media","group":"Sound & Media"},\n',
                 '    {"id":"media-lab","label":"Media Lab","group":"Sound & Media"},\n',
+                '    {"id":"media-video","label":"Camera Viewer","group":"Sound & Media"},\n',
             ]
         lines[insert_at:insert_at] = entries
         web = "".join(lines)
@@ -255,7 +257,11 @@ def patch_capture_catalog(web: str) -> str:
 
 
 def patch_media_native_router(text: str) -> str:
-    if 'strcmp(pageName, "media") == 0' in text and 'strcmp(pageName, "media-lab") == 0' in text:
+    if (
+        'strcmp(pageName, "media") == 0' in text
+        and 'strcmp(pageName, "media-lab") == 0' in text
+        and 'strcmp(pageName, "media-video") == 0' in text
+    ):
         return text
 
     anchor = '  if (strcmp(pageName, "custom") == 0) { setPage(SCREEN_HUB_CUSTOM); return true; }'
@@ -278,6 +284,16 @@ def patch_media_native_router(text: str) -> str:
     g_displayExperienceView = false;
     g_displayExperiencePage = 0;
     g_ui12SettingsView = 11;
+    g_dirty = true;
+    return true;
+  }
+
+  if (strcmp(pageName, "media-video") == 0) {
+    setPage(SCREEN_HUB_MORE);
+    g_toolsView = false;
+    g_displayExperienceView = false;
+    g_displayExperiencePage = 0;
+    g_ui12SettingsView = 12;
     g_dirty = true;
     return true;
   }
