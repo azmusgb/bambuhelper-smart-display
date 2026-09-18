@@ -44,7 +44,8 @@ python3 "$ROOT/scripts/validate_os12_media_capture.py" --repo "$BUILD"
 
 python3 "$ROOT/apply_workshop_os12_media_runtime.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/apply_workshop_os12_media_signal_hardening.py" --repo "$BUILD" --apply
-python3 "$ROOT/apply_workshop_os12_x2d_camera_test_support.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os12_mqtt_camera_telemetry.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_mqtt_camera_telemetry.py" --repo "$BUILD"
 python3 "$ROOT/apply_workshop_os12_camera_ownership.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_camera_transport_diagnostics.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_signal.py" --repo "$BUILD"
@@ -80,12 +81,14 @@ grep -q 'MALLOC_CAP_SPIRAM' "$BUILD/src/buzzer_backend_es8311.cpp"
 grep -q 'esWrite(ES_REG_SYS_14, 0x1A)' "$BUILD/src/buzzer_backend_es8311.cpp"
 grep -q 'esWrite(ES_REG_ADC_17, 0xC8)' "$BUILD/src/buzzer_backend_es8311.cpp"
 grep -q 'speakerTestEndsAtMs_ = nowMs + 750U' "$BUILD/src/media_service.cpp"
-grep -q 'OS12 media video: rejected displayed-printer camera unavailable' "$BUILD/src/ws350_media_backend.cpp"
+grep -q 'kDemoVideoSource' "$BUILD/src/ws350_media_backend.cpp"
+grep -q 'VideoSource::Demo' "$BUILD/src/ws350_media_backend.cpp"
 grep -q 'buz_vol' "$BUILD/src/settings.cpp"
 grep -q 'drawOs12Media' "$BUILD/src/smart_hub.cpp"
 grep -q 'drawOs12MediaLab' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshopMediaSnapshot()' "$BUILD/src/smart_hub.cpp"
-grep -q 'playMjpeg("printer-camera"' "$BUILD/src/smart_hub.cpp"
+grep -q 'playMjpeg("demo-video"' "$BUILD/src/smart_hub.cpp"
+grep -q 'rtspEnabled' "$BUILD/src/smart_hub.cpp"
 grep -q 'cameraGetLatestFrame' "$BUILD/src/ws350_media_backend.cpp"
 grep -q 'tft.drawJpg' "$BUILD/src/ws350_media_backend.cpp"
 grep -q 'SECURE_GET("/os12/media/status"' "$BUILD/src/web_server.cpp"
