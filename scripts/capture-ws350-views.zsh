@@ -2,13 +2,33 @@
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
-  echo "Usage: $0 <device-host-or-ip>"
+  echo "Usage: $0 <device-host-or-ip> [--resume <capture-folder>]"
   exit 2
 fi
 HOST="$1"
+shift
+RESUME=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --resume)
+      [ "$#" -ge 2 ] || { echo "ERROR: --resume requires a capture folder."; exit 2; }
+      RESUME="$2"
+      shift 2
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1"
+      exit 2
+      ;;
+  esac
+done
 BASE="http://$HOST"
 STAMP="$(date '+%Y%m%d-%H%M%S')"
-OUT="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP"
+if [ -n "$RESUME" ]; then
+  OUT="$RESUME"
+else
+  OUT="$HOME/Desktop/BambuHelper-Visual-Capture-$STAMP"
+fi
+SUCCESS=0
 COOKIE="$(mktemp -t bambu-capture-cookie)"
 LOGIN_BODY="$(mktemp -t bambu-capture-login)"
 RAW_PPM="$(mktemp -t bambu-capture-frame)"
@@ -19,12 +39,22 @@ cleanup() {
   stty echo 2>/dev/null || true
   unset CODE 2>/dev/null || true
   rm -f "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"
+  if [ "$SUCCESS" -ne 1 ] && [ -n "${OUT:-}" ] && [ -d "$OUT" ]; then
+    echo
+    echo "CAPTURE INCOMPLETE - retained for resume"
+    echo "Folder: $OUT"
+    printf 'Resume: %q %q --resume %q\n' "$0" "$HOST" "$OUT"
+  fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
 mkdir -p "$OUT/png" "$OUT/ppm" "$OUT/state"
+echo "Capture folder: $OUT"
+if [ -n "$RESUME" ]; then
+  echo "Resume mode: completed frames will be verified and skipped."
+fi
 
 printf "Portal code: "
 stty -echo
@@ -54,13 +84,20 @@ unset CODE
 
 echo "LOGIN OK"
 
-curl -fsS -b "$COOKIE" "$BASE/recovery/status" > "$OUT/state/recovery-status.json"
-curl -fsS -b "$COOKIE" "$BASE/hardware/health?slot=0" > "$OUT/state/hardware-health.json"
-curl -fsS -b "$COOKIE" "$BASE/status?slot=0" > "$OUT/state/printer-status-slot0.json"
+curl_get() {
+  local url="$1"
+  local dst="$2"
+  curl -fsS --retry 4 --retry-delay 1 --retry-all-errors --connect-timeout 5 --max-time 25 \
+    -b "$COOKIE" "$url" -o "$dst"
+}
+
+curl_get "$BASE/recovery/status" "$OUT/state/recovery-status.json"
+curl_get "$BASE/hardware/health?slot=0" "$OUT/state/hardware-health.json"
+curl_get "$BASE/status?slot=0" "$OUT/state/printer-status-slot0.json"
 # Deliberately do not capture /printer/config or settings exports: those data
 # models can contain printer access codes and other configuration secrets.
-curl -fsS -b "$COOKIE" "$BASE/power/stats" > "$OUT/state/power-stats.json"
-curl -fsS -b "$COOKIE" "$BASE/hub/views" > "$CATALOG"
+curl_get "$BASE/power/stats" "$OUT/state/power-stats.json"
+curl_get "$BASE/hub/views" "$CATALOG"
 
 cat > "$OUT/ppm_to_png.py" <<'PY'
 #!/usr/bin/env python3
@@ -148,7 +185,9 @@ png_dst.write_bytes(png)
 PY
 chmod +x "$OUT/ppm_to_png.py"
 
-printf 'index,id,label,group,sensitive,png,ppm\n' > "$OUT/manifest.csv"
+if [ ! -s "$OUT/manifest.csv" ]; then
+  printf 'index,id,label,group,sensitive,png,ppm\n' > "$OUT/manifest.csv"
+fi
 
 python3 - "$CATALOG" <<'PY' > "$OUT/view-list.tsv"
 import json, sys
@@ -173,9 +212,14 @@ while IFS=$'\t' read -r IDX ID LABEL GROUP SENSITIVE CATALOG_VERSION; do
   PPM="$OUT/ppm/$NUM-$SAFE_ID.ppm"
   PNG="$OUT/png/$NUM-$SAFE_ID.png"
 
+  if [ -s "$PNG" ] && [ -s "$PPM" ] && grep -Fq "$NUM,$ID," "$OUT/manifest.csv"; then
+    echo "[$NUM] $GROUP / $LABEL - already captured"
+    continue
+  fi
+
   echo "[$NUM] $GROUP / $LABEL"
 
-  SHOW_HTTP="$({ curl -sS -b "$COOKIE" \
+  SHOW_HTTP="$({ curl -sS --retry 4 --retry-delay 1 --retry-all-errors --connect-timeout 5 --max-time 25 -b "$COOKIE" \
     -H 'X-BambuHelper-Client: 1' \
     -X POST \
     --data-urlencode "page=$ID" \
@@ -191,7 +235,8 @@ while IFS=$'\t' read -r IDX ID LABEL GROUP SENSITIVE CATALOG_VERSION; do
 
   # Raw framebuffer bytes never enter the retained capture tree. The converter
   # reads the private temp file and writes only sanitized PPM/PNG outputs.
-  curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$RAW_PPM"
+  curl -fsS --retry 4 --retry-delay 1 --retry-all-errors --connect-timeout 5 --max-time 25 \
+    -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$RAW_PPM"
   python3 "$OUT/ppm_to_png.py" "$RAW_PPM" "$PPM" "$PNG" "$ID" "$SENSITIVE" "$CATALOG_VERSION"
   : > "$RAW_PPM"
 
@@ -238,3 +283,4 @@ echo "PNG frames: $(find "$OUT/png" -type f -name '*.png' | wc -l | tr -d ' ')"
 echo "Credential-bearing frame(s): REDACTED before retained PPM + PNG write"
 echo "Raw framebuffer: TEMPORARY 0600 ONLY"
 echo "Printer configuration/settings exports: EXCLUDED"
+SUCCESS=1
