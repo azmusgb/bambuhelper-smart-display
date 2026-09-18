@@ -17,6 +17,12 @@ def main() -> int:
         '#include "workshop_media_runtime.h"',
         'static void drawOs12Media()',
         'static void drawOs12MediaLab()',
+        'static void drawOs12VideoViewer()',
+        'g_ui12SettingsView==12',
+        'Waiting for live printer frames...',
+        '"Stop"',
+        '"Pause"',
+        '"Resume"',
         'g_ui12SettingsView==10',
         'g_ui12SettingsView==11',
         'workshopMediaSnapshot()',
@@ -34,7 +40,7 @@ def main() -> int:
         'Video',
         'Displayed printer camera',
         'playMjpeg("printer-camera",millis())',
-        'Tap anywhere to stop',
+        'gOs12VideoViewerPrimed',
         'Hardware not detected',
     ):
         if needle not in text:
