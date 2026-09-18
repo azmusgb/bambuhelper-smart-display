@@ -114,8 +114,8 @@ def native_view_catalog(client: Client) -> list[dict]:
 def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
     wanted = {
         "media": ("media", "media"),
-        "lab": ("media-lab", "media lab"),
-        "video": ("media-video", "camera viewer"),
+        "lab": ("media-lab", "recorder"),
+        "video": ("media-video", "video viewer"),
     }
     check(view in wanted, f"unknown native media acceptance view: {view}")
     preferred_id, preferred_label = wanted[view]
@@ -125,7 +125,7 @@ def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
         view_id = str(item.get("id", "")).strip()
         label = str(item.get("label", "")).strip()
         if view_id.lower() == preferred_id or label.lower() == preferred_label:
-            fallback = {"media": "Media", "lab": "Media Lab", "video": "Camera Viewer"}[view]
+            fallback = {"media": "Media", "lab": "Recorder", "video": "Video Viewer"}[view]
             return view_id, label or fallback
 
     available = ", ".join(
@@ -194,17 +194,19 @@ def exercise_audio_visible(
         "PASS  microphone sample while native Media view is visible: "
         f"{mic['microphoneLevelPercent']}%"
     )
+    if mic["microphoneLevelPercent"] == 0:
+        print("WARN  microphone sample is 0%; input path remains physically suspect until a non-zero response is observed")
 
     show_native_media_view(client, "lab", navigation_log)
     observations["native_media_lab_view_visible"] = observation(
-        "Did the native Media Lab screen appear on the WS350?"
+        "Did the native Recorder screen appear on the WS350?"
     )
     check(initial["psramAvailable"], "recording requires PSRAM")
     rec = api(client, "/os12/media/record/start", method="POST")
     validate_status(rec)
     check(rec["_http_status"] == 202 and rec["session"] == "Recording",
           f"record start refused: {rec['error']}")
-    print("STATE Recording: native Media Lab visible; bounded five-second capture started")
+    print("STATE Recording: native Recorder visible; bounded five-second capture started")
     completed = wait_for_session(client, {"Idle"}, 7.0)
     check(completed["recordingAvailable"],
           "recording completed without a retained local recording")
@@ -215,7 +217,7 @@ def exercise_audio_visible(
     check(play["_http_status"] == 202 and play["session"] == "PlayingRecording",
           f"recording playback refused: {play['error']}")
     wait_for_session(client, {"Idle"}, 7.0)
-    print("PASS  local recording playback completed while native Media Lab is visible")
+    print("PASS  local recording playback completed while native Recorder is visible")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -297,7 +299,7 @@ def run(args: argparse.Namespace) -> int:
         print("\nVIDEO\n-----")
         show_native_media_view(client, "video", navigation_log)
         observations["native_camera_viewer_visible"] = observation(
-            "Did the dedicated Camera Viewer screen appear on the WS350?"
+            "Did the dedicated Video Viewer screen appear on the WS350?"
         )
 
         idle = status(client)
@@ -308,7 +310,7 @@ def run(args: argparse.Namespace) -> int:
         check(
             start["_http_status"] == 202 and start["session"] == "PlayingVideo",
             "video start refused: " + str(start["error"]) +
-            " (displayed printer must expose a streamable local camera)",
+            " (built-in WS350 demo source must be available)",
         )
         print(
             "STATE PlayingVideo: runtime session entered. "
@@ -316,7 +318,7 @@ def run(args: argparse.Namespace) -> int:
         )
         time.sleep(1.5)
         observations["video_visible_motion"] = observation(
-            "While the session is PlayingVideo, can you actually see live camera motion on the WS350?"
+            "While the session is PlayingVideo, can you see the built-in WS350 demo motion?"
         )
 
         pause = api(client, "/os12/media/video/pause", method="POST")
@@ -325,7 +327,7 @@ def run(args: argparse.Namespace) -> int:
               f"video pause refused: {pause['error']}")
         print("STATE Paused: runtime pause accepted")
         observations["video_pause_visible"] = observation(
-            "Did the visible camera image freeze when Pause was issued?"
+            "Did the visible demo motion freeze when Pause was issued?"
         )
 
         resume = api(client, "/os12/media/video/resume", method="POST")
@@ -335,7 +337,7 @@ def run(args: argparse.Namespace) -> int:
         print("STATE PlayingVideo: runtime resume accepted")
         time.sleep(1.0)
         observations["video_resume_visible"] = observation(
-            "Did visible live camera motion resume on the WS350?"
+            "Did visible demo motion resume on the WS350?"
         )
         observations["touch_responsive_during_video"] = observation(
             "Did touchscreen interaction remain responsive while video was active?"
