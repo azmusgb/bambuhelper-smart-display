@@ -83,49 +83,43 @@ def apply(repo: Path) -> None:
     camera_cpp.write_text(c, encoding="utf-8")
 
     b = load(backend_cpp)
-    begin_old = """  // The existing camera client remains the sole network authority. It already
-  // bounds input to two 200 KB PSRAM JPEG buffers and publishes only complete
-  // SOI..EOI frames. MediaService owns only playback lifecycle and pacing.
-  cameraBegin();
-  if (!cameraActive()) {
-    Serial.println("OS12 media video: rejected camera transport did not become active");
-    return false;
-  }
-  Serial.println("OS12 media video: displayed-printer camera active");
+    begin_old = """    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraBegin();
+    if (!cameraActive()) return false;
+    next = VideoSource::PrinterCamera;
 """
-    begin_new = """  // The existing camera client remains the sole network authority. OS12 Media
-  // claims lifecycle ownership so the legacy dashboard camera loop cannot tear
-  // down this session merely because SCREEN_CAMERA / GAUGE_CAMERA is inactive.
-  cameraSetMediaOwned(true);
-  cameraBegin();
-  if (!cameraActive()) {
-    cameraSetMediaOwned(false);
-    Serial.println("OS12 media video: rejected camera transport did not become active");
-    return false;
-  }
-  Serial.println("OS12 media video: displayed-printer camera active");
+    begin_new = """    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
+    cameraBegin();
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
+    next = VideoSource::PrinterCamera;
 """
     b = once(b, begin_old, begin_new, "Media camera ownership claim")
 
     b = once(
         b,
-        "  if (videoRequested_) cameraStop();\n"
+        "  if (videoRequested_ && videoSource_ == VideoSource::PrinterCamera) cameraStop();\n"
         "  recordingRequested_ = false;\n",
-        "  if (videoRequested_) cameraStop();\n"
-        "  cameraSetMediaOwned(false);\n"
+        "  if (videoRequested_ && videoSource_ == VideoSource::PrinterCamera) {\n"
+        "    cameraStop();\n"
+        "    cameraSetMediaOwned(false);\n"
+        "  }\n"
         "  recordingRequested_ = false;\n",
         "Media camera ownership release",
     )
 
     b = once(
         b,
-        "    if (!cameraActive()) {\n"
-        "      videoRequested_ = false;\n"
-        "      videoPaused_ = false;\n",
-        "    if (!cameraActive()) {\n"
-        "      cameraSetMediaOwned(false);\n"
-        "      videoRequested_ = false;\n"
-        "      videoPaused_ = false;\n",
+        "      if (!cameraActive()) {\n"
+        "        videoRequested_ = false;\n"
+        "        videoPaused_ = false;\n",
+        "      if (!cameraActive()) {\n"
+        "        cameraSetMediaOwned(false);\n"
+        "        videoRequested_ = false;\n"
+        "        videoPaused_ = false;\n",
         "Media ownership release on inactive camera",
     )
     backend_cpp.write_text(b, encoding="utf-8")
