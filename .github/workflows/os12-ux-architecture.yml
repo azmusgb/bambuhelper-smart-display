@@ -60,6 +60,10 @@ jobs:
 
       - name: Validate script syntax
         run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y zsh
+          fi
           python3 -m py_compile \
             apply_workshop_os12_ux_architecture.py \
             apply_workshop_os12_ux_geometry.py \
