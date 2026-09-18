@@ -54,6 +54,7 @@ python3 "$ROOT/apply_workshop_os12_media_ui.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_ui.py" --repo "$BUILD"
 
 python3 "$ROOT/apply_workshop_os12_media_api.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os12_media_acceptance_ui_driver.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_api.py" --repo "$BUILD"
 
 python3 "$ROOT/scripts/validate_os12_device_update.py" --source-root "$ROOT" --repo "$BUILD"
