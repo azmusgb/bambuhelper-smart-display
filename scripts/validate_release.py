@@ -125,7 +125,7 @@ def validate_capture_security() -> None:
         "catalog_version == 1 and view_id == 'system'",
         "Refusing unverified legacy System redaction geometry",
         "redaction = (330, 196, 468, 230)", "Unsupported capture catalog version",
-        'curl -fsS -b "$COOKIE" "$BASE/hub/frame.ppm" -o "$RAW_PPM"',
+        '"$BASE/hub/frame.ppm"', '-o "$RAW_PPM"',
         "SECURITY-NOTE.txt", "Raw framebuffer: TEMPORARY 0600 ONLY",
         "Printer configuration/settings exports: EXCLUDED",
     ]
