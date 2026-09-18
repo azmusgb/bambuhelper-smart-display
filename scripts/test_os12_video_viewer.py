@@ -53,6 +53,12 @@ def main() -> int:
                 f"observed={current.get('videoFrameObservations', '?')} "
                 f"rendered={current.get('videoFramesRendered', '?')} "
                 f"lastBytes={current.get('videoLastFrameBytes', '?')} "
+                f"sock={current.get('cameraSocketConnected', '?')} "
+                f"conn={current.get('cameraConnectSuccesses', '?')}/{current.get('cameraConnectAttempts', '?')} "
+                f"auth={current.get('cameraAuthWrites', '?')} "
+                f"bytes={current.get('cameraBytesRead', '?')} "
+                f"pub={current.get('cameraFramesPublished', '?')} "
+                f"resets={current.get('cameraParserResets', '?')} "
                 f"psram={current['psramFreeBytes']}"
             )
 
