@@ -29,7 +29,8 @@ IMPL = r'''
 // OS12 media physical-acceptance UI driver.
 // This does not synthesize touches or duplicate media behavior. It selects the
 // existing native More -> Media / Media Lab views and lets normal rendering own
-// the screen.
+// the screen. It is injected beside the native Media renderers so it inherits
+// the same board/preprocessor boundary as those WS350 UI internals.
 bool workshopMediaAcceptanceShowView(uint8_t view) {
   if (view != 10U && view != 11U) return false;
   setPage(SCREEN_HUB_MORE);
@@ -37,6 +38,15 @@ bool workshopMediaAcceptanceShowView(uint8_t view) {
   g_dirty = true;
   hubMarkFrameDirty();
   return true;
+}
+'''
+
+STUB = r'''#include "workshop_media_acceptance_ui.h"
+
+// Cross-board fallback. WS350 provides the strong implementation from
+// smart_hub.cpp inside the native Media UI compilation boundary.
+bool __attribute__((weak)) workshopMediaAcceptanceShowView(uint8_t) {
+  return false;
 }
 '''
 
@@ -67,6 +77,7 @@ def apply(repo: Path) -> None:
     hub = repo / "src" / "smart_hub.cpp"
     web = repo / "src" / "web_server.cpp"
     header = repo / "include" / "workshop_media_acceptance_ui.h"
+    stub = repo / "src" / "workshop_media_acceptance_ui.cpp"
 
     hub_text = load(hub)
     web_text = load(web)
@@ -77,9 +88,13 @@ def apply(repo: Path) -> None:
 
     header.parent.mkdir(parents=True, exist_ok=True)
     header.write_text(HEADER, encoding="utf-8")
+    stub.write_text(STUB, encoding="utf-8")
 
     if "bool workshopMediaAcceptanceShowView(uint8_t view)" not in hub_text:
-        hub_text = hub_text.rstrip() + "\n\n" + IMPL.strip() + "\n"
+        anchor = "static void drawUi13PrinterAlerts() {"
+        if hub_text.count(anchor) != 1:
+            raise PatchError("native Media renderer boundary anchor missing/non-unique")
+        hub_text = hub_text.replace(anchor, IMPL.strip() + "\n\n" + anchor, 1)
         hub.write_text(hub_text, encoding="utf-8")
 
     if WEB_INCLUDE.strip() not in web_text:
