@@ -191,11 +191,35 @@ def exercise_audio_visible(
     check(mic["_http_status"] == 200,
           f"microphone sample refused: {mic['error']}")
     print(
-        "PASS  microphone sample while native Media view is visible: "
-        f"{mic['microphoneLevelPercent']}%"
+        "PASS  microphone baseline sample while native Media view is visible: "
+        f"{mic['microphoneLevelPercent']}% peak={mic.get('microphoneLastPeak')}"
     )
-    if mic["microphoneLevelPercent"] == 0:
-        print("WARN  microphone sample is 0%; input path remains physically suspect until a non-zero response is observed")
+    baseline_peak = mic.get("microphoneLastPeak")
+    input(
+        "Make a clear sound close to the WS350 microphone (speak/clap), "
+        "then press Enter to sample it: "
+    )
+    stimulated_peaks = []
+    stimulated_levels = []
+    for _ in range(3):
+        stimulated = api(client, "/os12/media/microphone-sample", method="POST")
+        validate_status(stimulated)
+        check(stimulated["_http_status"] == 200,
+              f"stimulated microphone sample refused: {stimulated['error']}")
+        if isinstance(stimulated.get("microphoneLastPeak"), int):
+            stimulated_peaks.append(stimulated["microphoneLastPeak"])
+        if isinstance(stimulated.get("microphoneLevelPercent"), int):
+            stimulated_levels.append(stimulated["microphoneLevelPercent"])
+        time.sleep(0.12)
+    stimulated_peak = max(stimulated_peaks) if stimulated_peaks else None
+    stimulated_level = max(stimulated_levels) if stimulated_levels else None
+    print(
+        "MIC RESPONSE "
+        f"baselinePeak={baseline_peak} stimulatedPeak={stimulated_peak} "
+        f"stimulatedLevel={stimulated_level}%"
+    )
+    observations["_mic_baseline_peak"] = baseline_peak
+    observations["_mic_stimulated_peak"] = stimulated_peak
 
     show_native_media_view(client, "lab", navigation_log)
     observations["native_media_lab_view_visible"] = observation(
@@ -243,6 +267,9 @@ def run(args: argparse.Namespace) -> int:
         "runtimeUptimeEndMs": None,
         "runtimeUptimeMonotonic": None,
         "runtimeObservationConflict": False,
+        "microphoneBaselinePeak": None,
+        "microphoneStimulatedPeak": None,
+        "microphonePeakIncreased": None,
         "passed": False,
         "completed": False,
         "failure": None,
@@ -287,6 +314,12 @@ def run(args: argparse.Namespace) -> int:
         )
         print("\nAUDIO / MICROPHONE\n------------------")
         exercise_audio_visible(client, initial, navigation_log, observations)
+        baseline_peak = observations.pop("_mic_baseline_peak", None)
+        stimulated_peak = observations.pop("_mic_stimulated_peak", None)
+        evidence["microphoneBaselinePeak"] = baseline_peak
+        evidence["microphoneStimulatedPeak"] = stimulated_peak
+        if isinstance(baseline_peak, int) and isinstance(stimulated_peak, int):
+            evidence["microphonePeakIncreased"] = stimulated_peak > baseline_peak
 
         observations["speaker_tone_clean"] = observation(
             "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
@@ -364,7 +397,7 @@ def run(args: argparse.Namespace) -> int:
             "Is the WS350 still reachable on the LAN after stopping media?"
         )
         observations["no_reboot_or_watchdog"] = observation(
-            "Did the device avoid unexpected reboot, watchdog reset, or recovery entry?"
+            "Did the WS350 stay running continuously with no reboot, watchdog reset, or recovery screen?"
         )
 
         final = status(client)
