@@ -100,11 +100,17 @@ def main() -> int:
     for duplicate in ('settings-experience', 'settings-printer', 'settings-update'):
         if f'"id":"{duplicate}"' in web or f'\\"id\\":\\"{duplicate}\\"' in web:
             raise ValidationError(f"capture catalog duplicate remains: {duplicate}")
-    for canonical in ('settings-display', 'settings-printer-power', 'system-update', 'system-portal'):
+    for canonical in ('settings-display', 'settings-printer-power', 'system-update', 'system-portal', 'media', 'media-lab'):
         if f'"id":"{canonical}"' not in web and f'\\"id\\":\\"{canonical}\\"' not in web:
             raise ValidationError(f"capture catalog canonical view missing: {canonical}")
 
-    print("PASS: OS12 UX v3 root navigation, Local Portal parent routing, physical-fit evidence rows, and capture catalog are coherent")
+    show = block(hub, "bool smartHubShowPage(const char* pageName)")
+    require(show, 'strcmp(pageName, "media") == 0', "native Media route")
+    require(show, 'g_ui12SettingsView = 10;', "native Media route")
+    require(show, 'strcmp(pageName, "media-lab") == 0', "native Media Lab route")
+    require(show, 'g_ui12SettingsView = 11;', "native Media Lab route")
+
+    print("PASS: OS12 UX v3 root navigation, Local Portal parent routing, physical-fit evidence rows, media native routes, and capture catalog are coherent")
     return 0
 
 
