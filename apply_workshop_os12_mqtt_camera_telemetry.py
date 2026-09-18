@@ -92,8 +92,6 @@ def apply(repo: Path) -> None:
     if (ipcam["rtsp_url"].is<const char*>()) {
       const char* value = ipcam["rtsp_url"].as<const char*>();
       s.rtspEnabled = value && value[0] && strcmp(value, "disable") != 0;
-      if (s.rtspEnabled) strlcpy(s.rtspUrl, value, sizeof(s.rtspUrl));
-      else s.rtspUrl[0] = '\\0';
     }
   }
 
