@@ -42,6 +42,8 @@ def main() -> int:
         '"Printer Camera"',
         'Live %s • RTSP %s',
         'BRTC %s • TUTK %s',
+        'const bool printerConfigured=isAnyPrinterConfigured()',
+        'Configure a printer to observe camera capability',
         'playMjpeg("demo-video",millis())',
         'gOs12VideoViewerPrimed',
         'Hardware not detected',
