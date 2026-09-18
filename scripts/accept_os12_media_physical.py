@@ -115,6 +115,7 @@ def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
     wanted = {
         "media": ("media", "media"),
         "lab": ("media-lab", "media lab"),
+        "video": ("media-video", "camera viewer"),
     }
     check(view in wanted, f"unknown native media acceptance view: {view}")
     preferred_id, preferred_label = wanted[view]
@@ -124,7 +125,8 @@ def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
         view_id = str(item.get("id", "")).strip()
         label = str(item.get("label", "")).strip()
         if view_id.lower() == preferred_id or label.lower() == preferred_label:
-            return view_id, label or ("Media" if view == "media" else "Media Lab")
+            fallback = {"media": "Media", "lab": "Media Lab", "video": "Camera Viewer"}[view]
+            return view_id, label or fallback
 
     available = ", ".join(
         str(item.get("id", "")).strip()
@@ -293,7 +295,10 @@ def run(args: argparse.Namespace) -> int:
         )
 
         print("\nVIDEO\n-----")
-        show_native_media_view(client, "lab", navigation_log)
+        show_native_media_view(client, "video", navigation_log)
+        observations["native_camera_viewer_visible"] = observation(
+            "Did the dedicated Camera Viewer screen appear on the WS350?"
+        )
 
         idle = status(client)
         check(idle["session"] == "Idle",
