@@ -21,6 +21,7 @@ from accept_os12_portal_runtime import (
     check,
     login,
     normalized_code,
+    protected_root_is_open,
 )
 
 TERMINAL = {"Idle", "Fault"}
@@ -189,10 +190,13 @@ def run(args: argparse.Namespace) -> int:
     print(f"Target: {base_url}")
     assert_login_markup(Client(base_url))
 
-    code = read_code()
     client = Client(base_url)
-    login(client, code, "media acceptance session")
-    code = ""
+    if protected_root_is_open(client):
+        print("DEV OPEN  portal/session code bypass is active for this physical-test build")
+    else:
+        code = read_code()
+        login(client, code, "media acceptance session")
+        code = ""
 
     initial = status(client)
     print(
