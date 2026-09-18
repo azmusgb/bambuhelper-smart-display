@@ -41,12 +41,11 @@ static void drawOs12VideoViewer() {
   hubMarkFrameDirty();g_dirty=false;
 }
 
-static void drawOs12MediaLab() {
+static void drawOs12Recorder() {
   const workshop::media::Snapshot& m=workshopMediaSnapshot();
   const bool recordReady=m.capabilities.microphoneAvailable&&m.capabilities.psramAvailable;
   const bool recording=m.runtime.session==workshop::media::SessionState::Recording;
   const bool playing=m.runtime.session==workshop::media::SessionState::PlayingRecording;
-  const bool videoPlaying=m.runtime.session==workshop::media::SessionState::PlayingVideo||m.runtime.session==workshop::media::SessionState::Paused;
   tft.fillScreen(C10_BG);drawHeader("Recorder",workshop::media::sessionStateName(m.runtime.session),3);uiBottomNav(3,nullptr);
   const char* recordValue=recording?"Recording":(recordReady?"Tap to record":"Unavailable");
   const char* recordDetail=recordReady?"5 sec max • bounded PSRAM":"Microphone + PSRAM required";
@@ -214,7 +213,7 @@ def apply(repo: Path) -> None:
     text = replace_once(
         text,
         'if(g_ui12SettingsView==2){drawUi13Sound();return;}if(g_ui12SettingsView==3)',
-        'if(g_ui12SettingsView==2){drawUi13Sound();return;}if(g_ui12SettingsView==10){drawOs12Media();return;}if(g_ui12SettingsView==11){drawOs12MediaLab();return;}if(g_ui12SettingsView==12){drawOs12VideoViewer();return;}if(g_ui12SettingsView==3)',
+        'if(g_ui12SettingsView==2){drawUi13Sound();return;}if(g_ui12SettingsView==10){drawOs12Media();return;}if(g_ui12SettingsView==11){drawOs12Recorder();return;}if(g_ui12SettingsView==12){drawOs12VideoViewer();return;}if(g_ui12SettingsView==3)',
         "media render routing",
     )
     text = replace_once(
