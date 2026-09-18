@@ -198,6 +198,12 @@ void securityResetPortalPolicy();'''
 SECURITY_STATE = r'''
 constexpr char kPortalPolicyNamespace[] = "workshop-sec";
 constexpr char kPortalPolicyKey[] = "portal_lock";
+// TEMPORARY PHYSICAL-TEST MODE ONLY.
+// This branch intentionally bypasses portal-code/session requirements on the
+// station LAN so hardware/media acceptance can proceed when the device code is
+// not physically accessible. Same-origin protection for mutations remains in
+// force. Never merge/promote this branch as accepted or stable.
+constexpr bool kTemporaryNoCodeLan = true;
 bool g_portalPolicyLoaded = false;
 bool g_requirePortalCode = true;
 
@@ -232,7 +238,13 @@ SECURITY_AUTHORIZE = r'''bool securityAuthorize(WebServer& server, bool mutating
     return false;
   }
 
-  // Disabling the portal lock opens read-only station-LAN browsing only.
+  // TEMPORARY PHYSICAL-TEST MODE ONLY. This is deliberately broader than the
+  // persisted read-only portal-lock policy so media/runtime acceptance can run
+  // without a physically accessible portal code. Same-origin checks above are
+  // still mandatory for mutations.
+  if (kTemporaryNoCodeLan) return true;
+
+  // Disabling the normal portal lock opens read-only station-LAN browsing only.
   // Every mutation still requires a valid portal session.
   if (!mutating && !securityPortalCodeRequired()) return true;
   if (cookieMatches(server)) return true;
