@@ -48,6 +48,11 @@ def main() -> int:
                 f"{second:2d}s session={current['session']} "
                 f"error={current['error']} "
                 f"dropped={current['droppedVideoFrames']} "
+                f"polls={current.get('videoPolls', '?')} "
+                f"noFrame={current.get('videoNoFramePolls', '?')} "
+                f"observed={current.get('videoFrameObservations', '?')} "
+                f"rendered={current.get('videoFramesRendered', '?')} "
+                f"lastBytes={current.get('videoLastFrameBytes', '?')} "
                 f"psram={current['psramFreeBytes']}"
             )
 
@@ -56,7 +61,11 @@ def main() -> int:
     check(stop["_http_status"] == 200 and stop["session"] == "Idle",
           f"video stop refused: {stop['error']}")
     print("STATE Idle: video stopped")
-    print("This test proves runtime state only; visible camera motion must be observed physically.")
+    print(
+        "Interpretation: if polls rises while noFrame rises equally and observed/rendered stay 0, "
+        "the viewer is healthy but the camera client is not publishing complete JPEG frames."
+    )
+    print("Visible camera motion still requires physical observation.")
     return 0
 
 
