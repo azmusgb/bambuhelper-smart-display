@@ -26,6 +26,8 @@ ALLOWED_FIRMWARE = {
 }
 ALLOWED_WORKFLOWS = {
     "firmware-candidate.yml",
+    "os12-platform-bridge.yml",
+    "os12-ux-architecture.yml",
     "release-gate.yml",
     "release-main.yml",
     "ui13-appliance-settings.yml",
