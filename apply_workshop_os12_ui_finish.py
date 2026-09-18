@@ -139,6 +139,7 @@ ROW_SURFACE=r'''
 static void hubOs12RowSurface(const HubRect& r) {
   tft.fillRoundRect(r.x,r.y,r.w,r.h,OS12_UI_RADIUS_SMALL,C10_SURFACE);
   tft.drawRoundRect(r.x,r.y,r.w,r.h,OS12_UI_RADIUS_SMALL,C10_SEPARATOR);
+  tft.drawFastHLine(r.x+OS12_ROW_INSET_X,r.y+r.h-1,r.w-OS12_ROW_INSET_X*2,C10_SEPARATOR);
 }
 '''
 
