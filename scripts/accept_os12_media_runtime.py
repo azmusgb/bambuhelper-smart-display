@@ -112,6 +112,16 @@ def exercise_audio(client: Client, initial: dict) -> None:
     check(speaker["_http_status"] == 202, f"speaker test refused: {speaker['error']}")
     wait_for_session(client, {"Idle"}, 3.0)
     print("PASS  bounded non-blocking speaker-test lifecycle")
+    speaker_diag = status(client)
+    print(
+        "SPEAKER DIAG "
+        f"codecReady={speaker_diag.get('audioCodecReady')} "
+        f"i2sReady={speaker_diag.get('audioI2sReady')} "
+        f"pipelineRunning={speaker_diag.get('audioPipelineRunning')} "
+        f"writeBytes={speaker_diag.get('audioLastWriteBytes')} "
+        f"peak={speaker_diag.get('audioLastPeak')} "
+        f"freq={speaker_diag.get('audioCurrentFrequency')}"
+    )
 
     check(initial["microphoneAvailable"],
           "--exercise requested but microphone is not available")
