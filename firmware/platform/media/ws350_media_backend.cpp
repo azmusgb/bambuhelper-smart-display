@@ -178,17 +178,32 @@ void Ws350MediaBackend::renderDemoFrame(uint32_t nowMs) {
   const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
   const int16_t W = tft.width();
   const uint32_t frame = videoLastFrameId_ + 1U;
-  const int16_t x = static_cast<int16_t>((frame * 11U) % (W > 76 ? W - 76 : 1));
-  const int16_t y = static_cast<int16_t>(54 + ((frame * 7U) % (viewportH > 130 ? viewportH - 130 : 1)));
+  const int16_t motionWidth = W > 76 ? W - 76 : 1;
+  const int16_t motionHeight = viewportH > 130 ? viewportH - 130 : 1;
+  const int16_t x = static_cast<int16_t>((frame * 11U) % motionWidth);
+  const int16_t y = static_cast<int16_t>(54 + ((frame * 7U) % motionHeight));
 
-  tft.fillRect(0, 0, W, viewportH, TFT_BLACK);
-  tft.fillRoundRect(12, 12, W - 24, 34, 10, TFT_DARKGREY);
-  tft.setTextColor(TFT_WHITE, TFT_DARKGREY);
-  tft.setTextDatum(MC_DATUM);
-  tft.drawString("Workshop OS Video Demo", W / 2, 29);
+  // The first frame establishes the static scene. Subsequent frames update
+  // only the previous/current sprite and the two-pixel progress strip. This
+  // avoids repainting ~130k pixels every frame on the 40 MHz SPI panel and
+  // leaves materially more CPU/bus headroom for touch and printer telemetry.
+  if (videoLastFrameId_ == 0U) {
+    tft.fillRect(0, 0, W, viewportH, TFT_BLACK);
+    tft.fillRoundRect(12, 12, W - 24, 34, 10, TFT_DARKGREY);
+    tft.setTextColor(TFT_WHITE, TFT_DARKGREY);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("Workshop OS Video Demo", W / 2, 29);
+    tft.drawRect(10, viewportH - 18, W - 20, 6, TFT_DARKGREY);
+  } else {
+    const uint32_t previousFrame = frame - 1U;
+    const int16_t previousX = static_cast<int16_t>((previousFrame * 11U) % motionWidth);
+    const int16_t previousY = static_cast<int16_t>(54 + ((previousFrame * 7U) % motionHeight));
+    tft.fillRect(previousX, previousY, 56, 56, TFT_BLACK);
+  }
+
   tft.fillCircle(x + 28, y + 28, 28, TFT_CYAN);
   tft.fillRect(x + 18, y + 18, 20, 20, TFT_BLACK);
-  tft.drawRect(10, viewportH - 18, W - 20, 6, TFT_DARKGREY);
+  tft.fillRect(12, viewportH - 16, W - 24, 2, TFT_BLACK);
   const int16_t progress = static_cast<int16_t>((frame * 5U) % (W > 24 ? W - 24 : 1));
   tft.fillRect(12, viewportH - 16, progress, 2, TFT_GREEN);
 
