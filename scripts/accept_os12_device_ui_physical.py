@@ -15,7 +15,8 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
+import urllib.request
 
 from accept_os12_media_physical import (
     AcceptanceError,
@@ -68,9 +69,19 @@ def show(client: Client, view_id: str)->None:
     time.sleep(0.30)
 
 def frame_probe(client: Client)->dict:
-    r=client.request("/hub/frame.ppm",headers={"X-BambuHelper-Client":"1","Accept":"image/x-portable-pixmap"},timeout=12.0)
-    check(r.status==200,f"GET /hub/frame.ppm returned HTTP {r.status}")
-    body=r.body if isinstance(r.body,(bytes,bytearray)) else r.body.encode("latin1")
+    url=urljoin(client.base_url+"/","hub/frame.ppm")
+    req=urllib.request.Request(url,method="GET",headers={
+        "User-Agent":"WorkshopOS-Device-UI-Acceptance/1",
+        "X-BambuHelper-Client":"1",
+        "Accept":"image/x-portable-pixmap",
+    })
+    try:
+        with client.opener.open(req,timeout=12.0) as resp:
+            status=resp.status
+            body=resp.read()
+    except Exception as exc:
+        raise AcceptanceError(f"framebuffer capture request failed: {exc}") from exc
+    check(status==200,f"GET /hub/frame.ppm returned HTTP {status}")
     check(body.startswith(b"P6\n"),"framebuffer capture is not binary PPM")
     parts=body.split(b"\n",3)
     check(len(parts)==4,"PPM header is incomplete")
