@@ -28,7 +28,6 @@ from accept_os12_portal_runtime import (
 )
 from accept_os12_media_runtime import (
     api,
-    exercise_video,
     read_code,
     status,
     validate_status,
@@ -36,14 +35,17 @@ from accept_os12_media_runtime import (
 )
 
 
-def yes_no(prompt: str) -> bool:
+def observation(prompt: str) -> bool | None:
+    """Return True/False/Unknown without forcing uncertain physical evidence."""
     while True:
-        answer = input(f"{prompt} [y/n]: ").strip().lower()
+        answer = input(f"{prompt} [y/n/u]: ").strip().lower()
         if answer in ("y", "yes"):
             return True
         if answer in ("n", "no"):
             return False
-        print("Please answer y or n.")
+        if answer in ("u", "unknown", "unsure", "?"):
+            return None
+        print("Please answer y, n, or u (unknown/unsure).")
 
 
 def update_identity(client: Client) -> dict:
@@ -166,10 +168,10 @@ def exercise_audio_visible(
     client: Client,
     initial: dict,
     navigation_log: list[dict],
-    observations: dict[str, bool],
+    observations: dict[str, bool | None],
 ) -> None:
     show_native_media_view(client, "media", navigation_log)
-    observations["native_media_view_visible"] = yes_no(
+    observations["native_media_view_visible"] = observation(
         "Did the native Media screen appear on the WS350?"
     )
 
@@ -192,7 +194,7 @@ def exercise_audio_visible(
     )
 
     show_native_media_view(client, "lab", navigation_log)
-    observations["native_media_lab_view_visible"] = yes_no(
+    observations["native_media_lab_view_visible"] = observation(
         "Did the native Media Lab screen appear on the WS350?"
     )
     check(initial["psramAvailable"], "recording requires PSRAM")
@@ -223,7 +225,7 @@ def run(args: argparse.Namespace) -> int:
     stamp = now.strftime("%Y%m%d-%H%M%S")
     destination = output_path(args.output, stamp)
     evidence = {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "kind": "workshop-os12-media-physical-acceptance",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
@@ -243,7 +245,7 @@ def run(args: argparse.Namespace) -> int:
     client = Client(base_url)
     initial = None
     final = None
-    observations: dict[str, bool] = evidence["observations"]
+    observations: dict[str, bool | None] = evidence["observations"]
     navigation_log: list[dict] = evidence["navigationObservations"]
 
     try:
@@ -277,41 +279,79 @@ def run(args: argparse.Namespace) -> int:
         print("\nAUDIO / MICROPHONE\n------------------")
         exercise_audio_visible(client, initial, navigation_log, observations)
 
-        observations["speaker_tone_clean"] = yes_no(
+        observations["speaker_tone_clean"] = observation(
             "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
         )
-        observations["microphone_level_responds"] = yes_no(
+        observations["microphone_level_responds"] = observation(
             "Did the microphone level respond when you made sound near the device?"
         )
-        observations["recording_intelligible"] = yes_no(
+        observations["recording_intelligible"] = observation(
             "Was the five-second microphone recording intelligible during playback?"
         )
-        observations["audio_no_obvious_noise_or_instability"] = yes_no(
+        observations["audio_no_obvious_noise_or_instability"] = observation(
             "Did audio/recording complete without obvious electrical noise, reboot, hang, or UI freeze?"
         )
 
         print("\nVIDEO\n-----")
         show_native_media_view(client, "lab", navigation_log)
-        exercise_video(client, status(client))
-        observations["video_visible_motion"] = yes_no(
-            "Did the displayed-printer camera visibly update during video playback?"
+
+        idle = status(client)
+        check(idle["session"] == "Idle",
+              f"video physical check requires Idle media service, got {idle['session']}")
+        start = api(client, "/os12/media/video/start", method="POST")
+        validate_status(start)
+        check(
+            start["_http_status"] == 202 and start["session"] == "PlayingVideo",
+            "video start refused: " + str(start["error"]) +
+            " (displayed printer must expose a streamable local camera)",
         )
-        observations["video_pause_resume_visible"] = yes_no(
-            "Did Pause visibly freeze the image and Resume continue live motion?"
+        print(
+            "STATE PlayingVideo: runtime session entered. "
+            "This proves the command/state transition only, not visible video."
         )
-        observations["touch_responsive_during_video"] = yes_no(
+        time.sleep(1.5)
+        observations["video_visible_motion"] = observation(
+            "While the session is PlayingVideo, can you actually see live camera motion on the WS350?"
+        )
+
+        pause = api(client, "/os12/media/video/pause", method="POST")
+        validate_status(pause)
+        check(pause["_http_status"] == 200 and pause["session"] == "Paused",
+              f"video pause refused: {pause['error']}")
+        print("STATE Paused: runtime pause accepted")
+        observations["video_pause_visible"] = observation(
+            "Did the visible camera image freeze when Pause was issued?"
+        )
+
+        resume = api(client, "/os12/media/video/resume", method="POST")
+        validate_status(resume)
+        check(resume["_http_status"] == 200 and resume["session"] == "PlayingVideo",
+              f"video resume refused: {resume['error']}")
+        print("STATE PlayingVideo: runtime resume accepted")
+        time.sleep(1.0)
+        observations["video_resume_visible"] = observation(
+            "Did visible live camera motion resume on the WS350?"
+        )
+        observations["touch_responsive_during_video"] = observation(
             "Did touchscreen interaction remain responsive while video was active?"
         )
-        observations["printer_telemetry_continued"] = yes_no(
-            "Did printer telemetry continue updating during/after media use?"
+        observations["printer_telemetry_continued"] = observation(
+            "Did printer telemetry continue updating while/after media use?"
         )
-        observations["printer_controls_healthy"] = yes_no(
+
+        stop = api(client, "/os12/media/stop", method="POST")
+        validate_status(stop)
+        check(stop["_http_status"] == 200 and stop["session"] == "Idle",
+              f"video stop refused: {stop['error']}")
+        print("STATE Idle: video runtime stopped")
+
+        observations["printer_controls_healthy"] = observation(
             "Did normal non-destructive printer controls remain usable after media use?"
         )
-        observations["device_network_healthy"] = yes_no(
+        observations["device_network_healthy"] = observation(
             "Is the WS350 still reachable on the LAN after stopping media?"
         )
-        observations["no_reboot_or_watchdog"] = yes_no(
+        observations["no_reboot_or_watchdog"] = observation(
             "Did the device avoid unexpected reboot, watchdog reset, or recovery entry?"
         )
 
@@ -321,7 +361,9 @@ def run(args: argparse.Namespace) -> int:
         evidence["runtimeIdleAndClean"] = runtime_ok
         evidence["completed"] = True
 
-        all_observations = all(observations.values())
+        all_observations = bool(observations) and all(
+            value is True for value in observations.values()
+        )
         passed = runtime_ok and all_observations
         evidence["passed"] = passed
         write_evidence(destination, evidence)
@@ -332,11 +374,15 @@ def run(args: argparse.Namespace) -> int:
             print("Scope is media only. This does not promote Workshop OS to accepted or stable.")
             return 0
 
-        failed = [name for name, ok in observations.items() if not ok]
+        failed = [name for name, value in observations.items() if value is False]
+        unknown = [name for name, value in observations.items() if value is None]
         if not runtime_ok:
             failed.append("final_runtime_idle_and_clean")
         print("PHYSICAL MEDIA ACCEPTANCE: FAIL / PENDING")
-        print("Failed observations: " + ", ".join(failed))
+        if failed:
+            print("Failed observations: " + ", ".join(failed))
+        if unknown:
+            print("Unknown observations: " + ", ".join(unknown))
         return 1
 
     except AcceptanceError as exc:
