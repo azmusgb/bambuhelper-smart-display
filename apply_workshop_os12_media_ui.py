@@ -24,6 +24,22 @@ static void drawOs12Media() {
   hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Media Lab",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 
+static bool gOs12VideoViewerPrimed=false;
+
+static void drawOs12VideoViewer() {
+  const workshop::media::Snapshot& m=workshopMediaSnapshot();
+  if(!gOs12VideoViewerPrimed){
+    tft.fillScreen(TFT_BLACK);
+    uiDrawFit("Camera",12,18,tft.width()-24,FONT_BODY,TL_DATUM,C10_TEXT,TFT_BLACK);
+    uiDrawFit("Waiting for live printer frames...",12,44,tft.width()-24,FONT_SMALL,TL_DATUM,C10_MUTED,TFT_BLACK);
+    gOs12VideoViewerPrimed=true;
+  }
+  const bool paused=m.runtime.session==workshop::media::SessionState::Paused;
+  hubV1125Action(hubUi13BackRect(),"Stop",C10_RED,true,false);
+  hubV1125Action(hubUi13ActionRect(),paused?"Resume":"Pause",C10_ACCENT,true,false);
+  hubMarkFrameDirty();g_dirty=false;
+}
+
 static void drawOs12MediaLab() {
   const workshop::media::Snapshot& m=workshopMediaSnapshot();
   const bool recordReady=m.capabilities.microphoneAvailable&&m.capabilities.psramAvailable;
@@ -56,6 +72,22 @@ MEDIA_TOUCH = r'''
         if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=11;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
         return true;
       }
+      if(g_ui12SettingsView==12){
+        workshop::media::MediaService& media=workshopMediaService();
+        const workshop::media::SessionState state=media.snapshot().runtime.session;
+        if(hubUi13BackRect().contains(x,y)){
+          if(state!=workshop::media::SessionState::Idle)media.stop(millis());
+          gOs12VideoViewerPrimed=false;
+          g_ui12SettingsView=11;
+          buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;
+        }
+        if(hubUi13ActionRect().contains(x,y)){
+          if(state==workshop::media::SessionState::PlayingVideo)media.pauseVideo(true,millis());
+          else if(state==workshop::media::SessionState::Paused)media.pauseVideo(false,millis());
+          g_dirty=true;return true;
+        }
+        return true;
+      }
       if(g_ui12SettingsView==11){
         workshop::media::MediaService& media=workshopMediaService();
         if(media.snapshot().runtime.session==workshop::media::SessionState::PlayingVideo||media.snapshot().runtime.session==workshop::media::SessionState::Paused){
@@ -72,7 +104,12 @@ MEDIA_TOUCH = r'''
           g_dirty=true;return true;
         }
         if(hubUi13RowRect(2).contains(x,y)){
-          if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().capabilities.videoDecoderAvailable)media.playMjpeg("printer-camera",millis());
+          if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().capabilities.videoDecoderAvailable){
+            gOs12VideoViewerPrimed=false;
+            g_ui12SettingsView=12;
+            const bool started=media.playMjpeg("printer-camera",millis());
+            if(!started){g_ui12SettingsView=11;}
+          }
           g_dirty=true;return true;
         }
         if(hubUi13BackRect().contains(x,y)){
@@ -169,7 +206,7 @@ def apply(repo: Path) -> None:
     text = replace_once(
         text,
         'if(g_ui12SettingsView==2){drawUi13Sound();return;}if(g_ui12SettingsView==3)',
-        'if(g_ui12SettingsView==2){drawUi13Sound();return;}if(g_ui12SettingsView==10){drawOs12Media();return;}if(g_ui12SettingsView==11){drawOs12MediaLab();return;}if(g_ui12SettingsView==3)',
+        'if(g_ui12SettingsView==2){drawUi13Sound();return;}if(g_ui12SettingsView==10){drawOs12Media();return;}if(g_ui12SettingsView==11){drawOs12MediaLab();return;}if(g_ui12SettingsView==12){drawOs12VideoViewer();return;}if(g_ui12SettingsView==3)',
         "media render routing",
     )
     text = replace_once(
