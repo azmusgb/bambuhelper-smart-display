@@ -149,7 +149,7 @@ echo "Media runtime: centralized MediaService + capability-safe hardware adapter
 echo "Media UI: capability-scoped Speaker/Microphone/Media Lab surfaces integrated into UI13 settings flow."
 echo "Media diagnostics API: authenticated bounded audio/recording/video lifecycle routes; no arbitrary media URL."
 echo "Media physical acceptance navigation: canonical /hub/views + /hub/show router only; no parallel acceptance UI route."
-echo "Video: displayed-printer camera JPEG sequence via existing camera client + LovyanGFX drawJpg, paced to max 8 fps; startup diagnostics added; physical acceptance pending."
+echo "Video: WS350 media-owned built-in motion demo plus source-scoped printer camera path; printer MQTT camera capability is displayed read-only; physical acceptance pending."
 echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 verification -> inactive app partition -> reboot."
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
 echo "Full image / offset 0x0: recovery only, never device-native OTA."
