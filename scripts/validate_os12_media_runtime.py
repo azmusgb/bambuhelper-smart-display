@@ -44,6 +44,8 @@ def main() -> int:
         "class Ws350MediaBackend",
         "recordingPlaybackRequested_",
         "videoLastFrameId_",
+        "VideoSource",
+        "renderDemoFrame",
         "renderLatestCameraFrame",
     ])
     require(repo / "include/workshop_media_runtime.h", ["workshopMediaSnapshot"])
@@ -63,7 +65,10 @@ def main() -> int:
         "buzzerBackendMicPlaybackBegin",
         "buzzerBackendMicPlaybackPoll",
         "buzzerBackendMicHasRecording",
+        'kDemoVideoSource[] = "demo-video"',
         'kPrinterCameraSource[] = "printer-camera"',
+        "VideoSource::Demo",
+        "VideoSource::PrinterCamera",
         "cameraCanStreamDisplayedPrinter()",
         "cameraBegin()",
         "cameraGetLatestFrame",
@@ -76,14 +81,18 @@ def main() -> int:
         raise SystemExit("FAIL: bounded recording backend missing")
     if "recordingRequested_ = buzzerBackendMicRecordBegin(maxDurationMs);" not in backend:
         raise SystemExit("FAIL: recording does not route through the bounded microphone backend")
-    if 'std::strcmp(source, kPrinterCameraSource) != 0' not in backend:
-        raise SystemExit("FAIL: MJPEG source must be constrained to the existing printer-camera authority")
+    if 'std::strcmp(source, kDemoVideoSource) == 0' not in backend:
+        raise SystemExit("FAIL: built-in WS350 demo video source missing")
+    if 'std::strcmp(source, kPrinterCameraSource) == 0' not in backend:
+        raise SystemExit("FAIL: printer camera must remain an explicit source, not the video authority")
+    if "caps.videoDecoderAvailable = caps.psramAvailable;" not in backend:
+        raise SystemExit("FAIL: WS350 video capability must be device-owned and PSRAM-gated")
     if "cameraService();" not in backend or "renderLatestCameraFrame(millis());" not in backend:
         raise SystemExit("FAIL: MJPEG playback is not poll-driven")
     if "WiFiClient" in backend or "HTTPClient" in backend:
         raise SystemExit("FAIL: media backend created a second network transport authority")
 
-    print("PASS: reconstructed OS12 media runtime has bounded recording/playback and fixed-source MJPEG rendering")
+    print("PASS: reconstructed OS12 media runtime has bounded recording/playback, device-owned demo video, and source-scoped printer camera rendering")
     return 0
 
 
