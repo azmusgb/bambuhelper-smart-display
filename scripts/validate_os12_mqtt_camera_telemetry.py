@@ -16,7 +16,6 @@ def main() -> int:
         "bool ipcamSeen;",
         "bool liveviewPreview;",
         "bool rtspEnabled;",
-        "char rtspUrl[96];",
         "char cameraResolution[12];",
         "bool brtcServiceEnabled;",
         "bool tutkServiceEnabled;",
@@ -32,8 +31,11 @@ def main() -> int:
     ):
         if needle not in mqtt:
             raise SystemExit(f"FAIL: MQTT parser missing {needle!r}")
-    if "publish(" in mqtt[mqtt.find("JsonObject ipcam ="):mqtt.find("// Deferred activeTray sources")]:
+    parse_block = mqtt[mqtt.find("JsonObject ipcam ="):mqtt.find("// Deferred activeTray sources")]
+    if "publish(" in parse_block:
         raise SystemExit("FAIL: telemetry parser must remain read-only")
+    if "rtspUrl" in state or "rtspUrl" in parse_block:
+        raise SystemExit("FAIL: raw printer RTSP URL must not be retained; keep only capability state")
     print("PASS: printer MQTT camera capability telemetry is captured read-only")
     return 0
 
