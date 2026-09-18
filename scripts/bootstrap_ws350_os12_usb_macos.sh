@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-BUILD="${BUILD:-/tmp/ws350-os12-platform-build}"
+BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
 BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
 FLASH=0
 CONFIRM_IDLE=0
@@ -50,7 +50,7 @@ done
 
 cd "$ROOT"
 [[ -d .git ]] || { echo "ERROR: not inside the Workshop OS git repository" >&2; exit 2; }
-[[ -f scripts/run_os12_platform_local.sh ]] || { echo "ERROR: OS12 build helper missing" >&2; exit 2; }
+[[ -f scripts/run_os12_ux_local.sh ]] || { echo "ERROR: OS12 UX/control-plane build helper missing" >&2; exit 2; }
 [[ -f scripts/waveshare-usb.sh ]] || { echo "ERROR: WS350 USB resolver missing" >&2; exit 2; }
 [[ -f scripts/ensure-platformio.sh ]] || { echo "ERROR: PlatformIO setup helper missing" >&2; exit 2; }
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required" >&2; exit 2; }
@@ -77,7 +77,7 @@ PIO_BIN="$(ROOT="$ROOT" bash scripts/ensure-platformio.sh)"
 printf 'PlatformIO: %s\n' "$PIO_BIN"
 "$PIO_BIN" --version
 
-PIO_BIN="$PIO_BIN" BUILD="$BUILD" OS12_SOURCE_SHA="$HEAD_SHA" bash scripts/run_os12_platform_local.sh --build
+PIO_BIN="$PIO_BIN" BUILD="$BUILD" OS12_SOURCE_SHA="$HEAD_SHA" bash scripts/run_os12_ux_local.sh --build
 
 FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
 PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"
@@ -188,7 +188,7 @@ if [[ "$FLASH" -ne 1 ]]; then
 PRE-FLASH CHECKS: PASS
 No firmware was changed.
 
-To install this exact reconstructed OS12 image after confirming the Bambu printer is idle:
+To install this exact reconstructed OS12 UX/control-plane image after confirming the Bambu printer is idle:
   bash scripts/bootstrap_ws350_os12_usb_macos.sh --flash --confirm-printer-idle
 EOF
   exit 0
@@ -201,7 +201,7 @@ if [[ "$CONFIRM_IDLE" -ne 1 ]]; then
 fi
 
 printf '\n=== Guarded USB bootstrap upload ===\n'
-echo "The partition layout matched exactly; uploading with the ws_lcd_350 PlatformIO target."
+echo "The partition layout matched exactly; uploading the exact reconstructed OS12 UX/control-plane candidate with the ws_lcd_350 PlatformIO target."
 echo "NVS is not erased. Critical pre-flash recovery data is already captured."
 (
   cd "$BUILD"
