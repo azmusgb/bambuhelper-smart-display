@@ -33,11 +33,9 @@ def once(text: str, old: str, new: str, label: str) -> str:
 def apply(repo: Path) -> None:
     es_path = repo / "src/buzzer_backend_es8311.cpp"
     media_path = repo / "src/media_service.cpp"
-    backend_path = repo / "src/ws350_media_backend.cpp"
 
     es = load(es_path)
     media = load(media_path)
-    backend = load(backend_path)
 
     es = once(
         es,
@@ -141,43 +139,8 @@ def apply(repo: Path) -> None:
         "physical speaker diagnostic duration",
     )
 
-    video_old = """  if (!source || std::strcmp(source, kPrinterCameraSource) != 0) return false;
-  if (!psramFound() || !cameraCanStreamDisplayedPrinter()) return false;
-
-  // The existing camera client remains the sole network authority. It already
-  // bounds input to two 200 KB PSRAM JPEG buffers and publishes only complete
-  // SOI..EOI frames. MediaService owns only playback lifecycle and pacing.
-  cameraBegin();
-  if (!cameraActive()) return false;
-"""
-    video_new = """  if (!source || std::strcmp(source, kPrinterCameraSource) != 0) {
-    Serial.println("OS12 media video: rejected invalid fixed source");
-    return false;
-  }
-  if (!psramFound()) {
-    Serial.println("OS12 media video: rejected PSRAM unavailable");
-    return false;
-  }
-  if (!cameraCanStreamDisplayedPrinter()) {
-    Serial.println("OS12 media video: rejected displayed-printer camera unavailable");
-    return false;
-  }
-
-  // The existing camera client remains the sole network authority. It already
-  // bounds input to two 200 KB PSRAM JPEG buffers and publishes only complete
-  // SOI..EOI frames. MediaService owns only playback lifecycle and pacing.
-  cameraBegin();
-  if (!cameraActive()) {
-    Serial.println("OS12 media video: rejected camera transport did not become active");
-    return false;
-  }
-  Serial.println("OS12 media video: displayed-printer camera active");
-"""
-    backend = once(backend, video_old, video_new, "video startup diagnostics")
-
     es_path.write_text(es, encoding="utf-8")
     media_path.write_text(media, encoding="utf-8")
-    backend_path.write_text(backend, encoding="utf-8")
 
     print("Workshop OS 12 media signal-path hardening installed")
 
