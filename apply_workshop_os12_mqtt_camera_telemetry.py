@@ -72,7 +72,6 @@ def apply(repo: Path) -> None:
   s.ipcamSeen = false;
   s.liveviewPreview = false;
   s.rtspEnabled = false;
-  s.rtspUrl[0] = '\\0';
   s.cameraResolution[0] = '\\0';
   s.brtcServiceEnabled = false;
   s.tutkServiceEnabled = false;
