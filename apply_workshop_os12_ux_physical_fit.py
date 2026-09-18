@@ -197,45 +197,60 @@ def patch_portal_routes(text: str) -> str:
 
 
 def patch_capture_catalog(web: str) -> str:
+    # Catalog text has existed both as raw JSON inside a C++ raw string and as
+    # escaped JSON in historical patch layers. Match by normalized line content
+    # instead of a fragile backslash-heavy regex.
     aliases = ("settings-experience", "settings-printer", "settings-update")
+    lines = web.splitlines(keepends=True)
     for view_id in aliases:
-        pattern = re.compile(r'\\s*\\{\\\\?"id\\\\?":\\\\?"' + re.escape(view_id) + r'\\\\?"[^\\n]*\\n?')
-        web, count = pattern.subn("", web, count=1)
+        needle = f'"id":"{view_id}"'
+        kept = []
+        count = 0
+        for line in lines:
+            normalized = line.replace('\\\"', '"')
+            if needle in normalized:
+                count += 1
+                continue
+            kept.append(line)
         if count != 1:
             raise PatchError(f"capture catalog alias missing/non-unique: {view_id}")
-    web = web.replace('{\\\"id\\\":\\\"more\\\",\\\"label\\\":\\\"Settings\\\"', '{\\\"id\\\":\\\"more\\\",\\\"label\\\":\\\"More\\\"')
+        lines = kept
+    web = "".join(lines)
+
+    web = web.replace('{\\\"id\\":\\\"more\\",\\\"label\\":\\\"Settings\\"', '{\\\"id\\":\\\"more\\",\\\"label\\":\\\"More\\"')
     web = web.replace('{"id":"more","label":"Settings"', '{"id":"more","label":"More"')
 
     # Media is a real UI13 settings surface. It must be reachable through the
     # same native /hub/views + /hub/show contract used by physical capture and
     # acceptance; do not introduce an acceptance-only navigation endpoint.
-    has_media = (
-        '"id":"media"' in web
-        or '\\"id\\":\\"media\\"' in web
-    )
-    has_media_lab = (
-        '"id":"media-lab"' in web
-        or '\\"id\\":\\"media-lab\\"' in web
-    )
+    normalized_web = web.replace('\\\"', '"')
+    has_media = '"id":"media"' in normalized_web
+    has_media_lab = '"id":"media-lab"' in normalized_web
     if not has_media or not has_media_lab:
-        markers = (
-            '{"id":"system-date-time"',
-            '{\\"id\\":\\"system-date-time\\"',
-        )
-        marker = next((m for m in markers if m in web), None)
-        if marker is None:
+        lines = web.splitlines(keepends=True)
+        insert_at = None
+        escaped = False
+        for i, line in enumerate(lines):
+            normalized = line.replace('\\\"', '"')
+            if '"id":"system-date-time"' in normalized:
+                insert_at = i
+                escaped = '\\\"id\\\"' in line
+                break
+        if insert_at is None:
             raise PatchError("capture catalog media insertion anchor missing")
-        if marker.startswith('{\\\"'):
-            entries = (
-                '{\\\"id\\":\\\"media\\",\\\"label\\":\\\"Media\\",\\\"group\\":\\\"Sound & Media\\\"},\\n    '
-                '{\\\"id\\":\\\"media-lab\\",\\\"label\\":\\\"Media Lab\\",\\\"group\\":\\\"Sound & Media\\\"},\\n    '
-            )
+
+        if escaped:
+            entries = [
+                '    {\\\"id\\":\\\"media\\",\\\"label\\":\\\"Media\\",\\\"group\\":\\\"Sound & Media\\\"},\n',
+                '    {\\\"id\\":\\\"media-lab\\",\\\"label\\":\\\"Media Lab\\",\\\"group\\":\\\"Sound & Media\\\"},\n',
+            ]
         else:
-            entries = (
-                '{"id":"media","label":"Media","group":"Sound & Media"},\\n    '
-                '{"id":"media-lab","label":"Media Lab","group":"Sound & Media"},\\n    '
-            )
-        web = web.replace(marker, entries + marker, 1)
+            entries = [
+                '    {"id":"media","label":"Media","group":"Sound & Media"},\n',
+                '    {"id":"media-lab","label":"Media Lab","group":"Sound & Media"},\n',
+            ]
+        lines[insert_at:insert_at] = entries
+        web = "".join(lines)
     return web
 
 
