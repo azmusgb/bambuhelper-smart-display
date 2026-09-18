@@ -68,7 +68,7 @@ def main() -> int:
     if 'server.on("/os12/media/' in registration:
         raise SystemExit("FAIL: media mutations bypass authenticated SECURE routes")
 
-    print("PASS: OS12 media API is authenticated, source-free and fixes recording to the bounded five-second contract")
+    if 'playMjpeg("demo-video", millis())' not in media_handlers:\n        raise SystemExit("FAIL: media API video start must use the built-in WS350 demo source")\n\n    print("PASS: OS12 media API is authenticated, source-free and starts the built-in WS350 video demo")
     return 0
 
 
