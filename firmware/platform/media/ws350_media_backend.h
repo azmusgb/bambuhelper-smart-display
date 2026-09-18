@@ -5,6 +5,19 @@
 namespace workshop {
 namespace media {
 
+struct VideoDiagnostics {
+  VideoDiagnostics()
+      : polls(0), noFramePolls(0), frameObservations(0), framesRendered(0),
+        lastFrameId(0), lastFrameBytes(0), lastFrameAtMs(0) {}
+  uint32_t polls;
+  uint32_t noFramePolls;
+  uint32_t frameObservations;
+  uint32_t framesRendered;
+  uint32_t lastFrameId;
+  uint32_t lastFrameBytes;
+  uint32_t lastFrameAtMs;
+};
+
 class Ws350MediaBackend : public HardwareBackend {
  public:
   Ws350MediaBackend();
@@ -23,6 +36,7 @@ class Ws350MediaBackend : public HardwareBackend {
   void poll() override;
   bool isSessionActive() const override;
   bool hasRecording() const override;
+  const VideoDiagnostics& videoDiagnostics() const { return videoDiagnostics_; }
 
  private:
   void renderLatestCameraFrame(uint32_t nowMs);
@@ -36,6 +50,7 @@ class Ws350MediaBackend : public HardwareBackend {
   bool videoPaused_;
   uint32_t videoLastFrameId_;
   uint32_t videoLastRenderAtMs_;
+  VideoDiagnostics videoDiagnostics_;
 };
 
 }  // namespace media
