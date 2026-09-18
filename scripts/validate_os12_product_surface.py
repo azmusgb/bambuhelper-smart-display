@@ -67,7 +67,7 @@ def main()->int:
     forbid(media,"uiBottomNav(","Media child navigation")
 
     recorder=block(hub,"static void drawOs12Recorder()")
-    for n in ('"Microphone"','"Live input activity"','"Recording"','"Playback"','"5 sec maximum"'):
+    for n in ('"Microphone"','"Live input activity"','"Recording"','"Playback"',"5 sec maximum"):
         req(recorder,n,"Recorder")
     forbid(recorder,"Printer Camera","Recorder normal surface")
     forbid(recorder,"uiBottomNav(","Recorder child navigation")
