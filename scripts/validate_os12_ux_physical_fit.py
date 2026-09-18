@@ -91,9 +91,9 @@ def main() -> int:
         forbid(home, forbidden, "Home inventory truth")
 
     workshop = block(hub, "static void drawWorkshop(bool full)")
-    require(workshop, '"Print Readiness","Undetermined","Requirements unknown"', "Workshop readiness truth")
-    require(workshop, '"Loaded Spools","Unknown","Canonical placement unknown"', "Workshop placement truth")
-    require(workshop, '"Inventory","Unknown","Authoritative inventory unavailable"', "Workshop inventory truth")
+    require(workshop, '"Print Readiness","Undetermined","Requirements or inventory evidence unavailable"', "Workshop readiness truth")
+    require(workshop, '"Loaded Spools","Unknown","Placement evidence unavailable"', "Workshop placement truth")
+    require(workshop, '"Inventory","Unknown","Filament Inventory device feed not authoritative here"', "Workshop inventory truth")
     for forbidden in ("activeTray", "AmsTray", "matchSpoolByColor", "matchSpoolByMaterial"):
         forbid(workshop, forbidden, "Workshop inventory truth")
 
@@ -107,9 +107,9 @@ def main() -> int:
     show = block(hub, "bool smartHubShowPage(const char* pageName)")
     require(show, 'strcmp(pageName, "media") == 0', "native Media route")
     require(show, 'g_ui12SettingsView = 10;', "native Media route")
-    require(show, 'strcmp(pageName, "media-lab") == 0', "native Media Lab route")
+    require(show, 'strcmp(pageName, "media-lab") == 0', "native Recorder route")
     require(show, 'g_ui12SettingsView = 11;', "native Media Lab route")
-    require(show, 'strcmp(pageName, "media-video") == 0', "native Camera Viewer route")
+    require(show, 'strcmp(pageName, "media-video") == 0', "native Video Viewer route")
     require(show, 'g_ui12SettingsView = 12;', "native Camera Viewer route")
 
     print("PASS: OS12 UX v3 root navigation, Local Portal parent routing, physical-fit evidence rows, media native routes, and capture catalog are coherent")
