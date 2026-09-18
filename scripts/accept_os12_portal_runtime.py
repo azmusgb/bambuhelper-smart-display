@@ -237,11 +237,24 @@ def run(args: argparse.Namespace) -> int:
     print(f"Target: {base_url}")
     probe = Client(base_url)
     assert_login_markup(probe)
-    assert_unauthenticated_gate(base_url)
+    open_lan = protected_root_is_open(Client(base_url))
+    if open_lan:
+        print("DEV OPEN  temporary no-code LAN mode is active; same-origin mutation protection remains enabled")
+    else:
+        assert_unauthenticated_gate(base_url)
 
     if args.probe_only:
-        print("PROBE: PASS — device is ready for OS12 portal runtime acceptance")
+        if open_lan:
+            print("PROBE: PASS — temporary physical-test build is reachable without a portal code")
+        else:
+            print("PROBE: PASS — device is ready for OS12 portal runtime acceptance")
         return 0
+
+    if open_lan:
+        raise AcceptanceError(
+            "full portal-security acceptance is intentionally unavailable while the "
+            "temporary no-code LAN physical-test mode is active"
+        )
 
     raw_code = os.environ.get("WORKSHOP_OS_PORTAL_CODE")
     if not raw_code:
