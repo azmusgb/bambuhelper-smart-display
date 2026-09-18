@@ -199,14 +199,76 @@ def patch_portal_routes(text: str) -> str:
 def patch_capture_catalog(web: str) -> str:
     aliases = ("settings-experience", "settings-printer", "settings-update")
     for view_id in aliases:
-        pattern = re.compile(r'\s*\{\\?"id\\?":\\?"' + re.escape(view_id) + r'\\?"[^\n]*\n?')
+        pattern = re.compile(r'\\s*\\{\\\\?"id\\\\?":\\\\?"' + re.escape(view_id) + r'\\\\?"[^\\n]*\\n?')
         web, count = pattern.subn("", web, count=1)
         if count != 1:
             raise PatchError(f"capture catalog alias missing/non-unique: {view_id}")
-    web = web.replace('{\\"id\\":\\"more\\",\\"label\\":\\"Settings\\"', '{\\"id\\":\\"more\\",\\"label\\":\\"More\\"')
+    web = web.replace('{\\\"id\\\":\\\"more\\\",\\\"label\\\":\\\"Settings\\\"', '{\\\"id\\\":\\\"more\\\",\\\"label\\\":\\\"More\\\"')
     web = web.replace('{"id":"more","label":"Settings"', '{"id":"more","label":"More"')
+
+    # Media is a real UI13 settings surface. It must be reachable through the
+    # same native /hub/views + /hub/show contract used by physical capture and
+    # acceptance; do not introduce an acceptance-only navigation endpoint.
+    has_media = (
+        '"id":"media"' in web
+        or '\\"id\\":\\"media\\"' in web
+    )
+    has_media_lab = (
+        '"id":"media-lab"' in web
+        or '\\"id\\":\\"media-lab\\"' in web
+    )
+    if not has_media or not has_media_lab:
+        markers = (
+            '{"id":"system-date-time"',
+            '{\\"id\\":\\"system-date-time\\"',
+        )
+        marker = next((m for m in markers if m in web), None)
+        if marker is None:
+            raise PatchError("capture catalog media insertion anchor missing")
+        if marker.startswith('{\\\"'):
+            entries = (
+                '{\\\"id\\":\\\"media\\",\\\"label\\":\\\"Media\\",\\\"group\\":\\\"Sound & Media\\\"},\\n    '
+                '{\\\"id\\":\\\"media-lab\\",\\\"label\\":\\\"Media Lab\\",\\\"group\\":\\\"Sound & Media\\\"},\\n    '
+            )
+        else:
+            entries = (
+                '{"id":"media","label":"Media","group":"Sound & Media"},\\n    '
+                '{"id":"media-lab","label":"Media Lab","group":"Sound & Media"},\\n    '
+            )
+        web = web.replace(marker, entries + marker, 1)
     return web
 
+
+def patch_media_native_router(text: str) -> str:
+    if 'strcmp(pageName, "media") == 0' in text and 'strcmp(pageName, "media-lab") == 0' in text:
+        return text
+
+    anchor = '  if (strcmp(pageName, "custom") == 0) { setPage(SCREEN_HUB_CUSTOM); return true; }'
+    if text.count(anchor) != 1:
+        raise PatchError("native media router insertion anchor missing/non-unique")
+
+    media_routes = r'''  if (strcmp(pageName, "media") == 0) {
+    setPage(SCREEN_HUB_MORE);
+    g_toolsView = false;
+    g_displayExperienceView = false;
+    g_displayExperiencePage = 0;
+    g_ui12SettingsView = 10;
+    g_dirty = true;
+    return true;
+  }
+
+  if (strcmp(pageName, "media-lab") == 0) {
+    setPage(SCREEN_HUB_MORE);
+    g_toolsView = false;
+    g_displayExperienceView = false;
+    g_displayExperiencePage = 0;
+    g_ui12SettingsView = 11;
+    g_dirty = true;
+    return true;
+  }
+
+'''
+    return text.replace(anchor, media_routes + anchor, 1)
 
 def apply(repo: Path) -> None:
     hub_path = repo / "src" / "smart_hub.cpp"
@@ -216,6 +278,7 @@ def apply(repo: Path) -> None:
     text = replace_function(text, "static void drawHome(bool full)", HOME)
     text = replace_function(text, "static void drawWorkshop(bool full)", WORKSHOP)
     text = patch_portal_routes(text)
+    text = patch_media_native_router(text)
     hub_path.write_text(text, encoding="utf-8")
 
     web_path = repo / "src" / "web_server.cpp"
