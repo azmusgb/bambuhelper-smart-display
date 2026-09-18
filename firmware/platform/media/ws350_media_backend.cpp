@@ -16,7 +16,7 @@ namespace media {
 namespace {
 static const char kPrinterCameraSource[] = "printer-camera";
 static const char kDemoVideoSource[] = "demo-video";
-static const uint32_t kVideoFrameIntervalMs = 125U;  // 8 fps ceiling.
+static const uint32_t kVideoFrameIntervalMs = 200U;  // 5 fps diagnostic ceiling; preserve touch/main-loop headroom.
 static const float kBambuCameraWidth = 1280.0f;
 static const float kBambuCameraHeight = 720.0f;
 }
@@ -198,6 +198,7 @@ void Ws350MediaBackend::renderDemoFrame(uint32_t nowMs) {
   ++videoDiagnostics_.polls;
   ++videoDiagnostics_.frameObservations;
   ++videoDiagnostics_.framesRendered;
+  yield();  // Cooperative handoff: demo rendering must not starve touch/network tasks.
   videoDiagnostics_.lastFrameId = frame;
   videoDiagnostics_.lastFrameBytes = 0;
   videoDiagnostics_.lastFrameAtMs = nowMs;
