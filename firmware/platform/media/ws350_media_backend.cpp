@@ -175,8 +175,12 @@ void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
   if (!cameraGetLatestFrame(&frame, &frameLen, &frameId) || !frame || frameLen == 0) return;
   if (frameId == videoLastFrameId_) return;
 
+  // Reserve the bottom 50 px for the dedicated viewer controls. On the
+  // 480x320 WS350 this yields an exact 480x270 16:9 camera viewport.
+  const int16_t controlBarH = 50;
+  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
   const float sw = static_cast<float>(tft.width());
-  const float sh = static_cast<float>(tft.height());
+  const float sh = static_cast<float>(viewportH);
   float scale = sw / kBambuCameraWidth;
   const float heightScale = sh / kBambuCameraHeight;
   if (heightScale < scale) scale = heightScale;
@@ -185,8 +189,8 @@ void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
   const int drawW = static_cast<int>(kBambuCameraWidth * scale);
   const int drawH = static_cast<int>(kBambuCameraHeight * scale);
   const int x = (tft.width() - drawW) / 2;
-  const int y = (tft.height() - drawH) / 2;
-  tft.fillScreen(TFT_BLACK);
+  const int y = (viewportH - drawH) / 2;
+  tft.fillRect(0, 0, tft.width(), viewportH, TFT_BLACK);
   tft.drawJpg(frame, static_cast<uint32_t>(frameLen), x, y, 0, 0, 0, 0, scale, scale);
   markFrameDirty();
   videoLastFrameId_ = frameId;
