@@ -24,7 +24,7 @@ Ws350MediaBackend::Ws350MediaBackend()
     : requestedVolume_(70), muted_(false), requestedRecordMs_(0),
       recordingRequested_(false), recordingPlaybackRequested_(false),
       videoRequested_(false), videoPaused_(false), videoLastFrameId_(0),
-      videoLastRenderAtMs_(0) {}
+      videoLastRenderAtMs_(0), videoDiagnostics_() {}
 
 Capabilities Ws350MediaBackend::probe() {
   Capabilities caps;
@@ -151,6 +151,7 @@ bool Ws350MediaBackend::beginMjpeg(const char* source) {
   videoPaused_ = false;
   videoLastFrameId_ = 0;
   videoLastRenderAtMs_ = 0;
+  videoDiagnostics_ = VideoDiagnostics();
   return true;
 #else
   (void)source;
@@ -169,11 +170,19 @@ void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
   if (!videoRequested_ || videoPaused_) return;
   if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
 
+  ++videoDiagnostics_.polls;
   const uint8_t* frame = 0;
   size_t frameLen = 0;
   uint32_t frameId = 0;
-  if (!cameraGetLatestFrame(&frame, &frameLen, &frameId) || !frame || frameLen == 0) return;
+  if (!cameraGetLatestFrame(&frame, &frameLen, &frameId) || !frame || frameLen == 0) {
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+  videoDiagnostics_.lastFrameId = frameId;
+  videoDiagnostics_.lastFrameBytes = static_cast<uint32_t>(frameLen);
+  videoDiagnostics_.lastFrameAtMs = nowMs;
   if (frameId == videoLastFrameId_) return;
+  ++videoDiagnostics_.frameObservations;
 
   // Reserve the bottom 50 px for the dedicated viewer controls. On the
   // 480x320 WS350 this yields an exact 480x270 16:9 camera viewport.
@@ -195,6 +204,7 @@ void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
   markFrameDirty();
   videoLastFrameId_ = frameId;
   videoLastRenderAtMs_ = nowMs;
+  ++videoDiagnostics_.framesRendered;
 #else
   (void)nowMs;
 #endif
