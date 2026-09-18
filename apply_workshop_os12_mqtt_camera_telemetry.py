@@ -44,7 +44,6 @@ def apply(repo: Path) -> None:
   bool ipcamSeen;             // printer reported print.ipcam
   bool liveviewPreview;       // print.ipcam.liveview_preview
   bool rtspEnabled;           // true only when printer reports a non-disabled RTSP URL
-  char rtspUrl[96];           // printer-reported URL; empty when disabled/unknown
   char cameraResolution[12];  // printer-reported live-view resolution
   bool brtcServiceEnabled;    // print.ipcam.brtc_service == "enable"
   bool tutkServiceEnabled;    // print.ipcam.tutk_server == "enable"
