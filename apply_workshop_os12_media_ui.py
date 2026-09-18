@@ -15,13 +15,14 @@ INCLUDE = '#include "workshop_media_runtime.h"\n'
 MEDIA_UI = r'''
 static void drawOs12Media() {
   const workshop::media::Snapshot& m=workshopMediaSnapshot();
+  const bool videoPlaying=m.runtime.session==workshop::media::SessionState::PlayingVideo||m.runtime.session==workshop::media::SessionState::Paused;
   tft.fillScreen(C10_BG);drawHeader("Media",workshop::media::sessionStateName(m.runtime.session),3);uiBottomNav(3,nullptr);
   char volume[16];snprintf(volume,sizeof(volume),"%u%%",(unsigned)m.runtime.volumePercent);
-  hubUi13StepperRow(hubUi13RowRect(0),"Speaker Volume",volume,m.capabilities.speakerAvailable?(m.runtime.muted?"Muted":"Output ready"):"Speaker unavailable",m.capabilities.speakerAvailable?C10_ACCENT:C10_MUTED);
-  hubUi13InfoRow(hubUi13RowRect(1),"Speaker Test",m.capabilities.speakerAvailable?"Tap to test":"Unavailable",m.capabilities.speakerAvailable?"Local diagnostic tone":"Hardware not detected",m.capabilities.speakerAvailable?C10_GREEN:C10_MUTED);
+  hubUi13StepperRow(hubUi13RowRect(0),"Speaker",volume,m.capabilities.speakerAvailable?(m.runtime.muted?"Muted • tap center to test":"Output ready • tap center to test"):"Speaker unavailable",m.capabilities.speakerAvailable?C10_ACCENT:C10_MUTED);
   char mic[20];if(m.capabilities.microphoneAvailable)snprintf(mic,sizeof(mic),"%u%%",(unsigned)m.runtime.microphoneLevelPercent);else strlcpy(mic,"Unavailable",sizeof(mic));
-  hubUi13InfoRow(hubUi13RowRect(2),"Microphone",mic,m.capabilities.microphoneAvailable?"Tap to sample 250 ms":"Hardware not detected",m.capabilities.microphoneAvailable?C10_ACCENT:C10_MUTED);
-  hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Media Lab",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
+  hubUi13InfoRow(hubUi13RowRect(1),"Microphone",mic,m.capabilities.microphoneAvailable?"Tap to sample":"Hardware not detected",m.capabilities.microphoneAvailable?C10_ACCENT:C10_MUTED);
+  hubUi13InfoRow(hubUi13RowRect(2),"Video",videoPlaying?"Playing":(m.capabilities.videoDecoderAvailable?"Play demo":"Unavailable"),m.capabilities.videoDecoderAvailable?"WS350 local motion test":"Decoder unavailable",videoPlaying?C10_GREEN:(m.capabilities.videoDecoderAvailable?C10_ACCENT:C10_MUTED));
+  hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Recorder",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 
 static bool gOs12VideoViewerPrimed=false;
@@ -46,19 +47,23 @@ static void drawOs12MediaLab() {
   const bool recording=m.runtime.session==workshop::media::SessionState::Recording;
   const bool playing=m.runtime.session==workshop::media::SessionState::PlayingRecording;
   const bool videoPlaying=m.runtime.session==workshop::media::SessionState::PlayingVideo||m.runtime.session==workshop::media::SessionState::Paused;
-  tft.fillScreen(C10_BG);drawHeader("Media Lab",workshop::media::sessionStateName(m.runtime.session),3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Recorder",workshop::media::sessionStateName(m.runtime.session),3);uiBottomNav(3,nullptr);
   const char* recordValue=recording?"Recording":(recordReady?"Tap to record":"Unavailable");
   const char* recordDetail=recordReady?"5 sec max • bounded PSRAM":"Microphone + PSRAM required";
   hubUi13InfoRow(hubUi13RowRect(0),"Recording",recordValue,recording?"Tap to stop":recordDetail,recording?C10_ORANGE:(recordReady?C10_ACCENT:C10_MUTED));
   const char* playValue=playing?"Playing":(m.runtime.recordingAvailable?"Tap to play":"No recording");
   hubUi13InfoRow(hubUi13RowRect(1),"Playback",playValue,playing?"Tap to stop":"Uses the captured local buffer",playing?C10_GREEN:(m.runtime.recordingAvailable?C10_ACCENT:C10_MUTED));
-  const char* videoValue=videoPlaying?"Playing":(m.capabilities.videoDecoderAvailable?"Play demo":"Unavailable");
   const PrinterSlot& p=displayedPrinter();
-  char videoDetail[72];
-  if(p.state.ipcamSeen)snprintf(videoDetail,sizeof(videoDetail),"Printer: live %s • RTSP %s • %s",p.state.liveviewPreview?"on":"off",p.state.rtspEnabled?"on":"off",p.state.cameraResolution[0]?p.state.cameraResolution:"?");
-  else strlcpy(videoDetail,m.capabilities.videoDecoderAvailable?"Local WS350 motion demo":"Video unavailable",sizeof(videoDetail));
-  hubUi13InfoRow(hubUi13RowRect(2),"Video",videoValue,videoPlaying?"Tap anywhere to stop":videoDetail,videoPlaying?C10_GREEN:(m.capabilities.videoDecoderAvailable?C10_ACCENT:C10_MUTED));
-  hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Printer Alerts",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
+  char cameraValue[32];char cameraDetail[80];
+  if(p.state.ipcamSeen){
+    snprintf(cameraValue,sizeof(cameraValue),"Live %s • RTSP %s",p.state.liveviewPreview?"on":"off",p.state.rtspEnabled?"on":"off");
+    snprintf(cameraDetail,sizeof(cameraDetail),"%s • BRTC %s • TUTK %s",p.state.cameraResolution[0]?p.state.cameraResolution:"resolution ?",p.state.brtcServiceEnabled?"on":"off",p.state.tutkServiceEnabled?"on":"off");
+  }else{
+    strlcpy(cameraValue,"Unknown",sizeof(cameraValue));
+    strlcpy(cameraDetail,"No camera capability report observed",sizeof(cameraDetail));
+  }
+  hubUi13InfoRow(hubUi13RowRect(2),"Printer Camera",cameraValue,cameraDetail,p.state.rtspEnabled?C10_GREEN:(p.state.ipcamSeen?C10_ORANGE:C10_MUTED));
+  hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Done",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 '''
 
@@ -69,8 +74,16 @@ MEDIA_TOUCH = r'''
           int v=(int)media.snapshot().runtime.volumePercent+(hubUi13MinusRect(0).contains(x,y)?-10:10);if(v<0)v=0;if(v>100)v=100;
           if(media.setVolume((uint8_t)v)){buzzerSettings.volume=(uint8_t)v;saveBuzzerSettings();buzzerPlay(BUZZ_CLICK);}g_dirty=true;return true;
         }
-        if(hubUi13RowRect(1).contains(x,y)){if(media.snapshot().runtime.session==workshop::media::SessionState::Idle)media.testSpeaker(millis());g_dirty=true;return true;}
-        if(hubUi13RowRect(2).contains(x,y)){if(media.snapshot().runtime.session==workshop::media::SessionState::Idle)media.sampleMicrophone(millis());g_dirty=true;return true;}
+        HubRect speakerCenter=hubUi13RowRect(0);speakerCenter.x+=60;speakerCenter.w-=120;
+        if(speakerCenter.contains(x,y)){if(media.snapshot().runtime.session==workshop::media::SessionState::Idle)media.testSpeaker(millis());g_dirty=true;return true;}
+        if(hubUi13RowRect(1).contains(x,y)){if(media.snapshot().runtime.session==workshop::media::SessionState::Idle)media.sampleMicrophone(millis());g_dirty=true;return true;}
+        if(hubUi13RowRect(2).contains(x,y)){
+          if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().capabilities.videoDecoderAvailable){
+            gOs12VideoViewerPrimed=false;g_ui12SettingsView=12;
+            if(!media.playMjpeg("demo-video",millis()))g_ui12SettingsView=10;
+          }
+          g_dirty=true;return true;
+        }
         if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=2;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
         if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=11;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}
         return true;
@@ -81,7 +94,7 @@ MEDIA_TOUCH = r'''
         if(hubUi13BackRect().contains(x,y)){
           if(state!=workshop::media::SessionState::Idle)media.stop(millis());
           gOs12VideoViewerPrimed=false;
-          g_ui12SettingsView=11;
+          g_ui12SettingsView=10;
           buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;
         }
         if(hubUi13ActionRect().contains(x,y)){
@@ -106,15 +119,7 @@ MEDIA_TOUCH = r'''
           else if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().runtime.recordingAvailable)media.playRecording(millis());
           g_dirty=true;return true;
         }
-        if(hubUi13RowRect(2).contains(x,y)){
-          if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().capabilities.videoDecoderAvailable){
-            gOs12VideoViewerPrimed=false;
-            g_ui12SettingsView=12;
-            const bool started=media.playMjpeg("demo-video",millis());
-            if(!started){g_ui12SettingsView=11;}
-          }
-          g_dirty=true;return true;
-        }
+        if(hubUi13RowRect(2).contains(x,y)){return true;}
         if(hubUi13BackRect().contains(x,y)){
           if(media.snapshot().runtime.session==workshop::media::SessionState::Recording)media.stopRecording(millis());
           else if(media.snapshot().runtime.session!=workshop::media::SessionState::Idle)media.stop(millis());
@@ -123,7 +128,7 @@ MEDIA_TOUCH = r'''
         if(hubUi13ActionRect().contains(x,y)){
           if(media.snapshot().runtime.session==workshop::media::SessionState::Recording)media.stopRecording(millis());
           else if(media.snapshot().runtime.session!=workshop::media::SessionState::Idle)media.stop(millis());
-          g_ui12SettingsView=6;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;
+          g_ui12SettingsView=10;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;
         }
         return true;
       }
