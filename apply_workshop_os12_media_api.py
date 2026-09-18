@@ -44,9 +44,10 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["microphoneLastSamples"] = buzzerBackendMicLastSamples();
   doc["microphoneLastNonZeroSamples"] = buzzerBackendMicLastNonZeroSamples();
   doc["microphoneLastPeak"] = buzzerBackendMicLastPeak();
-  doc["audioLastWriteBytes"] = buzzerBackendAudioLastWriteBytes();
-  doc["audioLastPeak"] = buzzerBackendAudioLastPeak();
+  doc["audioAmpEnabled"] = buzzerBackendAmpEnabled();
   doc["audioCurrentFrequency"] = buzzerBackendAudioCurrentFrequency();
+  doc["audioTargetGain"] = buzzerBackendAudioTargetGain();
+  doc["audioCurrentGain"] = buzzerBackendAudioCurrentGain();
 #else
   doc["audioCodecReady"] = false;
   doc["audioI2sReady"] = false;
@@ -55,9 +56,10 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["microphoneLastSamples"] = 0;
   doc["microphoneLastNonZeroSamples"] = 0;
   doc["microphoneLastPeak"] = 0;
-  doc["audioLastWriteBytes"] = 0;
-  doc["audioLastPeak"] = 0;
+  doc["audioAmpEnabled"] = false;
   doc["audioCurrentFrequency"] = 0;
+  doc["audioTargetGain"] = 0;
+  doc["audioCurrentGain"] = 0;
 #endif
   const bool printerConfigured = isAnyPrinterConfigured();
   const PrinterSlot* printer = printerConfigured ? &displayedPrinter() : nullptr;
