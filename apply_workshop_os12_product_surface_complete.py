@@ -116,17 +116,13 @@ static void drawMore(bool full) {
 
   (void)full;
   const bool wifi=workshopPlatformWifiOnline();
-  const bool configured=workshopPlatformState().configuredPrinterCount>0;
-  const uint8_t slot=rotState.displayIndex<MAX_PRINTERS?rotState.displayIndex:0;
-  const bool printerConnected=configured&&workshopPlatformPrinterOnline(slot);
   const bool deviceHealthy=hubTouchHealthy()&&recoveryWebReady();
 
   tft.fillScreen(C10_BG);drawHeader("More",nullptr,3);uiBottomNav(3,nullptr);
-  hubUi12SettingsCard(hubUi12SettingsRect(0),"Display & Appearance","Brightness, standby and after-print behavior",C10_ACCENT,false);
-  hubUi12SettingsCard(hubUi12SettingsRect(1),"Sound & Media","Sounds, microphone, recorder and video",C10_ACCENT,false);
-  hubUi12SettingsCard(hubUi12SettingsRect(2),"Network",wifi?"Connected":"Offline",wifi?C10_GREEN:C10_ORANGE,false);
-  hubUi12SettingsCard(hubUi12SettingsRect(3),"Printer & Power",!configured?"Not configured":(printerConnected?"Connected":"Unavailable"),printerConnected?C10_GREEN:(configured?C10_ORANGE:C10_MUTED),false);
-  hubUi12SettingsCard(hubUi12SettingsRect(4),"System",deviceHealthy?"Healthy · date, update, diagnostics":"Needs attention · diagnostics available",deviceHealthy?C10_GREEN:C10_ORANGE,true);
+  hubOs12NavRow(hubUi12SettingsRect(0),"Display & Appearance","Brightness, standby and after-print behavior",C10_MUTED);
+  hubOs12NavRow(hubUi12SettingsRect(1),"Sound & Media","Sounds, microphone, recorder and video",C10_MUTED);
+  hubOs12NavRow(hubUi12SettingsRect(2),"Network",wifi?"Connected":"Offline",wifi?C10_GREEN:C10_ORANGE);
+  hubOs12NavRow(hubUi12SettingsRect(3),"System",deviceHealthy?"Healthy · power, date, update, diagnostics":"Needs attention · diagnostics available",deviceHealthy?C10_GREEN:C10_ORANGE);
   hubMarkFrameDirty();g_dirty=false;
 }
 '''
@@ -137,25 +133,24 @@ static void drawSystem(bool full) {
   (void)full;
   const bool touchOk=hubTouchHealthy(),recoveryOk=recoveryWebReady();
   const bool healthy=touchOk&&recoveryOk;
-  const bool wifi=workshopPlatformWifiOnline();
   const bool configured=workshopPlatformState().configuredPrinterCount>0;
   const uint8_t slot=rotState.displayIndex<MAX_PRINTERS?rotState.displayIndex:0;
   const bool printerOk=configured&&workshopPlatformPrinterOnline(slot);
 
-  tft.fillScreen(C10_BG);drawHeader("System",healthy?"Healthy":"Check Device",3);uiBottomNav(3,nullptr);
-  hubUi12SettingsCard(hubUi13SystemCardRect(0),"Device Health",healthy?"Healthy":"Needs attention",healthy?C10_GREEN:C10_ORANGE,false);
-  hubUi12SettingsCard(hubUi13SystemCardRect(1),"Connectivity",!wifi?"Network offline":(printerOk?"Network + printer":"Network only"),wifi?C10_GREEN:C10_ORANGE,false);
-  hubUi12SettingsCard(hubUi13SystemCardRect(2),"Date & Time",hubTimezoneLabel(),C10_ACCENT,false);
-  hubUi12SettingsCard(hubUi13SystemCardRect(3),"Software Update","Version and candidate update status",C10_ACCENT,false);
+  tft.fillScreen(C10_BG);drawHeader("System",healthy?"Healthy":"Check Device",3);
+  hubOs12NavRow(hubUi13SystemCardRect(0),"Device Health",healthy?"Healthy":"Needs attention",healthy?C10_GREEN:C10_ORANGE);
+  hubOs12NavRow(hubUi13SystemCardRect(1),"Printer & Power",!configured?"Not configured":(printerOk?"Connected":"Unavailable"),printerOk?C10_GREEN:(configured?C10_ORANGE:C10_MUTED));
+  hubOs12NavRow(hubUi13SystemCardRect(2),"Date & Time",hubTimezoneLabel(),C10_MUTED);
+  hubOs12NavRow(hubUi13SystemCardRect(3),"Software Update","Version and candidate update status",C10_MUTED);
   hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);
-  hubV1125Action(hubUi13ActionRect(),"Local Portal",C10_ACCENT,wifi,false);
+  hubV1125Action(hubUi13ActionRect(),"Local Portal",C10_ACCENT,workshopPlatformWifiOnline(),false);
   hubMarkFrameDirty();g_dirty=false;
 }
 '''
 
 DISPLAY=r'''
 static void drawUi13Display() {
-  tft.fillScreen(C10_BG);drawHeader("Display & Appearance",nullptr,3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Display & Appearance",nullptr,3);
   char mainValue[16],standbyValue[16];snprintf(mainValue,sizeof(mainValue),"%u%%",(unsigned)hubLevelPct(brightness));snprintf(standbyValue,sizeof(standbyValue),"%u%%",(unsigned)hubLevelPct(dpSettings.screensaverBrightness));
   hubUi13StepperRow(hubUi13RowRect(0),"Brightness",mainValue,"Active display",C10_ACCENT);
   hubUi13StepperRow(hubUi13RowRect(1),"Standby Brightness",standbyValue,"Idle display",C10_ACCENT);
@@ -167,7 +162,7 @@ static void drawUi13Display() {
 
 AFTER=r'''
 static void drawUi13AfterPrint() {
-  tft.fillScreen(C10_BG);drawHeader("After Print",nullptr,3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("After Print",nullptr,3);
   char timeout[20];if(dpSettings.finishDisplayMins==0)strlcpy(timeout,"Immediate",sizeof(timeout));else snprintf(timeout,sizeof(timeout),"%u min",(unsigned)dpSettings.finishDisplayMins);
   hubUi13StepperRow(hubUi13RowRect(0),"Display Behavior",hubAfterPrintLabel(),"Finished-print screen",C10_ACCENT);
   hubUi13StepperRow(hubUi13RowRect(1),"Finish Timeout",timeout,"Before standby",C10_ACCENT);
@@ -179,7 +174,7 @@ static void drawUi13AfterPrint() {
 
 SOUND=r'''
 static void drawUi13Sound() {
-  tft.fillScreen(C10_BG);drawHeader("Sound & Media",nullptr,3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Sound & Media",nullptr,3);
   hubUi13ToggleRow(hubUi13RowRect(0),"Event Sounds","Print and device events",buzzerSettings.enabled,C10_ACCENT);
   hubUi13ToggleRow(hubUi13RowRect(1),"Touch Sounds","Immediate tap feedback",buzzerSettings.buttonClick,C10_ACCENT);
   hubUi13ToggleRow(hubUi13RowRect(2),"Bed Cooled Alert","Notify when the bed cools",buzzerSettings.bedCooldownAlert,C10_ACCENT);
@@ -191,7 +186,7 @@ static void drawUi13Sound() {
 NETWORK=r'''
 static void drawUi13Network() {
   const bool wifi=workshopPlatformWifiOnline();String ip=wifi?WiFi.localIP().toString():String("Unknown");
-  tft.fillScreen(C10_BG);drawHeader("Network",wifi?"Connected":"Offline",3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Network",wifi?"Connected":"Offline",3);
   hubUi13InfoRow(hubUi13RowRect(0),"Wi-Fi",wifi?"Connected":"Unavailable",wifi?ip.c_str():"No active network connection",wifi?C10_GREEN:C10_ORANGE);
   hubUi13ToggleRow(hubUi13RowRect(1),"Local Hostname","Advertise the device on the LAN",netSettings.mdnsEnabled,C10_ACCENT);
   hubUi13ToggleRow(hubUi13RowRect(2),"Show IP at Startup","Show address after connection",netSettings.showIPAtStartup,C10_ACCENT);
@@ -209,7 +204,7 @@ static void drawUi13PrinterPower() {
   const uint8_t plug=configured?hubPowerConfigPlug():0xFF;
   const bool mapped=plug!=0xFF;
   const bool plugReady=mapped&&tasmotaSettings[plug].enabled&&tasmotaSettings[plug].ip[0];
-  tft.fillScreen(C10_BG);drawHeader("Printer & Power",connected?"Connected":(configured?"Unavailable":"Not Configured"),3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Printer & Power",connected?"Connected":(configured?"Unavailable":"Not Configured"),3);
   hubUi13InfoRow(hubUi13RowRect(0),"Printer",p&&p->config.name[0]?p->config.name:(configured?"Configured":"Not configured"),connected?"Fresh printer connection":(configured?"No fresh printer connection":"Setup required"),connected?C10_GREEN:(configured?C10_ORANGE:C10_MUTED));
   hubUi13InfoRow(hubUi13RowRect(1),"Smart Plug",plugReady?"Ready":(mapped?"Needs setup":"Not mapped"),mapped?"Power mapping exists":"No power mapping",plugReady?C10_GREEN:C10_MUTED);
   hubUi13ToggleRow(hubUi13RowRect(2),"Automatic Power Off",mapped&&tasmotaSettings[plug].autoOffEnabled?"Enabled after finished print":"Disabled or unavailable",mapped&&tasmotaSettings[plug].autoOffEnabled,C10_ACCENT);
@@ -221,7 +216,7 @@ static void drawUi13PrinterPower() {
 POWER_OPTIONS=r'''
 static void drawUi13PowerOptions() {
   const bool configured=workshopPlatformState().configuredPrinterCount>0;const uint8_t plug=configured?hubPowerConfigPlug():0xFF;const bool mapped=plug!=0xFF;
-  tft.fillScreen(C10_BG);drawHeader("Power Options",mapped?"Ready":"Unavailable",3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Power Options",mapped?"Ready":"Unavailable",3);
   if(mapped){
     TasmotaSettings& ps=tasmotaSettings[plug];char delay[20];snprintf(delay,sizeof(delay),"%u min",(unsigned)ps.autoOffDelayMin);
     hubUi13StepperRow(hubUi13RowRect(0),"Auto-Off Delay",delay,"After a finished print",C10_ACCENT);
@@ -239,7 +234,7 @@ static void drawUi13PowerOptions() {
 
 AUTO_OFF=r'''
 static void drawUi13AutoOffConfirm() {
-  const int16_t W=tft.width();tft.fillScreen(C10_BG);drawHeader("Enable Auto-Off?",nullptr,3);uiBottomNav(3,nullptr);
+  const int16_t W=tft.width();tft.fillScreen(C10_BG);drawHeader("Enable Auto-Off?",nullptr,3);
   HubRect card=hr(OS12_MARGIN_X,52,W-OS12_MARGIN_X*2,146);hubOs12StatePanel(card,"Guarded automation","Automatic printer power-off","Turns off only the mapped plug after a finished print and configured delay.",C10_ORANGE,true);
   hubV1125Action(hubUi13BackRect(),"Cancel",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Enable",C10_ORANGE,true,false);
   hubMarkFrameDirty();g_dirty=false;
@@ -248,7 +243,7 @@ static void drawUi13AutoOffConfirm() {
 
 DATE_TIME=r'''
 static void drawUi13DateTime() {
-  tft.fillScreen(C10_BG);drawHeader("Date & Time",nullptr,3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Date & Time",nullptr,3);
   hubUi13StepperRow(hubUi13RowRect(0),"Time Zone",hubTimezoneLabel(),"Local region",C10_ACCENT);
   hubUi13ToggleRow(hubUi13RowRect(1),"24-Hour Time","Use a 24-hour clock",netSettings.use24h,C10_ACCENT);
   hubUi13StepperRow(hubUi13RowRect(2),"Date Format",hubDateFormatLabel(netSettings.dateFormat),"Display format",C10_ACCENT);
@@ -258,7 +253,7 @@ static void drawUi13DateTime() {
 
 UPDATE=r'''
 static void drawUi13SoftwareUpdate() {
-  const int16_t W=tft.width();tft.fillScreen(C10_BG);drawHeader("Software Update",nullptr,3);uiBottomNav(3,nullptr);
+  const int16_t W=tft.width();tft.fillScreen(C10_BG);drawHeader("Software Update",nullptr,3);
   HubRect hero=hr(OS12_MARGIN_X,48,W-OS12_MARGIN_X*2,86);hubV1125Card(hero,C10_ACCENT,true);
   char ver[40];snprintf(ver,sizeof(ver),"Workshop OS %s",SMART_HOME_VERSION);
   uiDrawFit(ver,hero.x+16,hero.y+14,hero.w-32,FONT_LARGE,TL_DATUM,C10_TEXT,C10_SURFACE_2);
@@ -275,7 +270,7 @@ static void drawUi13Diagnostics() {
   const uint8_t slot=rotState.displayIndex<MAX_PRINTERS?rotState.displayIndex:0;
   const bool printerOk=configured&&workshopPlatformPrinterOnline(slot);
   const bool healthy=touchOk&&recoveryOk;
-  tft.fillScreen(C10_BG);drawHeader("Diagnostics",healthy?"Healthy":"Check Device",3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Diagnostics",healthy?"Healthy":"Check Device",3);
   hubUi13InfoRow(hubUi13RowRect(0),"Touch",touchOk?"OK":"Check","Physical touchscreen input",touchOk?C10_GREEN:C10_ORANGE);
   hubUi13InfoRow(hubUi13RowRect(1),"Recovery",recoveryOk?"Ready":"Starting","Recovery service",recoveryOk?C10_GREEN:C10_ORANGE);
   hubUi13InfoRow(hubUi13RowRect(2),"Connectivity",!wifi?"Offline":(printerOk?"Network + printer":"Network only"),"Connectivity is not device-health proof",wifi?C10_GREEN:C10_ORANGE);
@@ -286,7 +281,7 @@ static void drawUi13Diagnostics() {
 PORTAL=r'''
 static void drawUi12PortalAccess() {
   const int16_t W=tft.width();const bool wifi=workshopPlatformWifiOnline();String ip=wifi?WiFi.localIP().toString():String("Wi-Fi required");
-  tft.fillScreen(C10_BG);drawHeader("Local Portal",wifi?"Ready":"Offline",3);uiBottomNav(3,nullptr);
+  tft.fillScreen(C10_BG);drawHeader("Local Portal",wifi?"Ready":"Offline",3);
   HubRect card=hr(OS12_MARGIN_X,48,W-OS12_MARGIN_X*2,156);hubV1125Card(card,wifi?C10_ACCENT:C10_ORANGE,true);
   uiDrawFit("Authenticated local administration",card.x+16,card.y+14,card.w-32,FONT_LARGE,TL_DATUM,C10_TEXT,C10_SURFACE_2);
   uiDrawFit(wifi?"Open this device address from the same LAN.":"Connect the WS350 to Wi-Fi before using Local Portal.",card.x+16,card.y+55,card.w-32,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE_2);
