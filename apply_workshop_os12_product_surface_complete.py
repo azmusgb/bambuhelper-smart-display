@@ -296,6 +296,11 @@ static void drawUi12PortalAccess() {
 
 def apply(repo:Path)->None:
     p=repo/"src"/"smart_hub.cpp";text=load(p)
+    if "static uint8_t gOs12SettingsParent = 0;" not in text:
+        marker="static uint8_t gOs12PortalParent = 0;"
+        if marker not in text:
+            raise PatchError("OS12 parent-state insertion anchor missing")
+        text=text.replace(marker,marker+"\nstatic uint8_t gOs12SettingsParent = 0; // 0=More, 1=System",1)
     if "static void hubOs12StatePanel(" not in text:
         anchor="static void drawHome(bool full)"
         if text.count(anchor)!=1: raise PatchError("state helper insertion anchor missing/non-unique")
@@ -337,6 +342,40 @@ def apply(repo:Path)->None:
     if sound_touch_old not in text:
         raise PatchError("Sound & Media touch routing anchor missing")
     text=text.replace(sound_touch_old,sound_touch_new,1)
+
+    # Preserve deterministic parentage for Printer & Power, which is owned
+    # by System even though the historical renderer uses SCREEN_HUB_MORE state.
+    more_route_old='if(i<3){g_ui12SettingsView=(uint8_t)(i+1U);buzzerPlay(BUZZ_CLICK);g_dirty=true;}'
+    more_route_new='if(i<3){gOs12SettingsParent=0;g_ui12SettingsView=(uint8_t)(i+1U);buzzerPlay(BUZZ_CLICK);g_dirty=true;}'
+    if more_route_old not in text:
+        raise PatchError("More child parent-routing anchor missing")
+    text=text.replace(more_route_old,more_route_new,1)
+
+    system_power_old='else if(i==1){g_ui12SettingsView=4;setPage(SCREEN_HUB_MORE);}'
+    system_power_new='else if(i==1){gOs12SettingsParent=1;g_ui12SettingsView=4;setPage(SCREEN_HUB_MORE);}'
+    if system_power_old not in text:
+        raise PatchError("System -> Printer & Power parent-routing anchor missing")
+    text=text.replace(system_power_old,system_power_new,1)
+
+    power_back_old='if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}'
+    state4=text.find('if(g_ui12SettingsView==4){')
+    state8=text.find('if(g_ui12SettingsView==8){',state4)
+    if state4 < 0 or state8 < 0:
+        raise PatchError("Printer & Power touch block missing")
+    block=text[state4:state8]
+    if power_back_old not in block:
+        raise PatchError("Printer & Power Back anchor missing")
+    power_back_new='if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=0;if(gOs12SettingsParent==1){gOs12SettingsParent=0;g_ui12SystemView=0;setPage(SCREEN_HUB_SYSTEM);}buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}'
+    block=block.replace(power_back_old,power_back_new,1)
+    text=text[:state4]+block+text[state8:]
+
+    # Deterministic capture/navigation of Printer & Power should also identify
+    # System as its logical parent.
+    capture_old='if (strcmp(pageName, "settings-printer-power") == 0) { setPage(SCREEN_HUB_MORE);g_ui12SettingsView=4;g_ui12SystemView=0;g_networkSettingsView=false;g_audioSettingsView=false;g_dirty=true;return true; }'
+    capture_new='if (strcmp(pageName, "settings-printer-power") == 0) { setPage(SCREEN_HUB_MORE);gOs12SettingsParent=1;g_ui12SettingsView=4;g_ui12SystemView=0;g_networkSettingsView=false;g_audioSettingsView=false;g_dirty=true;return true; }'
+    if capture_old not in text:
+        raise PatchError("Printer & Power native route anchor missing")
+    text=text.replace(capture_old,capture_new,1)
 
     p.write_text(text,encoding="utf-8")
     print("Workshop OS 12 Home/Workshop/More/System product surfaces completed")
