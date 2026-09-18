@@ -106,7 +106,8 @@ def main() -> int:
     forbid(row, ("hubV1125Card(",), "row surface")
 
     nav = braced_block(text, "static void hubOs12NavRow(")
-    require(nav, ("OS12_ROW_INSET_X", 'uiDrawFit(">"'), "navigation row")
+    require(nav, ("OS12_ROW_INSET_X", "tft.drawLine", "cy-5", "cy+5"), "navigation row")
+    forbid(nav, ('uiDrawFit(">")',), "navigation row glyph")
 
     evidence = braced_block(text, "static void hubOs12EvidenceRow(")
     require(evidence, (
