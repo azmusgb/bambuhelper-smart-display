@@ -358,7 +358,8 @@ def apply(repo:Path)->None:
     text=text.replace(system_power_old,system_power_new,1)
 
     power_back_old='if(hubUi13BackRect().contains(x,y)){g_ui12SettingsView=0;buzzerPlay(BUZZ_CLICK);g_dirty=true;return true;}'
-    state4=text.find('if(g_ui12SettingsView==4){')
+    touch_root=text.find('if(g_ui12SettingsView){')
+    state4=text.find('if(g_ui12SettingsView==4){',touch_root)
     state8=text.find('if(g_ui12SettingsView==8){',state4)
     if state4 < 0 or state8 < 0:
         raise PatchError("Printer & Power touch block missing")
