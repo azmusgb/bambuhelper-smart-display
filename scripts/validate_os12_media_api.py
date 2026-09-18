@@ -32,6 +32,7 @@ def main() -> int:
         'doc["recordingAvailable"]',
         'doc["videoDecoderAvailable"]',
         'doc["microphoneLevelPercent"]',
+        'doc["deviceUptimeMs"]',
         'doc["printerConfigured"]',
         'doc["printerCameraObserved"]',
         'doc["printerLiveviewPreview"]',
