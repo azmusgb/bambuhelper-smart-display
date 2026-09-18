@@ -45,6 +45,12 @@ def main()->int:
     ap=argparse.ArgumentParser();ap.add_argument("--repo",required=True);a=ap.parse_args()
     hub=load(Path(a.repo).resolve()/"src"/"smart_hub.cpp")
 
+    req(hub,'static uint8_t gOs12SettingsParent = 0;',"settings parent state")
+    req(hub,'gOs12SettingsParent=1;g_ui12SettingsView=4;setPage(SCREEN_HUB_MORE);',"System -> Printer & Power parent")
+    req(hub,'if(gOs12SettingsParent==1){gOs12SettingsParent=0;g_ui12SystemView=0;setPage(SCREEN_HUB_SYSTEM);}',"Printer & Power Back parent")
+    req(hub,'if(hubUi13RowRect(2).contains(x,y)){g_ui12SettingsView=10;',"Sound & Media -> Media")
+    req(hub,'if(hubUi13ActionRect().contains(x,y)){g_ui12SettingsView=6;',"Sound & Media -> Printer Alerts")
+
     helper=block(hub,"static void hubOs12StatePanel(")
     for n in ("hubV1125Card","eyebrow","detail","color"): req(helper,n,"state panel")
 
