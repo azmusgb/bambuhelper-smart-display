@@ -113,7 +113,7 @@ def validate_main_state(main_state: object, readme_text: str) -> str:
 def validate_capture_security() -> None:
     capture = (ROOT / "scripts" / "capture-ws350-views.zsh").read_text(encoding="utf-8")
     required = [
-        'echo "Usage: $0 <device-host-or-ip>"', 'HOST="$1"',
+        'echo "Usage: $0 <device-host-or-ip> [--resume <capture-folder>]"', 'HOST="$1"',
         'RAW_PPM="$(mktemp -t bambu-capture-frame)"', "stty -echo",
         'chmod 600 "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"',
         'rm -f "$COOKIE" "$LOGIN_BODY" "$RAW_PPM"', "trap cleanup EXIT",
