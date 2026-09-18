@@ -18,6 +18,7 @@ on:
       - 'scripts/validate_os12_ux_physical_fit.py'
       - 'scripts/validate_os12_portal_control_plane.py'
       - 'scripts/capture-ws350-views.zsh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/ui-v11.25-rc10/**'
       - 'firmware/ui-v11.26-ui11/**'
@@ -36,6 +37,7 @@ on:
       - 'scripts/validate_os12_ux_physical_fit.py'
       - 'scripts/validate_os12_portal_control_plane.py'
       - 'scripts/capture-ws350-views.zsh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/ui-v11.25-rc10/**'
       - 'firmware/ui-v11.26-ui11/**'
@@ -70,6 +72,7 @@ jobs:
           python3 -m json.tool contracts/filament-inventory-device-feed-v1.schema.json >/dev/null
           bash -n scripts/run_os12_ux_local.sh
           zsh -n scripts/capture-ws350-views.zsh
+          bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
 
       - name: Reconstruct and build exact-head UX candidate
         run: BUILD=/tmp/ws350-os12-ux-build bash scripts/run_os12_ux_local.sh --build
