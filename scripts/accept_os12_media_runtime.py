@@ -2,8 +2,7 @@
 """Exercise the Workshop OS 12 media contract against a real WS350.
 
 Default mode is read-only. --exercise runs speaker, microphone and bounded
-record/playback. --exercise-video runs the fixed-source displayed-printer camera
-video lifecycle. These are runtime checks only; hearing/seeing media quality and
+record/playback. --exercise-video runs the built-in WS350 demo-video lifecycle. These are runtime checks only; hearing/seeing media quality and
 touch responsiveness remain physical acceptance observations.
 """
 from __future__ import annotations
@@ -153,9 +152,9 @@ def exercise_video(client: Client, initial: dict) -> None:
     check(
         start["_http_status"] == 202 and start["session"] == "PlayingVideo",
         "video start refused: " + str(start["error"]) +
-        " (displayed printer must expose a streamable local camera)",
+        " (built-in WS350 demo source must be available)",
     )
-    print("STATE PlayingVideo: displayed-printer camera started")
+    print("STATE PlayingVideo: built-in WS350 demo video started")
 
     time.sleep(2.0)
     live = status(client)
@@ -180,7 +179,7 @@ def exercise_video(client: Client, initial: dict) -> None:
     validate_status(stop)
     check(stop["_http_status"] == 200 and stop["session"] == "Idle",
           f"video stop refused: {stop['error']}")
-    print("PASS  bounded printer-camera video start/pause/resume/stop lifecycle")
+    print("PASS  bounded WS350 demo-video start/pause/resume/stop lifecycle")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -256,7 +255,7 @@ def main() -> int:
     ap.add_argument(
         "--exercise-video",
         action="store_true",
-        help="exercise fixed-source displayed-printer camera start/pause/resume/stop",
+        help="exercise built-in WS350 demo-video start/pause/resume/stop",
     )
     args = ap.parse_args()
     try:
