@@ -16,7 +16,7 @@ def main() -> int:
     for needle in (
         '#include "workshop_media_runtime.h"',
         'static void drawOs12Media()',
-        'static void drawOs12MediaLab()',
+        'static void drawOs12Recorder()',
         'static void drawOs12VideoViewer()',
         'g_ui12SettingsView==12',
         'Workshop OS media playback',
@@ -27,8 +27,9 @@ def main() -> int:
         'g_ui12SettingsView==11',
         'workshopMediaSnapshot()',
         'workshopMediaService()',
-        'Speaker Volume',
-        'Speaker Test',
+        '"Speaker"',
+        'tap center to test',
+        '"Recorder"',
         'Microphone',
         'Recording',
         'Playback',
@@ -38,7 +39,9 @@ def main() -> int:
         'stopRecording(millis())',
         'playRecording(millis())',
         'Video',
-        'Printer: live',
+        '"Printer Camera"',
+        'Live %s • RTSP %s',
+        'BRTC %s • TUTK %s',
         'playMjpeg("demo-video",millis())',
         'gOs12VideoViewerPrimed',
         'Hardware not detected',
@@ -50,7 +53,7 @@ def main() -> int:
     for forbidden in ('matchSpoolByColor', 'matchSpoolByMaterial', 'resolveSpool'):
         if forbidden in text:
             raise SystemExit(f"FAIL: media UI introduced forbidden inventory inference {forbidden}")
-    print('PASS: OS12 media touchscreen UI exposes speaker/mic plus printer-independent WS350 video demo and read-only camera telemetry')
+    print('PASS: OS12 Media hierarchy exposes Speaker, Microphone and Video together; Recorder is secondary; printer camera telemetry remains read-only')
     return 0
 
 
