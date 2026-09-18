@@ -167,7 +167,7 @@ def main() -> int:
 
     toggle = braced_block(text, "static void hubUi13ToggleRow(")
     stepper = braced_block(text, "static void hubUi13StepperRow(")
-    require(toggle, ("OS12_ROW_INSET_X", "controlW=62", "36"), "toggle geometry")
+    require(toggle, ("OS12_ROW_INSET_X", "controlW=62", "34", "d=26"), "toggle geometry")
     require(stepper, ("buttonW=46", "buttonH=44", "OS12_ACTION_GAP"), "stepper geometry")
 
     print("PASS: OS12 480x320 geometry uses canonical margins, rows, action bars, and compact physical evidence columns")
