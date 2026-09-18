@@ -182,6 +182,29 @@ def exercise_audio_visible(
     validate_status(speaker)
     check(speaker["_http_status"] == 202,
           f"speaker test refused: {speaker['error']}")
+    time.sleep(0.15)
+    speaker_active = status(client)
+    check(speaker_active["session"] == "PlayingAudio",
+          f"speaker diagnostic did not remain active long enough to sample: {speaker_active['session']}")
+    observations["_speaker_active_diag"] = {
+        "codecReady": speaker_active.get("audioCodecReady"),
+        "i2sReady": speaker_active.get("audioI2sReady"),
+        "pipelineRunning": speaker_active.get("audioPipelineRunning"),
+        "ampEnabled": speaker_active.get("audioAmpEnabled"),
+        "frequency": speaker_active.get("audioCurrentFrequency"),
+        "targetGain": speaker_active.get("audioTargetGain"),
+        "currentGain": speaker_active.get("audioCurrentGain"),
+    }
+    print(
+        "SPEAKER ACTIVE "
+        f"codecReady={speaker_active.get('audioCodecReady')} "
+        f"i2sReady={speaker_active.get('audioI2sReady')} "
+        f"pipelineRunning={speaker_active.get('audioPipelineRunning')} "
+        f"ampEnabled={speaker_active.get('audioAmpEnabled')} "
+        f"freq={speaker_active.get('audioCurrentFrequency')} "
+        f"targetGain={speaker_active.get('audioTargetGain')} "
+        f"currentGain={speaker_active.get('audioCurrentGain')}"
+    )
     wait_for_session(client, {"Idle"}, 3.0)
     print("PASS  bounded speaker-test lifecycle while native Media view is visible")
 
@@ -270,6 +293,7 @@ def run(args: argparse.Namespace) -> int:
         "microphoneBaselinePeak": None,
         "microphoneStimulatedPeak": None,
         "microphonePeakIncreased": None,
+        "speakerActiveDiagnostics": None,
         "passed": False,
         "completed": False,
         "failure": None,
@@ -314,6 +338,7 @@ def run(args: argparse.Namespace) -> int:
         )
         print("\nAUDIO / MICROPHONE\n------------------")
         exercise_audio_visible(client, initial, navigation_log, observations)
+        evidence["speakerActiveDiagnostics"] = observations.pop("_speaker_active_diag", None)
         baseline_peak = observations.pop("_mic_baseline_peak", None)
         stimulated_peak = observations.pop("_mic_stimulated_peak", None)
         evidence["microphoneBaselinePeak"] = baseline_peak
