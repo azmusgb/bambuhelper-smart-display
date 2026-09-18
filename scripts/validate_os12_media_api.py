@@ -32,6 +32,10 @@ def main() -> int:
         'doc["recordingAvailable"]',
         'doc["videoDecoderAvailable"]',
         'doc["microphoneLevelPercent"]',
+        'doc["printerCameraObserved"]',
+        'doc["printerLiveviewPreview"]',
+        'doc["printerRtspEnabled"]',
+        'doc["printerCameraResolution"]',
         'Cache-Control',
         'no-store',
     ):
