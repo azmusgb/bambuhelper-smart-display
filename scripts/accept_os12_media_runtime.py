@@ -120,6 +120,16 @@ def exercise_audio(client: Client, initial: dict) -> None:
     check(mic["_http_status"] == 200,
           f"microphone sample refused: {mic['error']}")
     print(f"PASS  microphone activity sample returned {mic['microphoneLevelPercent']}%")
+    print(
+        "AUDIO DIAG "
+        f"codecReady={mic.get('audioCodecReady')} "
+        f"i2sReady={mic.get('audioI2sReady')} "
+        f"pipelineRunning={mic.get('audioPipelineRunning')} "
+        f"bytes={mic.get('microphoneLastBytes')} "
+        f"samples={mic.get('microphoneLastSamples')} "
+        f"nonzero={mic.get('microphoneLastNonZeroSamples')} "
+        f"peak={mic.get('microphoneLastPeak')}"
+    )
 
     check(initial["psramAvailable"],
           "recording requires PSRAM but device reports unavailable")
