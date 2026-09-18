@@ -36,6 +36,13 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["audioUnderruns"] = snap.runtime.audioUnderruns;
   doc["droppedVideoFrames"] = snap.runtime.droppedVideoFrames;
   doc["deviceUptimeMs"] = (uint32_t)millis();
+  doc["audioCodecReady"] = buzzerBackendCodecReady();
+  doc["audioI2sReady"] = buzzerBackendI2sReady();
+  doc["audioPipelineRunning"] = buzzerBackendAudioRunning();
+  doc["microphoneLastBytes"] = buzzerBackendMicLastBytes();
+  doc["microphoneLastSamples"] = buzzerBackendMicLastSamples();
+  doc["microphoneLastNonZeroSamples"] = buzzerBackendMicLastNonZeroSamples();
+  doc["microphoneLastPeak"] = buzzerBackendMicLastPeak();
   const bool printerConfigured = isAnyPrinterConfigured();
   const PrinterSlot* printer = printerConfigured ? &displayedPrinter() : nullptr;
   doc["printerConfigured"] = printerConfigured;
@@ -151,7 +158,7 @@ def apply(repo: Path) -> None:
         anchor = '#include "workshop_update_service.h"\n'
         if text.count(anchor) != 1:
             raise PatchError("media API include anchor missing/non-unique")
-        text = text.replace(anchor, anchor + '#include "workshop_media_runtime.h"\n#include "camera_client.h"\n', 1)
+        text = text.replace(anchor, anchor + '#include "workshop_media_runtime.h"\n#include "camera_client.h"\n#include "buzzer_backend.h"\n', 1)
 
     if "sendWorkshopMediaStatus" not in text:
         marker = "void initWebServer() {\n"
