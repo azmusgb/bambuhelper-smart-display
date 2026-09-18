@@ -248,8 +248,8 @@ def patch_capture_catalog(web: str) -> str:
         else:
             entries = [
                 '    {"id":"media","label":"Media","group":"Sound & Media"},\n',
-                '    {"id":"media-lab","label":"Media Lab","group":"Sound & Media"},\n',
-                '    {"id":"media-video","label":"Camera Viewer","group":"Sound & Media"},\n',
+                '    {"id":"media-lab","label":"Recorder","group":"Sound & Media"},\n',
+                '    {"id":"media-video","label":"Video Viewer","group":"Sound & Media"},\n',
             ]
         lines[insert_at:insert_at] = entries
         web = "".join(lines)
