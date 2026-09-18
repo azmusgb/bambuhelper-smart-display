@@ -67,7 +67,7 @@ uint16_t buzzerBackendAudioCurrentGain();
             "uint32_t gOs12MicLastBytes = 0;\n"
             "uint32_t gOs12MicLastSamples = 0;\n"
             "uint32_t gOs12MicLastNonZeroSamples = 0;\n"
-            "uint32_t gOs12MicLastPeak = 0;\n"
+            "uint32_t gOs12MicLastPeak = 0;\n",
             "ES8311 media diagnostic state",
         )
 
