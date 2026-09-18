@@ -69,6 +69,7 @@ def main() -> int:
         "recordingPlaybackRequested_",
         "videoLastFrameId_",
         "videoLastRenderAtMs_",
+        "renderDemoFrame",
         "renderLatestCameraFrame",
         "isSessionActive() const override",
         "hasRecording() const override",
@@ -84,12 +85,14 @@ def main() -> int:
         "buzzerBackendMicPlaybackPoll",
         "buzzerBackendMicHasRecording",
         "psramFound()",
+        'kDemoVideoSource[] = "demo-video"',
         'kPrinterCameraSource[] = "printer-camera"',
         "cameraCanStreamDisplayedPrinter()",
         "cameraBegin()",
         "cameraGetLatestFrame",
         "tft.drawJpg",
-        "kVideoFrameIntervalMs = 125U",
+        "kVideoFrameIntervalMs = 200U",
+        "yield();  // Cooperative handoff",
         "videoDecoderAvailable = caps.psramAvailable",
     ])
     forbid(BACKEND_CPP, [
