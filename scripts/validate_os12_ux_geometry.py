@@ -96,8 +96,14 @@ def main() -> int:
             fail(f"geometry token must exist exactly once: {token}")
 
     row = braced_block(text, "static void hubOs12RowSurface(")
-    require(row, ("OS12_ROW_INSET_X", "tft.drawFastHLine"), "row surface")
-    forbid(row, ("hubV1125Card(", "fillRoundRect("), "row surface")
+    require(row, (
+        "OS12_ROW_INSET_X",
+        "tft.drawFastHLine",
+        "tft.fillRoundRect",
+        "tft.drawRoundRect",
+        "OS12_UI_RADIUS_SMALL",
+    ), "row surface")
+    forbid(row, ("hubV1125Card(",), "row surface")
 
     nav = braced_block(text, "static void hubOs12NavRow(")
     require(nav, ("OS12_ROW_INSET_X", 'uiDrawFit(">"'), "navigation row")
