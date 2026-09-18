@@ -118,9 +118,10 @@ def exercise_audio(client: Client, initial: dict) -> None:
         f"codecReady={speaker_diag.get('audioCodecReady')} "
         f"i2sReady={speaker_diag.get('audioI2sReady')} "
         f"pipelineRunning={speaker_diag.get('audioPipelineRunning')} "
-        f"writeBytes={speaker_diag.get('audioLastWriteBytes')} "
-        f"peak={speaker_diag.get('audioLastPeak')} "
-        f"freq={speaker_diag.get('audioCurrentFrequency')}"
+        f"ampEnabled={speaker_diag.get('audioAmpEnabled')} "
+        f"freq={speaker_diag.get('audioCurrentFrequency')} "
+        f"targetGain={speaker_diag.get('audioTargetGain')} "
+        f"currentGain={speaker_diag.get('audioCurrentGain')}"
     )
 
     check(initial["microphoneAvailable"],
