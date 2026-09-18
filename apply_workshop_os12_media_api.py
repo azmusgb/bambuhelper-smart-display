@@ -43,6 +43,17 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["videoLastFrameId"] = video.lastFrameId;
   doc["videoLastFrameBytes"] = video.lastFrameBytes;
   doc["videoLastFrameAtMs"] = video.lastFrameAtMs;
+  CameraTransportDiagnostics cameraDiag;
+  cameraGetTransportDiagnostics(&cameraDiag);
+  doc["cameraSocketConnected"] = cameraDiag.socketConnected;
+  doc["cameraConnectAttempts"] = cameraDiag.connectAttempts;
+  doc["cameraConnectSuccesses"] = cameraDiag.connectSuccesses;
+  doc["cameraConnectFailures"] = cameraDiag.connectFailures;
+  doc["cameraAuthWrites"] = cameraDiag.authWrites;
+  doc["cameraBytesRead"] = cameraDiag.bytesRead;
+  doc["cameraParserResets"] = cameraDiag.parserResets;
+  doc["cameraFramesPublished"] = cameraDiag.framesPublished;
+  doc["cameraLastReadAtMs"] = cameraDiag.lastReadAtMs;
   String json;
   serializeJson(doc, json);
   server.sendHeader("Cache-Control", "no-store");
@@ -131,7 +142,7 @@ def apply(repo: Path) -> None:
         anchor = '#include "workshop_update_service.h"\n'
         if text.count(anchor) != 1:
             raise PatchError("media API include anchor missing/non-unique")
-        text = text.replace(anchor, anchor + '#include "workshop_media_runtime.h"\n', 1)
+        text = text.replace(anchor, anchor + '#include "workshop_media_runtime.h"\n#include "camera_client.h"\n', 1)
 
     if "sendWorkshopMediaStatus" not in text:
         marker = "void initWebServer() {\n"
