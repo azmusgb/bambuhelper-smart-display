@@ -8,7 +8,6 @@ adds bounded diagnostics that make physical acceptance failures observable.
 from __future__ import annotations
 
 import argparse
-import re
 from pathlib import Path
 
 
@@ -47,9 +46,10 @@ uint32_t buzzerBackendMicLastBytes();
 uint32_t buzzerBackendMicLastSamples();
 uint32_t buzzerBackendMicLastNonZeroSamples();
 uint32_t buzzerBackendMicLastPeak();
-uint32_t buzzerBackendAudioLastWriteBytes();
-uint32_t buzzerBackendAudioLastPeak();
+bool buzzerBackendAmpEnabled();
 uint16_t buzzerBackendAudioCurrentFrequency();
+uint16_t buzzerBackendAudioTargetGain();
+uint16_t buzzerBackendAudioCurrentGain();
 """
     if "buzzerBackendCodecReady" not in header:
         header = once(
@@ -68,8 +68,6 @@ uint16_t buzzerBackendAudioCurrentFrequency();
             "uint32_t gOs12MicLastSamples = 0;\n"
             "uint32_t gOs12MicLastNonZeroSamples = 0;\n"
             "uint32_t gOs12MicLastPeak = 0;\n"
-            "uint32_t gOs12AudioLastWriteBytes = 0;\n"
-            "uint32_t gOs12AudioLastPeak = 0;\n",
             "ES8311 media diagnostic state",
         )
 
@@ -101,32 +99,6 @@ uint16_t buzzerBackendAudioCurrentFrequency();
         mic_route,
         "ES8311 analog-mic route/gain",
     )
-
-    if "gOs12AudioLastWriteBytes = (uint32_t)written;" not in es:
-        pattern = re.compile(
-            r"(fillChunk\(chunk\);\s*)"
-            r"(size_t\s+written\s*=\s*0;\s*)"
-            r"(i2s_write\(\(i2s_port_t\)AUDIO_I2S_PORT,\s*chunk,\s*sizeof\(chunk\),\s*"
-            r"&written,\s*pdMS_TO_TICKS\(50\)\);)"
-        )
-        match = pattern.search(es)
-        if not match:
-            raise PatchError("ES8311 speaker TX diagnostics: audio task write anchor missing")
-        instrumented = (
-            match.group(1)
-            + "uint32_t peak = 0;\n"
-            + "    for (size_t i = 0; i < kChunkSamples; ++i) {\n"
-            + "      int32_t v = chunk[i];\n"
-            + "      if (v < 0) v = -v;\n"
-            + "      if ((uint32_t)v > peak) peak = (uint32_t)v;\n"
-            + "    }\n"
-            + "    "
-            + match.group(2)
-            + match.group(3)
-            + "\n    gOs12AudioLastWriteBytes = (uint32_t)written;"
-            + "\n    gOs12AudioLastPeak = peak;"
-        )
-        es = es[:match.start()] + instrumented + es[match.end():]
 
     mic_meter_old = """  int16_t samples[128];
   int32_t peak = 0;
@@ -219,9 +191,10 @@ uint32_t buzzerBackendMicLastBytes() { return gOs12MicLastBytes; }
 uint32_t buzzerBackendMicLastSamples() { return gOs12MicLastSamples; }
 uint32_t buzzerBackendMicLastNonZeroSamples() { return gOs12MicLastNonZeroSamples; }
 uint32_t buzzerBackendMicLastPeak() { return gOs12MicLastPeak; }
-uint32_t buzzerBackendAudioLastWriteBytes() { return gOs12AudioLastWriteBytes; }
-uint32_t buzzerBackendAudioLastPeak() { return gOs12AudioLastPeak; }
+bool buzzerBackendAmpEnabled() { return gAmpEnabled; }
 uint16_t buzzerBackendAudioCurrentFrequency() { return gCurrentFreq; }
+uint16_t buzzerBackendAudioTargetGain() { return gTargetGain; }
+uint16_t buzzerBackendAudioCurrentGain() { return gCurrentGain; }
 
 '''
     if "bool buzzerBackendCodecReady()" not in es:
@@ -242,9 +215,10 @@ uint16_t buzzerBackendAudioCurrentFrequency() { return gCurrentFreq; }
         "buzzerBackendMicLastSamples",
         "buzzerBackendMicLastNonZeroSamples",
         "buzzerBackendMicLastPeak",
-        "buzzerBackendAudioLastWriteBytes",
-        "buzzerBackendAudioLastPeak",
+        "buzzerBackendAmpEnabled",
         "buzzerBackendAudioCurrentFrequency",
+        "buzzerBackendAudioTargetGain",
+        "buzzerBackendAudioCurrentGain",
     ):
         if needle not in header or needle not in es:
             raise PatchError(f"media diagnostic contract missing {needle}")
