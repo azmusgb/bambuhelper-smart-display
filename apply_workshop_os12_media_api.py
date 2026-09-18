@@ -35,6 +35,14 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["recordingAvailable"] = snap.runtime.recordingAvailable;
   doc["audioUnderruns"] = snap.runtime.audioUnderruns;
   doc["droppedVideoFrames"] = snap.runtime.droppedVideoFrames;
+  const workshop::media::VideoDiagnostics& video = workshopVideoDiagnostics();
+  doc["videoPolls"] = video.polls;
+  doc["videoNoFramePolls"] = video.noFramePolls;
+  doc["videoFrameObservations"] = video.frameObservations;
+  doc["videoFramesRendered"] = video.framesRendered;
+  doc["videoLastFrameId"] = video.lastFrameId;
+  doc["videoLastFrameBytes"] = video.lastFrameBytes;
+  doc["videoLastFrameAtMs"] = video.lastFrameAtMs;
   String json;
   serializeJson(doc, json);
   server.sendHeader("Cache-Control", "no-store");
