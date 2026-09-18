@@ -36,6 +36,7 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["audioUnderruns"] = snap.runtime.audioUnderruns;
   doc["droppedVideoFrames"] = snap.runtime.droppedVideoFrames;
   doc["deviceUptimeMs"] = (uint32_t)millis();
+#if defined(BOARD_HAS_ES8311_AUDIO)
   doc["audioCodecReady"] = buzzerBackendCodecReady();
   doc["audioI2sReady"] = buzzerBackendI2sReady();
   doc["audioPipelineRunning"] = buzzerBackendAudioRunning();
@@ -43,6 +44,15 @@ static void sendWorkshopMediaStatus(int httpCode = 200) {
   doc["microphoneLastSamples"] = buzzerBackendMicLastSamples();
   doc["microphoneLastNonZeroSamples"] = buzzerBackendMicLastNonZeroSamples();
   doc["microphoneLastPeak"] = buzzerBackendMicLastPeak();
+#else
+  doc["audioCodecReady"] = false;
+  doc["audioI2sReady"] = false;
+  doc["audioPipelineRunning"] = false;
+  doc["microphoneLastBytes"] = 0;
+  doc["microphoneLastSamples"] = 0;
+  doc["microphoneLastNonZeroSamples"] = 0;
+  doc["microphoneLastPeak"] = 0;
+#endif
   const bool printerConfigured = isAnyPrinterConfigured();
   const PrinterSlot* printer = printerConfigured ? &displayedPrinter() : nullptr;
   doc["printerConfigured"] = printerConfigured;
