@@ -23,3 +23,7 @@ workshop::media::MediaService& workshopMediaService() {
 const workshop::media::Snapshot& workshopMediaSnapshot() {
   return gMediaService.snapshot();
 }
+
+const workshop::media::VideoDiagnostics& workshopVideoDiagnostics() {
+  return gMediaBackend.videoDiagnostics();
+}
