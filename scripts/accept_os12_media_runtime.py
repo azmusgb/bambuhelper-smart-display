@@ -110,11 +110,12 @@ def exercise_audio(client: Client, initial: dict) -> None:
     speaker = api(client, "/os12/media/speaker-test", method="POST")
     validate_status(speaker)
     check(speaker["_http_status"] == 202, f"speaker test refused: {speaker['error']}")
-    wait_for_session(client, {"Idle"}, 3.0)
-    print("PASS  bounded non-blocking speaker-test lifecycle")
+    time.sleep(0.15)
     speaker_diag = status(client)
+    check(speaker_diag["session"] == "PlayingAudio",
+          f"speaker diagnostic did not remain active long enough to sample: {speaker_diag['session']}")
     print(
-        "SPEAKER DIAG "
+        "SPEAKER ACTIVE "
         f"codecReady={speaker_diag.get('audioCodecReady')} "
         f"i2sReady={speaker_diag.get('audioI2sReady')} "
         f"pipelineRunning={speaker_diag.get('audioPipelineRunning')} "
@@ -123,6 +124,8 @@ def exercise_audio(client: Client, initial: dict) -> None:
         f"targetGain={speaker_diag.get('audioTargetGain')} "
         f"currentGain={speaker_diag.get('audioCurrentGain')}"
     )
+    wait_for_session(client, {"Idle"}, 3.0)
+    print("PASS  bounded non-blocking speaker-test lifecycle")
 
     check(initial["microphoneAvailable"],
           "--exercise requested but microphone is not available")
