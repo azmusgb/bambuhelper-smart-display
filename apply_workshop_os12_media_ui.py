@@ -52,16 +52,17 @@ static void drawOs12Recorder() {
   hubUi13InfoRow(hubUi13RowRect(0),"Recording",recordValue,recording?"Tap to stop":recordDetail,recording?C10_ORANGE:(recordReady?C10_ACCENT:C10_MUTED));
   const char* playValue=playing?"Playing":(m.runtime.recordingAvailable?"Tap to play":"No recording");
   hubUi13InfoRow(hubUi13RowRect(1),"Playback",playValue,playing?"Tap to stop":"Uses the captured local buffer",playing?C10_GREEN:(m.runtime.recordingAvailable?C10_ACCENT:C10_MUTED));
-  const PrinterSlot& p=displayedPrinter();
+  const bool printerConfigured=isAnyPrinterConfigured();
+  const PrinterSlot* p=printerConfigured?&displayedPrinter():nullptr;
   char cameraValue[32];char cameraDetail[80];
-  if(p.state.ipcamSeen){
-    snprintf(cameraValue,sizeof(cameraValue),"Live %s • RTSP %s",p.state.liveviewPreview?"on":"off",p.state.rtspEnabled?"on":"off");
-    snprintf(cameraDetail,sizeof(cameraDetail),"%s • BRTC %s • TUTK %s",p.state.cameraResolution[0]?p.state.cameraResolution:"resolution ?",p.state.brtcServiceEnabled?"on":"off",p.state.tutkServiceEnabled?"on":"off");
+  if(p&&p->state.ipcamSeen){
+    snprintf(cameraValue,sizeof(cameraValue),"Live %s • RTSP %s",p->state.liveviewPreview?"on":"off",p->state.rtspEnabled?"on":"off");
+    snprintf(cameraDetail,sizeof(cameraDetail),"%s • BRTC %s • TUTK %s",p->state.cameraResolution[0]?p->state.cameraResolution:"resolution ?",p->state.brtcServiceEnabled?"on":"off",p->state.tutkServiceEnabled?"on":"off");
   }else{
-    strlcpy(cameraValue,"Unknown",sizeof(cameraValue));
-    strlcpy(cameraDetail,"No camera capability report observed",sizeof(cameraDetail));
+    strlcpy(cameraValue,printerConfigured?"Unknown":"Not configured",sizeof(cameraValue));
+    strlcpy(cameraDetail,printerConfigured?"No camera capability report observed":"Configure a printer to observe camera capability",sizeof(cameraDetail));
   }
-  hubUi13InfoRow(hubUi13RowRect(2),"Printer Camera",cameraValue,cameraDetail,p.state.rtspEnabled?C10_GREEN:(p.state.ipcamSeen?C10_ORANGE:C10_MUTED));
+  hubUi13InfoRow(hubUi13RowRect(2),"Printer Camera",cameraValue,cameraDetail,p&&p->state.rtspEnabled?C10_GREEN:(p&&p->state.ipcamSeen?C10_ORANGE:C10_MUTED));
   hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Done",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 '''
