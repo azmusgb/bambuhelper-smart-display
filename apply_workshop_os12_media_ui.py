@@ -30,8 +30,8 @@ static void drawOs12VideoViewer() {
   const workshop::media::Snapshot& m=workshopMediaSnapshot();
   if(!gOs12VideoViewerPrimed){
     tft.fillScreen(TFT_BLACK);
-    uiDrawFit("Camera",12,18,tft.width()-24,FONT_BODY,TL_DATUM,C10_TEXT,TFT_BLACK);
-    uiDrawFit("Waiting for live printer frames...",12,44,tft.width()-24,FONT_SMALL,TL_DATUM,C10_MUTED,TFT_BLACK);
+    uiDrawFit("Video Viewer",12,18,tft.width()-24,FONT_BODY,TL_DATUM,C10_TEXT,TFT_BLACK);
+    uiDrawFit("Workshop OS media playback",12,44,tft.width()-24,FONT_SMALL,TL_DATUM,C10_MUTED,TFT_BLACK);
     gOs12VideoViewerPrimed=true;
   }
   const bool paused=m.runtime.session==workshop::media::SessionState::Paused;
@@ -52,9 +52,12 @@ static void drawOs12MediaLab() {
   hubUi13InfoRow(hubUi13RowRect(0),"Recording",recordValue,recording?"Tap to stop":recordDetail,recording?C10_ORANGE:(recordReady?C10_ACCENT:C10_MUTED));
   const char* playValue=playing?"Playing":(m.runtime.recordingAvailable?"Tap to play":"No recording");
   hubUi13InfoRow(hubUi13RowRect(1),"Playback",playValue,playing?"Tap to stop":"Uses the captured local buffer",playing?C10_GREEN:(m.runtime.recordingAvailable?C10_ACCENT:C10_MUTED));
-  const char* videoValue=videoPlaying?"Playing":(m.capabilities.videoDecoderAvailable?"Tap to view":"Unavailable");
-  const char* videoDetail=videoPlaying?"Tap anywhere to stop":(m.capabilities.videoDecoderAvailable?"Displayed printer camera • max 8 fps":"Decoder unavailable on this board");
-  hubUi13InfoRow(hubUi13RowRect(2),"Video",videoValue,videoDetail,videoPlaying?C10_GREEN:(m.capabilities.videoDecoderAvailable?C10_ACCENT:C10_MUTED));
+  const char* videoValue=videoPlaying?"Playing":(m.capabilities.videoDecoderAvailable?"Play demo":"Unavailable");
+  const PrinterSlot& p=displayedPrinter();
+  char videoDetail[72];
+  if(p.state.ipcamSeen)snprintf(videoDetail,sizeof(videoDetail),"Printer: live %s • RTSP %s • %s",p.state.liveviewPreview?"on":"off",p.state.rtspEnabled?"on":"off",p.state.cameraResolution[0]?p.state.cameraResolution:"?");
+  else strlcpy(videoDetail,m.capabilities.videoDecoderAvailable?"Local WS350 motion demo":"Video unavailable",sizeof(videoDetail));
+  hubUi13InfoRow(hubUi13RowRect(2),"Video",videoValue,videoPlaying?"Tap anywhere to stop":videoDetail,videoPlaying?C10_GREEN:(m.capabilities.videoDecoderAvailable?C10_ACCENT:C10_MUTED));
   hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);hubV1125Action(hubUi13ActionRect(),"Printer Alerts",C10_ACCENT,true,false);hubMarkFrameDirty();g_dirty=false;
 }
 '''
@@ -107,7 +110,7 @@ MEDIA_TOUCH = r'''
           if(media.snapshot().runtime.session==workshop::media::SessionState::Idle&&media.snapshot().capabilities.videoDecoderAvailable){
             gOs12VideoViewerPrimed=false;
             g_ui12SettingsView=12;
-            const bool started=media.playMjpeg("printer-camera",millis());
+            const bool started=media.playMjpeg("demo-video",millis());
             if(!started){g_ui12SettingsView=11;}
           }
           g_dirty=true;return true;
