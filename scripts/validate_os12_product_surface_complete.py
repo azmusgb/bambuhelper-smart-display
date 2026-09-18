@@ -60,18 +60,20 @@ def main()->int:
     forbid(home,"const bool configured=isAnyPrinterConfigured()","Home normalized state")
 
     workshop=block(hub,"static void drawWorkshop(bool full)")
-    for n in ('"Print Readiness"','"Undetermined"','"Canonical placement evidence unavailable"','"Filament Inventory device feed not authoritative here"'):
+    for n in ('"Print Readiness"','"Undetermined"','"Placement evidence unavailable"','"Filament Inventory device feed not authoritative here"'):
         req(workshop,n,"Workshop")
     for n in ("matchSpoolByColor","matchSpoolByMaterial","resolveSpool"): forbid(workshop,n,"Workshop inventory boundary")
 
     more=block(hub,"static void drawMore(bool full)")
-    for n in ('drawHeader("More"','"Display & Appearance"','"Sound & Media"','"Network"','"Printer & Power"','"System"','workshopPlatformWifiOnline()'):
+    for n in ('drawHeader("More"','"Display & Appearance"','"Sound & Media"','"Network"','"System"','workshopPlatformWifiOnline()','hubOs12NavRow('):
         req(more,n,"More")
+    forbid(more,'"Printer & Power"',"More hierarchy")
     forbid(more,'drawHeader("Settings"',"More naming")
 
     system=block(hub,"static void drawSystem(bool full)")
-    for n in ('"Device Health"','"Connectivity"','"Date & Time"','"Software Update"','workshopPlatformWifiOnline()'):
+    for n in ('"Device Health"','"Printer & Power"','"Date & Time"','"Software Update"','workshopPlatformWifiOnline()','hubOs12NavRow('):
         req(system,n,"System")
+    forbid(system,"uiBottomNav(","System child navigation")
     forbid(system,"securityPortalCode()","System root secret boundary")
 
     child_contracts={
@@ -90,6 +92,7 @@ def main()->int:
     for sig,needles in child_contracts.items():
         b=block(hub,sig)
         for n in needles:req(b,n,sig)
+        forbid(b,"uiBottomNav(",sig+" root-nav leakage")
 
     print("PASS: OS12 Home/Workshop/More/System and child settings use completed product-surface/state contracts")
     return 0
