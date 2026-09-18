@@ -382,6 +382,18 @@ def run(args: argparse.Namespace) -> int:
         runtime_ok = final["session"] == "Idle" and final["error"] == "None"
         evidence["runtimeIdleAndClean"] = runtime_ok
         evidence["completed"] = True
+        if evidence["runtimeUptimeMonotonic"] is not None:
+            print(
+                "UPTIME "
+                f"start={evidence['runtimeUptimeStartMs']}ms "
+                f"end={evidence['runtimeUptimeEndMs']}ms "
+                f"monotonic={evidence['runtimeUptimeMonotonic']}"
+            )
+        if evidence["runtimeObservationConflict"]:
+            print(
+                "EVIDENCE CONFLICT: operator reboot/watchdog observation disagrees "
+                "with monotonic device uptime; physical acceptance remains pending."
+            )
 
         all_observations = bool(observations) and all(
             value is True for value in observations.values()
