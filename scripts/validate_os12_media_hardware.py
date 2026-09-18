@@ -23,6 +23,22 @@ def main() -> int:
 
     require(repo / "src/settings.h", ("uint8_t volume;",))
     require(
+        repo / "boards/ws_lcd_350.ini",
+        (
+            "-D BOARD_HAS_ES8311_AUDIO=1",
+            "-D BOARD_HAS_MICROPHONE=1",
+            "-D AUDIO_I2C_ADDR=0x18",
+            "-D AUDIO_I2C_SDA=8",
+            "-D AUDIO_I2C_SCL=7",
+            "-D AUDIO_I2S_MCLK=12",
+            "-D AUDIO_I2S_BCLK=13",
+            "-D AUDIO_I2S_LRC=15",
+            "-D AUDIO_I2S_DIN=14",
+            "-D AUDIO_I2S_DOUT=16",
+            "-D AUDIO_PA_CTRL=-1",
+        ),
+    )
+    require(
         repo / "src/settings.cpp",
         ('getUChar("buz_vol"', 'putUChar("buz_vol"'),
     )
