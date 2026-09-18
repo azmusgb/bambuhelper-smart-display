@@ -229,7 +229,7 @@ def run(args: argparse.Namespace) -> int:
     stamp = now.strftime("%Y%m%d-%H%M%S")
     destination = output_path(args.output, stamp)
     evidence = {
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "kind": "workshop-os12-media-physical-acceptance",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
@@ -239,6 +239,10 @@ def run(args: argparse.Namespace) -> int:
         "observations": {},
         "navigationObservations": [],
         "runtimeIdleAndClean": False,
+        "runtimeUptimeStartMs": None,
+        "runtimeUptimeEndMs": None,
+        "runtimeUptimeMonotonic": None,
+        "runtimeObservationConflict": False,
         "passed": False,
         "completed": False,
         "failure": None,
@@ -268,6 +272,7 @@ def run(args: argparse.Namespace) -> int:
 
         initial = status(client)
         evidence["initialMediaStatus"] = public_status(initial)
+        evidence["runtimeUptimeStartMs"] = initial.get("deviceUptimeMs")
         check(initial["session"] == "Idle",
               f"physical acceptance must start Idle, got {initial['session']}")
         for key in (
@@ -363,6 +368,16 @@ def run(args: argparse.Namespace) -> int:
         )
 
         final = status(client)
+        evidence["runtimeUptimeEndMs"] = final.get("deviceUptimeMs")
+        start_uptime = evidence["runtimeUptimeStartMs"]
+        end_uptime = evidence["runtimeUptimeEndMs"]
+        if isinstance(start_uptime, int) and isinstance(end_uptime, int):
+            evidence["runtimeUptimeMonotonic"] = end_uptime >= start_uptime
+            if observations["no_reboot_or_watchdog"] is not None:
+                deterministic_no_reboot = evidence["runtimeUptimeMonotonic"]
+                evidence["runtimeObservationConflict"] = (
+                    bool(observations["no_reboot_or_watchdog"]) != deterministic_no_reboot
+                )
         evidence["finalMediaStatus"] = public_status(final)
         runtime_ok = final["session"] == "Idle" and final["error"] == "None"
         evidence["runtimeIdleAndClean"] = runtime_ok
@@ -371,7 +386,7 @@ def run(args: argparse.Namespace) -> int:
         all_observations = bool(observations) and all(
             value is True for value in observations.values()
         )
-        passed = runtime_ok and all_observations
+        passed = runtime_ok and all_observations and not evidence["runtimeObservationConflict"]
         evidence["passed"] = passed
         write_evidence(destination, evidence)
 
