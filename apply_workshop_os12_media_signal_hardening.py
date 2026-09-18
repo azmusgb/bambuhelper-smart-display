@@ -8,6 +8,7 @@ adds bounded diagnostics that make physical acceptance failures observable.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 
@@ -101,35 +102,31 @@ uint16_t buzzerBackendAudioCurrentFrequency();
         "ES8311 analog-mic route/gain",
     )
 
-    audio_task_old = """void audioTask(void*) {
-  static int16_t chunk[kChunkSamples];
-
-  while (!gShutdownRequested) {
-    fillChunk(chunk);
-    size_t written = 0;
-    i2s_write((i2s_port_t)AUDIO_I2S_PORT, chunk, sizeof(chunk),
-              &written, pdMS_TO_TICKS(50));
-  }
-"""
-    audio_task_new = """void audioTask(void*) {
-  static int16_t chunk[kChunkSamples];
-
-  while (!gShutdownRequested) {
-    fillChunk(chunk);
-    uint32_t peak = 0;
-    for (size_t i = 0; i < kChunkSamples; ++i) {
-      int32_t v = chunk[i];
-      if (v < 0) v = -v;
-      if ((uint32_t)v > peak) peak = (uint32_t)v;
-    }
-    size_t written = 0;
-    i2s_write((i2s_port_t)AUDIO_I2S_PORT, chunk, sizeof(chunk),
-              &written, pdMS_TO_TICKS(50));
-    gOs12AudioLastWriteBytes = (uint32_t)written;
-    gOs12AudioLastPeak = peak;
-  }
-"""
-    es = once(es, audio_task_old, audio_task_new, "ES8311 speaker TX diagnostics")
+    if "gOs12AudioLastWriteBytes = (uint32_t)written;" not in es:
+        pattern = re.compile(
+            r"(fillChunk\(chunk\);\s*)"
+            r"(size_t\s+written\s*=\s*0;\s*)"
+            r"(i2s_write\(\(i2s_port_t\)AUDIO_I2S_PORT,\s*chunk,\s*sizeof\(chunk\),\s*"
+            r"&written,\s*pdMS_TO_TICKS\(50\)\);)"
+        )
+        match = pattern.search(es)
+        if not match:
+            raise PatchError("ES8311 speaker TX diagnostics: audio task write anchor missing")
+        instrumented = (
+            match.group(1)
+            + "uint32_t peak = 0;\n"
+            + "    for (size_t i = 0; i < kChunkSamples; ++i) {\n"
+            + "      int32_t v = chunk[i];\n"
+            + "      if (v < 0) v = -v;\n"
+            + "      if ((uint32_t)v > peak) peak = (uint32_t)v;\n"
+            + "    }\n"
+            + "    "
+            + match.group(2)
+            + match.group(3)
+            + "\n    gOs12AudioLastWriteBytes = (uint32_t)written;"
+            + "\n    gOs12AudioLastPeak = peak;"
+        )
+        es = es[:match.start()] + instrumented + es[match.end():]
 
     mic_meter_old = """  int16_t samples[128];
   int32_t peak = 0;
@@ -148,13 +145,7 @@ uint16_t buzzerBackendAudioCurrentFrequency();
   } while ((int32_t)(deadline - millis()) > 0);
 
   if (gTargetGain == 0 && gCurrentGain == 0) gIdleStartMs = millis();
-  // Map -60 dBFS..0 dBFS to 0..100 for a human-scale activity meter.
-  // Raw peak remains authoritative diagnostic evidence.
-  int level = 0;
-  if (peak > 0) {
-    const float dbfs = 20.0f * log10f((float)peak / 32767.0f);
-    level = (int)lroundf(((dbfs + 60.0f) * 100.0f) / 60.0f);
-  }
+  int level = (int)((peak * 100L) / 32767L);
   return constrain(level, 0, 100);
 """
     mic_meter_new = """  int16_t samples[128];
@@ -202,7 +193,13 @@ uint16_t buzzerBackendAudioCurrentFrequency();
       (long)peak);
 
   if (gTargetGain == 0 && gCurrentGain == 0) gIdleStartMs = millis();
-  int level = (int)((peak * 100L) / 32767L);
+  // Map -60 dBFS..0 dBFS to 0..100 for a human-scale activity meter.
+  // Raw peak remains authoritative diagnostic evidence.
+  int level = 0;
+  if (peak > 0) {
+    const float dbfs = 20.0f * log10f((float)peak / 32767.0f);
+    level = (int)lroundf(((dbfs + 60.0f) * 100.0f) / 60.0f);
+  }
   return constrain(level, 0, 100);
 """
     es = once(es, mic_meter_old, mic_meter_new, "ES8311 raw microphone diagnostics")
