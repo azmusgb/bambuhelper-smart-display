@@ -103,7 +103,7 @@ static void drawWorkshop(bool full) {
 
   hubOs12EvidenceRow(attention,"Needs Attention",printerAlert?"Printer alert":"Unknown",printerAlert?"Printer evidence available":"Inventory attention evidence unavailable",printerAlert?C10_ORANGE:C10_MUTED);
   hubOs12EvidenceRow(readiness,"Print Readiness","Undetermined","Requirements or inventory evidence unavailable",C10_MUTED);
-  hubOs12EvidenceRow(loaded,"Loaded Spools","Unknown","Canonical placement evidence unavailable",C10_MUTED);
+  hubOs12EvidenceRow(loaded,"Loaded Spools","Unknown","Placement evidence unavailable",C10_MUTED);
   hubOs12EvidenceRow(inventory,"Inventory","Unknown","Filament Inventory device feed not authoritative here",C10_MUTED);
   hubMarkFrameDirty();g_dirty=false;
 }
