@@ -134,7 +134,7 @@ def main() -> int:
     require(more, (
         "uiBottomNav(3,nullptr)",
         '"Display & Appearance"',
-        '"Sound & Microphone"',
+        '"Sound & Media"',
         '"Network"',
         '"System"',
         "hubOs12NavRow(",
