@@ -161,7 +161,7 @@ def main() -> int:
         "OS12_CONTENT_TOP+OS12_ROW_H*3",
         "W-OS12_MARGIN_X*2",
         '"Undetermined"',
-        '"Canonical placement unknown"',
+        '"Placement evidence unavailable"',
     ), "Workshop geometry")
     forbid(workshop, ("hr(8,", "hubV1125Card("), "Workshop geometry")
 
