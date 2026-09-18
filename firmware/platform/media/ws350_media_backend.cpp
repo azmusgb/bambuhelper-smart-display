@@ -15,6 +15,7 @@ namespace media {
 
 namespace {
 static const char kPrinterCameraSource[] = "printer-camera";
+static const char kDemoVideoSource[] = "demo-video";
 static const uint32_t kVideoFrameIntervalMs = 125U;  // 8 fps ceiling.
 static const float kBambuCameraWidth = 1280.0f;
 static const float kBambuCameraHeight = 720.0f;
@@ -23,8 +24,8 @@ static const float kBambuCameraHeight = 720.0f;
 Ws350MediaBackend::Ws350MediaBackend()
     : requestedVolume_(70), muted_(false), requestedRecordMs_(0),
       recordingRequested_(false), recordingPlaybackRequested_(false),
-      videoRequested_(false), videoPaused_(false), videoLastFrameId_(0),
-      videoLastRenderAtMs_(0), videoDiagnostics_() {}
+      videoRequested_(false), videoPaused_(false), videoSource_(VideoSource::None),
+      videoLastFrameId_(0), videoLastRenderAtMs_(0), videoDiagnostics_() {}
 
 Capabilities Ws350MediaBackend::probe() {
   Capabilities caps;
@@ -43,12 +44,10 @@ Capabilities Ws350MediaBackend::probe() {
   }
 #endif
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
-  // LovyanGFX provides the JPEG decoder, but a usable video feature also
-  // requires the displayed printer to expose the existing bounded local JPEG
-  // camera transport. Do not advertise video merely because the LCD can decode
-  // JPEGs; unsupported printer camera transports must remain explicitly
-  // unavailable rather than failing later as DecoderFailure.
-  caps.videoDecoderAvailable = caps.psramAvailable && cameraCanStreamDisplayedPrinter();
+  // Video is a WS350 media capability, not a printer capability. Individual
+  // sources (printer camera, network stream, local demo) perform their own
+  // availability checks when selected.
+  caps.videoDecoderAvailable = caps.psramAvailable;
 #endif
   return caps;
 }
@@ -78,8 +77,6 @@ bool Ws350MediaBackend::setSpeakerMuted(bool muted) {
 
 bool Ws350MediaBackend::playDiagnosticTone() {
 #if defined(BOARD_HAS_ES8311_AUDIO)
-  // Non-blocking: existing ES8311 audio task owns DMA streaming. MediaService
-  // stops this test on its bounded deadline.
   buzzerBackendApplyStep(1047U);
   return true;
 #else
@@ -139,16 +136,23 @@ bool Ws350MediaBackend::playRecording() {
 
 bool Ws350MediaBackend::beginMjpeg(const char* source) {
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
-  if (!source || std::strcmp(source, kPrinterCameraSource) != 0) return false;
-  if (!psramFound() || !cameraCanStreamDisplayedPrinter()) return false;
+  if (!source || !psramFound()) return false;
 
-  // The existing camera client remains the sole network authority. It already
-  // bounds input to two 200 KB PSRAM JPEG buffers and publishes only complete
-  // SOI..EOI frames. MediaService owns only playback lifecycle and pacing.
-  cameraBegin();
-  if (!cameraActive()) return false;
+  VideoSource next = VideoSource::None;
+  if (std::strcmp(source, kDemoVideoSource) == 0) {
+    next = VideoSource::Demo;
+  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
+    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraBegin();
+    if (!cameraActive()) return false;
+    next = VideoSource::PrinterCamera;
+  } else {
+    return false;
+  }
+
   videoRequested_ = true;
   videoPaused_ = false;
+  videoSource_ = next;
   videoLastFrameId_ = 0;
   videoLastRenderAtMs_ = 0;
   videoDiagnostics_ = VideoDiagnostics();
@@ -165,9 +169,46 @@ bool Ws350MediaBackend::pauseVideo(bool paused) {
   return true;
 }
 
+void Ws350MediaBackend::renderDemoFrame(uint32_t nowMs) {
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
+  if (!videoRequested_ || videoPaused_ || videoSource_ != VideoSource::Demo) return;
+  if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
+
+  const int16_t controlBarH = 50;
+  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
+  const int16_t W = tft.width();
+  const uint32_t frame = videoLastFrameId_ + 1U;
+  const int16_t x = static_cast<int16_t>((frame * 11U) % (W > 76 ? W - 76 : 1));
+  const int16_t y = static_cast<int16_t>(54 + ((frame * 7U) % (viewportH > 130 ? viewportH - 130 : 1)));
+
+  tft.fillRect(0, 0, W, viewportH, TFT_BLACK);
+  tft.fillRoundRect(12, 12, W - 24, 34, 10, TFT_DARKGREY);
+  tft.setTextColor(TFT_WHITE, TFT_DARKGREY);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Workshop OS Video Demo", W / 2, 29);
+  tft.fillCircle(x + 28, y + 28, 28, TFT_CYAN);
+  tft.fillRect(x + 18, y + 18, 20, 20, TFT_BLACK);
+  tft.drawRect(10, viewportH - 18, W - 20, 6, TFT_DARKGREY);
+  const int16_t progress = static_cast<int16_t>((frame * 5U) % (W > 24 ? W - 24 : 1));
+  tft.fillRect(12, viewportH - 16, progress, 2, TFT_GREEN);
+
+  markFrameDirty();
+  videoLastFrameId_ = frame;
+  videoLastRenderAtMs_ = nowMs;
+  ++videoDiagnostics_.polls;
+  ++videoDiagnostics_.frameObservations;
+  ++videoDiagnostics_.framesRendered;
+  videoDiagnostics_.lastFrameId = frame;
+  videoDiagnostics_.lastFrameBytes = 0;
+  videoDiagnostics_.lastFrameAtMs = nowMs;
+#else
+  (void)nowMs;
+#endif
+}
+
 void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
-  if (!videoRequested_ || videoPaused_) return;
+  if (!videoRequested_ || videoPaused_ || videoSource_ != VideoSource::PrinterCamera) return;
   if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
 
   ++videoDiagnostics_.polls;
@@ -184,8 +225,6 @@ void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
   if (frameId == videoLastFrameId_) return;
   ++videoDiagnostics_.frameObservations;
 
-  // Reserve the bottom 50 px for the dedicated viewer controls. On the
-  // 480x320 WS350 this yields an exact 480x270 16:9 camera viewport.
   const int16_t controlBarH = 50;
   const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
   const float sw = static_cast<float>(tft.width());
@@ -218,12 +257,13 @@ bool Ws350MediaBackend::stopMedia() {
 #if defined(BOARD_HAS_ES8311_AUDIO)
   buzzerBackendStop();
 #endif
-  if (videoRequested_) cameraStop();
+  if (videoRequested_ && videoSource_ == VideoSource::PrinterCamera) cameraStop();
   recordingRequested_ = false;
   recordingPlaybackRequested_ = false;
   requestedRecordMs_ = 0;
   videoRequested_ = false;
   videoPaused_ = false;
+  videoSource_ = VideoSource::None;
   videoLastFrameId_ = 0;
   videoLastRenderAtMs_ = 0;
   return true;
@@ -241,17 +281,20 @@ void Ws350MediaBackend::poll() {
 #endif
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
   if (videoRequested_) {
-    cameraService();
-    if (!cameraActive()) {
-      videoRequested_ = false;
-      videoPaused_ = false;
-    } else {
-      renderLatestCameraFrame(millis());
+    if (videoSource_ == VideoSource::PrinterCamera) {
+      cameraService();
+      if (!cameraActive()) {
+        videoRequested_ = false;
+        videoPaused_ = false;
+        videoSource_ = VideoSource::None;
+      } else {
+        renderLatestCameraFrame(millis());
+      }
+    } else if (videoSource_ == VideoSource::Demo) {
+      renderDemoFrame(millis());
     }
   }
 #endif
-  // All low-level capture/video work is bounded. Printer telemetry, touch,
-  // network, OTA and recovery remain serviced by the main loop between polls.
 }
 
 bool Ws350MediaBackend::isSessionActive() const {
