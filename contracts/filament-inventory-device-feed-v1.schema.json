@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://filamentinventory.local/contracts/device-feed-v1.schema.json",
+  "title": "Filament Inventory Device Feed v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "scope", "freshness", "inventory", "readiness", "unknowns", "attention"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {"type": {"const": "profile"}, "id": {"type": "string", "minLength": 1}}
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceUpdatedAt", "ageSeconds", "stale"],
+      "properties": {
+        "sourceUpdatedAt": {"type": ["string", "null"], "format": "date-time"},
+        "ageSeconds": {"type": ["integer", "null"], "minimum": 0},
+        "stale": {"type": "boolean"}
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "spools"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "spools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["spoolId", "material", "color", "quantity", "placement"],
+            "properties": {
+              "spoolId": {"type": "string", "minLength": 1},
+              "material": {"type": ["string", "null"]},
+              "color": {"type": ["string", "null"]},
+              "quantity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["remainingGrams", "method", "source", "grossGrams", "tareGrams", "observedAt", "confidence", "stale"],
+                "properties": {
+                  "remainingGrams": {"type": ["number", "null"], "minimum": 0},
+                  "method": {"enum": ["Measured", "CalculatedFromMeasured", "PrinterEstimatedUsage", "VisualEstimate", "ImportedEstimate", "Unknown"]},
+                  "source": {"type": ["string", "null"]},
+                  "grossGrams": {"type": ["number", "null"]},
+                  "tareGrams": {"type": ["number", "null"]},
+                  "observedAt": {"type": ["string", "null"], "format": "date-time"},
+                  "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+                  "stale": {"type": "boolean"}
+                }
+              },
+              "placement": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["state", "printerId", "feederId", "slot", "external", "observedAt"],
+                "properties": {
+                  "state": {"type": "string"},
+                  "printerId": {"type": ["string", "null"]},
+                  "feederId": {"type": ["string", "null"]},
+                  "slot": {"type": ["integer", "null"]},
+                  "external": {"type": ["boolean", "null"]},
+                  "observedAt": {"type": ["string", "null"], "format": "date-time"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason", "requiredGrams"],
+      "properties": {
+        "state": {"enum": ["Ready", "ReadyWithSubstitute", "NeedsLoad", "NeedsDry", "InsufficientQuantity", "EvidenceStale", "Undetermined"]},
+        "reason": {"type": "string"},
+        "requiredGrams": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "unknowns": {"type": "array", "items": {"type": "string"}},
+    "attention": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "message"],
+        "properties": {
+          "kind": {"type": "string"},
+          "message": {"type": "string"},
+          "spoolId": {"type": "string"}
+        }
+      }
+    }
+  }
+}

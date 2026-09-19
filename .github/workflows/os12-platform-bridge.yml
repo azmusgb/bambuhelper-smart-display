@@ -1,0 +1,203 @@
+name: Workshop OS 12 Platform Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/workshop-os12-device-platform-foundation
+    paths:
+      - 'firmware/platform/**'
+      - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_media_hardware.py'
+      - 'apply_workshop_os12_media_capture.py'
+      - 'apply_workshop_os12_media_runtime.py'
+      - 'apply_workshop_os12_media_signal_hardening.py'
+      - 'apply_workshop_os12_mqtt_camera_telemetry.py'
+      - 'apply_workshop_os12_media_ui.py'
+      - 'apply_workshop_os12_media_api.py'
+      - 'apply_workshop_os12_non_destructive_controls.py'
+      - 'apply_workshop_os12_guarded_stop.py'
+      - 'apply_workshop_os12_portal_login_hardening.py'
+      - 'apply_workshop_os12_device_update.py'
+      - 'apply_workshop_os12_release_identity.py'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/waveshare-usb.sh'
+      - 'scripts/run_os12_platform_local.sh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
+      - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_media_hardware.py'
+      - 'scripts/validate_os12_media_capture.py'
+      - 'scripts/validate_os12_media_signal.py'
+      - 'scripts/validate_os12_mqtt_camera_telemetry.py'
+      - 'scripts/validate_os12_media_service.py'
+      - 'scripts/validate_os12_media_runtime.py'
+      - 'scripts/validate_os12_media_ui.py'
+      - 'scripts/validate_os12_media_api.py'
+      - 'scripts/validate_os12_non_destructive_controls.py'
+      - 'scripts/validate_os12_guarded_stop.py'
+      - 'scripts/validate_os12_control_boundary.py'
+      - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/validate_os12_device_update.py'
+      - 'scripts/prepare_os12_device_candidate.py'
+      - 'scripts/validate_os12_candidate_publisher.py'
+      - 'scripts/accept_os12_portal_runtime.py'
+      - 'scripts/accept_os12_update_runtime.py'
+      - 'scripts/accept_os12_media_runtime.py'
+      - 'scripts/accept_os12_media_physical.py'
+      - 'releases/device-update.json'
+      - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
+      - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'
+      - '.github/workflows/validate.yml'
+      - '.github/workflows/os12-platform-bridge.yml'
+  pull_request:
+    paths:
+      - 'firmware/platform/**'
+      - 'apply_workshop_os12_platform_bridge.py'
+      - 'apply_workshop_os12_media_hardware.py'
+      - 'apply_workshop_os12_media_capture.py'
+      - 'apply_workshop_os12_media_runtime.py'
+      - 'apply_workshop_os12_media_signal_hardening.py'
+      - 'apply_workshop_os12_media_ui.py'
+      - 'apply_workshop_os12_media_api.py'
+      - 'apply_workshop_os12_non_destructive_controls.py'
+      - 'apply_workshop_os12_guarded_stop.py'
+      - 'apply_workshop_os12_portal_login_hardening.py'
+      - 'apply_workshop_os12_device_update.py'
+      - 'apply_workshop_os12_release_identity.py'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/waveshare-usb.sh'
+      - 'scripts/run_os12_platform_local.sh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
+      - 'scripts/validate_os12_platform_bridge.py'
+      - 'scripts/validate_os12_media_hardware.py'
+      - 'scripts/validate_os12_media_capture.py'
+      - 'scripts/validate_os12_media_signal.py'
+      - 'scripts/validate_os12_media_service.py'
+      - 'scripts/validate_os12_media_runtime.py'
+      - 'scripts/validate_os12_media_ui.py'
+      - 'scripts/validate_os12_media_api.py'
+      - 'scripts/validate_os12_non_destructive_controls.py'
+      - 'scripts/validate_os12_guarded_stop.py'
+      - 'scripts/validate_os12_control_boundary.py'
+      - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/validate_os12_device_update.py'
+      - 'scripts/prepare_os12_device_candidate.py'
+      - 'scripts/validate_os12_candidate_publisher.py'
+      - 'scripts/accept_os12_portal_runtime.py'
+      - 'scripts/accept_os12_update_runtime.py'
+      - 'scripts/accept_os12_media_runtime.py'
+      - 'scripts/accept_os12_media_physical.py'
+      - 'releases/device-update.json'
+      - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
+      - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'
+      - '.github/workflows/validate.yml'
+      - '.github/workflows/os12-platform-bridge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Reconstruct and compile OS12 device platform
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OS12_RELEASE_VERSION: '12.0.0'
+      OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PlatformIO
+        run: |
+          python3 -m pip install --upgrade platformio
+          pio --version
+
+      - name: Validate device-native update source contract
+        run: python3 scripts/validate_os12_device_update.py --source-root .
+
+      - name: Validate candidate publication safety
+        run: python3 scripts/validate_os12_candidate_publisher.py
+
+      - name: Validate media service contracts
+        run: python3 scripts/validate_os12_media_service.py
+
+      - name: Reconstruct UI13 and apply OS12 platform
+        run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
+
+      - name: Validate runtime acceptance helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/accept_os12_portal_runtime.py \
+            scripts/accept_os12_update_runtime.py \
+            scripts/accept_os12_media_runtime.py \
+            scripts/accept_os12_media_physical.py
+
+      - name: Validate USB/bootstrap helper syntax
+        run: |
+          bash -n scripts/ensure-platformio.sh
+          bash -n scripts/waveshare-usb.sh
+          bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
+
+      - name: Package exact-head WS350 OTA candidate
+        run: |
+          set -euo pipefail
+          BUILD=/tmp/ws350-os12-platform-build
+          SOURCE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
+          test -s "$SOURCE"
+
+          OUT=/tmp/workshop-os12-ws350-ota
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          NAME="Workshop-OS-${OS12_RELEASE_VERSION}-WS350-${OS12_SOURCE_SHA}.bin"
+          cp "$SOURCE" "$OUT/$NAME"
+          (
+            cd "$OUT"
+            sha256sum "$NAME" > SHA256SUMS.txt
+          )
+
+          {
+            echo "release_state=built-tested-candidate-only"
+            echo "release_version=${OS12_RELEASE_VERSION}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "source_sha=${OS12_SOURCE_SHA}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
+            echo "board=ws_lcd_350"
+            echo "artifact_type=OTA/application image"
+            echo "full_image=false"
+            echo "device_native_update_service=true"
+            echo "media_service=true"
+            echo "media_ui=true"
+            echo "media_recording=bounded-five-second"
+            echo "media_signal_hardening=analog-mic-route-gain-diagnostics"
+            echo "media_video=ws350-owned-demo-plus-source-scoped-printer-camera"
+            echo "printer_camera_telemetry=read-only-mqtt"
+            echo "media_physical_acceptance=false"
+            echo "legacy_url_auto_ota_route=false"
+            echo "physical_acceptance=false"
+            echo
+            grep -E 'SMART_HOME_BUILD_LABEL|SMART_HOME_PROFILE|WORKSHOP_OS_UI_SCHEMA|WORKSHOP_OS_V11_28_UI13|WORKSHOP_OS12_DEVICE_UPDATE|WORKSHOP_OS_RELEASE_VERSION|WORKSHOP_OS_SOURCE_SHA' \
+              "$BUILD/include/smart_home_build.h" || true
+          } > "$OUT/BUILD-INFO.txt"
+
+          cat "$OUT/SHA256SUMS.txt"
+          cat "$OUT/BUILD-INFO.txt"
+
+      - name: Upload exact-head WS350 OTA candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: workshop-os12-ws350-ota-${{ env.OS12_SOURCE_SHA }}
+          path: /tmp/workshop-os12-ws350-ota/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record non-promotion state
+        if: always()
+        run: |
+          echo 'This workflow proves buildability and publishes a CI candidate artifact only.'
+          echo 'Media speaker/microphone/recording capability is not physically accepted by this workflow.'
+          echo 'WS350 analog microphone signal-path hardening is implemented/tested but requires physical acceptance.'
+          echo 'WS350-owned demo video and read-only printer camera telemetry are implemented/built/tested; physical video acceptance is not established by CI.'
+          echo 'It does not publish the artifact into the device discovery manifest.'
+          echo 'It does not establish runtime, physical, accepted, or stable state.'
