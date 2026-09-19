@@ -173,7 +173,7 @@ def main() -> int:
     require(text, (
         "for(uint8_t i=0;i<4;i++)if(hubUi12SettingsRect(i).contains(x,y))",
         "if(i<3){gOs12SettingsParent=0;g_ui12SettingsView=(uint8_t)(i+1U)",
-        "else if(i==1){g_ui12SettingsView=4;setPage(SCREEN_HUB_MORE);}",
+        "else if(i==1){gOs12SettingsParent=1;g_ui12SettingsView=4;setPage(SCREEN_HUB_MORE);}",
     ), "touch routing")
 
     print("PASS: OS12 UX architecture is hierarchical, flat, root-nav scoped, and inventory-truth preserving")
