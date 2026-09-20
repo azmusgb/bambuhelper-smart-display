@@ -44,6 +44,9 @@ struct InventoryFeedObservation {
     std::uint16_t staleQuantityCount{0};
     std::uint16_t conflictCount{0};
     std::uint16_t invalidLineageCount{0};
+    std::uint16_t unknownPlacementCount{0};
+    std::uint16_t stalePlacementCount{0};
+    std::uint16_t placementConflictCount{0};
     InventoryReadinessState readiness{InventoryReadinessState::Undetermined};
     bool available{false};
     bool feedStale{true};
@@ -114,6 +117,9 @@ inline InventoryProjectionState normalizeInventoryFeedObservation(
     state.staleQuantityCount = observation.staleQuantityCount;
     state.conflictCount = observation.conflictCount;
     state.invalidLineageCount = observation.invalidLineageCount;
+    state.unknownPlacementCount = observation.unknownPlacementCount;
+    state.stalePlacementCount = observation.stalePlacementCount;
+    state.placementConflictCount = observation.placementConflictCount;
     state.readiness = observation.readiness;
 
     if (observation.profileId != nullptr) {
@@ -125,6 +131,8 @@ inline InventoryProjectionState normalizeInventoryFeedObservation(
         state.freshness = Freshness::Unknown;
         state.quantityState = InventoryQuantityState::Unknown;
         state.quantityVerificationRequired = true;
+        state.placementState = InventoryPlacementState::Unknown;
+        state.placementVerificationRequired = true;
         return state;
     }
 
@@ -145,6 +153,20 @@ inline InventoryProjectionState normalizeInventoryFeedObservation(
 
     state.quantityVerificationRequired =
         state.quantityState != InventoryQuantityState::Current ||
+        state.freshness != Freshness::Fresh;
+
+    if (observation.placementConflictCount > 0) {
+        state.placementState = InventoryPlacementState::Conflict;
+    } else if (observation.stalePlacementCount > 0 || observation.feedStale) {
+        state.placementState = InventoryPlacementState::Stale;
+    } else if (observation.unknownPlacementCount > 0) {
+        state.placementState = InventoryPlacementState::Unknown;
+    } else {
+        state.placementState = InventoryPlacementState::Current;
+    }
+
+    state.placementVerificationRequired =
+        state.placementState != InventoryPlacementState::Current ||
         state.freshness != Freshness::Fresh;
 
     return state;
