@@ -10,6 +10,31 @@ static void drawWorkshop(bool full) {
   const uint16_t timerColor=g_workshopTimerDone?C10_ORANGE:
                             (workshopTimerActive()?C10_ACCENT:W25_LINE);
 
+  const workshop::platform::InventoryProjectionState& inv=workshopPlatformInventoryState();
+  char inventoryValue[38]="Inventory unknown";
+  uint16_t inventoryColor=C10_MUTED;
+  if(inv.available) {
+    if(inv.quantityState==workshop::platform::InventoryQuantityState::InvalidLineage) {
+      strlcpy(inventoryValue,"Evidence lineage invalid",sizeof(inventoryValue)); inventoryColor=C10_RED;
+    } else if(inv.quantityState==workshop::platform::InventoryQuantityState::Conflict) {
+      strlcpy(inventoryValue,"Quantity conflict · verify",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.quantityState==workshop::platform::InventoryQuantityState::Stale) {
+      strlcpy(inventoryValue,"Quantity stale · refresh",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.quantityState==workshop::platform::InventoryQuantityState::Unknown) {
+      strlcpy(inventoryValue,"Quantity unknown · weigh",sizeof(inventoryValue));
+    } else if(inv.placementState==workshop::platform::InventoryPlacementState::Conflict) {
+      strlcpy(inventoryValue,"Placement conflict · verify",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.placementState==workshop::platform::InventoryPlacementState::Stale) {
+      strlcpy(inventoryValue,"Placement stale · refresh",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.placementState==workshop::platform::InventoryPlacementState::Unknown) {
+      strlcpy(inventoryValue,"Placement unknown",sizeof(inventoryValue));
+    } else {
+      snprintf(inventoryValue,sizeof(inventoryValue),"%u spools · %u loaded · %u low",
+               (unsigned)inv.spoolCount,(unsigned)inv.loadedCount,(unsigned)inv.lowCount);
+      inventoryColor=inv.lowCount?C10_ORANGE:C10_GREEN;
+    }
+  }
+
   char materialValue[34]="Unknown telemetry";
   if(s&&s->ams.present&&s->ams.activeTray<4&&s->ams.trays[s->ams.activeTray].present) {
     const AmsTray& t=s->ams.trays[s->ams.activeTray];
@@ -39,9 +64,9 @@ static void drawWorkshop(bool full) {
               context.x+66,context.y+20,mid-context.x-76,FONT_BODY,ML_DATUM,
               g_workshopNote[0]?C10_TEXT:C10_MUTED,C10_SURFACE);
     tft.drawFastVLine(mid,context.y+8,context.h-16,C10_SEPARATOR);
-    uiDrawFit("Printer feed",mid+12,context.y+8,58,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
-    uiDrawFit(materialValue,mid+76,context.y+20,context.x+context.w-mid-88,FONT_BODY,ML_DATUM,
-              (s&&s->ams.present)?C10_TEXT:C10_MUTED,C10_SURFACE);
+    uiDrawFit("Inventory",mid+12,context.y+8,58,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit(inventoryValue,mid+76,context.y+20,context.x+context.w-mid-88,FONT_BODY,ML_DATUM,
+              inventoryColor,C10_SURFACE);
 
     char timerLab[18];workshopTimerText(timerLab,sizeof(timerLab),true);
     for(uint8_t i=0;i<4;i++) {
@@ -70,9 +95,9 @@ static void drawWorkshop(bool full) {
               context.x+12,context.y+38,context.w-24,FONT_BODY,TL_DATUM,
               g_workshopNote[0]?C10_TEXT:C10_MUTED,C10_SURFACE);
     tft.drawFastHLine(context.x+12,context.y+68,context.w-24,C10_SEPARATOR);
-    uiDrawFit("Printer feed",context.x+12,context.y+80,context.w-24,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
-    uiDrawFit(materialValue,context.x+12,context.y+106,context.w-24,FONT_BODY,TL_DATUM,
-              (s&&s->ams.present)?C10_TEXT:C10_MUTED,C10_SURFACE);
+    uiDrawFit("Inventory",context.x+12,context.y+80,context.w-24,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit(inventoryValue,context.x+12,context.y+106,context.w-24,FONT_BODY,TL_DATUM,
+              inventoryColor,C10_SURFACE);
 
     for(uint8_t i=0;i<4;i++) {
       const char* label=i==0?(s&&s->lightState==1?"Light Off":"Light On"):
