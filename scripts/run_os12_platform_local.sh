@@ -34,6 +34,8 @@ python3 "$ROOT/apply_workshop_os12_portal_login_hardening.py" --repo "$BUILD" --
 python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 
 python3 "$ROOT/apply_workshop_os12_device_update.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/apply_workshop_os12_inventory_service.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_inventory_service.py" --repo "$BUILD"
 python3 "$ROOT/apply_workshop_os12_release_identity.py" --repo "$BUILD" --version "$OS12_RELEASE_VERSION" --source-sha "$OS12_SOURCE_SHA" --apply
 
 python3 "$ROOT/apply_workshop_os12_media_hardware.py" --repo "$BUILD" --apply
@@ -68,8 +70,11 @@ test "$(grep -c 'workshopMediaBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopMediaPoll();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopUpdateServiceBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopUpdateServiceLoop();' "$BUILD/src/main.cpp")" -eq 1
+test "$(grep -c 'workshopInventoryServiceBegin();' "$BUILD/src/main.cpp")" -eq 1
+test "$(grep -c 'workshopInventoryServiceLoop();' "$BUILD/src/main.cpp")" -eq 1
 test -s "$BUILD/src/workshop_platform_bridge.cpp"
 test -s "$BUILD/src/workshop_update_service.cpp"
+test -s "$BUILD/src/workshop_inventory_service.cpp"
 test -s "$BUILD/src/media_service.cpp"
 test -s "$BUILD/src/ws350_media_backend.cpp"
 test -s "$BUILD/src/workshop_media_runtime.cpp"
@@ -110,6 +115,9 @@ grep -q "<html lang='en'>" "$BUILD/src/web_server.cpp"
 grep -q "autocomplete='off'" "$BUILD/src/web_server.cpp"
 grep -q 'raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json' "$BUILD/src/workshop_update_service.cpp"
 grep -q 'esp_ota_set_boot_partition' "$BUILD/src/workshop_update_service.cpp"
+grep -q 'filamentinventory.netlify.app/api/device-feed/v1' "$BUILD/src/workshop_inventory_service.cpp"
+grep -q 'Authorization' "$BUILD/src/workshop_inventory_service.cpp"
+! grep -q 'X-Filament-Sync-Key' "$BUILD/src/workshop_inventory_service.cpp"
 grep -q 'workshopUpdateRequestInstall' "$BUILD/src/smart_hub.cpp"
 grep -q "#define WORKSHOP_OS_RELEASE_VERSION \"$OS12_RELEASE_VERSION\"" "$BUILD/include/smart_home_build.h"
 grep -q "#define WORKSHOP_OS_SOURCE_SHA \"$OS12_SOURCE_SHA\"" "$BUILD/include/smart_home_build.h"
@@ -157,6 +165,6 @@ echo "Device updates: GitHub manifest -> exact WS350 OTA path -> size/SHA-256 ve
 echo "Legacy online updater: /ota/auto route retired; manual local OTA remains a maintenance fallback."
 echo "Full image / offset 0x0: recovery only, never device-native OTA."
 echo "Power authority: unchanged Tasmota path."
-echo "Inventory authority: unchanged Filament Inventory path."
+echo "Inventory authority: Filament Inventory only; WS350 consumes a revocable read-only device-feed credential."
 echo "UI13 physical acceptance candidate: untouched."
 echo "Stable promotion: forbidden by this script."
