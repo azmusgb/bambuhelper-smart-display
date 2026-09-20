@@ -68,6 +68,24 @@ enum class UpdatePhase : std::uint8_t {
     Failed,
 };
 
+enum class InventoryQuantityState : std::uint8_t {
+    Unknown = 0,
+    Current,
+    Stale,
+    Conflict,
+    InvalidLineage,
+};
+
+enum class InventoryReadinessState : std::uint8_t {
+    Undetermined = 0,
+    Ready,
+    ReadyWithSubstitute,
+    NeedsLoad,
+    NeedsDry,
+    InsufficientQuantity,
+    EvidenceStale,
+};
+
 struct PrinterState {
     Connectivity connection{Connectivity::Unknown};
     PrinterActivity activity{PrinterActivity::Unknown};
@@ -104,11 +122,25 @@ struct NetworkState {
     bool accessPointMode{false};
 };
 
+// InventoryProjectionState is a redacted summary derived only from the
+// Filament Inventory device-feed contract. It is not an inventory authority and
+// must never be populated from printer/AMS similarity. Unknown/conflict/stale
+// evidence remains explicit and prevents a clean readiness presentation.
 struct InventoryProjectionState {
     Freshness freshness{Freshness::Unknown};
+    InventoryQuantityState quantityState{InventoryQuantityState::Unknown};
+    InventoryReadinessState readiness{InventoryReadinessState::Undetermined};
     std::uint32_t observedAtMs{0};
+    std::uint16_t spoolCount{0};
+    std::uint16_t loadedCount{0};
+    std::uint16_t lowCount{0};
+    std::uint16_t unknownQuantityCount{0};
+    std::uint16_t staleQuantityCount{0};
+    std::uint16_t conflictCount{0};
+    std::uint16_t invalidLineageCount{0};
     char profileId[kProfileIdLength]{};
     bool available{false};
+    bool verificationRequired{true};
 };
 
 // UpdateState is the normalized device-facing view of UpdateService. It records
@@ -195,6 +227,21 @@ inline bool printerActivityIsActive(PrinterActivity activity) {
     return activity == PrinterActivity::Preparing ||
            activity == PrinterActivity::Printing ||
            activity == PrinterActivity::Paused;
+}
+
+inline bool inventoryQuantityUsable(const InventoryProjectionState& state) {
+    return state.available &&
+           state.freshness == Freshness::Fresh &&
+           state.quantityState == InventoryQuantityState::Current &&
+           !state.verificationRequired &&
+           state.conflictCount == 0 &&
+           state.invalidLineageCount == 0 &&
+           state.staleQuantityCount == 0;
+}
+
+inline bool inventoryReadinessClean(const InventoryProjectionState& state) {
+    return inventoryQuantityUsable(state) &&
+           state.readiness == InventoryReadinessState::Ready;
 }
 
 inline bool canDispatchPrinterCommand(const WorkshopState& state, std::size_t slot) {
