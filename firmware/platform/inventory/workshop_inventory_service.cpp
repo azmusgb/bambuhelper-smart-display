@@ -408,14 +408,12 @@ bool fetchFeed(
 void refreshTask(void*) {
     InventoryFeedObservation observation;
     char error[112] = {};
-    const std::uint32_t attemptStartedAtMs = millis();
     std::uint32_t credentialGeneration = 0;
     std::uint32_t retryAfterMs = kRetryIntervalMs;
     portENTER_CRITICAL(&g_inventoryMux);
     credentialGeneration = g_credentialGeneration;
     portEXIT_CRITICAL(&g_inventoryMux);
     bool ok = false;
-    (void)attemptStartedAtMs;
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
     ok = fetchFeed(observation, error, sizeof(error), retryAfterMs);
