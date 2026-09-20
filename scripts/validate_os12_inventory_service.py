@@ -56,7 +56,8 @@ def main() -> int:
         'http.collectHeaders(responseHeaders, 1);',
         'HTTP_CODE_SERVICE_UNAVAILABLE',
         'parseRetryAfterMs(http.header("Retry-After"))',
-        'g_nextRefreshAtMs = nowMs + retryAfterMs;',
+        'const std::uint32_t completedAtMs = millis();',
+        'g_nextRefreshAtMs = completedAtMs + retryAfterMs;',
         'deadlineReached(nowMs, nextRefreshAtMs)',
         'Filament Inventory is temporarily unavailable; retrying in %lu s.',
     ):
