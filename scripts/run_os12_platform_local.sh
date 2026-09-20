@@ -33,6 +33,9 @@ python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"
 python3 "$ROOT/apply_workshop_os12_portal_login_hardening.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 
+python3 "$ROOT/apply_workshop_os12_inventory_api.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_inventory_api.py" --repo "$BUILD"
+
 python3 "$ROOT/apply_workshop_os12_device_update.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/apply_workshop_os12_inventory_service.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_inventory_service.py" --repo "$BUILD"
@@ -73,6 +76,7 @@ test "$(grep -c 'workshopUpdateServiceLoop();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopInventoryServiceBegin();' "$BUILD/src/main.cpp")" -eq 1
 test "$(grep -c 'workshopInventoryServiceLoop();' "$BUILD/src/main.cpp")" -eq 1
 test -s "$BUILD/src/workshop_platform_bridge.cpp"
+test -s "$BUILD/src/workshop_inventory_service.cpp"
 test -s "$BUILD/src/workshop_update_service.cpp"
 test -s "$BUILD/src/workshop_inventory_service.cpp"
 test -s "$BUILD/src/media_service.cpp"
@@ -111,6 +115,11 @@ grep -q 'workshopPlatformDispatchPrinterCommand' "$BUILD/src/smart_hub.cpp"
 grep -q 'workshop::platform::PrinterCommand::Stop,true' "$BUILD/src/smart_hub.cpp"
 grep -q 'longPress' "$BUILD/src/smart_hub.cpp"
 grep -q 'SecurityLoginResult::RateLimited' "$BUILD/src/security_manager.cpp"
+grep -q 'SECURE_GET("/os12/inventory/status"' "$BUILD/src/web_server.cpp"
+grep -q 'SECURE_POST("/os12/inventory/credential"' "$BUILD/src/web_server.cpp"
+grep -q 'SECURE_POST("/os12/inventory/refresh"' "$BUILD/src/web_server.cpp"
+grep -q 'workshopInventoryServiceBegin();' "$BUILD/src/main.cpp"
+grep -q 'workshopInventoryServiceLoop();' "$BUILD/src/main.cpp"
 grep -q "<html lang='en'>" "$BUILD/src/web_server.cpp"
 grep -q "autocomplete='off'" "$BUILD/src/web_server.cpp"
 grep -q 'raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json' "$BUILD/src/workshop_update_service.cpp"
