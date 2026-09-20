@@ -122,7 +122,7 @@ bool parseFeed(JsonDocument& doc, InventoryFeedObservation& observation, char* e
     }
 
     observation = InventoryFeedObservation{};
-    observation.profileId = profileId;
+    strlcpy(observation.profileId, profileId, sizeof(observation.profileId));
     observation.available = true;
     observation.feedStale = freshness["stale"] | true;
     observation.readiness = readinessFromText(readiness["state"] | "Undetermined");
