@@ -408,13 +408,14 @@ bool fetchFeed(
 void refreshTask(void*) {
     InventoryFeedObservation observation;
     char error[112] = {};
-    const std::uint32_t nowMs = millis();
+    const std::uint32_t attemptStartedAtMs = millis();
     std::uint32_t credentialGeneration = 0;
     std::uint32_t retryAfterMs = kRetryIntervalMs;
     portENTER_CRITICAL(&g_inventoryMux);
     credentialGeneration = g_credentialGeneration;
     portEXIT_CRITICAL(&g_inventoryMux);
     bool ok = false;
+    (void)attemptStartedAtMs;
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
     ok = fetchFeed(observation, error, sizeof(error), retryAfterMs);
@@ -422,6 +423,7 @@ void refreshTask(void*) {
     copyText(error, sizeof(error), "Filament Inventory HTTPS feed is unavailable on this target.");
 #endif
 
+    const std::uint32_t completedAtMs = millis();
     portENTER_CRITICAL(&g_inventoryMux);
     const bool credentialScopeChanged = credentialGeneration != g_credentialGeneration;
     portEXIT_CRITICAL(&g_inventoryMux);
@@ -438,7 +440,7 @@ void refreshTask(void*) {
     }
 
     if (ok) {
-        observation.observedAtMs = nowMs;
+        observation.observedAtMs = completedAtMs;
         InventoryProjectionState normalized =
             workshop::platform::normalizeInventoryFeedObservation(observation);
         workshopPlatformPublishInventoryState(normalized);
@@ -446,18 +448,18 @@ void refreshTask(void*) {
         portENTER_CRITICAL(&g_inventoryMux);
         g_runtime.state = normalized;
         g_runtime.busy = false;
-        g_runtime.lastAttemptAtMs = nowMs;
-        g_runtime.lastSuccessAtMs = nowMs;
-        g_nextRefreshAtMs = nowMs + kRefreshIntervalMs;
+        g_runtime.lastAttemptAtMs = completedAtMs;
+        g_runtime.lastSuccessAtMs = completedAtMs;
+        g_nextRefreshAtMs = completedAtMs + kRefreshIntervalMs;
         g_runtime.credentialConfigured = true;
         copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Filament Inventory device feed is current.");
         g_taskActive = false;
         portEXIT_CRITICAL(&g_inventoryMux);
     } else {
         const bool configured = workshopInventoryCredentialConfigured();
-        publishUnavailable(error[0] ? error : "Filament Inventory refresh failed.", configured, nowMs);
+        publishUnavailable(error[0] ? error : "Filament Inventory refresh failed.", configured, completedAtMs);
         portENTER_CRITICAL(&g_inventoryMux);
-        g_nextRefreshAtMs = nowMs + retryAfterMs;
+        g_nextRefreshAtMs = completedAtMs + retryAfterMs;
         g_taskActive = false;
         portEXIT_CRITICAL(&g_inventoryMux);
     }
