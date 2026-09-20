@@ -124,9 +124,12 @@ def apply(repo: Path) -> None:
         text = text.replace(marker, HANDLERS + "\n" + marker, 1)
 
     if '/os12/inventory/status' not in text:
-        route_anchor = '  SECURE_GET("/os12/update/status", handleWorkshopUpdateStatus);\n'
+        # Register directly at the authenticated init boundary. Inventory routes
+        # use SECURE_GET/SECURE_POST themselves, so they do not depend on any
+        # unrelated OS12 feature route being present in this reconstruction.
+        route_anchor = "void initWebServer() {\n"
         if text.count(route_anchor) != 1:
-            raise PatchError("authenticated OS12 route anchor missing/non-unique")
+            raise PatchError("web server init route anchor missing/non-unique")
         text = text.replace(route_anchor, route_anchor + ROUTES, 1)
 
     for route in (
