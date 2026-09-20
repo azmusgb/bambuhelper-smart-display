@@ -153,8 +153,6 @@ def validate_patcher() -> None:
             "OperationPhase::RecoverableError",
             "FatalError,",
             "commandOperationFromResult",
-            "InventoryQuantityState",
-            "InventoryReadinessState",
             "class IInventoryService",
             "publishInventoryState",
         ):
