@@ -41,6 +41,7 @@ WorkshopInventoryRuntimeSnapshot g_runtime;
 char g_deviceToken[kTokenLength + 1] = {};
 bool g_refreshRequested = false;
 bool g_taskActive = false;
+std::uint32_t g_credentialGeneration = 0;
 
 void copyText(char* dst, std::size_t len, const char* src) {
     if (!dst || len == 0) return;
@@ -331,6 +332,10 @@ void refreshTask(void*) {
     InventoryFeedObservation observation;
     char error[112] = {};
     const std::uint32_t nowMs = millis();
+    std::uint32_t credentialGeneration = 0;
+    portENTER_CRITICAL(&g_inventoryMux);
+    credentialGeneration = g_credentialGeneration;
+    portEXIT_CRITICAL(&g_inventoryMux);
     bool ok = false;
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
@@ -338,6 +343,21 @@ void refreshTask(void*) {
 #else
     copyText(error, sizeof(error), "Filament Inventory HTTPS feed is unavailable on this target.");
 #endif
+
+    portENTER_CRITICAL(&g_inventoryMux);
+    const bool credentialScopeChanged = credentialGeneration != g_credentialGeneration;
+    portEXIT_CRITICAL(&g_inventoryMux);
+    if (credentialScopeChanged) {
+        // Never publish a response fetched under a credential that was replaced
+        // or cleared while the HTTPS request was in flight.
+        portENTER_CRITICAL(&g_inventoryMux);
+        g_runtime.busy = false;
+        g_taskActive = false;
+        copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Inventory scope changed; stale response discarded.");
+        portEXIT_CRITICAL(&g_inventoryMux);
+        vTaskDelete(nullptr);
+        return;
+    }
 
     if (ok) {
         observation.observedAtMs = nowMs;
@@ -411,6 +431,7 @@ void workshopInventoryServiceBegin() {
     portENTER_CRITICAL(&g_inventoryMux);
     g_runtime = WorkshopInventoryRuntimeSnapshot{};
     std::memcpy(g_deviceToken, token, sizeof(g_deviceToken));
+    ++g_credentialGeneration;
     g_runtime.credentialConfigured = validDeviceToken(g_deviceToken);
     copyText(
         g_runtime.statusMessage,
@@ -468,6 +489,7 @@ bool workshopInventorySetDeviceCredential(const char* token) {
 
     portENTER_CRITICAL(&g_inventoryMux);
     strlcpy(g_deviceToken, token, sizeof(g_deviceToken));
+    ++g_credentialGeneration;
     // Credential replacement may change the bound member/profile. Never leave
     // the previous profile's projection visible while the new scope refreshes.
     g_runtime.state = InventoryProjectionState{};
@@ -489,6 +511,7 @@ void workshopInventoryClearDeviceCredential() {
 
     portENTER_CRITICAL(&g_inventoryMux);
     std::memset(g_deviceToken, 0, sizeof(g_deviceToken));
+    ++g_credentialGeneration;
     g_runtime.state = InventoryProjectionState{};
     g_runtime.lastSuccessAtMs = 0;
     g_runtime.credentialConfigured = false;
