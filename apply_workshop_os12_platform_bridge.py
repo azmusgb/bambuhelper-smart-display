@@ -17,7 +17,13 @@ PLATFORM_HEADERS = (
     "service_contracts.hpp",
 )
 
+INVENTORY_FILES = (
+    "workshop_inventory_service.h",
+    "workshop_inventory_service.cpp",
+)
+
 INCLUDE_LINE = '#include "workshop_platform_bridge.h"\n'
+INVENTORY_INCLUDE_LINE = '#include "workshop_inventory_service.h"\n'
 INCLUDE_ANCHOR = '#include "wifi_manager.h"\n'
 BEGIN_ANCHOR = "    tasmotaInit();\n"
 POLL_ANCHOR = "  handleWiFi();\n"
@@ -57,18 +63,26 @@ def apply(repo: Path, source_root: Path) -> None:
     copy_exact(bridge_source / "workshop_platform_bridge.h", repo / "include" / "workshop_platform_bridge.h")
     copy_exact(bridge_source / "workshop_platform_bridge.cpp", repo / "src" / "workshop_platform_bridge.cpp")
 
+    inventory_source = platform_source / "inventory"
+    copy_exact(inventory_source / "workshop_inventory_service.h", repo / "include" / "workshop_inventory_service.h")
+    copy_exact(inventory_source / "workshop_inventory_service.cpp", repo / "src" / "workshop_inventory_service.cpp")
+
     text = main_cpp.read_text(encoding="utf-8")
-    text = insert_once(text, INCLUDE_ANCHOR, INCLUDE_LINE, "bridge include")
-    text = insert_once(text, BEGIN_ANCHOR, "    workshopPlatformBegin();\n", "bridge begin")
-    text = insert_once(text, POLL_ANCHOR, "  workshopPlatformPoll();\n", "bridge poll")
+    text = insert_once(text, INCLUDE_ANCHOR, INCLUDE_LINE + INVENTORY_INCLUDE_LINE, "bridge include")
+    text = insert_once(text, BEGIN_ANCHOR, "    workshopPlatformBegin();\n    workshopInventoryServiceBegin();\n", "bridge begin")
+    text = insert_once(text, POLL_ANCHOR, "  workshopPlatformPoll();\n  workshopInventoryServiceLoop();\n", "bridge poll")
     main_cpp.write_text(text, encoding="utf-8")
 
     if text.count("workshopPlatformBegin();") != 1:
         raise PatchError("workshopPlatformBegin must be injected exactly once")
     if text.count("workshopPlatformPoll();") != 1:
         raise PatchError("workshopPlatformPoll must be injected exactly once")
+    if text.count("workshopInventoryServiceBegin();") != 1:
+        raise PatchError("workshopInventoryServiceBegin must be injected exactly once")
+    if text.count("workshopInventoryServiceLoop();") != 1:
+        raise PatchError("workshopInventoryServiceLoop must be injected exactly once")
 
-    print("Workshop OS 12 observation bridge installed")
+    print("Workshop OS 12 platform bridge and Filament Inventory consumer installed")
 
 
 def main() -> int:
