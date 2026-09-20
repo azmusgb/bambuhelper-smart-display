@@ -186,9 +186,13 @@ def prepare_repo(root: Path, *, ui13: bool = True) -> None:
 
 
 def validate_output(repo: Path) -> None:
+    build = (repo / "include/smart_home_build.h").read_text(encoding="utf-8")
     header = (repo / "include/security_manager.h").read_text(encoding="utf-8")
     security = (repo / "src/security_manager.cpp").read_text(encoding="utf-8")
     web = (repo / "src/web_server.cpp").read_text(encoding="utf-8")
+
+    forbid(build, "WORKSHOP_OS_TEMP_NO_CODE_LAN", "temporary open-LAN build marker")
+    forbid(security, "WORKSHOP_OS_TEMP_NO_CODE_LAN", "temporary open-LAN authorization bypass")
 
     for marker in (
         "enum class SecurityLoginResult : uint8_t",
