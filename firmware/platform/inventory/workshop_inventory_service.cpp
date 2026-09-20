@@ -191,18 +191,40 @@ bool parseFeed(JsonDocument& doc, InventoryFeedObservation& observation, char* e
                 copyText(error, errorLen, "Current quantity evidence failed verification contract.");
                 return false;
             }
+            const char* method = quantity["method"] | "Unknown";
+            if (std::strcmp(method, "Unknown") == 0) {
+                copyText(error, errorLen, "Current quantity evidence cannot use Unknown method.");
+                return false;
+            }
             if (std::strcmp(stockState, "Low") == 0) ++lowCount;
             else if (std::strcmp(stockState, "Unknown") == 0) {
                 copyText(error, errorLen, "Current quantity evidence cannot expose Unknown stock state.");
                 return false;
             }
         } else if (std::strcmp(quantityStatus, "Stale") == 0) {
+            if (!quantityVerify) {
+                copyText(error, errorLen, "Stale quantity evidence must require verification.");
+                return false;
+            }
             ++staleQuantityCount;
         } else if (std::strcmp(quantityStatus, "Conflict") == 0) {
+            JsonArray conflictIds = quantity["conflictEvidenceIds"].as<JsonArray>();
+            if (!quantityVerify || !(quantity["conflict"] | false) || conflictIds.isNull() || conflictIds.size() < 2) {
+                copyText(error, errorLen, "Conflicting quantity evidence failed conflict contract.");
+                return false;
+            }
             ++quantityConflictCount;
         } else if (std::strcmp(quantityStatus, "InvalidLineage") == 0) {
+            if (!quantityVerify) {
+                copyText(error, errorLen, "Invalid quantity lineage must require verification.");
+                return false;
+            }
             ++invalidLineageCount;
         } else if (std::strcmp(quantityStatus, "Unknown") == 0) {
+            if (!quantityVerify || !quantity["remainingGrams"].isNull()) {
+                copyText(error, errorLen, "Unknown quantity evidence must preserve unknown grams and require verification.");
+                return false;
+            }
             ++unknownQuantityCount;
         } else {
             copyText(error, errorLen, "Device feed contains an unknown quantity evidence state.");
@@ -240,10 +262,24 @@ bool parseFeed(JsonDocument& doc, InventoryFeedObservation& observation, char* e
                 return false;
             }
         } else if (std::strcmp(placementStatus, "Stale") == 0) {
+            if (!placementVerify) {
+                copyText(error, errorLen, "Stale placement evidence must require verification.");
+                return false;
+            }
             ++stalePlacementCount;
         } else if (std::strcmp(placementStatus, "Conflict") == 0) {
+            if (!placementVerify) {
+                copyText(error, errorLen, "Conflicting placement evidence must require verification.");
+                return false;
+            }
             ++placementConflictCount;
         } else if (std::strcmp(placementStatus, "Unknown") == 0) {
+            if (!placementVerify || std::strcmp(placementState, "Unknown") != 0 ||
+                !placement["printerId"].isNull() || !placement["feederId"].isNull() ||
+                !placement["slot"].isNull() || !placement["external"].isNull()) {
+                copyText(error, errorLen, "Unknown placement evidence must preserve unknown physical state.");
+                return false;
+            }
             ++unknownPlacementCount;
         } else {
             copyText(error, errorLen, "Device feed contains an unknown placement evidence state.");
