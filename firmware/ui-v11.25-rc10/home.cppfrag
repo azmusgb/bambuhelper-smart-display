@@ -44,6 +44,34 @@ static void drawHome(bool full) {
     workshopTimerText(attentionDetail,sizeof(attentionDetail));
   }
 
+  // Inventory is a redacted projection from Filament Inventory only.
+  // Printer/AMS telemetry remains a separate printer-feed observation and must
+  // never be promoted into inventory identity, quantity, or placement.
+  const workshop::platform::InventoryProjectionState& inv=workshopPlatformInventoryState();
+  char inventoryValue[34]="Inventory unknown";
+  uint16_t inventoryColor=C10_MUTED;
+  if(inv.available) {
+    if(inv.quantityState==workshop::platform::InventoryQuantityState::InvalidLineage) {
+      strlcpy(inventoryValue,"Evidence lineage invalid",sizeof(inventoryValue)); inventoryColor=C10_RED;
+    } else if(inv.quantityState==workshop::platform::InventoryQuantityState::Conflict) {
+      strlcpy(inventoryValue,"Quantity conflict",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.quantityState==workshop::platform::InventoryQuantityState::Stale) {
+      strlcpy(inventoryValue,"Quantity stale",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.quantityState==workshop::platform::InventoryQuantityState::Unknown) {
+      strlcpy(inventoryValue,"Quantity unknown",sizeof(inventoryValue));
+    } else if(inv.placementState==workshop::platform::InventoryPlacementState::Conflict) {
+      strlcpy(inventoryValue,"Placement conflict",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.placementState==workshop::platform::InventoryPlacementState::Stale) {
+      strlcpy(inventoryValue,"Placement stale",sizeof(inventoryValue)); inventoryColor=C10_ORANGE;
+    } else if(inv.placementState==workshop::platform::InventoryPlacementState::Unknown) {
+      strlcpy(inventoryValue,"Placement unknown",sizeof(inventoryValue));
+    } else {
+      snprintf(inventoryValue,sizeof(inventoryValue),"%u spools · %u loaded",
+               (unsigned)inv.spoolCount,(unsigned)inv.loadedCount);
+      inventoryColor=C10_GREEN;
+    }
+  }
+
   char materialValue[30]="Unknown telemetry";
   if(s&&s->ams.present&&s->ams.activeTray<4&&s->ams.trays[s->ams.activeTray].present) {
     const AmsTray& t=s->ams.trays[s->ams.activeTray];
@@ -91,9 +119,9 @@ static void drawHome(bool full) {
               (s&&s->ams.present)?C10_TEXT:C10_MUTED,C10_SURFACE);
 
     tft.drawFastHLine(summary.x+14,summary.y+143,summary.w-28,C10_SEPARATOR);
-    uiDrawFit("Network",summary.x+14,summary.y+154,summary.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
-    uiDrawFit(wifi?"Connected":"Offline",summary.x+14,summary.y+178,summary.w-28,FONT_BODY,TL_DATUM,
-              wifi?C10_GREEN:C10_RED,C10_SURFACE);
+    uiDrawFit("Inventory",summary.x+14,summary.y+154,summary.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit(inventoryValue,summary.x+14,summary.y+178,summary.w-28,FONT_BODY,TL_DATUM,
+              inventoryColor,C10_SURFACE);
   } else {
     HubRect hero=hr(8,44,W-16,170);
     HubRect summary=hr(8,222,W-16,196);
@@ -119,9 +147,9 @@ static void drawHome(bool full) {
     uiDrawFit("Printer feed",summary.x+14,summary.y+82,summary.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
     uiDrawFit(materialValue,summary.x+14,summary.y+108,summary.w-28,FONT_BODY,TL_DATUM,C10_TEXT,C10_SURFACE);
     tft.drawFastHLine(summary.x+14,summary.y+140,summary.w-28,C10_SEPARATOR);
-    uiDrawFit("Network",summary.x+14,summary.y+152,summary.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
-    uiDrawFit(wifi?"Connected":"Offline",summary.x+14,summary.y+178,summary.w-28,FONT_BODY,TL_DATUM,
-              wifi?C10_GREEN:C10_RED,C10_SURFACE);
+    uiDrawFit("Inventory",summary.x+14,summary.y+152,summary.w-28,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit(inventoryValue,summary.x+14,summary.y+178,summary.w-28,FONT_BODY,TL_DATUM,
+              inventoryColor,C10_SURFACE);
   }
 
   hubMarkFrameDirty();
