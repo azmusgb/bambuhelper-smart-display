@@ -45,12 +45,27 @@ def main()->int:
     ap=argparse.ArgumentParser();ap.add_argument("--repo",required=True);args=ap.parse_args()
     hub=load(Path(args.repo).resolve()/"src"/"smart_hub.cpp")
 
-    for token in (
+    finish_tokens=(
         "static constexpr int16_t OS12_UI_RADIUS = 14;",
         "static constexpr int16_t OS12_UI_RADIUS_SMALL = 10;",
         "static constexpr int16_t OS12_UI_TOUCH_MIN = 44;",
         "static constexpr int16_t OS12_UI_CONTROL_H = 44;",
-    ): require(hub,token,"UI finish tokens")
+    )
+    for token in finish_tokens:
+        require(hub,token,"UI finish tokens")
+        if hub.count(token)!=1: raise ValidationError(f"UI finish token must exist exactly once: {token}")
+
+    declaration_pos=hub.find("static constexpr int16_t OS12_UI_RADIUS = 14;")
+    for signature in (
+        "static void drawHeader(",
+        "static void uiBottomNav(",
+        "static void hubV1125Card(",
+        "static void hubV1125ModeTabs()",
+        "static void hubOs12RowSurface(",
+    ):
+        consumer_pos=hub.find(signature)
+        if consumer_pos>=0 and declaration_pos>consumer_pos:
+            raise ValidationError(f"UI finish tokens are declared after consumer: {signature}")
 
     header=block(hub,"static void drawHeader(")
     require(header,"hubUi13HeaderStateColor","header semantic status")
