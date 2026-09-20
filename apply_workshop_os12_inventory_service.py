@@ -315,7 +315,6 @@ def apply(repo: Path, source_root: Path) -> None:
     patch_service(repo, source_root)
     patch_main(repo)
     patch_web_server(repo)
-    patch_portal(repo)
     patch_build_identity(repo)
     print("Workshop OS 12 Filament Inventory device-feed consumer installed")
 
@@ -325,11 +324,18 @@ def main() -> int:
     ap.add_argument("--repo", required=True)
     ap.add_argument("--source-root", default=str(Path(__file__).resolve().parent))
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--portal-only", action="store_true",
+                    help="Apply only the Filament Inventory controls to an already reconstructed OS12 portal")
     args = ap.parse_args()
     if not args.apply:
         raise SystemExit("refusing to modify source without --apply")
     try:
-        apply(Path(args.repo).resolve(), Path(args.source_root).resolve())
+        repo = Path(args.repo).resolve()
+        if args.portal_only:
+            patch_portal(repo)
+            print("Workshop OS 12 Filament Inventory portal controls installed")
+        else:
+            apply(repo, Path(args.source_root).resolve())
     except PatchError as exc:
         raise SystemExit(f"FAIL: {exc}") from exc
     return 0
