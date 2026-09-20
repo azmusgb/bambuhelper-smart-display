@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://filamentinventory.local/contracts/device-feed-v1.schema.json",
   "title": "Filament Inventory Device Feed v1",
+  "description": "Versioned, profile-scoped, redacted projection owned by Filament Inventory and consumed by Workshop OS.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "generatedAt", "scope", "freshness", "inventory", "readiness", "unknowns", "attention"],
@@ -12,7 +13,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "id"],
-      "properties": {"type": {"const": "profile"}, "id": {"type": "string", "minLength": 1}}
+      "properties": {
+        "type": {"const": "profile"},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
     },
     "freshness": {
       "type": "object",
@@ -32,28 +36,116 @@
         "status": {"enum": ["available", "unavailable"]},
         "spools": {
           "type": "array",
+          "maxItems": 256,
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["spoolId", "material", "color", "quantity", "placement"],
             "properties": {
-              "spoolId": {"type": "string", "minLength": 1},
-              "material": {"type": ["string", "null"]},
-              "color": {"type": ["string", "null"]},
+              "spoolId": {"type": "string", "minLength": 1, "maxLength": 128},
+              "material": {"type": ["string", "null"], "maxLength": 64},
+              "color": {"type": ["string", "null"], "maxLength": 64},
               "quantity": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["remainingGrams", "method", "source", "grossGrams", "tareGrams", "observedAt", "confidence", "stale"],
+                "required": [
+                  "evidenceId",
+                  "remainingGrams",
+                  "method",
+                  "source",
+                  "grossGrams",
+                  "tareGrams",
+                  "observedAt",
+                  "staleAfter",
+                  "confidence",
+                  "status",
+                  "evidenceCount",
+                  "conflict",
+                  "conflictEvidenceIds",
+                  "verificationRequired"
+                ],
                 "properties": {
+                  "evidenceId": {"type": ["string", "null"], "maxLength": 128},
                   "remainingGrams": {"type": ["number", "null"], "minimum": 0},
-                  "method": {"enum": ["Measured", "CalculatedFromMeasured", "PrinterEstimatedUsage", "VisualEstimate", "ImportedEstimate", "Unknown"]},
-                  "source": {"type": ["string", "null"]},
-                  "grossGrams": {"type": ["number", "null"]},
-                  "tareGrams": {"type": ["number", "null"]},
+                  "method": {
+                    "enum": [
+                      "Measured",
+                      "CalculatedFromMeasured",
+                      "PrinterEstimatedUsage",
+                      "VisualEstimate",
+                      "ImportedEstimate",
+                      "Unknown"
+                    ]
+                  },
+                  "source": {"type": ["string", "null"], "maxLength": 128},
+                  "grossGrams": {"type": ["number", "null"], "minimum": 0},
+                  "tareGrams": {"type": ["number", "null"], "minimum": 0},
                   "observedAt": {"type": ["string", "null"], "format": "date-time"},
-                  "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-                  "stale": {"type": "boolean"}
-                }
+                  "staleAfter": {"type": ["string", "null"], "format": "date-time"},
+                  "confidence": {"type": ["string", "null"], "maxLength": 32},
+                  "status": {"enum": ["Current", "Stale", "Conflict", "InvalidLineage", "Unknown"]},
+                  "evidenceCount": {"type": "integer", "minimum": 0},
+                  "conflict": {"type": "boolean"},
+                  "conflictEvidenceIds": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 128}
+                  },
+                  "verificationRequired": {"type": "boolean"}
+                },
+                "allOf": [
+                  {
+                    "if": {"properties": {"status": {"const": "Current"}}, "required": ["status"]},
+                    "then": {
+                      "properties": {
+                        "remainingGrams": {"type": "number", "minimum": 0},
+                        "method": {
+                          "enum": [
+                            "Measured",
+                            "CalculatedFromMeasured",
+                            "PrinterEstimatedUsage",
+                            "VisualEstimate",
+                            "ImportedEstimate"
+                          ]
+                        },
+                        "verificationRequired": {"const": false}
+                      }
+                    }
+                  },
+                  {
+                    "if": {"properties": {"status": {"const": "Unknown"}}, "required": ["status"]},
+                    "then": {
+                      "properties": {
+                        "remainingGrams": {"type": "null"},
+                        "method": {"enum": ["VisualEstimate", "Unknown"]},
+                        "verificationRequired": {"const": true}
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {"enum": ["Stale", "Conflict", "InvalidLineage"]}
+                      },
+                      "required": ["status"]
+                    },
+                    "then": {
+                      "properties": {
+                        "verificationRequired": {"const": true}
+                      }
+                    }
+                  },
+                  {
+                    "if": {"properties": {"status": {"const": "Conflict"}}, "required": ["status"]},
+                    "then": {
+                      "properties": {
+                        "conflict": {"const": true},
+                        "conflictEvidenceIds": {"minItems": 2}
+                      }
+                    }
+                  }
+                ]
               },
               "placement": {
                 "type": "object",
@@ -61,9 +153,9 @@
                 "required": ["state", "printerId", "feederId", "slot", "external", "observedAt"],
                 "properties": {
                   "state": {"type": "string"},
-                  "printerId": {"type": ["string", "null"]},
-                  "feederId": {"type": ["string", "null"]},
-                  "slot": {"type": ["integer", "null"]},
+                  "printerId": {"type": ["string", "null"], "maxLength": 128},
+                  "feederId": {"type": ["string", "null"], "maxLength": 128},
+                  "slot": {"type": ["integer", "null"], "minimum": 0},
                   "external": {"type": ["boolean", "null"]},
                   "observedAt": {"type": ["string", "null"], "format": "date-time"}
                 }
@@ -78,21 +170,37 @@
       "additionalProperties": false,
       "required": ["state", "reason", "requiredGrams"],
       "properties": {
-        "state": {"enum": ["Ready", "ReadyWithSubstitute", "NeedsLoad", "NeedsDry", "InsufficientQuantity", "EvidenceStale", "Undetermined"]},
-        "reason": {"type": "string"},
+        "state": {
+          "enum": [
+            "Ready",
+            "ReadyWithSubstitute",
+            "NeedsLoad",
+            "NeedsDry",
+            "InsufficientQuantity",
+            "EvidenceStale",
+            "Undetermined"
+          ]
+        },
+        "reason": {"type": "string", "minLength": 1, "maxLength": 256},
         "requiredGrams": {"type": ["number", "null"], "minimum": 0}
       }
     },
-    "unknowns": {"type": "array", "items": {"type": "string"}},
+    "unknowns": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
     "attention": {
       "type": "array",
+      "maxItems": 128,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["kind", "message"],
         "properties": {
-          "kind": {"type": "string"},
-          "message": {"type": "string"},
-          "spoolId": {"type": "string"}
+          "kind": {"type": "string", "minLength": 1, "maxLength": 64},
+          "message": {"type": "string", "minLength": 1, "maxLength": 256},
+          "spoolId": {"type": "string", "minLength": 1, "maxLength": 128}
         }
       }
     }
