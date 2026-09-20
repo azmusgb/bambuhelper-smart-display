@@ -63,6 +63,18 @@ def apply(repo: Path, source_root: Path) -> None:
     copy_exact(bridge_source / "workshop_platform_bridge.h", repo / "include" / "workshop_platform_bridge.h")
     copy_exact(bridge_source / "workshop_platform_bridge.cpp", repo / "src" / "workshop_platform_bridge.cpp")
 
+    # UI13 Home/Workshop fragments read the normalized inventory projection from
+    # smart_hub.cpp. The bridge header must therefore be visible in that
+    # translation unit as well as main.cpp; relying on main.cpp includes does
+    # not make the workshop namespace or facade declarations visible here.
+    smart_hub_cpp = repo / "src" / "smart_hub.cpp"
+    if not smart_hub_cpp.is_file():
+        raise PatchError("Workshop OS 12 bridge requires reconstructed smart_hub.cpp")
+    smart_hub_text = smart_hub_cpp.read_text(encoding="utf-8")
+    if INCLUDE_LINE.strip() not in smart_hub_text:
+        smart_hub_text = INCLUDE_LINE + smart_hub_text
+        smart_hub_cpp.write_text(smart_hub_text, encoding="utf-8")
+
     inventory_source = platform_source / "inventory"
     copy_exact(inventory_source / "workshop_inventory_service.h", repo / "include" / "workshop_inventory_service.h")
     copy_exact(inventory_source / "workshop_inventory_service.cpp", repo / "src" / "workshop_inventory_service.cpp")
