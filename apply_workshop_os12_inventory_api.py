@@ -132,14 +132,15 @@ def apply(repo: Path) -> None:
             raise PatchError("web server init route anchor missing/non-unique")
         text = text.replace(route_anchor, route_anchor + ROUTES, 1)
 
-    for route in (
-        '/os12/inventory/status',
-        '/os12/inventory/credential',
-        '/os12/inventory/credential/clear',
-        '/os12/inventory/refresh',
-    ):
-        if text.count(route) != 1:
-            raise PatchError(f"inventory route missing/non-unique: {route}")
+    route_registrations = (
+        'SECURE_GET("/os12/inventory/status", handleWorkshopInventoryStatus);',
+        'SECURE_POST("/os12/inventory/credential", handleWorkshopInventoryCredential);',
+        'SECURE_POST("/os12/inventory/credential/clear", handleWorkshopInventoryCredentialClear);',
+        'SECURE_POST("/os12/inventory/refresh", handleWorkshopInventoryRefresh);',
+    )
+    for registration in route_registrations:
+        if text.count(registration) != 1:
+            raise PatchError(f"inventory route missing/non-unique: {registration}")
 
     init_start = text.find("void initWebServer() {")
     init_end = text.find("\nvoid handleWebServer()", init_start)
