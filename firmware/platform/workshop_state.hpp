@@ -99,9 +99,6 @@ struct PrinterState {
     bool stopGuardRequired{true};
 };
 
-// Power state is printer-scoped but represents the mapped smart-plug channel,
-// not printer telemetry. Unknown relay state remains explicit; availability of
-// a plug mapping alone never proves the relay is reachable or on/off.
 struct PowerState {
     Freshness freshness{Freshness::Unknown};
     std::uint32_t observedAtMs{0};
@@ -122,10 +119,11 @@ struct NetworkState {
     bool accessPointMode{false};
 };
 
-// InventoryProjectionState is a redacted summary derived only from the
-// Filament Inventory device-feed contract. It is not an inventory authority and
-// must never be populated from printer/AMS similarity. Unknown/conflict/stale
-// evidence remains explicit and prevents a clean readiness presentation.
+// Redacted summary derived only from the validated Filament Inventory device
+// feed. Workshop OS must never populate these fields from printer/AMS
+// similarity. Quantity validity is intentionally distinct from print-readiness
+// validity: requirements can be Undetermined while quantity evidence remains
+// fully current.
 struct InventoryProjectionState {
     Freshness freshness{Freshness::Unknown};
     InventoryQuantityState quantityState{InventoryQuantityState::Unknown};
@@ -140,12 +138,9 @@ struct InventoryProjectionState {
     std::uint16_t invalidLineageCount{0};
     char profileId[kProfileIdLength]{};
     bool available{false};
-    bool verificationRequired{true};
+    bool quantityVerificationRequired{true};
 };
 
-// UpdateState is the normalized device-facing view of UpdateService. It records
-// only metadata validated by the authoritative manifest and runtime phase.
-// Full-image recovery is deliberately separate from normal device OTA.
 struct UpdateState {
     UpdateChannel channel{UpdateChannel::Unknown};
     UpdatePhase phase{UpdatePhase::Unknown};
@@ -233,7 +228,7 @@ inline bool inventoryQuantityUsable(const InventoryProjectionState& state) {
     return state.available &&
            state.freshness == Freshness::Fresh &&
            state.quantityState == InventoryQuantityState::Current &&
-           !state.verificationRequired &&
+           !state.quantityVerificationRequired &&
            state.conflictCount == 0 &&
            state.invalidLineageCount == 0 &&
            state.staleQuantityCount == 0;
