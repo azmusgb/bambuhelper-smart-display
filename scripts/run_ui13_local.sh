@@ -27,6 +27,13 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 if [[ "${1:-}" == "--build" ]]; then
+  # UI13 contains Workshop/Inventory presentation that consumes the OS12
+  # normalized bridge. Compile the same dependency boundary that those views
+  # require; never allow the standalone UI gate to compile an impossible
+  # partial product.
+  python3 "$ROOT/apply_workshop_os12_platform_bridge.py" --repo "$BUILD" --source-root "$ROOT" --apply
+  python3 "$ROOT/scripts/validate_os12_platform_bridge.py"
+
   if ! command -v pio >/dev/null 2>&1; then
     echo "PlatformIO not found; installing for current user..."
     python3 -m pip install --user --upgrade platformio
