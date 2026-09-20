@@ -246,17 +246,25 @@ def apply(repo: Path) -> None:
     path = repo / "src" / "smart_hub.cpp"
     text = load(path)
 
-    if "OS12_MARGIN_X" not in text:
-        signatures = (
-            "static void hubOs12RowSurface(",
-            "static HubRect hubUi13RowRect(",
-            "static HubRect hubUi12SettingsRect(",
-        )
-        positions = [text.find(sig) for sig in signatures if text.find(sig) >= 0]
-        if not positions:
-            raise PatchError("unable to locate UX geometry insertion point")
-        pos = min(positions)
-        text = text[:pos] + TOKENS + "\n" + text[pos:]
+    # Token declarations must precede every function that consumes them. Earlier
+    # revisions only checked whether the token *name* existed anywhere, which
+    # allowed a later declaration to satisfy the patch while earlier functions
+    # failed to compile. Normalize the declarations to the top of the anonymous
+    # namespace on every application so reconstruction is deterministic.
+    token_lines = tuple(line.strip() for line in TOKENS.strip().splitlines() if line.strip())
+    for token in token_lines:
+        count = text.count(token)
+        if count > 1:
+            raise PatchError(f"duplicate UX geometry token: {token}")
+        if count == 1:
+            text = text.replace(token, "", 1)
+
+    namespace_anchor = "namespace {\n"
+    pos = text.find(namespace_anchor)
+    if pos < 0:
+        raise PatchError("anonymous namespace anchor missing for UX geometry tokens")
+    pos += len(namespace_anchor)
+    text = text[:pos] + "\n" + TOKENS.strip() + "\n\n" + text[pos:]
 
     replacements = (
         ("static void hubOs12RowSurface(", ROW_SURFACE),
