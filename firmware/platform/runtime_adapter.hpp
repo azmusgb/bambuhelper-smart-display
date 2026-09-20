@@ -33,6 +33,25 @@ struct LegacyNetworkObservation {
     const char* localAddress{nullptr};
 };
 
+// Parsed/validated summary of the Filament Inventory device-feed v1 contract.
+// The parser/transport is responsible for validating the external schema before
+// constructing this observation. This adapter only normalizes the already
+// validated, profile-scoped projection into Workshop OS state.
+struct InventoryFeedObservation {
+    const char* profileId{nullptr};
+    std::uint32_t observedAtMs{0};
+    std::uint16_t spoolCount{0};
+    std::uint16_t loadedCount{0};
+    std::uint16_t lowCount{0};
+    std::uint16_t unknownQuantityCount{0};
+    std::uint16_t staleQuantityCount{0};
+    std::uint16_t conflictCount{0};
+    std::uint16_t invalidLineageCount{0};
+    InventoryReadinessState readiness{InventoryReadinessState::Undetermined};
+    bool available{false};
+    bool feedStale{true};
+};
+
 // Unsigned subtraction is intentional: Arduino millis() wraps at 2^32 and this
 // remains correct as long as the freshness horizon is far below half the range.
 inline Freshness freshnessFromAge(
@@ -85,6 +104,56 @@ inline NetworkState normalizeNetworkObservation(const LegacyNetworkObservation& 
         std::strncpy(state.localAddress, observation.localAddress, sizeof(state.localAddress) - 1);
         state.localAddress[sizeof(state.localAddress) - 1] = '\0';
     }
+    return state;
+}
+
+inline InventoryProjectionState normalizeInventoryFeedObservation(
+    const InventoryFeedObservation& observation) {
+    InventoryProjectionState state;
+    state.available = observation.available;
+    state.observedAtMs = observation.observedAtMs;
+    state.spoolCount = observation.spoolCount;
+    state.loadedCount = observation.loadedCount;
+    state.lowCount = observation.lowCount;
+    state.unknownQuantityCount = observation.unknownQuantityCount;
+    state.staleQuantityCount = observation.staleQuantityCount;
+    state.conflictCount = observation.conflictCount;
+    state.invalidLineageCount = observation.invalidLineageCount;
+    state.readiness = observation.readiness;
+
+    if (observation.profileId != nullptr) {
+        std::strncpy(state.profileId, observation.profileId, sizeof(state.profileId) - 1);
+        state.profileId[sizeof(state.profileId) - 1] = '\0';
+    }
+
+    if (!observation.available) {
+        state.freshness = Freshness::Unknown;
+        state.quantityState = InventoryQuantityState::Unknown;
+        state.verificationRequired = true;
+        return state;
+    }
+
+    state.freshness = observation.feedStale ? Freshness::Stale : Freshness::Fresh;
+
+    if (observation.invalidLineageCount > 0) {
+        state.quantityState = InventoryQuantityState::InvalidLineage;
+    } else if (observation.conflictCount > 0) {
+        state.quantityState = InventoryQuantityState::Conflict;
+        state.freshness = Freshness::Conflicting;
+    } else if (observation.staleQuantityCount > 0 || observation.feedStale) {
+        state.quantityState = InventoryQuantityState::Stale;
+    } else if (observation.unknownQuantityCount > 0) {
+        state.quantityState = InventoryQuantityState::Unknown;
+    } else {
+        state.quantityState = InventoryQuantityState::Current;
+    }
+
+    state.verificationRequired =
+        state.quantityState != InventoryQuantityState::Current ||
+        state.freshness != Freshness::Fresh ||
+        state.readiness == InventoryReadinessState::Undetermined ||
+        state.readiness == InventoryReadinessState::EvidenceStale;
+
     return state;
 }
 
