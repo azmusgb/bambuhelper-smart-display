@@ -156,6 +156,10 @@ const workshop::platform::WorkshopState& workshopPlatformState() {
     return g_workshopStateStore.snapshot();
 }
 
+void workshopPlatformPublishInventoryState(const workshop::platform::InventoryProjectionState& state) {
+    g_workshopStateStore.publishInventoryProjectionState(state);
+}
+
 void workshopPlatformPublishUpdateState(const workshop::platform::UpdateState& state) {
     g_workshopStateStore.publishUpdateState(state);
 }
