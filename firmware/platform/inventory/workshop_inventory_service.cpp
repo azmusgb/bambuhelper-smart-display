@@ -468,10 +468,15 @@ bool workshopInventorySetDeviceCredential(const char* token) {
 
     portENTER_CRITICAL(&g_inventoryMux);
     strlcpy(g_deviceToken, token, sizeof(g_deviceToken));
+    // Credential replacement may change the bound member/profile. Never leave
+    // the previous profile's projection visible while the new scope refreshes.
+    g_runtime.state = InventoryProjectionState{};
+    g_runtime.lastSuccessAtMs = 0;
     g_runtime.credentialConfigured = true;
     g_refreshRequested = true;
     copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Workshop OS device access saved. Refresh pending.");
     portEXIT_CRITICAL(&g_inventoryMux);
+    publishUnavailable("Waiting for the newly scoped Filament Inventory refresh.", true, millis());
     return true;
 }
 
@@ -484,6 +489,8 @@ void workshopInventoryClearDeviceCredential() {
 
     portENTER_CRITICAL(&g_inventoryMux);
     std::memset(g_deviceToken, 0, sizeof(g_deviceToken));
+    g_runtime.state = InventoryProjectionState{};
+    g_runtime.lastSuccessAtMs = 0;
     g_runtime.credentialConfigured = false;
     g_refreshRequested = false;
     portEXIT_CRITICAL(&g_inventoryMux);
