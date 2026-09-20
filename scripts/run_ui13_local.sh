@@ -32,7 +32,7 @@ if [[ "${1:-}" == "--build" ]]; then
   # require; never allow the standalone UI gate to compile an impossible
   # partial product.
   python3 "$ROOT/apply_workshop_os12_platform_bridge.py" --repo "$BUILD" --source-root "$ROOT" --apply
-  python3 "$ROOT/scripts/validate_os12_platform_bridge.py"
+  python3 "$ROOT/scripts/validate_os12_platform_bridge.py" --repo "$BUILD"
 
   if ! command -v pio >/dev/null 2>&1; then
     echo "PlatformIO not found; installing for current user..."
