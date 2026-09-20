@@ -191,10 +191,19 @@ static void hubUi13StepperRow(const HubRect& r,const char* label,const char* val
 
 def apply(repo: Path) -> None:
     path=repo/"src"/"smart_hub.cpp";text=load(path)
-    if "OS12_UI_RADIUS = 14" not in text:
-        anchor="static constexpr int16_t OS12_MARGIN_X = 12;"
-        if text.count(anchor)!=1: raise PatchError("OS12 geometry token anchor missing/non-unique")
-        text=text.replace(anchor,TOKENS+"\n"+anchor,1)
+    # Keep finish tokens at namespace scope before every drawing primitive.
+    # Merely finding the token text later in the file is insufficient in C++:
+    # declarations must precede the functions that consume them.
+    token_lines=tuple(line.strip() for line in TOKENS.strip().splitlines() if line.strip())
+    for token in token_lines:
+        count=text.count(token)
+        if count>1: raise PatchError(f"duplicate OS12 UI finish token: {token}")
+        if count==1: text=text.replace(token,"",1)
+    anchor="namespace {\n"
+    pos=text.find(anchor)
+    if pos<0: raise PatchError("anonymous namespace anchor missing for UI finish tokens")
+    pos+=len(anchor)
+    text=text[:pos]+"\n"+TOKENS.strip()+"\n\n"+text[pos:]
     for signature,replacement in (
         ("static void hubV1125Card(",CARD),("static void hubV1125ModeTabs()",MODE_TABS),("static void hubV1125Action(",ACTION),
         ("static void hubV1125TelemetryColumn(",TELEMETRY),("static void hubV1125AmsSlot(",AMS_SLOT),("static void drawHeader(",HEADER),
