@@ -18,6 +18,7 @@ on:
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
+      - 'apply_workshop_os12_inventory_api.py'
       - 'apply_workshop_os12_device_update.py'
       - 'apply_workshop_os12_inventory_service.py'
       - 'apply_workshop_os12_release_identity.py'
@@ -38,6 +39,7 @@ on:
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/validate_os12_inventory_api.py'
       - 'scripts/validate_os12_device_update.py'
       - 'scripts/validate_os12_inventory_service.py'
       - 'scripts/prepare_os12_device_candidate.py'
@@ -65,6 +67,7 @@ on:
       - 'apply_workshop_os12_non_destructive_controls.py'
       - 'apply_workshop_os12_guarded_stop.py'
       - 'apply_workshop_os12_portal_login_hardening.py'
+      - 'apply_workshop_os12_inventory_api.py'
       - 'apply_workshop_os12_device_update.py'
       - 'apply_workshop_os12_inventory_service.py'
       - 'apply_workshop_os12_release_identity.py'
@@ -84,6 +87,7 @@ on:
       - 'scripts/validate_os12_guarded_stop.py'
       - 'scripts/validate_os12_control_boundary.py'
       - 'scripts/validate_os12_portal_login.py'
+      - 'scripts/validate_os12_inventory_api.py'
       - 'scripts/validate_os12_device_update.py'
       - 'scripts/validate_os12_inventory_service.py'
       - 'scripts/prepare_os12_device_candidate.py'
@@ -172,6 +176,8 @@ jobs:
             echo "full_image=false"
             echo "device_native_update_service=true"
             echo "media_service=true"
+            echo "filament_inventory_device_feed_v1=true"
+            echo "filament_inventory_device_credential=revocable-read-only"
             echo "media_ui=true"
             echo "media_recording=bounded-five-second"
             echo "media_signal_hardening=analog-mic-route-gain-diagnostics"
