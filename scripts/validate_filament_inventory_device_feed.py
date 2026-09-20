@@ -37,6 +37,7 @@ QUANTITY_METHODS = {
 QUANTITY_STATUS = {"Current", "Stale", "Conflict", "InvalidLineage", "Unknown"}
 PLACEMENT_STATUS = {"Current", "Stale", "Conflict", "Unknown"}
 PLACEMENT_STATE = {"Stored", "Loaded", "Unknown"}
+STOCK_STATE = {"Available", "Low", "Empty", "Unknown"}
 
 READINESS = {
     "Ready",
@@ -270,7 +271,8 @@ def validate_payload(payload: dict[str, Any]) -> None:
     seen_spools: set[str] = set()
     for index, spool in enumerate(inventory["spools"]):
         context = f"inventory.spools[{index}]"
-        expect_exact(spool, {"spoolId", "material", "color", "quantity", "placement"}, context)
+        expect_exact(spool, {"spoolId", "material", "stockState", "color", "quantity", "placement"}, context)
+        require(spool["stockState"] in STOCK_STATE, f"{context}.stockState invalid")
         spool_id = spool["spoolId"]
         require(isinstance(spool_id, str) and spool_id.strip(), f"{context}.spoolId required")
         require(spool_id not in seen_spools, f"duplicate spoolId: {spool_id}")
@@ -304,6 +306,7 @@ def representative_payload() -> dict[str, Any]:
                 {
                     "spoolId": "spool-1",
                     "material": "PLA",
+                    "stockState": "Available",
                     "color": "Black",
                     "quantity": {
                         "evidenceId": "qe-1",
