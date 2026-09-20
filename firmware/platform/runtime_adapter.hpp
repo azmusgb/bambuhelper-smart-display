@@ -9,9 +9,6 @@
 namespace workshop {
 namespace platform {
 
-// Transitional input only. These observations are populated from the existing
-// Bambu/Wi-Fi runtime; they are not a second authority and contain no inventory
-// identity or placement semantics.
 struct LegacyPrinterObservation {
     bool configured{false};
     bool connected{false};
@@ -34,9 +31,9 @@ struct LegacyNetworkObservation {
 };
 
 // Parsed/validated summary of the Filament Inventory device-feed v1 contract.
-// The parser/transport is responsible for validating the external schema before
-// constructing this observation. This adapter only normalizes the already
-// validated, profile-scoped projection into Workshop OS state.
+// Transport/parser code must validate profile scope and schema before creating
+// this observation. This adapter never derives inventory state from printer
+// telemetry.
 struct InventoryFeedObservation {
     const char* profileId{nullptr};
     std::uint32_t observedAtMs{0};
@@ -52,8 +49,6 @@ struct InventoryFeedObservation {
     bool feedStale{true};
 };
 
-// Unsigned subtraction is intentional: Arduino millis() wraps at 2^32 and this
-// remains correct as long as the freshness horizon is far below half the range.
 inline Freshness freshnessFromAge(
     std::uint32_t observedAtMs,
     std::uint32_t nowMs,
@@ -129,7 +124,7 @@ inline InventoryProjectionState normalizeInventoryFeedObservation(
     if (!observation.available) {
         state.freshness = Freshness::Unknown;
         state.quantityState = InventoryQuantityState::Unknown;
-        state.verificationRequired = true;
+        state.quantityVerificationRequired = true;
         return state;
     }
 
@@ -148,11 +143,9 @@ inline InventoryProjectionState normalizeInventoryFeedObservation(
         state.quantityState = InventoryQuantityState::Current;
     }
 
-    state.verificationRequired =
+    state.quantityVerificationRequired =
         state.quantityState != InventoryQuantityState::Current ||
-        state.freshness != Freshness::Fresh ||
-        state.readiness == InventoryReadinessState::Undetermined ||
-        state.readiness == InventoryReadinessState::EvidenceStale;
+        state.freshness != Freshness::Fresh;
 
     return state;
 }
