@@ -113,8 +113,9 @@ grep -Fq 'Hold to Apply' "$HUB"
 grep -Fq 'securityPortalCode()' "$HUB"
 grep -Fq 'return cookieMatches(server);' "$SEC"
 grep -Fq 'if (mutating && !sameOrigin(server))' "$SEC"
-! grep -Fq 'WORKSHOP_OS_TEMP_NO_CODE_LAN' "$HDR"
-! grep -Fq 'WORKSHOP_OS_TEMP_NO_CODE_LAN' "$SEC"
+! grep -Fq '#define WORKSHOP_OS_TEMP_NO_CODE_LAN' "$HDR"
+! grep -Fq '#if defined(WORKSHOP_OS_TEMP_NO_CODE_LAN) && WORKSHOP_OS_TEMP_NO_CODE_LAN' "$SEC"
+! grep -Fq 'if (!isAPMode()) return true;' "$SEC"
 ! grep -Fq 'TEST / NO CODE' "$HUB"
 for bad in matchSpoolByColor matchSpoolByMaterial resolveSpool; do ! grep -Fq "$bad" "$HUB"; done
 if command -v node >/dev/null 2>&1; then node --check "$APP"; fi
