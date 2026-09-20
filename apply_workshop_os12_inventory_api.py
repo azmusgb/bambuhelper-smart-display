@@ -104,9 +104,17 @@ def apply(repo: Path) -> None:
         raise PatchError("portal authentication hardening must be present")
 
     if '#include "workshop_inventory_service.h"' not in text:
-        anchor = '#include "workshop_platform_bridge.h"\n'
-        if text.count(anchor) != 1:
-            raise PatchError("inventory API include anchor missing/non-unique")
+        # Reconstructed web_server.cpp does not necessarily consume the platform
+        # bridge directly. Anchor to the stable update-service include used by
+        # the other OS12 authenticated APIs instead of requiring an unrelated
+        # include to exist first.
+        anchors = (
+            '#include "workshop_update_service.h"\n',
+            '#include "security_manager.h"\n',
+        )
+        anchor = next((candidate for candidate in anchors if text.count(candidate) == 1), None)
+        if anchor is None:
+            raise PatchError("inventory API stable include anchor missing/non-unique")
         text = text.replace(anchor, anchor + '#include "workshop_inventory_service.h"\n', 1)
 
     if "sendWorkshopInventoryStatus" not in text:
