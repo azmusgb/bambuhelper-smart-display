@@ -159,7 +159,30 @@ def validate_patcher() -> None:
             "publishInventoryState",
         ):
             if marker not in installed_service:
-                fail(f"reconstructed source lost command feedback marker: {marker}")
+                fail(f"reconstructed service contract lost marker: {marker}")
+
+        installed_state = (repo / "include/workshop_platform/workshop_state.hpp").read_text(encoding="utf-8")
+        for marker in (
+            "InventoryProjectionState",
+            "inventoryQuantityUsable",
+            "inventoryReadinessClean",
+        ):
+            if marker not in installed_state:
+                fail(f"reconstructed state contract lost inventory marker: {marker}")
+
+        installed_adapter = (repo / "include/workshop_platform/runtime_adapter.hpp").read_text(encoding="utf-8")
+        if "normalizeInventoryFeedObservation" not in installed_adapter:
+            fail("reconstructed runtime adapter lost inventory normalization")
+
+        installed_bridge_h = (repo / "include/workshop_platform_bridge.h").read_text(encoding="utf-8")
+        for marker in (
+            "workshopPlatformPublishInventoryState",
+            "workshopPlatformInventoryState",
+            "workshopPlatformInventoryQuantityUsable",
+            "workshopPlatformInventoryReady",
+        ):
+            if marker not in installed_bridge_h:
+                fail(f"reconstructed bridge header lost inventory marker: {marker}")
 
 
 def main() -> int:
