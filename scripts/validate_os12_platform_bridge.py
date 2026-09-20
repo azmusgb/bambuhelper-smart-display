@@ -56,8 +56,10 @@ def validate_templates() -> None:
         "result-to-feedback mapping": "commandOperationFromResult",
         "inventory projection state": "InventoryProjectionState",
         "inventory quantity state": "InventoryQuantityState",
+        "inventory placement state": "InventoryPlacementState",
         "inventory readiness state": "InventoryReadinessState",
         "inventory quantity gate": "inventoryQuantityUsable",
+        "inventory placement gate": "inventoryPlacementUsable",
         "inventory readiness gate": "inventoryReadinessClean",
         "inventory service seam": "class IInventoryService",
         "inventory publish facade": "workshopPlatformPublishInventoryState",
@@ -163,6 +165,7 @@ def validate_patcher() -> None:
         for marker in (
             "InventoryProjectionState",
             "inventoryQuantityUsable",
+            "inventoryPlacementUsable",
             "inventoryReadinessClean",
         ):
             if marker not in installed_state:
