@@ -76,6 +76,13 @@ enum class InventoryQuantityState : std::uint8_t {
     InvalidLineage,
 };
 
+enum class InventoryPlacementState : std::uint8_t {
+    Unknown = 0,
+    Current,
+    Stale,
+    Conflict,
+};
+
 enum class InventoryReadinessState : std::uint8_t {
     Undetermined = 0,
     Ready,
@@ -127,6 +134,7 @@ struct NetworkState {
 struct InventoryProjectionState {
     Freshness freshness{Freshness::Unknown};
     InventoryQuantityState quantityState{InventoryQuantityState::Unknown};
+    InventoryPlacementState placementState{InventoryPlacementState::Unknown};
     InventoryReadinessState readiness{InventoryReadinessState::Undetermined};
     std::uint32_t observedAtMs{0};
     std::uint16_t spoolCount{0};
@@ -136,9 +144,13 @@ struct InventoryProjectionState {
     std::uint16_t staleQuantityCount{0};
     std::uint16_t conflictCount{0};
     std::uint16_t invalidLineageCount{0};
+    std::uint16_t unknownPlacementCount{0};
+    std::uint16_t stalePlacementCount{0};
+    std::uint16_t placementConflictCount{0};
     char profileId[kProfileIdLength]{};
     bool available{false};
     bool quantityVerificationRequired{true};
+    bool placementVerificationRequired{true};
 };
 
 struct UpdateState {
@@ -232,6 +244,16 @@ inline bool inventoryQuantityUsable(const InventoryProjectionState& state) {
            state.conflictCount == 0 &&
            state.invalidLineageCount == 0 &&
            state.staleQuantityCount == 0;
+}
+
+inline bool inventoryPlacementUsable(const InventoryProjectionState& state) {
+    return state.available &&
+           state.freshness == Freshness::Fresh &&
+           state.placementState == InventoryPlacementState::Current &&
+           !state.placementVerificationRequired &&
+           state.unknownPlacementCount == 0 &&
+           state.stalePlacementCount == 0 &&
+           state.placementConflictCount == 0;
 }
 
 inline bool inventoryReadinessClean(const InventoryProjectionState& state) {
