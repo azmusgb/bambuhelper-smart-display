@@ -21,7 +21,7 @@ int main() {
     assert(!inventoryReadinessClean(missing));
 
     InventoryFeedObservation clean;
-    clean.profileId = "profile-bill";
+    std::strncpy(clean.profileId, "profile-bill", sizeof(clean.profileId) - 1);
     clean.observedAtMs = 1000;
     clean.spoolCount = 8;
     clean.loadedCount = 2;
