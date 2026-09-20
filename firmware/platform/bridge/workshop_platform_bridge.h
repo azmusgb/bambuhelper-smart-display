@@ -92,6 +92,10 @@ inline bool workshopPlatformInventoryQuantityUsable() {
     return workshop::platform::inventoryQuantityUsable(workshopPlatformInventoryState());
 }
 
+inline bool workshopPlatformInventoryPlacementUsable() {
+    return workshop::platform::inventoryPlacementUsable(workshopPlatformInventoryState());
+}
+
 inline bool workshopPlatformInventoryReady() {
     return workshop::platform::inventoryReadinessClean(workshopPlatformInventoryState());
 }
