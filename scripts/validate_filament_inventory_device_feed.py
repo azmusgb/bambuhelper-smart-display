@@ -35,6 +35,8 @@ QUANTITY_METHODS = {
 }
 
 QUANTITY_STATUS = {"Current", "Stale", "Conflict", "InvalidLineage", "Unknown"}
+PLACEMENT_STATUS = {"Current", "Stale", "Conflict", "Unknown"}
+PLACEMENT_STATE = {"Stored", "Loaded", "Unknown"}
 
 READINESS = {
     "Ready",
@@ -123,6 +125,27 @@ def validate_schema(schema: dict[str, Any]) -> None:
     }
     require(set(quantity.get("required", [])) == required_quantity, "quantity evidence projection drifted")
 
+    placement = (
+        schema["properties"]["inventory"]["properties"]["spools"]["items"]
+        ["properties"]["placement"]
+    )
+    require(placement.get("additionalProperties") is False, "placement projection must fail closed")
+    pprops = placement.get("properties", {})
+    require(set(pprops["status"].get("enum", [])) == PLACEMENT_STATUS, "placement status drifted")
+    require(set(pprops["state"].get("enum", [])) == PLACEMENT_STATE, "placement state drifted")
+    required_placement = {
+        "status",
+        "state",
+        "printerId",
+        "feederId",
+        "slot",
+        "external",
+        "observedAt",
+        "source",
+        "verificationRequired",
+    }
+    require(set(placement.get("required", [])) == required_placement, "placement evidence projection drifted")
+
     readiness = schema["properties"]["readiness"]["properties"]["state"]
     require(set(readiness.get("enum", [])) == READINESS, "readiness states drifted")
 
@@ -183,6 +206,49 @@ def validate_quantity(quantity: dict[str, Any], context: str) -> None:
         require(len(quantity["conflictEvidenceIds"]) >= 2, f"{context}: Conflict requires at least two evidence IDs")
 
 
+def validate_placement(placement: dict[str, Any], context: str) -> None:
+    allowed = {
+        "status",
+        "state",
+        "printerId",
+        "feederId",
+        "slot",
+        "external",
+        "observedAt",
+        "source",
+        "verificationRequired",
+    }
+    expect_exact(placement, allowed, context)
+    require(placement["status"] in PLACEMENT_STATUS, f"{context}.status invalid")
+    require(placement["state"] in PLACEMENT_STATE, f"{context}.state invalid")
+    require(isinstance(placement["verificationRequired"], bool), f"{context}.verificationRequired must be bool")
+
+    if placement["status"] == "Current":
+        require(placement["verificationRequired"] is False, f"{context}: Current must not require verification")
+    else:
+        require(placement["verificationRequired"] is True, f"{context}: non-current placement must require verification")
+
+    if placement["state"] == "Stored":
+        require(placement["printerId"] is None, f"{context}: Stored cannot retain printerId")
+        require(placement["feederId"] is None, f"{context}: Stored cannot retain feederId")
+        require(placement["slot"] is None, f"{context}: Stored cannot retain slot")
+        require(placement["external"] is False, f"{context}: Stored must set external=false")
+
+    if placement["state"] == "Unknown":
+        require(placement["printerId"] is None, f"{context}: Unknown cannot invent printerId")
+        require(placement["feederId"] is None, f"{context}: Unknown cannot invent feederId")
+        require(placement["slot"] is None, f"{context}: Unknown cannot invent slot")
+        require(placement["external"] is None, f"{context}: Unknown must preserve external unknown")
+
+    if placement["state"] == "Loaded" and placement["status"] == "Current":
+        require(bool(placement["printerId"]), f"{context}: current Loaded placement requires printerId")
+        if placement["external"] is True:
+            require(placement["feederId"] is None and placement["slot"] is None, f"{context}: external path cannot have feeder/slot")
+        else:
+            require(bool(placement["feederId"]), f"{context}: feeder path requires feederId")
+            require(isinstance(placement["slot"], int) and placement["slot"] >= 0, f"{context}: feeder path requires slot")
+
+
 def validate_payload(payload: dict[str, Any]) -> None:
     expect_exact(payload, TOP_LEVEL, "payload")
     require(payload["schemaVersion"] == 1, "unsupported schemaVersion")
@@ -211,9 +277,7 @@ def validate_payload(payload: dict[str, Any]) -> None:
         seen_spools.add(spool_id)
         validate_quantity(spool["quantity"], f"{context}.quantity")
 
-        placement = spool["placement"]
-        expect_exact(placement, {"state", "printerId", "feederId", "slot", "external", "observedAt"}, f"{context}.placement")
-        require(isinstance(placement["state"], str) and placement["state"].strip(), f"{context}.placement.state required")
+        validate_placement(spool["placement"], f"{context}.placement")
 
     readiness = payload["readiness"]
     expect_exact(readiness, {"state", "reason", "requiredGrams"}, "readiness")
@@ -258,12 +322,15 @@ def representative_payload() -> dict[str, Any]:
                         "verificationRequired": False,
                     },
                     "placement": {
+                        "status": "Current",
                         "state": "Loaded",
                         "printerId": "printer-1",
                         "feederId": "ams-1",
                         "slot": 1,
                         "external": False,
                         "observedAt": "2026-09-20T04:57:00.000Z",
+                        "source": "manual-load",
+                        "verificationRequired": False,
                     },
                 }
             ],
@@ -300,6 +367,24 @@ def main() -> int:
     q["evidenceCount"] = 0
     q["verificationRequired"] = True
     validate_payload(unknown)
+
+    placement_conflict = representative_payload()
+    p = placement_conflict["inventory"]["spools"][0]["placement"]
+    p["status"] = "Conflict"
+    p["slot"] = None
+    p["verificationRequired"] = True
+    validate_payload(placement_conflict)
+
+    placement_unknown = representative_payload()
+    p = placement_unknown["inventory"]["spools"][0]["placement"]
+    p["status"] = "Unknown"
+    p["state"] = "Unknown"
+    p["printerId"] = None
+    p["feederId"] = None
+    p["slot"] = None
+    p["external"] = None
+    p["verificationRequired"] = True
+    validate_payload(placement_unknown)
 
     print("Filament Inventory device-feed v1 contract validation passed")
     return 0
