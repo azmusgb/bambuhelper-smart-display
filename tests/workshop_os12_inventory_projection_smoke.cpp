@@ -13,7 +13,7 @@ int main() {
     assert(missing.freshness == Freshness::Unknown);
     assert(missing.quantityState == InventoryQuantityState::Unknown);
     assert(missing.readiness == InventoryReadinessState::Undetermined);
-    assert(missing.verificationRequired);
+    assert(missing.quantityVerificationRequired);
     assert(!inventoryQuantityUsable(missing));
     assert(!inventoryReadinessClean(missing));
 
@@ -32,7 +32,7 @@ int main() {
     assert(current.freshness == Freshness::Fresh);
     assert(current.quantityState == InventoryQuantityState::Current);
     assert(current.readiness == InventoryReadinessState::Ready);
-    assert(!current.verificationRequired);
+    assert(!current.quantityVerificationRequired);
     assert(current.spoolCount == 8);
     assert(current.loadedCount == 2);
     assert(current.lowCount == 1);
@@ -45,7 +45,7 @@ int main() {
     InventoryProjectionState conflicting = normalizeInventoryFeedObservation(conflict);
     assert(conflicting.freshness == Freshness::Conflicting);
     assert(conflicting.quantityState == InventoryQuantityState::Conflict);
-    assert(conflicting.verificationRequired);
+    assert(conflicting.quantityVerificationRequired);
     assert(!inventoryQuantityUsable(conflicting));
     assert(!inventoryReadinessClean(conflicting));
 
@@ -53,14 +53,14 @@ int main() {
     badLineage.invalidLineageCount = 1;
     InventoryProjectionState invalid = normalizeInventoryFeedObservation(badLineage);
     assert(invalid.quantityState == InventoryQuantityState::InvalidLineage);
-    assert(invalid.verificationRequired);
+    assert(invalid.quantityVerificationRequired);
     assert(!inventoryQuantityUsable(invalid));
 
     InventoryFeedObservation staleQuantity = clean;
     staleQuantity.staleQuantityCount = 1;
     InventoryProjectionState staleEvidence = normalizeInventoryFeedObservation(staleQuantity);
     assert(staleEvidence.quantityState == InventoryQuantityState::Stale);
-    assert(staleEvidence.verificationRequired);
+    assert(staleEvidence.quantityVerificationRequired);
     assert(!inventoryQuantityUsable(staleEvidence));
 
     InventoryFeedObservation staleFeed = clean;
@@ -68,27 +68,29 @@ int main() {
     InventoryProjectionState staleSource = normalizeInventoryFeedObservation(staleFeed);
     assert(staleSource.freshness == Freshness::Stale);
     assert(staleSource.quantityState == InventoryQuantityState::Stale);
-    assert(staleSource.verificationRequired);
+    assert(staleSource.quantityVerificationRequired);
 
     InventoryFeedObservation unknownQuantity = clean;
     unknownQuantity.unknownQuantityCount = 3;
     InventoryProjectionState unknown = normalizeInventoryFeedObservation(unknownQuantity);
     assert(unknown.quantityState == InventoryQuantityState::Unknown);
-    assert(unknown.verificationRequired);
+    assert(unknown.quantityVerificationRequired);
 
+    // Quantity evidence can remain fully usable while print readiness is
+    // Undetermined because no requirement has been supplied.
     InventoryFeedObservation undetermined = clean;
     undetermined.readiness = InventoryReadinessState::Undetermined;
     InventoryProjectionState noRequirement = normalizeInventoryFeedObservation(undetermined);
     assert(noRequirement.quantityState == InventoryQuantityState::Current);
-    assert(noRequirement.verificationRequired);
-    assert(inventoryQuantityUsable(noRequirement) == false);
+    assert(!noRequirement.quantityVerificationRequired);
+    assert(inventoryQuantityUsable(noRequirement));
     assert(!inventoryReadinessClean(noRequirement));
 
     InventoryFeedObservation needsLoad = clean;
     needsLoad.readiness = InventoryReadinessState::NeedsLoad;
     InventoryProjectionState loadRequired = normalizeInventoryFeedObservation(needsLoad);
     assert(loadRequired.quantityState == InventoryQuantityState::Current);
-    assert(!loadRequired.verificationRequired);
+    assert(!loadRequired.quantityVerificationRequired);
     assert(inventoryQuantityUsable(loadRequired));
     assert(!inventoryReadinessClean(loadRequired));
 
