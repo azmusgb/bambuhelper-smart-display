@@ -30,7 +30,6 @@ required=(
   apply_smart_home_auth_restore_v11_23_rc2.py
   apply_workshop_os_ui_overhaul_v11_25.py
   apply_workshop_os_ui_overhaul_v11_25_rc2.py
-  apply_workshop_os_temp_no_code_v11_25.py
   apply_workshop_os_ui_overhaul_v11_25_rc3.py
   apply_workshop_os_ui_overhaul_v11_25_rc4.py
   apply_workshop_os_ui_overhaul_v11_25_rc5.py
@@ -70,7 +69,6 @@ rm -rf "$BUILD/firmware/ui-v11.25"
 cp -R "$ROOT/firmware/ui-v11.25" "$BUILD/firmware/"
 python3 "$ROOT/apply_workshop_os_ui_overhaul_v11_25.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os_ui_overhaul_v11_25_rc2.py" --repo "$BUILD" --apply
-python3 "$ROOT/apply_workshop_os_temp_no_code_v11_25.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os_ui_overhaul_v11_25_rc3.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os_ui_overhaul_v11_25_rc4.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os_ui_overhaul_v11_25_rc5.py" --repo "$BUILD" --apply
@@ -115,6 +113,8 @@ grep -Fq 'Hold to Apply' "$HUB"
 grep -Fq 'securityPortalCode()' "$HUB"
 grep -Fq 'return cookieMatches(server);' "$SEC"
 grep -Fq 'if (mutating && !sameOrigin(server))' "$SEC"
+! grep -Fq 'WORKSHOP_OS_TEMP_NO_CODE_LAN' "$HDR"
+! grep -Fq 'WORKSHOP_OS_TEMP_NO_CODE_LAN' "$SEC"
 ! grep -Fq 'TEST / NO CODE' "$HUB"
 for bad in matchSpoolByColor matchSpoolByMaterial resolveSpool; do ! grep -Fq "$bad" "$HUB"; done
 if command -v node >/dev/null 2>&1; then node --check "$APP"; fi
