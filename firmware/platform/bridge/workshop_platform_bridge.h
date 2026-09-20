@@ -8,6 +8,7 @@
 void workshopPlatformBegin();
 void workshopPlatformPoll();
 const workshop::platform::WorkshopState& workshopPlatformState();
+void workshopPlatformPublishInventoryState(const workshop::platform::InventoryProjectionState& state);
 void workshopPlatformPublishUpdateState(const workshop::platform::UpdateState& state);
 
 workshop::platform::CommandResult workshopPlatformDispatchPrinterCommand(
@@ -21,10 +22,6 @@ workshop::platform::CommandResult workshopPlatformDispatchPowerCommand(
     bool guardSatisfied = false,
     bool strongGuardSatisfied = false);
 
-// Read-only UI facade over the normalized state store. These helpers let the
-// existing Workshop OS screens migrate incrementally without reaching back into
-// Bambu/Wi-Fi/Tasmota runtime state for facts already normalized by the platform
-// layer. They do not mutate inventory truth or infer authoritative placement.
 inline const workshop::platform::PrinterState& workshopPlatformPrinterState(std::size_t slot) {
     const workshop::platform::WorkshopState& state = workshopPlatformState();
     static const workshop::platform::PrinterState unknown{};
@@ -35,6 +32,10 @@ inline const workshop::platform::PowerState& workshopPlatformPowerState(std::siz
     const workshop::platform::WorkshopState& state = workshopPlatformState();
     static const workshop::platform::PowerState unknown{};
     return workshop::platform::validPrinterSlot(slot) ? state.power[slot] : unknown;
+}
+
+inline const workshop::platform::InventoryProjectionState& workshopPlatformInventoryState() {
+    return workshopPlatformState().inventory;
 }
 
 inline const workshop::platform::UpdateState& workshopPlatformUpdateState() {
@@ -81,6 +82,18 @@ inline bool workshopPlatformPowerStateKnown(std::size_t slot) {
 inline bool workshopPlatformPowerOn(std::size_t slot) {
     const workshop::platform::PowerState& state = workshopPlatformPowerState(slot);
     return state.stateKnown && state.on;
+}
+
+inline bool workshopPlatformInventoryAvailable() {
+    return workshopPlatformInventoryState().available;
+}
+
+inline bool workshopPlatformInventoryQuantityUsable() {
+    return workshop::platform::inventoryQuantityUsable(workshopPlatformInventoryState());
+}
+
+inline bool workshopPlatformInventoryReady() {
+    return workshop::platform::inventoryReadinessClean(workshopPlatformInventoryState());
 }
 
 inline bool workshopPlatformWifiOnline() {
