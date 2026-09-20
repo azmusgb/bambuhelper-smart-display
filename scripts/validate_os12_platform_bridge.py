@@ -28,6 +28,7 @@ def validate_templates() -> None:
     service = (ROOT / "firmware/platform/service_contracts.hpp").read_text(encoding="utf-8")
     bridge_h = (ROOT / "firmware/platform/bridge/workshop_platform_bridge.h").read_text(encoding="utf-8")
     bridge = (ROOT / "firmware/platform/bridge/workshop_platform_bridge.cpp").read_text(encoding="utf-8")
+    inventory = (ROOT / "firmware/platform/inventory/workshop_inventory_service.cpp").read_text(encoding="utf-8")
 
     required = {
         "four printer slots": "kMaxPrinterSlots = 4",
@@ -65,8 +66,12 @@ def validate_templates() -> None:
         "inventory publish facade": "workshopPlatformPublishInventoryState",
         "inventory read facade": "workshopPlatformInventoryState",
         "inventory normalized adapter": "normalizeInventoryFeedObservation",
+        "device bearer transport": 'http.addHeader("Authorization", authorization)',
+        "device feed HTTPS endpoint": "https://filamentinventory.netlify.app/api/device-feed/v1",
+        "owned profile scope": "char profileId[kProfileIdLength]",
+        "credential persistence": 'kCredentialKey[] = "device_token"',
     }
-    joined = state + adapter + service + bridge_h + bridge
+    joined = state + adapter + service + bridge_h + bridge + inventory
     for label, needle in required.items():
         if needle not in joined:
             fail(f"missing {label}: {needle}")
@@ -137,6 +142,12 @@ def validate_patcher() -> None:
             fail("bridge begin was not injected exactly once")
         if main.count("workshopPlatformPoll();") != 1:
             fail("bridge poll was not injected exactly once")
+        if main.count('#include "workshop_inventory_service.h"') != 1:
+            fail("inventory service include was not injected exactly once")
+        if main.count("workshopInventoryServiceBegin();") != 1:
+            fail("inventory service begin was not injected exactly once")
+        if main.count("workshopInventoryServiceLoop();") != 1:
+            fail("inventory service loop was not injected exactly once")
 
         for path in (
             "include/workshop_platform/workshop_state.hpp",
@@ -144,6 +155,8 @@ def validate_patcher() -> None:
             "include/workshop_platform/service_contracts.hpp",
             "include/workshop_platform_bridge.h",
             "src/workshop_platform_bridge.cpp",
+            "include/workshop_inventory_service.h",
+            "src/workshop_inventory_service.cpp",
         ):
             if not (repo / path).is_file():
                 fail(f"patcher failed to install {path}")
@@ -174,6 +187,24 @@ def validate_patcher() -> None:
         installed_adapter = (repo / "include/workshop_platform/runtime_adapter.hpp").read_text(encoding="utf-8")
         if "normalizeInventoryFeedObservation" not in installed_adapter:
             fail("reconstructed runtime adapter lost inventory normalization")
+        if "char profileId[kProfileIdLength]" not in installed_adapter:
+            fail("inventory observation must own profile identity instead of borrowing JSON memory")
+
+        installed_inventory = (repo / "src/workshop_inventory_service.cpp").read_text(encoding="utf-8")
+        for marker in (
+            "Authorization",
+            "Bearer ",
+            "workshopPlatformPublishInventoryState",
+            "workshopInventorySetDeviceCredential",
+            "workshopInventoryClearDeviceCredential",
+            "stockState",
+            "placementStatus",
+        ):
+            if marker not in installed_inventory:
+                fail(f"reconstructed inventory consumer lost marker: {marker}")
+        for forbidden_marker in ("X-Filament-Sync-Key", "X-Filament-Profile", "OPENAI_API_KEY", "sk-"):
+            if forbidden_marker in installed_inventory:
+                fail(f"inventory consumer contains forbidden broad credential marker: {forbidden_marker}")
 
         installed_bridge_h = (repo / "include/workshop_platform_bridge.h").read_text(encoding="utf-8")
         for marker in (
