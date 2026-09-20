@@ -263,9 +263,29 @@ def patch_portal(repo: Path) -> None:
     css_path = repo / "web" / "app.css"
     html = load(html_path)
     if INTEGRATION_NEW not in html:
-        if html.count(INTEGRATION_OLD) != 1:
-            raise PatchError("Filament Inventory integration panel anchor missing/non-unique")
-        html = html.replace(INTEGRATION_OLD, INTEGRATION_NEW, 1)
+        # The portal presentation evolves independently of the inventory
+        # transport. Anchor this upgrade to the semantic integration section
+        # rather than to the complete historical minified HTML string.
+        marker = '<section class="os12-integration"'
+        starts = []
+        pos = 0
+        while True:
+            pos = html.find(marker, pos)
+            if pos < 0:
+                break
+            close = html.find("</section>", pos)
+            if close < 0:
+                raise PatchError("Filament Inventory integration panel is unterminated")
+            section = html[pos:close + len("</section>")]
+            if "FILAMENT INVENTORY" in section and "Device Feed v1" in section:
+                starts.append((pos, close + len("</section>")))
+            pos = close + len("</section>")
+        if len(starts) != 1:
+            raise PatchError(
+                f"Filament Inventory integration panel anchor missing/non-unique: found {len(starts)}"
+            )
+        start, end = starts[0]
+        html = html[:start] + INTEGRATION_NEW + html[end:]
         html_path.write_text(html, encoding="utf-8")
     js = load(js_path)
     if "loadInventoryDeviceFeedStatus" not in js:
