@@ -165,6 +165,7 @@ public:
     virtual void publishPrinterState(std::size_t slot, const PrinterState& state) = 0;
     virtual void publishPowerState(std::size_t slot, const PowerState& state) = 0;
     virtual void publishNetworkState(const NetworkState& state) = 0;
+    virtual void publishInventoryState(const InventoryProjectionState& state) = 0;
 };
 
 class IPrinterService {
@@ -199,6 +200,15 @@ public:
     virtual void requestReconnect() = 0;
 };
 
+class IInventoryService {
+public:
+    virtual ~IInventoryService() {}
+    virtual void begin(IStateSink& sink) = 0;
+    virtual void poll(std::uint32_t nowMs) = 0;
+    virtual InventoryProjectionState snapshot() const = 0;
+    virtual void requestRefresh() = 0;
+};
+
 class StateStore : public IStateSink {
 public:
     void publishPrinterState(std::size_t slot, const PrinterState& state) override {
@@ -220,10 +230,14 @@ public:
         ++state_.revision;
     }
 
-    void publishInventoryProjectionState(const InventoryProjectionState& state) {
+    void publishInventoryState(const InventoryProjectionState& state) override {
         state_.inventory = state;
         state_.capabilities.inventory = state.available;
         ++state_.revision;
+    }
+
+    void publishInventoryProjectionState(const InventoryProjectionState& state) {
+        publishInventoryState(state);
     }
 
     void publishUpdateState(const UpdateState& state) {
