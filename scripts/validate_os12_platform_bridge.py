@@ -131,6 +131,13 @@ def validate_patcher() -> None:
             '}\n',
             encoding="utf-8",
         )
+        # The production UI13 reconstruction always contains smart_hub.cpp.
+        # Model that precondition so this unit fixture exercises the same
+        # translation-unit include injection as the real firmware build.
+        (repo / "src/smart_hub.cpp").write_text(
+            '#include "smart_hub.h"\n',
+            encoding="utf-8",
+        )
 
         patcher.apply(repo, ROOT)
         patcher.apply(repo, ROOT)
@@ -144,6 +151,9 @@ def validate_patcher() -> None:
             fail("bridge poll was not injected exactly once")
         if main.count('#include "workshop_inventory_service.h"') != 1:
             fail("inventory service include was not injected exactly once")
+        smart_hub = (repo / "src/smart_hub.cpp").read_text(encoding="utf-8")
+        if smart_hub.count('#include "workshop_platform_bridge.h"') != 1:
+            fail("smart hub bridge include was not injected exactly once")
         if main.count("workshopInventoryServiceBegin();") != 1:
             fail("inventory service begin was not injected exactly once")
         if main.count("workshopInventoryServiceLoop();") != 1:
