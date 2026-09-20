@@ -38,6 +38,9 @@ jobs:
       - name: Validate Workshop OS 12 device contract
         run: python3 scripts/validate_os12_device_contract.py
 
+      - name: Validate Filament Inventory device-feed v1 contract
+        run: python3 scripts/validate_filament_inventory_device_feed.py
+
       - name: Validate Workshop OS 12 platform bridge
         run: python3 scripts/validate_os12_platform_bridge.py
 
@@ -90,6 +93,7 @@ jobs:
             scripts/validate_os12_media_runtime.py \
             scripts/validate_os12_media_ui.py \
             scripts/validate_os12_media_api.py \
+            scripts/validate_filament_inventory_device_feed.py \
             scripts/validate_workshop_ui_review_contract.py
 
       - name: Compile Workshop OS 12 platform contracts
