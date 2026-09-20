@@ -54,6 +54,15 @@ def validate_templates() -> None:
         # a fabricated runtime mapping merely to satisfy this structural gate.
         "operation feedback fatal contract": "FatalError,",
         "result-to-feedback mapping": "commandOperationFromResult",
+        "inventory projection state": "InventoryProjectionState",
+        "inventory quantity state": "InventoryQuantityState",
+        "inventory readiness state": "InventoryReadinessState",
+        "inventory quantity gate": "inventoryQuantityUsable",
+        "inventory readiness gate": "inventoryReadinessClean",
+        "inventory service seam": "class IInventoryService",
+        "inventory publish facade": "workshopPlatformPublishInventoryState",
+        "inventory read facade": "workshopPlatformInventoryState",
+        "inventory normalized adapter": "normalizeInventoryFeedObservation",
     }
     joined = state + adapter + service + bridge_h + bridge
     for label, needle in required.items():
@@ -144,6 +153,10 @@ def validate_patcher() -> None:
             "OperationPhase::RecoverableError",
             "FatalError,",
             "commandOperationFromResult",
+            "InventoryQuantityState",
+            "InventoryReadinessState",
+            "class IInventoryService",
+            "publishInventoryState",
         ):
             if marker not in installed_service:
                 fail(f"reconstructed source lost command feedback marker: {marker}")
