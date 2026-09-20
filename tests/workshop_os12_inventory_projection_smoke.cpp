@@ -14,7 +14,10 @@ int main() {
     assert(missing.quantityState == InventoryQuantityState::Unknown);
     assert(missing.readiness == InventoryReadinessState::Undetermined);
     assert(missing.quantityVerificationRequired);
+    assert(missing.placementState == InventoryPlacementState::Unknown);
+    assert(missing.placementVerificationRequired);
     assert(!inventoryQuantityUsable(missing));
+    assert(!inventoryPlacementUsable(missing));
     assert(!inventoryReadinessClean(missing));
 
     InventoryFeedObservation clean;
@@ -33,11 +36,14 @@ int main() {
     assert(current.quantityState == InventoryQuantityState::Current);
     assert(current.readiness == InventoryReadinessState::Ready);
     assert(!current.quantityVerificationRequired);
+    assert(current.placementState == InventoryPlacementState::Current);
+    assert(!current.placementVerificationRequired);
     assert(current.spoolCount == 8);
     assert(current.loadedCount == 2);
     assert(current.lowCount == 1);
     assert(std::strcmp(current.profileId, "profile-bill") == 0);
     assert(inventoryQuantityUsable(current));
+    assert(inventoryPlacementUsable(current));
     assert(inventoryReadinessClean(current));
 
     InventoryFeedObservation conflict = clean;
@@ -78,6 +84,28 @@ int main() {
 
     // Quantity evidence can remain fully usable while print readiness is
     // Undetermined because no requirement has been supplied.
+    InventoryFeedObservation placementConflict = clean;
+    placementConflict.placementConflictCount = 1;
+    InventoryProjectionState badPlacement = normalizeInventoryFeedObservation(placementConflict);
+    assert(badPlacement.placementState == InventoryPlacementState::Conflict);
+    assert(badPlacement.placementVerificationRequired);
+    assert(!inventoryPlacementUsable(badPlacement));
+    assert(inventoryQuantityUsable(badPlacement));
+
+    InventoryFeedObservation placementStale = clean;
+    placementStale.stalePlacementCount = 1;
+    InventoryProjectionState stalePlacement = normalizeInventoryFeedObservation(placementStale);
+    assert(stalePlacement.placementState == InventoryPlacementState::Stale);
+    assert(stalePlacement.placementVerificationRequired);
+    assert(!inventoryPlacementUsable(stalePlacement));
+
+    InventoryFeedObservation placementUnknown = clean;
+    placementUnknown.unknownPlacementCount = 2;
+    InventoryProjectionState unknownPlacement = normalizeInventoryFeedObservation(placementUnknown);
+    assert(unknownPlacement.placementState == InventoryPlacementState::Unknown);
+    assert(unknownPlacement.placementVerificationRequired);
+    assert(!inventoryPlacementUsable(unknownPlacement));
+
     InventoryFeedObservation undetermined = clean;
     undetermined.readiness = InventoryReadinessState::Undetermined;
     InventoryProjectionState noRequirement = normalizeInventoryFeedObservation(undetermined);
