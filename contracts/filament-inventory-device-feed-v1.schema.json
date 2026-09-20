@@ -92,6 +92,7 @@
             "required": [
               "spoolId",
               "material",
+              "stockState",
               "color",
               "quantity",
               "placement"
@@ -514,6 +515,14 @@
                       }
                     }
                   }
+                ]
+              },
+              "stockState": {
+                "enum": [
+                  "Available",
+                  "Low",
+                  "Empty",
+                  "Unknown"
                 ]
               }
             }
