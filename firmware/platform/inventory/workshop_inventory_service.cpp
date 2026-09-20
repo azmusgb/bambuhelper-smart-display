@@ -1,6 +1,7 @@
 #include "workshop_inventory_service.h"
 
 #include "wifi_manager.h"
+#include "workshop_platform/runtime_adapter.hpp"
 #include "workshop_platform_bridge.h"
 
 #include <ArduinoJson.h>
@@ -9,6 +10,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 
@@ -145,6 +147,15 @@ bool parseFeed(JsonDocument& doc, InventoryFeedObservation& observation, char* e
         ++spoolCount;
 
         const char* stockState = spool["stockState"] | "Unknown";
+        const bool stockStateKnown =
+            std::strcmp(stockState, "Available") == 0 ||
+            std::strcmp(stockState, "Low") == 0 ||
+            std::strcmp(stockState, "Empty") == 0 ||
+            std::strcmp(stockState, "Unknown") == 0;
+        if (!stockStateKnown) {
+            copyText(error, errorLen, "Device feed contains an unknown stock state.");
+            return false;
+        }
         JsonObject quantity = spool["quantity"].as<JsonObject>();
         JsonObject placement = spool["placement"].as<JsonObject>();
         if (quantity.isNull() || placement.isNull()) {
@@ -185,7 +196,28 @@ bool parseFeed(JsonDocument& doc, InventoryFeedObservation& observation, char* e
                 copyText(error, errorLen, "Current placement evidence unexpectedly requires verification.");
                 return false;
             }
-            if (std::strcmp(placementState, "Loaded") == 0) ++loadedCount;
+            if (std::strcmp(placementState, "Loaded") == 0) {
+                const char* printerId = placement["printerId"] | "";
+                const char* feederId = placement["feederId"] | "";
+                const bool external = placement["external"] | false;
+                if (!printerId[0]) {
+                    copyText(error, errorLen, "Current loaded placement is missing printerId.");
+                    return false;
+                }
+                if (external) {
+                    if (feederId[0] || !placement["slot"].isNull()) {
+                        copyText(error, errorLen, "External placement unexpectedly contains feeder or slot.");
+                        return false;
+                    }
+                } else if (!feederId[0] || placement["slot"].isNull()) {
+                    copyText(error, errorLen, "Feeder placement is missing feederId or slot.");
+                    return false;
+                }
+                ++loadedCount;
+            } else if (std::strcmp(placementState, "Stored") != 0) {
+                copyText(error, errorLen, "Current placement has an unsupported physical state.");
+                return false;
+            }
         } else if (std::strcmp(placementStatus, "Stale") == 0) {
             ++stalePlacementCount;
         } else if (std::strcmp(placementStatus, "Conflict") == 0) {
