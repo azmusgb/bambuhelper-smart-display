@@ -76,8 +76,28 @@ InventoryReadinessState readinessFromText(const char* value) {
 
 void publishUnavailable(const char* message, bool credentialConfigured, std::uint32_t nowMs) {
     InventoryProjectionState state;
-    state.available = false;
-    state.freshness = Freshness::Unknown;
+    bool hasLastKnown = false;
+
+    portENTER_CRITICAL(&g_inventoryMux);
+    hasLastKnown = g_runtime.lastSuccessAtMs != 0 && g_runtime.state.available;
+    if (hasLastKnown) state = g_runtime.state;
+    portEXIT_CRITICAL(&g_inventoryMux);
+
+    if (hasLastKnown) {
+        // A transport/auth failure must not destroy the last authoritative
+        // observation. Preserve it as stale evidence and fail every actionable
+        // gate closed until a fresh profile-scoped feed succeeds again.
+        state.freshness = Freshness::Stale;
+        if (state.quantityState == workshop::platform::InventoryQuantityState::Current) {
+            state.quantityState = workshop::platform::InventoryQuantityState::Stale;
+        }
+        if (state.placementState == workshop::platform::InventoryPlacementState::Current) {
+            state.placementState = workshop::platform::InventoryPlacementState::Stale;
+        }
+    } else {
+        state.available = false;
+        state.freshness = Freshness::Unknown;
+    }
     state.quantityVerificationRequired = true;
     state.placementVerificationRequired = true;
     workshopPlatformPublishInventoryState(state);
