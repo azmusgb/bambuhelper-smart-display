@@ -26,6 +26,10 @@ python3 "$ROOT/apply_workshop_os12_ui_finish.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_product_surface.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_product_surface_complete.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_portal_control_plane.py" --repo "$BUILD" --apply
+# The device-feed transport is installed by the platform stage. Its browser
+# controls are applied only after the OS12 portal owns the integration surface.
+python3 "$ROOT/apply_workshop_os12_inventory_service.py" --repo "$BUILD" --source-root "$ROOT" --portal-only --apply
+python3 "$ROOT/scripts/validate_os12_inventory_service.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_architecture.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_geometry.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
