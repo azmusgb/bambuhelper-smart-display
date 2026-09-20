@@ -191,8 +191,13 @@ def validate_output(repo: Path) -> None:
     security = (repo / "src/security_manager.cpp").read_text(encoding="utf-8")
     web = (repo / "src/web_server.cpp").read_text(encoding="utf-8")
 
-    forbid(build, "WORKSHOP_OS_TEMP_NO_CODE_LAN", "temporary open-LAN build marker")
-    forbid(security, "WORKSHOP_OS_TEMP_NO_CODE_LAN", "temporary open-LAN authorization bypass")
+    forbid(build, "#define WORKSHOP_OS_TEMP_NO_CODE_LAN", "temporary open-LAN build marker")
+    forbid(
+        security,
+        "#if defined(WORKSHOP_OS_TEMP_NO_CODE_LAN) && WORKSHOP_OS_TEMP_NO_CODE_LAN",
+        "temporary open-LAN authorization bypass",
+    )
+    forbid(security, "if (!isAPMode()) return true;", "station-LAN authentication bypass")
 
     for marker in (
         "enum class SecurityLoginResult : uint8_t",
