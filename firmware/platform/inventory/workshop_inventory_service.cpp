@@ -11,6 +11,7 @@
 #include <WiFiClientSecure.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 
@@ -27,6 +28,8 @@ constexpr char kTokenPrefix[] = "fi_dev_";
 constexpr std::size_t kTokenLength = 50;  // prefix + 43 base64url characters
 constexpr std::uint32_t kRefreshIntervalMs = 5UL * 60UL * 1000UL;
 constexpr std::uint32_t kRetryIntervalMs = 60UL * 1000UL;
+constexpr std::uint32_t kMinServerRetryMs = 1000UL;
+constexpr std::uint32_t kMaxServerRetryMs = 5UL * 60UL * 1000UL;
 constexpr std::uint32_t kMaxPayloadBytes = 96UL * 1024UL;
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
@@ -42,6 +45,7 @@ char g_deviceToken[kTokenLength + 1] = {};
 bool g_refreshRequested = false;
 bool g_taskActive = false;
 std::uint32_t g_credentialGeneration = 0;
+std::uint32_t g_nextRefreshAtMs = 0;
 
 void copyText(char* dst, std::size_t len, const char* src) {
     if (!dst || len == 0) return;
@@ -62,6 +66,22 @@ bool validDeviceToken(const char* token) {
         if (!allowed) return false;
     }
     return true;
+}
+
+bool deadlineReached(std::uint32_t nowMs, std::uint32_t deadlineMs) {
+    return deadlineMs == 0 || static_cast<std::int32_t>(nowMs - deadlineMs) >= 0;
+}
+
+std::uint32_t parseRetryAfterMs(const String& value) {
+    if (value.length() == 0) return kRetryIntervalMs;
+    char* end = nullptr;
+    const unsigned long seconds = std::strtoul(value.c_str(), &end, 10);
+    if (end == value.c_str() || !end || *end != '\0') return kRetryIntervalMs;
+    std::uint32_t delayMs = seconds > (kMaxServerRetryMs / 1000UL)
+        ? kMaxServerRetryMs
+        : static_cast<std::uint32_t>(seconds) * 1000UL;
+    if (delayMs < kMinServerRetryMs) delayMs = kMinServerRetryMs;
+    return delayMs;
 }
 
 InventoryReadinessState readinessFromText(const char* value) {
@@ -301,7 +321,12 @@ bool parseFeed(JsonDocument& doc, InventoryFeedObservation& observation, char* e
 }
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
-bool fetchFeed(InventoryFeedObservation& observation, char* error, std::size_t errorLen) {
+bool fetchFeed(
+    InventoryFeedObservation& observation,
+    char* error,
+    std::size_t errorLen,
+    std::uint32_t& retryAfterMs) {
+    retryAfterMs = kRetryIntervalMs;
     if (WiFi.status() != WL_CONNECTED || isAPMode()) {
         copyText(error, errorLen, "Connect Workshop OS to Wi-Fi before refreshing Filament Inventory.");
         return false;
@@ -323,6 +348,8 @@ bool fetchFeed(InventoryFeedObservation& observation, char* error, std::size_t e
     http.setConnectTimeout(10000);
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
     http.setUserAgent("WorkshopOS-WS350/12");
+    const char* responseHeaders[] = {"Retry-After"};
+    http.collectHeaders(responseHeaders, 1);
     if (!http.begin(client, kFeedUrl)) {
         copyText(error, errorLen, "Could not initialize the Filament Inventory request.");
         return false;
@@ -337,7 +364,21 @@ bool fetchFeed(InventoryFeedObservation& observation, char* error, std::size_t e
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
         if (code == HTTP_CODE_UNAUTHORIZED) {
+            // A rejected/revoked token is not a transient platform failure.
+            // Keep the last authoritative projection stale/fail-closed and
+            // avoid repeatedly hammering the credential boundary.
+            retryAfterMs = kRefreshIntervalMs;
             copyText(error, errorLen, "Workshop OS device access was rejected or revoked.");
+        } else if (code == HTTP_CODE_SERVICE_UNAVAILABLE) {
+            // Filament Inventory #148 explicitly returns Retry-After for
+            // transient credential/inventory storage failures. Honor it within
+            // a bounded window instead of waiting the normal five-minute poll.
+            retryAfterMs = parseRetryAfterMs(http.header("Retry-After"));
+            snprintf(
+                error,
+                errorLen,
+                "Filament Inventory is temporarily unavailable; retrying in %lu s.",
+                static_cast<unsigned long>((retryAfterMs + 999UL) / 1000UL));
         } else {
             snprintf(error, errorLen, "Filament Inventory request failed (HTTP %d).", code);
         }
@@ -369,13 +410,14 @@ void refreshTask(void*) {
     char error[112] = {};
     const std::uint32_t nowMs = millis();
     std::uint32_t credentialGeneration = 0;
+    std::uint32_t retryAfterMs = kRetryIntervalMs;
     portENTER_CRITICAL(&g_inventoryMux);
     credentialGeneration = g_credentialGeneration;
     portEXIT_CRITICAL(&g_inventoryMux);
     bool ok = false;
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
-    ok = fetchFeed(observation, error, sizeof(error));
+    ok = fetchFeed(observation, error, sizeof(error), retryAfterMs);
 #else
     copyText(error, sizeof(error), "Filament Inventory HTTPS feed is unavailable on this target.");
 #endif
@@ -406,6 +448,7 @@ void refreshTask(void*) {
         g_runtime.busy = false;
         g_runtime.lastAttemptAtMs = nowMs;
         g_runtime.lastSuccessAtMs = nowMs;
+        g_nextRefreshAtMs = nowMs + kRefreshIntervalMs;
         g_runtime.credentialConfigured = true;
         copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Filament Inventory device feed is current.");
         g_taskActive = false;
@@ -414,6 +457,7 @@ void refreshTask(void*) {
         const bool configured = workshopInventoryCredentialConfigured();
         publishUnavailable(error[0] ? error : "Filament Inventory refresh failed.", configured, nowMs);
         portENTER_CRITICAL(&g_inventoryMux);
+        g_nextRefreshAtMs = nowMs + retryAfterMs;
         g_taskActive = false;
         portEXIT_CRITICAL(&g_inventoryMux);
     }
@@ -446,6 +490,7 @@ bool startRefresh() {
         portENTER_CRITICAL(&g_inventoryMux);
         g_taskActive = false;
         g_runtime.busy = false;
+        g_nextRefreshAtMs = millis() + kRetryIntervalMs;
         copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Could not start the inventory refresh worker.");
         portEXIT_CRITICAL(&g_inventoryMux);
         return false;
@@ -477,6 +522,7 @@ void workshopInventoryServiceBegin() {
             : "Create a read-only WS350 token in Filament Inventory and add it in Local Portal.");
     g_refreshRequested = g_runtime.credentialConfigured;
     g_taskActive = false;
+    g_nextRefreshAtMs = 0;
     portEXIT_CRITICAL(&g_inventoryMux);
     std::memset(token, 0, sizeof(token));
 
@@ -490,16 +536,16 @@ void workshopInventoryServiceBegin() {
 void workshopInventoryServiceLoop() {
     WorkshopInventoryRuntimeSnapshot snap;
     bool requested = false;
+    std::uint32_t nextRefreshAtMs = 0;
     portENTER_CRITICAL(&g_inventoryMux);
     snap = g_runtime;
     requested = g_refreshRequested;
+    nextRefreshAtMs = g_nextRefreshAtMs;
     portEXIT_CRITICAL(&g_inventoryMux);
 
     if (!snap.credentialConfigured || snap.busy) return;
     const std::uint32_t nowMs = millis();
-    const std::uint32_t interval = snap.lastSuccessAtMs ? kRefreshIntervalMs : kRetryIntervalMs;
-    const bool due = snap.lastAttemptAtMs == 0 || static_cast<std::uint32_t>(nowMs - snap.lastAttemptAtMs) >= interval;
-    if (requested || due) startRefresh();
+    if (requested || deadlineReached(nowMs, nextRefreshAtMs)) startRefresh();
 }
 
 bool workshopInventoryRequestRefresh() {
@@ -532,6 +578,7 @@ bool workshopInventorySetDeviceCredential(const char* token) {
     g_runtime.lastSuccessAtMs = 0;
     g_runtime.credentialConfigured = true;
     g_refreshRequested = true;
+    g_nextRefreshAtMs = 0;
     copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Workshop OS device access saved. Refresh pending.");
     portEXIT_CRITICAL(&g_inventoryMux);
     publishUnavailable("Waiting for the newly scoped Filament Inventory refresh.", true, millis());
@@ -552,6 +599,7 @@ void workshopInventoryClearDeviceCredential() {
     g_runtime.lastSuccessAtMs = 0;
     g_runtime.credentialConfigured = false;
     g_refreshRequested = false;
+    g_nextRefreshAtMs = 0;
     portEXIT_CRITICAL(&g_inventoryMux);
 
     publishUnavailable("Filament Inventory device access removed.", false, millis());
