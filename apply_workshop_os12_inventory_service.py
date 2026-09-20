@@ -116,7 +116,7 @@ static void sendWorkshopInventoryStatus(int httpCode = 200) {
   doc["quantityState"] = quantityState;
   doc["placementState"] = placementState;
   doc["readiness"] = readiness;
-  doc["profileId"] = snap.state.profileId;
+  doc["profileScoped"] = snap.state.profileId[0] != '\\0';
   doc["spoolCount"] = snap.state.spoolCount;
   doc["loadedCount"] = snap.state.loadedCount;
   doc["lowCount"] = snap.state.lowCount;
@@ -211,7 +211,7 @@ async function loadInventoryDeviceFeedStatus(){
     if(l){l.textContent=d.placementState||'Unknown';}
     if(ld){ld.textContent=(d.loadedCount||0)+' canonically loaded · '+(d.placementConflictCount||0)+' placement conflicts';}
     if(f){f.textContent=d.freshness||'Unknown';}
-    if(fd){fd.textContent=d.profileId?'Profile '+d.profileId:'No validated profile-scoped feed';}
+    if(fd){fd.textContent=d.profileScoped?'Validated private profile scope':'No validated profile-scoped feed';}
     if(ready){ready.textContent=d.readiness||'Undetermined';}
   }catch(e){access.textContent='Unavailable';status.textContent='Could not read Filament Inventory device-feed status.';}
 }
