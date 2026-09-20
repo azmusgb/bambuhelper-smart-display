@@ -95,6 +95,18 @@ def main() -> int:
         if text.count(token) != 1:
             fail(f"geometry token must exist exactly once: {token}")
 
+    declaration_pos = text.find("static constexpr int16_t OS12_MARGIN_X = 12;")
+    for signature in (
+        "static void drawHeader(",
+        "static void uiBottomNav(",
+        "static void hubV1125Card(",
+        "static void hubOs12RowSurface(",
+        "static HubRect hubUi13RowRect(",
+    ):
+        consumer_pos = text.find(signature)
+        if consumer_pos >= 0 and declaration_pos > consumer_pos:
+            fail(f"geometry tokens are declared after consumer: {signature}")
+
     row = braced_block(text, "static void hubOs12RowSurface(")
     require(row, (
         "OS12_ROW_INSET_X",
