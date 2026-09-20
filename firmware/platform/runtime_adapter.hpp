@@ -35,7 +35,7 @@ struct LegacyNetworkObservation {
 // this observation. This adapter never derives inventory state from printer
 // telemetry.
 struct InventoryFeedObservation {
-    const char* profileId{nullptr};
+    char profileId[kProfileIdLength]{};
     std::uint32_t observedAtMs{0};
     std::uint16_t spoolCount{0};
     std::uint16_t loadedCount{0};
@@ -122,10 +122,8 @@ inline InventoryProjectionState normalizeInventoryFeedObservation(
     state.placementConflictCount = observation.placementConflictCount;
     state.readiness = observation.readiness;
 
-    if (observation.profileId != nullptr) {
-        std::strncpy(state.profileId, observation.profileId, sizeof(state.profileId) - 1);
-        state.profileId[sizeof(state.profileId) - 1] = '\0';
-    }
+    std::strncpy(state.profileId, observation.profileId, sizeof(state.profileId) - 1);
+    state.profileId[sizeof(state.profileId) - 1] = '\0';
 
     if (!observation.available) {
         state.freshness = Freshness::Unknown;
