@@ -10,10 +10,10 @@ static void drawWorkshop(bool full) {
   const uint16_t timerColor=g_workshopTimerDone?C10_ORANGE:
                             (workshopTimerActive()?C10_ACCENT:W25_LINE);
 
-  char materialValue[34]="Unknown";
+  char materialValue[34]="Unknown telemetry";
   if(s&&s->ams.present&&s->ams.activeTray<4&&s->ams.trays[s->ams.activeTray].present) {
     const AmsTray& t=s->ams.trays[s->ams.activeTray];
-    snprintf(materialValue,sizeof(materialValue),"Slot %u - %s",
+    snprintf(materialValue,sizeof(materialValue),"AMS %u · %s",
              (unsigned)s->ams.activeTray+1,t.type[0]?t.type:"Filament");
   }
 
@@ -39,7 +39,7 @@ static void drawWorkshop(bool full) {
               context.x+66,context.y+20,mid-context.x-76,FONT_BODY,ML_DATUM,
               g_workshopNote[0]?C10_TEXT:C10_MUTED,C10_SURFACE);
     tft.drawFastVLine(mid,context.y+8,context.h-16,C10_SEPARATOR);
-    uiDrawFit("Material",mid+12,context.y+8,58,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit("Printer feed",mid+12,context.y+8,58,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
     uiDrawFit(materialValue,mid+76,context.y+20,context.x+context.w-mid-88,FONT_BODY,ML_DATUM,
               (s&&s->ams.present)?C10_TEXT:C10_MUTED,C10_SURFACE);
 
@@ -70,7 +70,7 @@ static void drawWorkshop(bool full) {
               context.x+12,context.y+38,context.w-24,FONT_BODY,TL_DATUM,
               g_workshopNote[0]?C10_TEXT:C10_MUTED,C10_SURFACE);
     tft.drawFastHLine(context.x+12,context.y+68,context.w-24,C10_SEPARATOR);
-    uiDrawFit("Material",context.x+12,context.y+80,context.w-24,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
+    uiDrawFit("Printer feed",context.x+12,context.y+80,context.w-24,FONT_SMALL,TL_DATUM,C10_MUTED,C10_SURFACE);
     uiDrawFit(materialValue,context.x+12,context.y+106,context.w-24,FONT_BODY,TL_DATUM,
               (s&&s->ams.present)?C10_TEXT:C10_MUTED,C10_SURFACE);
 
