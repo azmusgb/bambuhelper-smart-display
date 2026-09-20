@@ -52,8 +52,21 @@ def main() -> int:
         'Stale placement evidence must require verification.',
         'Conflicting placement evidence must require verification.',
         'Unknown placement evidence must preserve unknown physical state.',
+        'const char* responseHeaders[] = {"Retry-After"};',
+        'http.collectHeaders(responseHeaders, 1);',
+        'HTTP_CODE_SERVICE_UNAVAILABLE',
+        'parseRetryAfterMs(http.header("Retry-After"))',
+        'g_nextRefreshAtMs = nowMs + retryAfterMs;',
+        'deadlineReached(nowMs, nextRefreshAtMs)',
+        'Filament Inventory is temporarily unavailable; retrying in %lu s.',
     ):
         need(service,marker,"inventory service contract")
+
+    forbid(
+        service,
+        'const std::uint32_t interval = snap.lastSuccessAtMs ? kRefreshIntervalMs : kRetryIntervalMs;',
+        "legacy fixed retry schedule that ignores server Retry-After",
+    )
 
     for forbidden in (
         "X-Filament-Sync-Key",
@@ -113,7 +126,7 @@ def main() -> int:
             need(js,marker,"device-feed portal behavior")
 
     need(build,"WORKSHOP_OS12_INVENTORY_DEVICE_FEED 1","build identity")
-    print("PASS: OS12 Filament Inventory transport is profile-scoped, bearer-only, fail-closed, and locally revocable")
+    print("PASS: OS12 Filament Inventory transport is profile-scoped, bearer-only, fail-closed, locally revocable, and honors bounded transient Retry-After scheduling")
     return 0
 
 
