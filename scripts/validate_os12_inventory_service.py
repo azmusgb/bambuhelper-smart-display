@@ -45,6 +45,13 @@ def main() -> int:
         'stockState',
         'quantity["verificationRequired"]',
         'placement["verificationRequired"]',
+        'Stale quantity evidence must require verification.',
+        'Conflicting quantity evidence failed conflict contract.',
+        'Invalid quantity lineage must require verification.',
+        'Unknown quantity evidence must preserve unknown grams and require verification.',
+        'Stale placement evidence must require verification.',
+        'Conflicting placement evidence must require verification.',
+        'Unknown placement evidence must preserve unknown physical state.',
     ):
         need(service,marker,"inventory service contract")
 
