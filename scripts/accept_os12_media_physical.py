@@ -22,16 +22,13 @@ from urllib.parse import urlparse
 from accept_os12_portal_runtime import (
     AcceptanceError,
     Client,
-    assert_login_markup,
+    assert_code_free_portal,
     check,
-    login,
-    protected_root_is_open,
 )
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 
 from accept_os12_media_runtime import (
     api,
-    read_code,
     status,
     validate_status,
     wait_for_session,
@@ -314,17 +311,9 @@ def run(args: argparse.Namespace) -> int:
     navigation_log: list[dict] = evidence["navigationObservations"]
 
     try:
-        assert_login_markup(client)
-        if protected_root_is_open(client):
-            evidence["portalMode"] = "insecure-open-lan"
-            raise AcceptanceError(
-                "protected root is reachable without authentication; refusing physical "
-                "acceptance against an obsolete/insecure open-LAN image"
-            )
-        evidence["portalMode"] = "portal-code"
-        code = read_code()
-        login(client, code, "physical media acceptance session")
-        code = ""
+        assert_code_free_portal(client)
+        evidence["portalMode"] = "local-code-free"
+        print("PASS  code-free local portal contract")
 
         identity = update_identity(client)
         evidence["runtimeIdentity"] = identity
