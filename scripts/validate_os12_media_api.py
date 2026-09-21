@@ -20,6 +20,8 @@ def main() -> int:
         'workshopMediaSnapshot()',
         'workshopMediaService()',
         'SECURE_GET("/os12/media/status"',
+        'SECURE_POST("/os12/media/volume"',
+        'SECURE_POST("/os12/media/mute"',
         'SECURE_POST("/os12/media/speaker-test"',
         'SECURE_POST("/os12/media/microphone-sample"',
         'SECURE_POST("/os12/media/record/start"',
@@ -44,6 +46,10 @@ def main() -> int:
         'doc["audioCurrentFrequency"]',
         'doc["audioTargetGain"]',
         'doc["audioCurrentGain"]',
+        'server.hasArg("percent")',
+        'server.hasArg("muted")',
+        'media.setVolume((uint8_t)requested)',
+        'media.setMuted(muted)',
         'doc["printerConfigured"]',
         'doc["printerCameraObserved"]',
         'doc["printerLiveviewPreview"]',
@@ -88,7 +94,7 @@ def main() -> int:
     if 'playMjpeg("demo-video", millis())' not in media_handlers:
         raise SystemExit("FAIL: media API video start must use the built-in WS350 demo source")
 
-    print("PASS: OS12 media API is authenticated, source-free and starts the built-in WS350 video demo")
+    print("PASS: OS12 media API is authenticated, source-free, exposes bounded speaker diagnostic controls, and starts the built-in WS350 video demo")
     return 0
 
 
