@@ -61,7 +61,8 @@ def main() -> int:
     for needle in (
         'if [[ "$FLASH" -eq 1 && -z "$EXPECT_SOURCE_SHA" ]]',
         'if [[ "$FLASH" -eq 1 && -z "$EXPECT_FIRMWARE_SHA256" ]]',
-        'if [[ "$HEAD_SHA" != "$EXPECT_SOURCE_SHA" ]]',
+        'if [[ -n "$EXPECT_SOURCE_SHA" && "$HEAD_SHA" != "$EXPECT_SOURCE_SHA" ]]',
+        'if [[ -n "$EXPECT_FIRMWARE_SHA256" ]]',
         'if [[ "$FIRMWARE_SHA256" != "$EXPECT_FIRMWARE_SHA256" ]]',
     ):
         require(bootstrap, needle, "physical flash exact-artifact guard")
