@@ -53,6 +53,7 @@ def main() -> int:
         "MediaError::Busy",
         "MediaError::OutOfMemory",
         "refreshBackendFacts",
+        "speakerTestEndsAtMs_ = nowMs + 1200U;",
     ])
     backend = require(repo / "src/ws350_media_backend.cpp", [
         "BOARD_HAS_ES8311_AUDIO",
