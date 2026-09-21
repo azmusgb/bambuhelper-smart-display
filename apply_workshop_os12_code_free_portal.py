@@ -237,34 +237,25 @@ def patch_portal_html(repo: Path) -> None:
     <div><small>LOCAL ACCESS</small><h3 id="localAccessTitle">No device code required</h3><p>Workshop OS opens directly on the trusted local network. Mutating requests remain protected by same-origin enforcement.</p></div>
   </section>'''
 
-    # Anchor on semantic copy that survives all preceding reconstruction layers.
-    # Find the section containing PORTAL SECURITY / Require access code, then
-    # replace only that section. Do not depend on a particular class ordering,
-    # whitespace layout, or following integration-section markup.
+    # Some reconstructed baselines omit or reshape the portal-security panel.
+    # Treat absence as already prompt-free; when present, locate it by its
+    # semantic copy rather than brittle class/attribute formatting.
     marker = "PORTAL SECURITY"
-    marker_pos = text.find(marker)
-    if marker_pos < 0:
-        marker = "Require access code"
-        marker_pos = text.find(marker)
-    if marker_pos < 0:
-        raise PatchError("portal security semantic marker missing")
+    pos = text.find(marker)
+    if pos >= 0:
+        section_start = text.rfind("<section", 0, pos)
+        section_end = text.find("</section>", pos)
+        if section_start < 0 or section_end < 0:
+            raise PatchError("portal security copy found outside a complete section")
+        section_end += len("</section>")
+        text = text[:section_start] + replacement + text[section_end:]
+    elif "No device code required" not in text:
+        # No legacy security panel exists. Insert a small code-free status note
+        # immediately before the Filament Inventory integration when available.
+        integration_pos = text.find('<section class="os12-integration"')
+        if integration_pos >= 0:
+            text = text[:integration_pos] + replacement + "\n  " + text[integration_pos:]
 
-    start = text.rfind("<section", 0, marker_pos)
-    if start < 0:
-        raise PatchError("portal security section start missing")
-
-    # The generated portal sections are flat here; take the first closing
-    # section after the security marker.
-    end = text.find("</section>", marker_pos)
-    if end < 0:
-        raise PatchError("portal security section end missing")
-    end += len("</section>")
-
-    old = text[start:end]
-    if "portalSecurity" not in old and "Require access code" not in old and "PORTAL SECURITY" not in old:
-        raise PatchError("refusing to replace non-security section")
-
-    text = text[:start] + replacement + text[end:]
     save(path, text)
 
 
