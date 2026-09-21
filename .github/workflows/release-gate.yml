@@ -68,6 +68,7 @@ jobs:
           firmware_required=0
           settings_required=0
           static_required=0
+          os12_required=0
 
           for f in "${files[@]}"; do
             case "$f" in
@@ -85,6 +86,11 @@ jobs:
                 static_required=1
                 ;;
             esac
+            case "$f" in
+              .github/workflows/os12-platform-bridge.yml|.github/workflows/os12-ux-architecture.yml|apply_workshop_os12_*.py|contracts/*|firmware/platform/*|firmware/ui-v11.25-rc10/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.28-ui13/*|scripts/*os12*|scripts/ensure-platformio.sh|scripts/waveshare-usb.sh|scripts/capture-ws350-views.zsh|docs/WORKSHOP_OS12_DEVICE_PLATFORM.md|docs/DEVICE_NATIVE_UPDATES.md|docs/MEDIA_PHYSICAL_ACCEPTANCE.md|releases/device-update.json)
+                os12_required=1
+                ;;
+            esac
           done
 
           if (( firmware_required )); then
@@ -95,6 +101,10 @@ jobs:
           fi
           if (( static_required )); then
             required+=("Validate accepted static installer")
+          fi
+          if (( os12_required )); then
+            required+=("Workshop OS 12 Platform Bridge")
+            required+=("Workshop OS 12 UX Architecture")
           fi
 
           printf '%s\n' "${required[@]}" | jq -R . | jq -s -c . > required.json
