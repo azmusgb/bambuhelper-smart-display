@@ -58,9 +58,9 @@ int main() {
 
   assert(media.testSpeaker(100));
   assert(media.snapshot().runtime.session == SessionState::PlayingAudio);
-  media.poll(279);
+  media.poll(1299);
   assert(media.snapshot().runtime.session == SessionState::PlayingAudio);
-  media.poll(280);
+  media.poll(1300);
   assert(media.snapshot().runtime.session == SessionState::Idle);
   assert(hw.stopCount == 1);
 
