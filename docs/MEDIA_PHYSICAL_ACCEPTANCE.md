@@ -14,6 +14,32 @@ It does **not** promote Workshop OS to stable and does not replace whole-device 
 - The actual printer is in a safe state for operator interaction.
 - Recovery/rollback evidence exists for the installed image.
 
+## Default unattended acceptance
+
+Routine candidate validation should now start with the unattended runner rather than the interactive physical helpers:
+
+```bash
+python3 scripts/accept_os12_unattended.py \\
+  --base-url http://10.0.0.124
+```
+
+By default, the runner resolves the exact expected source SHA from the `candidate` entry in `releases/device-update.json`, refuses to test a different running source, and requires no operator prompts. It automatically records:
+
+- exact running source identity before and after the run;
+- code-free local portal contract;
+- required native-view catalog coverage;
+- canonical `/hub/show` routing across the whole 480x320 UI set;
+- framebuffer dimensions, content sanity, hashes, and route diversity;
+- speaker lifecycle plus codec/I2S/pipeline/amplifier diagnostics;
+- valid microphone ADC/sample measurements;
+- bounded record -> idle -> playback -> idle lifecycle;
+- video framebuffer motion, pause/freeze, resume, and stop behavior;
+- clean final media state, end-of-run LAN reachability, and monotonic uptime.
+
+A successful run reports `UNATTENDED WORKSHOP OS 12 ACCEPTANCE: PASS` and writes a timestamped JSON evidence bundle under `~/Downloads` unless `--output` is supplied.
+
+This unattended pass deliberately does **not** relabel machine-observable evidence as final physical acceptance. The remaining human-only checks are reduced to a final release spot-check for physical LCD appearance, actual finger-driven touch behavior, audible speaker quality, microphone intelligibility, and physical recovery/rollback when that gate is due. Those checks are not required on every candidate iteration.
+
 ## Runtime exercise
 
 From the repository root:
