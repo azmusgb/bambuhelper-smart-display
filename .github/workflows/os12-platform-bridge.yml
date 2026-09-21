@@ -56,6 +56,14 @@ on:
       - '.github/workflows/os12-platform-bridge.yml'
   pull_request:
     paths:
+      - 'apply_workshop_os12_*.py'
+      - 'contracts/**'
+      - 'firmware/ui-v11.25-rc10/**'
+      - 'firmware/ui-v11.26-ui11/**'
+      - 'firmware/ui-v11.27-ui12/**'
+      - 'firmware/ui-v11.28-ui13/**'
+      - 'scripts/*os12*'
+      - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
       - 'apply_workshop_os12_media_hardware.py'

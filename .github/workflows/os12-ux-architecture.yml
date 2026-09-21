@@ -27,6 +27,16 @@ on:
       - 'firmware/ui-v11.28-ui13/**'
   pull_request:
     paths:
+      - 'apply_workshop_os12_*.py'
+      - 'firmware/platform/**'
+      - 'scripts/*os12*'
+      - 'scripts/waveshare-usb.sh'
+      - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
+      - 'docs/DEVICE_NATIVE_UPDATES.md'
+      - 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'
+      - 'releases/device-update.json'
+      - '.github/workflows/os12-platform-bridge.yml'
+      - '.github/workflows/validate.yml'
       - 'apply_workshop_os12_ux_architecture.py'
       - 'apply_workshop_os12_ux_geometry.py'
       - 'apply_workshop_os12_ux_physical_fit.py'

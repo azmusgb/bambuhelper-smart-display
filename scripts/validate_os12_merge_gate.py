@@ -37,6 +37,31 @@ def main() -> int:
     if platform_i > poll_i or ux_i > poll_i:
         raise ValidationError("OS12 workflows are not added before merge-gate polling")
 
+    platform_workflow = (root / ".github/workflows/os12-platform-bridge.yml").read_text(encoding="utf-8")
+    ux_workflow = (root / ".github/workflows/os12-ux-architecture.yml").read_text(encoding="utf-8")
+    shared_trigger_needles = (
+        "apply_workshop_os12_*.py",
+        "contracts/**",
+        "firmware/platform/**",
+        "firmware/ui-v11.25-rc10/**",
+        "firmware/ui-v11.26-ui11/**",
+        "firmware/ui-v11.27-ui12/**",
+        "firmware/ui-v11.28-ui13/**",
+        "scripts/*os12*",
+        "scripts/ensure-platformio.sh",
+        "scripts/waveshare-usb.sh",
+        "scripts/capture-ws350-views.zsh",
+        "docs/WORKSHOP_OS12_DEVICE_PLATFORM.md",
+        "docs/DEVICE_NATIVE_UPDATES.md",
+        "docs/MEDIA_PHYSICAL_ACCEPTANCE.md",
+        "releases/device-update.json",
+        ".github/workflows/os12-platform-bridge.yml",
+        ".github/workflows/os12-ux-architecture.yml",
+    )
+    for needle in shared_trigger_needles:
+        require(platform_workflow, needle, "Platform Bridge PR trigger coverage")
+        require(ux_workflow, needle, "UX Architecture PR trigger coverage")
+
     print("PASS: OS12-sensitive PRs require exact-head Platform Bridge and UX Architecture workflows before merge")
     return 0
 
