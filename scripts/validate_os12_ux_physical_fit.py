@@ -86,14 +86,19 @@ def main() -> int:
     forbid(evidence, "OS12_TRAILING_COL_W", "physical-fit evidence row")
 
     home = block(hub, "static void drawHome(bool full)")
-    require(home, '"Filament Inventory","Unknown","No authoritative inventory evidence"', "Home inventory truth")
+    require(home, '"Filament Inventory"', "Home inventory truth")
+    require(home, '"Unknown"', "Home inventory truth")
+    require(home, '"No authoritative inventory evidence"', "Home inventory truth")
     for forbidden in ("activeTray", "AmsTray", "matchSpoolByColor", "matchSpoolByMaterial"):
         forbid(home, forbidden, "Home inventory truth")
 
     workshop = block(hub, "static void drawWorkshop(bool full)")
-    require(workshop, '"Print Readiness","Undetermined","Requirements or inventory evidence unavailable"', "Workshop readiness truth")
-    require(workshop, '"Loaded Spools","Unknown","Placement evidence unavailable"', "Workshop placement truth")
-    require(workshop, '"Inventory","Unknown","Filament Inventory device feed not authoritative here"', "Workshop inventory truth")
+    require(workshop, '"Print Readiness"', "Workshop readiness truth")
+    require(workshop, '"Undetermined"', "Workshop readiness truth")
+    require(workshop, '"Print requirements or inventory evidence missing"', "Workshop readiness truth")
+    require(workshop, '"Loaded Spools"', "Workshop placement truth")
+    require(workshop, '"Unknown"', "Workshop placement truth")
+    require(workshop, '"Canonical placement unknown"', "Workshop placement truth")
     for forbidden in ("activeTray", "AmsTray", "matchSpoolByColor", "matchSpoolByMaterial"):
         forbid(workshop, forbidden, "Workshop inventory truth")
 
