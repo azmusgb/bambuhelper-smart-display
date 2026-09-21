@@ -36,7 +36,7 @@ def main() -> int:
             "maxSample",
         ),
     )
-    require(repo / "src/media_service.cpp", ("speakerTestEndsAtMs_ = nowMs + 750U",))
+    require(repo / "src/media_service.cpp", ("speakerTestEndsAtMs_ = nowMs + 1200U",))
     route = es.find("esWrite(ES_REG_SYS_14, 0x1A)")
     gain = es.find("esWrite(ES_REG_ADC_17, 0xC8)")
     adc = es.find("esWrite(ES_REG_ADC_1C, 0x6A)")
@@ -47,7 +47,7 @@ def main() -> int:
         raise SystemExit("FAIL: DMIC bit must remain clear for the WS350 analog microphone")
 
     print(
-        "PASS: OS12 WS350 analog microphone route/gain, raw RX diagnostics, and audible speaker window are present"
+        "PASS: OS12 WS350 analog microphone route/gain, raw RX diagnostics, and 1200 ms speaker window are present"
     )
     return 0
 
