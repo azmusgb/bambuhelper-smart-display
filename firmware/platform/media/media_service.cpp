@@ -117,7 +117,7 @@ bool MediaService::testSpeaker(uint32_t nowMs) {
     return false;
   }
   transition(SessionState::PlayingAudio, nowMs);
-  speakerTestEndsAtMs_ = nowMs + 180U;
+  speakerTestEndsAtMs_ = nowMs + 1200U;
   clearError();
   return true;
 }
