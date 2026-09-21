@@ -161,8 +161,8 @@ def main() -> int:
 
     home = braced_block(text, "static void drawHome(bool full)")
     require(home, (
-        "hr(OS12_MARGIN_X,48,W-OS12_MARGIN_X*2,58)",
-        "hr(OS12_MARGIN_X,114,W-OS12_MARGIN_X*2,70)",
+        "hr(OS12_MARGIN_X,48,W-OS12_MARGIN_X*2,64)",
+        "hr(OS12_MARGIN_X,118,W-OS12_MARGIN_X*2,68)",
         "hr(OS12_MARGIN_X,192,W-OS12_MARGIN_X*2,60)",
         '"No authoritative inventory evidence"',
     ), "Home geometry")
@@ -170,10 +170,12 @@ def main() -> int:
 
     workshop = braced_block(text, "static void drawWorkshop(bool full)")
     require(workshop, (
-        "OS12_CONTENT_TOP+OS12_ROW_H*3",
+        "hr(OS12_MARGIN_X,48,W-OS12_MARGIN_X*2,60)",
+        "hr(OS12_MARGIN_X,112,W-OS12_MARGIN_X*2,60)",
+        "hr(OS12_MARGIN_X,176,W-OS12_MARGIN_X*2,72)",
         "W-OS12_MARGIN_X*2",
         '"Undetermined"',
-        '"Placement evidence unavailable"',
+        '"Canonical placement unknown"',
     ), "Workshop geometry")
     forbid(workshop, ("hr(8,", "hubV1125Card("), "Workshop geometry")
 
