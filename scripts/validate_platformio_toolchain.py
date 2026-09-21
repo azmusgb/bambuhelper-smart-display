@@ -29,6 +29,7 @@ def main() -> int:
 
     ensure = read(root / "scripts/ensure-platformio.sh")
     bootstrap = read(root / "scripts/bootstrap_ws350_os12_usb_macos.sh")
+    exact_ci_installer = read(root / "scripts/flash_os12_ci_candidate_macos.sh")
     ui13_runner = read(root / "scripts/run_ui13_local.sh")
     platform_workflow = read(root / ".github/workflows/os12-platform-bridge.yml")
     ux_workflow = read(root / ".github/workflows/os12-ux-architecture.yml")
@@ -129,13 +130,41 @@ def main() -> int:
         '"candidateAuthority": "os12-ux-architecture"',
         "name: os12-ux-ws350-",
         'cp "$SRC" "$OUT/firmware.bin"',
+        'cp "$PART" "$OUT/partitions.bin"',
+        '"partitionSha256": "%s"',
+        '"partitionSize": %s',
     ):
         require(ux_workflow, needle, "OS12 UX physical candidate authority")
 
+    for needle in (
+        "This is the canonical macOS physical-candidate installer.",
+        "DOES NOT rebuild",
+        "DOES NOT invoke PlatformIO",
+        'CI_PARTITIONS="$CANDIDATE_DIR/partitions.bin"',
+        '"partitionSha256": part_hash',
+        "--confirm-printer-idle",
+        "--full-backup",
+        "=== Partition-layout gate ===",
+        'cmp -s "$BACKUP_DIR/partition-table.bin" "$CI_PARTITIONS"',
+        'install_transport=manual-ota-exact-ci-artifact',
+        'X-SHA256: $EXPECT_FIRMWARE_SHA256',
+        '$BASE_URL/ota/upload',
+        "PlatformIO used on Mac: NO",
+    ):
+        require(exact_ci_installer, needle, "exact-CI macOS physical installer")
+    for needle in (
+        "scripts/ensure-platformio.sh",
+        "pio run",
+        "run_os12_ux_local.sh",
+        "firmware.bin changed before upload",
+    ):
+        forbid(exact_ci_installer, needle, "exact-CI installer local-build bypass")
+
     print(
-        "PASS: Workshop OS build/flash tooling has one pinned PlatformIO authority, "
-        "rejects known-bad Python 3.13+, requires exact CI source+firmware identity for physical flash, "
-        "and keeps the OS12 UX workflow as the sole flashable physical-candidate authority"
+        "PASS: Workshop OS build tooling has one pinned CI PlatformIO authority, "
+        "the OS12 UX workflow is the sole flashable physical-candidate authority, "
+        "and macOS physical acceptance verifies CI firmware+partition evidence before exact-artifact OTA "
+        "without rebuilding firmware or invoking PlatformIO locally"
     )
     return 0
 
