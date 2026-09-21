@@ -117,16 +117,24 @@ jobs:
         run: |
           set -euo pipefail
           SRC=/tmp/ws350-os12-ux-build/.pio/build/ws_lcd_350/firmware.bin
+          PART=/tmp/ws350-os12-ux-build/.pio/build/ws_lcd_350/partitions.bin
           OUT=/tmp/os12-ux-ws350-candidate
           test -s "$SRC"
+          test -s "$PART"
           rm -rf "$OUT"
           mkdir -p "$OUT"
           cp "$SRC" "$OUT/firmware.bin"
+          cp "$PART" "$OUT/partitions.bin"
           FW_SHA="$(sha256sum "$OUT/firmware.bin" | awk '{print $1}')"
           FW_SIZE="$(stat -c '%s' "$OUT/firmware.bin")"
-          printf '%s  %s\n' "$FW_SHA" firmware.bin > "$OUT/SHA256SUMS.txt"
-          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "artifactRole": "physical-acceptance-candidate",\n  "candidateAuthority": "os12-ux-architecture",\n  "portalArchitecture": "control-plane-v4",\n  "inventoryContract": "device-feed/v1",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
-            "$OS12_RELEASE_VERSION" "$OS12_SOURCE_SHA" "$FW_SHA" "$FW_SIZE" > "$OUT/candidate.json"
+          PART_SHA="$(sha256sum "$OUT/partitions.bin" | awk '{print $1}')"
+          PART_SIZE="$(stat -c '%s' "$OUT/partitions.bin")"
+          {
+            printf '%s  %s\n' "$FW_SHA" firmware.bin
+            printf '%s  %s\n' "$PART_SHA" partitions.bin
+          } > "$OUT/SHA256SUMS.txt"
+          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "partitionSha256": "%s",\n  "partitionSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "artifactRole": "physical-acceptance-candidate",\n  "candidateAuthority": "os12-ux-architecture",\n  "portalArchitecture": "control-plane-v4",\n  "inventoryContract": "device-feed/v1",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
+            "$OS12_RELEASE_VERSION" "$OS12_SOURCE_SHA" "$FW_SHA" "$FW_SIZE" "$PART_SHA" "$PART_SIZE" > "$OUT/candidate.json"
           echo "firmware_sha256=$FW_SHA" >> "$GITHUB_OUTPUT"
           echo "firmware_size=$FW_SIZE" >> "$GITHUB_OUTPUT"
           {
@@ -135,6 +143,8 @@ jobs:
             echo "- Source SHA: `$OS12_SOURCE_SHA`"
             echo "- Firmware SHA-256: `$FW_SHA`"
             echo "- Firmware bytes: `$FW_SIZE`"
+            echo "- Partition SHA-256: `$PART_SHA`"
+            echo "- Partition bytes: `$PART_SIZE`"
             echo '- Artifact role: physical-acceptance-candidate'
             echo '- Candidate authority: os12-ux-architecture'
             echo '- Portal architecture: control-plane-v4'
