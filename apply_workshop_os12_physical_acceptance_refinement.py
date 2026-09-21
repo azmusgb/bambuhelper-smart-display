@@ -79,14 +79,15 @@ HOME = r'''
 static void drawHome(bool full) {
   (void)full;
   const int16_t W=tft.width();
-  const bool configured=isAnyPrinterConfigured();
+  const bool configured=workshopPlatformState().configuredPrinterCount>0;
   const PrinterSlot* p=configured?&displayedPrinter():nullptr;
   const BambuState* s=p?&p->state:nullptr;
   if(g_ambientEnabled&&g_ambientActive){drawAmbientHome(p,s);return;}
 
-  const bool paused=s&&s->gcodeStateId==GCODE_PAUSE;
-  const bool printing=s&&s->printing;
-  const bool online=s&&s->connected;
+  const uint8_t os12Slot=rotState.displayIndex<MAX_PRINTERS?rotState.displayIndex:0;
+  const bool paused=configured&&workshopPlatformPrinterPaused(os12Slot);
+  const bool printing=configured&&workshopPlatformPrinterPrinting(os12Slot);
+  const bool online=configured&&workshopPlatformPrinterOnline(os12Slot);
   const bool alert=s&&uiHmsCount(*s)>0;
   const uint16_t stateColor=!configured?C10_MUTED:(!online?C10_RED:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));
   const char* state=!configured?"Set Up":(!online?"Offline":(alert?"Needs Attention":(paused?"Paused":(printing?"Printing":"Ready"))));
