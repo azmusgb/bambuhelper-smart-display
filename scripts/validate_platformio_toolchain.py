@@ -68,6 +68,19 @@ def main() -> int:
         require(bootstrap, needle, "physical flash exact-artifact guard")
 
     for needle in (
+        "CANDIDATE BUILD CHECKS: PASS",
+        "No USB device access was performed.",
+        'if [[ "$CONFIRM_IDLE" -ne 1 ]]',
+        "Printer-idle confirmation received before USB reset/probe.",
+    ):
+        require(bootstrap, needle, "USB preflight idle-safety guard")
+
+    idle_gate = bootstrap.index('if [[ "$CONFIRM_IDLE" -ne 1 ]]')
+    usb_resolver = bootstrap.index('PORT="$(PIO_BIN="$PIO_BIN" bash scripts/waveshare-usb.sh port)"')
+    if idle_gate < 0 or usb_resolver < 0 or idle_gate > usb_resolver:
+        raise ValidationError("printer-idle confirmation must be enforced before USB resolver/esptool access")
+
+    for needle in (
         'PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"',
         '"$PIO_BIN" run -e ws_lcd_350',
         '"$PIO_BIN" run -e jc3248w535',

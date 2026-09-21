@@ -23,8 +23,9 @@ Usage:
 
 Options:
   --flash                    Perform the guarded USB bootstrap upload after checks.
-  --confirm-printer-idle     Required with --flash. Confirms no printer is preparing,
-                             printing, or paused before the display is rebooted.
+  --confirm-printer-idle     Required before any USB chip probe/read/flash. Confirms
+                             no printer is preparing, printing, or paused before the
+                             local-control display can be reset into bootloader.
   --expect-source-sha SHA    Exact CI candidate source SHA. Required with --flash.
   --expect-firmware-sha256 H Exact CI candidate firmware.bin SHA-256. Required with
                              --flash. The locally reconstructed bytes must match.
@@ -33,10 +34,11 @@ Options:
   --base-url URL             Local portal base URL used for the post-flash probe.
   -h, --help                 Show this help.
 
-Default mode is non-mutating with respect to device firmware: build the exact local
-OS12 image, identify the attached WS350, back up critical flash metadata, and compare
-the live partition table with the expected Workshop OS 16 MB layout. A partition
-mismatch fails closed; cross-line migration must use the approved Full image at 0x0.
+Default mode is build-only and does not touch the attached device. Add
+--confirm-printer-idle to permit USB chip probing/recovery reads and partition-table
+comparison. Those operations can reset the WS350 into bootloader even though they do
+not modify firmware. A partition mismatch fails closed; cross-line migration must use
+the approved Full image at 0x0.
 
 A physical-acceptance flash must also be byte-identical to the recorded exact-head
 CI physical candidate. Source SHA alone is not sufficient release evidence.
@@ -156,6 +158,20 @@ if [[ -n "$EXPECT_FIRMWARE_SHA256" ]]; then
   echo "PASS: local firmware bytes exactly match the recorded CI candidate SHA-256."
 fi
 
+if [[ "$CONFIRM_IDLE" -ne 1 ]]; then
+  cat <<EOF
+
+CANDIDATE BUILD CHECKS: PASS
+No USB device access was performed.
+No firmware was changed.
+
+To run the attached-device recovery/partition preflight, first confirm the printer
+is not preparing, printing, or paused, then rerun with --confirm-printer-idle.
+EOF
+  exit 0
+fi
+
+echo "Printer-idle confirmation received before USB reset/probe."
 PORT="$(PIO_BIN="$PIO_BIN" bash scripts/waveshare-usb.sh port)"
 printf '\n=== Attached device ===\n'
 printf 'Port: %s\n' "$PORT"
@@ -273,6 +289,7 @@ EOF
   exit 0
 fi
 
+# Defense in depth: the same confirmation is checked before USB probing above.
 if [[ "$CONFIRM_IDLE" -ne 1 ]]; then
   echo "ERROR: --flash requires --confirm-printer-idle." >&2
   echo "Do not reboot the local-control display while printer state is active or uncertain." >&2

@@ -56,13 +56,22 @@ Legacy Waveshare Home recovery remains available until the Workshop OS replaceme
 
 A WS350 running firmware from before this OS12 UpdateService cannot acquire the new updater by using a feature it does not yet have. The first installation is therefore a **bootstrap update** using the existing authenticated local firmware-upload path, or a guarded USB bootstrap when the device is physically attached to a Mac. The approved USB recovery/full-image path is required when the partition layout differs.
 
-For an attached WS350 on the existing Workshop OS 16 MB layout, use:
+Start with a build-only candidate check:
 
 ```bash
 bash scripts/bootstrap_ws350_os12_usb_macos.sh
 ```
 
-The default run is non-mutating with respect to firmware. It reconstructs the local OS12 source with the repository-owned PlatformIO toolchain, resolves the ESP32-S3 USB device, probes the chip, captures partition/NVS/OTA metadata for recovery, and compares the live partition table byte-for-byte with the expected reconstructed layout.
+This reconstructs the exact local OS12 source with the repository-owned PlatformIO toolchain and performs **no USB device access**. That distinction matters because esptool chip probing/readback can reset the WS350 into bootloader even when no firmware bytes are written.
+
+For the attached-device recovery/partition preflight, first confirm the printer is not preparing, printing, or paused, then use:
+
+```bash
+bash scripts/bootstrap_ws350_os12_usb_macos.sh \
+  --confirm-printer-idle
+```
+
+The device preflight resolves the ESP32-S3 USB device, probes the chip, captures partition/NVS/OTA metadata for recovery, and compares the live partition table byte-for-byte with the expected reconstructed layout.
 
 A physical-acceptance flash has an additional artifact-identity gate: the local source SHA and reconstructed `firmware.bin` SHA-256 must exactly match the recorded exact-head **OS12 UX physical candidate** produced by CI. This prevents a dependency/toolchain drift rebuild from being treated as the tested artifact merely because it came from the same branch.
 
@@ -82,7 +91,7 @@ The helper refuses to flash when:
 - the local checkout does not equal the expected exact source SHA;
 - the locally reconstructed firmware bytes do not equal the CI-recorded SHA-256;
 - the live partition table differs from the expected Workshop OS layout; or
-- explicit printer-idle confirmation is absent.
+- explicit printer-idle confirmation is absent before USB reset/probe/read/flash activity.
 
 It does not erase NVS. A partition mismatch is a recovery/migration boundary: preserve the captured evidence and use the approved Full image at `0x0` rather than forcing an application/bootstrap upload. `--full-backup` optionally captures the entire 16 MB device flash before mutation.
 

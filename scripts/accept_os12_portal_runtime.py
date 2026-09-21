@@ -111,6 +111,21 @@ def protected_root_is_open(client: Client) -> bool:
     return response.status == 200 and final_path != "/login"
 
 
+def portal_security_status(client: Client) -> dict | None:
+    response = client.request(
+        "/api/portal-security",
+        headers={"X-BambuHelper-Client": "1", "Accept": "application/json"},
+    )
+    if response.status != 200:
+        return None
+    try:
+        import json
+        payload = json.loads(response.body)
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def firmware_mismatch_reason(text: str) -> str | None:
     legacy_markers = (
         "Workshop OS Secure Sign In",
@@ -239,10 +254,18 @@ def run(args: argparse.Namespace) -> int:
     assert_login_markup(probe)
     open_lan = protected_root_is_open(Client(base_url))
     if open_lan:
+        policy = portal_security_status(Client(base_url))
+        if policy and policy.get("authMode") == "open-readonly":
+            raise AcceptanceError(
+                "protected root is open because the persisted Workshop OS policy is "
+                "open-readonly. This is a supported read-only mode, but physical/release "
+                "acceptance requires Require access code = ON. Sign in at /login, enable "
+                "the access-code policy under More, then rerun acceptance."
+            )
         raise AcceptanceError(
-            "protected root is reachable without authentication. This device is still "
-            "running an obsolete open-LAN physical-test image; rebuild/flash the current "
-            "OS12 candidate before portal runtime acceptance."
+            "protected root is reachable while the portal policy is not reporting "
+            "open-readonly. Refusing acceptance because an authentication bypass or "
+            "unexpected authorization state may still be active."
         )
 
     assert_unauthenticated_gate(base_url)
