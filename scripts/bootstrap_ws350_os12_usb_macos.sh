@@ -74,7 +74,10 @@ printf 'Portal probe: %s\n' "$BASE_URL"
 
 PIO_BIN="$(ROOT="$ROOT" bash scripts/ensure-platformio.sh)"
 [[ -x "$PIO_BIN" ]] || { echo "ERROR: PlatformIO setup did not return an executable" >&2; exit 4; }
+PIO_PYTHON="$(dirname "$PIO_BIN")/python"
+[[ -x "$PIO_PYTHON" ]] || { echo "ERROR: PlatformIO Python runtime missing beside pio" >&2; exit 4; }
 printf 'PlatformIO: %s\n' "$PIO_BIN"
+printf 'PlatformIO Python: %s (%s)\n' "$PIO_PYTHON" "$("$PIO_PYTHON" --version 2>&1)"
 "$PIO_BIN" --version
 
 PIO_BIN="$PIO_BIN" BUILD="$BUILD" OS12_SOURCE_SHA="$HEAD_SHA" bash scripts/run_os12_ux_local.sh --build
@@ -105,7 +108,7 @@ ensure_esptool_runtime() {
   echo "Provisioning isolated esptool runtime at $venv" >&2
   mkdir -p "$tool_root"
   if [[ ! -x "$py" ]]; then
-    python3 -m venv "$venv"
+    "$PIO_PYTHON" -m venv "$venv"
   fi
 
   "$py" -m pip install \

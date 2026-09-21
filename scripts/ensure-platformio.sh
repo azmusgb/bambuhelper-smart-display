@@ -15,17 +15,29 @@ python_is_supported_for_platformio() {
   [[ -x "$py" ]] || return 1
   version="$(python_minor "$py" || true)"
   case "$version" in
-    3.9|3.10|3.11|3.12|3.13) return 0 ;;
+    3.9|3.10|3.11|3.12) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 select_platformio_python() {
   local candidate
+  local override="${WORKSHOP_PLATFORMIO_PYTHON:-}"
+
+  if [[ -n "$override" ]]; then
+    if python_is_supported_for_platformio "$override"; then
+      printf '%s\n' "$override"
+      return 0
+    fi
+    echo "ERROR: WORKSHOP_PLATFORMIO_PYTHON is not a supported Python 3.9-3.12 interpreter: $override" >&2
+    return 2
+  fi
 
   for candidate in \
     "$(command -v python3.12 2>/dev/null || true)" \
-    "$(command -v python3.13 2>/dev/null || true)" \
+    "$(command -v python3.11 2>/dev/null || true)" \
+    "$(command -v python3.10 2>/dev/null || true)" \
+    "$(command -v python3.9 2>/dev/null || true)" \
     "/usr/bin/python3" \
     "$(command -v python3 2>/dev/null || true)"; do
     [[ -n "$candidate" ]] || continue
@@ -57,17 +69,23 @@ ensure_platformio_esptool_runtime() {
   }
 }
 
-# The user's Homebrew PlatformIO can be bound to Python 3.14. PlatformIO 6.2.0
-# currently reaches a SCons command-rendering failure on this WS350 build under
-# that interpreter (`TypeError: unsupported operand type(s) for +: _Null and
-# str`) even though the same exact source builds in CI under Python 3.12.
-# Therefore Workshop OS bootstrap uses a repo-local PlatformIO venv on a known
-# compatible Python (3.9-3.13) instead of trusting an arbitrary global `pio`.
+# The WS350 PlatformIO/SCons image-generation path is known-good in CI on
+# Python 3.12. A real macOS bootstrap reproduced the SCons command-rendering
+# failure below under Python 3.13 as well as the previously observed 3.14 case:
+#   TypeError: unsupported operand type(s) for +: _Null and str
+# Fail closed on 3.13+ rather than allowing source compilation to succeed and
+# firmware.bin generation to fail later. Keep the toolchain repo-local so an
+# arbitrary global PlatformIO/Python installation cannot redefine release bytes.
 PYTHON_BIN="$(select_platformio_python || true)"
 if [[ -z "$PYTHON_BIN" ]]; then
-  echo "ERROR: Workshop OS requires Python 3.9-3.13 for its isolated PlatformIO toolchain." >&2
-  echo "Python 3.14 is intentionally rejected because the WS350 PlatformIO/SCons build path is not reliable under it." >&2
-  echo "Install Python 3.13 (for example with Homebrew) and rerun the bootstrap." >&2
+  echo "ERROR: Workshop OS requires Python 3.9-3.12 for its isolated PlatformIO toolchain." >&2
+  echo "Python 3.13+ is intentionally rejected because the WS350 PlatformIO/SCons image-generation path is not reliable under it." >&2
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+    echo "Install Python 3.12 with Homebrew: brew install python@3.12" >&2
+    echo "Then rerun the bootstrap. The helper will prefer /opt/homebrew/bin/python3.12 when available." >&2
+  else
+    echo "Install Python 3.12 and rerun the bootstrap." >&2
+  fi
   exit 2
 fi
 
@@ -92,6 +110,12 @@ if [[ ! -x "$VENV/bin/python" ]]; then
   "$PYTHON_BIN" -m venv "$VENV"
 fi
 
+if ! python_is_supported_for_platformio "$VENV/bin/python"; then
+  echo "ERROR: repo-local PlatformIO environment is bound to an unsupported Python runtime." >&2
+  echo "Remove $VENV and rerun after installing Python 3.12." >&2
+  exit 3
+fi
+
 if [[ ! -x "$VENV/bin/pio" ]]; then
   "$VENV/bin/python" -m pip install \
     --disable-pip-version-check \
@@ -105,5 +129,6 @@ fi
 
 ensure_platformio_esptool_runtime "$VENV/bin/python"
 
+echo "PlatformIO Python: $VENV/bin/python (Python $(python_minor "$VENV/bin/python"))" >&2
 "$VENV/bin/pio" --version >&2
 printf '%s\n' "$VENV/bin/pio"
