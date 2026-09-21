@@ -21,6 +21,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import time
 from urllib.parse import urljoin, urlparse
@@ -57,6 +58,21 @@ MANUAL_RESIDUALS = (
     "microphone intelligibility/acoustic quality in the room",
     "physical full-image recovery/rollback when that release gate is due",
 )
+
+
+def local_git_head(repo_root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = result.stdout.strip().lower()
+    return value if HEX40.fullmatch(value) is not None else None
 
 
 def load_expected_source(manifest: Path, channel: str) -> tuple[str, dict]:
@@ -229,8 +245,17 @@ def run(args: argparse.Namespace) -> int:
     manifest = Path(args.manifest).expanduser().resolve()
     expected_source = args.expect_source_sha
     manifest_channel: dict | None = None
+    expected_origin = "explicit-cli"
+
     if expected_source is None:
-        expected_source, manifest_channel = load_expected_source(manifest, args.channel)
+        repo_root = Path(__file__).resolve().parents[1]
+        git_head = local_git_head(repo_root)
+        if git_head is not None:
+            expected_source = git_head
+            expected_origin = "local-git-head"
+        else:
+            expected_source, manifest_channel = load_expected_source(manifest, args.channel)
+            expected_origin = f"manifest:{args.channel}"
     else:
         check(
             HEX40.fullmatch(expected_source) is not None,
@@ -247,9 +272,7 @@ def run(args: argparse.Namespace) -> int:
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
         "expectedSourceSha": expected_source,
-        "expectedSourceOrigin": (
-            f"manifest:{args.channel}" if args.expect_source_sha is None else "explicit-cli"
-        ),
+        "expectedSourceOrigin": expected_origin,
         "manifestChannel": manifest_channel,
         "runtimeIdentityStart": None,
         "runtimeIdentityEnd": None,
@@ -280,11 +303,16 @@ def run(args: argparse.Namespace) -> int:
 
         identity_start = update_identity(client)
         evidence["runtimeIdentityStart"] = identity_start
-        check(
-            identity_start["runningSourceCommit"] == expected_source,
-            "runtime source SHA does not match expected candidate source",
-        )
-        print(f"PASS  exact running source: {expected_source}")
+        if identity_start["runningSourceCommit"] != expected_source:
+            raise AcceptanceError(
+                "runtime source SHA does not match expected candidate source: "
+                f"device={identity_start['runningSourceCommit']} "
+                f"expected={expected_source} "
+                f"expectedOrigin={expected_origin}. "
+                "Flash the exact expected CI candidate before acceptance, or pass "
+                "--expect-source-sha explicitly when intentionally validating another build."
+            )
+        print(f"PASS  exact running source: {expected_source} ({expected_origin})")
 
         initial = status(client)
         validate_status(initial)
