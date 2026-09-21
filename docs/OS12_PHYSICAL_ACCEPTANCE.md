@@ -16,50 +16,57 @@ Require all exact-head PR gates to be green, including:
 
 Record the exact source SHA, the OS12 UX physical-candidate artifact ID, firmware byte count, and firmware SHA-256. Platform Bridge regression evidence is not flashable candidate authority.
 
-## 2. Build-only identity check
+## 2. Prepare the exact CI candidate
 
-From the exact source checkout:
+Download the OS12 UX Architecture artifact for the exact PR head and extract it locally. The artifact must contain:
 
-```bash
-bash scripts/bootstrap_ws350_os12_usb_macos.sh \
-  --expect-source-sha <EXACT_HEAD_SHA> \
-  --expect-firmware-sha256 <CI_FIRMWARE_SHA256>
-```
+- `candidate.json`
+- `SHA256SUMS.txt`
+- `firmware.bin`
+- `partitions.bin`
 
-Expected result:
+Do not rebuild firmware on the Mac. CI is the sole physical-candidate build authority.
 
-- exact local source matches CI source;
-- locally reconstructed `firmware.bin` matches the CI SHA-256;
-- no USB device access occurs;
-- no firmware changes occur.
-
-## 3. Attached-device preflight
+## 3. Attached-device preflight + guarded exact-artifact install
 
 Only when the printer is not preparing, printing, or paused:
 
 ```bash
-bash scripts/bootstrap_ws350_os12_usb_macos.sh \
-  --confirm-printer-idle \
+bash scripts/flash_os12_ci_candidate_macos.sh \
+  --candidate-dir /path/to/extracted-os12-ci-candidate \
   --expect-source-sha <EXACT_HEAD_SHA> \
-  --expect-firmware-sha256 <CI_FIRMWARE_SHA256>
+  --expect-firmware-sha256 <CI_FIRMWARE_SHA256> \
+  --confirm-printer-idle \
+  --full-backup
 ```
 
-This may reset the WS350 into bootloader for chip/readback operations. It captures critical recovery metadata and requires a byte-for-byte partition-table match. A mismatch is a stop condition and requires the approved full-image/recovery path at `0x0`.
+The installer must:
 
-## 4. Guarded install
+- verify the exact checkout SHA;
+- verify `candidate.json`, `SHA256SUMS.txt`, `firmware.bin`, and `partitions.bin`;
+- use an isolated `esptool`/pyserial runtime only;
+- read the attached WS350 partition table and require a byte-for-byte match with the CI `partitions.bin`;
+- capture NVS, OTA data, partition-table bytes, and a full 16 MB recovery image before install;
+- return the device to runtime;
+- upload the exact CI `firmware.bin` through the device manual OTA path with the expected SHA-256;
+- run the post-reboot portal probe.
 
-After the preflight passes:
+A partition mismatch is a stop condition. Cross-line migration still requires the approved full-image/recovery path at `0x0`.
 
-```bash
-bash scripts/bootstrap_ws350_os12_usb_macos.sh \
-  --full-backup \
-  --flash \
-  --confirm-printer-idle \
-  --expect-source-sha <EXACT_HEAD_SHA> \
-  --expect-firmware-sha256 <CI_FIRMWARE_SHA256>
-```
+The macOS physical installer must not invoke PlatformIO or rebuild a substitute `firmware.bin`. Retain the recovery directory and hashes with the candidate evidence.
 
-Retain the recovery directory and hashes with the candidate evidence.
+## 4. Installer evidence boundary
+
+Successful exact-artifact install establishes only:
+
+- source identity verified;
+- CI firmware identity verified;
+- CI partition-layout identity verified;
+- full recovery capture completed;
+- exact CI application image accepted by the device;
+- portal probe completed.
+
+It does not establish whole-device physical acceptance, media quality, printer-control acceptance, recovery acceptance, OTA acceptance, accepted state, or stable state.
 
 ## 5. Authenticated runtime acceptance
 
