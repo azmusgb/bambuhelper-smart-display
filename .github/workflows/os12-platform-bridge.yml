@@ -63,6 +63,7 @@ on:
       - 'firmware/ui-v11.27-ui12/**'
       - 'firmware/ui-v11.28-ui13/**'
       - 'scripts/*os12*'
+      - 'scripts/capture-ws350-views.zsh'
       - '.github/workflows/os12-ux-architecture.yml'
       - 'firmware/platform/**'
       - 'apply_workshop_os12_platform_bridge.py'
