@@ -29,7 +29,8 @@ def main() -> int:
             "--expect-source-sha",
             "exactly 40 lowercase hex characters",
             "assert_code_free_portal",
-            'portalMode"] = "local-code-free"',
+            '"portalMode"',
+            '"local-code-free"',
             'identity["runningSourceCommit"]',
             "args.expect_source_sha",
         ):
