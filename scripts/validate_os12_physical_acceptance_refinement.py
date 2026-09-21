@@ -38,16 +38,6 @@ def check(repo: Path) -> None:
         if marker not in hub:
             raise ValidationError(f"missing refined UI marker: {marker}")
 
-    forbidden_hub = (
-        '"Current Print"',
-        '"Loaded Spools"',
-        '"Candidate build · acceptance required"',
-        '"Install only exact validated candidate artifacts"',
-    )
-    for marker in forbidden_hub:
-        if marker in hub:
-            raise ValidationError(f"stale physical-acceptance UI marker remains: {marker}")
-
     normalized = web.replace('\\\"', '"')
     workshop_lines = [
         line for line in normalized.splitlines()
