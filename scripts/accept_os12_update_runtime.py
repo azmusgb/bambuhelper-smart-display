@@ -12,7 +12,6 @@ release version and exact embedded source SHA after reconnect.
 from __future__ import annotations
 
 import argparse
-import getpass
 import json
 import os
 import re
@@ -22,10 +21,8 @@ import time
 from accept_os12_portal_runtime import (
     AcceptanceError,
     Client,
-    assert_login_markup,
+    assert_code_free_portal,
     check,
-    login,
-    normalized_code,
 )
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -43,21 +40,6 @@ def api(client: Client, path: str, *, method: str = "GET", form: dict[str, str] 
         raise AcceptanceError(f"{method} {path} did not return JSON") from exc
     check(isinstance(payload, dict), f"{method} {path} returned non-object JSON")
     return payload
-
-
-def read_code(prompt: str, *, env_name: str = "WORKSHOP_OS_PORTAL_CODE") -> str:
-    raw = os.environ.get(env_name)
-    if not raw:
-        raw = getpass.getpass(prompt)
-    code = normalized_code(raw)
-    raw = ""
-    return code
-
-
-def authenticated_client(base_url: str, code: str, label: str) -> Client:
-    client = Client(base_url)
-    login(client, code, label)
-    return client
 
 
 def validate_status(payload: dict) -> None:
@@ -94,12 +76,12 @@ def poll_check(client: Client, timeout: float) -> dict:
     raise AcceptanceError("timed out waiting for GitHub update check")
 
 
-def login_surface_reachable(base_url: str) -> bool:
+def portal_reachable(base_url: str) -> bool:
     try:
-        response = Client(base_url).request("/login", timeout=3.0)
+        response = Client(base_url).request("/", timeout=3.0)
     except AcceptanceError:
         return False
-    return response.status == 200 and "Workshop OS" in response.body
+    return response.status == 200
 
 
 def poll_install_until_reboot(client: Client, base_url: str, timeout: float) -> None:
@@ -128,21 +110,21 @@ def poll_install_until_reboot(client: Client, base_url: str, timeout: float) -> 
             if "request failed" in str(exc):
                 print("STATE rebooting: device temporarily unreachable")
                 return
-            if saw_reboot_required and login_surface_reachable(base_url):
+            if saw_reboot_required and portal_reachable(base_url):
                 print("STATE rebooted: previous authenticated session invalidated")
                 return
             raise
     raise AcceptanceError("timed out waiting for update installation/reboot")
 
 
-def wait_for_login(base_url: str, timeout: float) -> None:
+def wait_for_portal(base_url: str, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if login_surface_reachable(base_url):
-            print("PASS  WS350 reachable after reboot")
+        if portal_reachable(base_url):
+            print("PASS  WS350 code-free portal reachable after reboot")
             return
         time.sleep(2.0)
-    raise AcceptanceError("WS350 did not return to the login surface after reboot")
+    raise AcceptanceError("WS350 did not return to the code-free portal after reboot")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -156,10 +138,9 @@ def run(args: argparse.Namespace) -> int:
         raise AcceptanceError("--expect-source-sha must be exactly 40 lowercase hex characters")
 
     print(f"Target: {base_url}")
-    assert_login_markup(Client(base_url))
-    code = read_code("Current portal code shown on WS350 System screen: ")
-    client = authenticated_client(base_url, code, "update acceptance session")
-    code = ""
+    client = Client(base_url)
+    assert_code_free_portal(client)
+    print("PASS  code-free local portal contract")
 
     channel_payload = api(
         client,
@@ -208,15 +189,10 @@ def run(args: argparse.Namespace) -> int:
     print(f"Expected source: {args.expect_source_sha}")
     api(client, "/os12/update/install", method="POST")
     poll_install_until_reboot(client, base_url, args.install_timeout)
-    wait_for_login(base_url, args.reboot_timeout)
+    wait_for_portal(base_url, args.reboot_timeout)
 
-    print("Portal code rotates on reboot; re-authentication is required for post-install verification.")
-    new_code = read_code(
-        "New portal code shown on WS350 System screen after reboot: ",
-        env_name="WORKSHOP_OS_POST_REBOOT_PORTAL_CODE",
-    )
-    post = authenticated_client(base_url, new_code, "post-reboot verification session")
-    new_code = ""
+    post = Client(base_url)
+    assert_code_free_portal(post)
     final_status = api(post, "/os12/update/status")
     validate_status(final_status)
     check(final_status["runningVersion"] == args.expect_version,
