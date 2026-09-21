@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 TOOL_ROOT="${WORKSHOP_TOOL_ROOT:-$ROOT/.workshop-tools}"
 VENV="$TOOL_ROOT/platformio"
+PIO_WRAPPER="$VENV/bin/pio-workshop"
 
 python_minor() {
   "$1" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null
@@ -129,6 +130,26 @@ fi
 
 ensure_platformio_esptool_runtime "$VENV/bin/python"
 
+# PlatformIO's Python virtualenv alone does not isolate its package/cache state:
+# by default PlatformIO still reads ~/.platformio. That allowed a developer Mac
+# to reuse global Espressif packages while CI used a clean package set, and the
+# WS350 build could compile/link successfully but fail during elf2image.
+#
+# Return a repo-owned wrapper so every caller also gets a repo-local
+# PLATFORMIO_CORE_DIR. This makes framework/tool/package resolution part of the
+# exact candidate toolchain rather than ambient user state.
+cat > "$PIO_WRAPPER" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+TOOL_ROOT="$(cd "$VENV_DIR/.." && pwd)"
+export PLATFORMIO_CORE_DIR="${WORKSHOP_PLATFORMIO_CORE_DIR:-$TOOL_ROOT/platformio-core}"
+exec "$SCRIPT_DIR/pio" "$@"
+EOF
+chmod +x "$PIO_WRAPPER"
+
 echo "PlatformIO Python: $VENV/bin/python (Python $(python_minor "$VENV/bin/python"))" >&2
-"$VENV/bin/pio" --version >&2
-printf '%s\n' "$VENV/bin/pio"
+echo "PlatformIO core: ${WORKSHOP_PLATFORMIO_CORE_DIR:-$TOOL_ROOT/platformio-core}" >&2
+"$PIO_WRAPPER" --version >&2
+printf '%s\n' "$PIO_WRAPPER"
