@@ -48,6 +48,7 @@ on:
       - 'scripts/accept_os12_update_runtime.py'
       - 'scripts/accept_os12_media_runtime.py'
       - 'scripts/accept_os12_media_physical.py'
+      - 'scripts/accept_os12_unattended.py'
       - 'releases/device-update.json'
       - 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'
       - 'docs/DEVICE_NATIVE_UPDATES.md'
@@ -156,7 +157,8 @@ jobs:
             scripts/accept_os12_update_runtime.py \
             scripts/accept_os12_media_runtime.py \
             scripts/accept_os12_media_physical.py \
-            scripts/accept_os12_device_ui_physical.py
+            scripts/accept_os12_device_ui_physical.py \
+            scripts/accept_os12_unattended.py
 
       - name: Validate USB/bootstrap helper syntax
         run: |
