@@ -125,7 +125,7 @@ static void drawHome(bool full) {
       inventory,
       "Filament Inventory",
       "Unknown",
-      "Awaiting authoritative inventory evidence",
+      "No authoritative inventory evidence",
       C10_MUTED);
 
   hubMarkFrameDirty();
