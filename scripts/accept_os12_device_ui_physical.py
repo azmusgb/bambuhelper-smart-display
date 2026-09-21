@@ -23,11 +23,9 @@ from accept_os12_media_physical import (
     AcceptanceError,
     Client,
     check,
-    login,
-    protected_root_is_open,
-    read_code,
     update_identity,
 )
+from accept_os12_portal_runtime import assert_code_free_portal
 
 REQUIRED_VIEWS = (
     "home",
@@ -134,14 +132,9 @@ def main()->int:
     }
     client=Client(base)
     try:
-        if protected_root_is_open(client):
-            evidence["portalMode"]="insecure-open-lan"
-            raise AcceptanceError(
-                "protected root is reachable without authentication; refusing whole-device "
-                "physical acceptance against an obsolete/insecure open-LAN image"
-            )
-        evidence["portalMode"]="portal-code"
-        code=read_code();login(client,code,"whole-device UI acceptance");code=""
+        assert_code_free_portal(client)
+        evidence["portalMode"]="local-code-free"
+        print("PASS  code-free local portal contract")
 
         identity=update_identity(client);evidence["runtimeIdentity"]=identity
         check(
