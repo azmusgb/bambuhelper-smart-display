@@ -198,6 +198,13 @@ def validate_output(repo: Path) -> None:
         "temporary open-LAN authorization bypass",
     )
     forbid(security, "if (!isAPMode()) return true;", "station-LAN authentication bypass")
+    for marker in (
+        "kTemporaryNoCodeLan",
+        "TEMPORARY PHYSICAL-TEST MODE ONLY.",
+        "if (kTemporaryNoCodeLan) return true;",
+        "TEMPORARY physical-test mode: station-LAN authentication is bypassed",
+    ):
+        forbid(security, marker, "temporary no-code authorization bypass")
 
     for marker in (
         "enum class SecurityLoginResult : uint8_t",

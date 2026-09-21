@@ -70,8 +70,14 @@ def main() -> int:
     need(sec,'if (cookieMatches(server)) return true;','mutation session gate')
 
     need(sec,'RC6 secure physical acceptance forbids WORKSHOP_OS_TEMP_NO_CODE_LAN','legacy bypass fail-closed guard')
+    for marker in (
+        'kTemporaryNoCodeLan',
+        'TEMPORARY PHYSICAL-TEST MODE ONLY.',
+        'if (kTemporaryNoCodeLan) return true;',
+        'TEMPORARY physical-test mode: station-LAN authentication is bypassed',
+    ):
+        forbid(sec,marker,'temporary no-code authorization bypass')
     forbid(sec,'if (!isAPMode()) return true;','station-LAN blanket auth bypass')
-    forbid(sec,'TEMPORARY physical-test mode: station-LAN authentication is bypassed','legacy no-code implementation')
 
     for marker in ('handlePortalSecurityStatus','handlePortalSecuritySave','/api/portal-security','securityResetPortalPolicy(); // OS12 secure factory default'):
         need(web,marker,'portal security API/reset behavior')

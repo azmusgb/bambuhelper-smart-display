@@ -36,6 +36,9 @@ python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ui_finish.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface_complete.py" --repo "$BUILD"
+# Re-validate authentication after the final portal/control-plane overlay. This
+# catches any later layer that accidentally reintroduces an open-LAN bypass.
+python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
   --repo "$BUILD" \
   --contract "$ROOT/contracts/filament-inventory-device-feed-v1.schema.json"
