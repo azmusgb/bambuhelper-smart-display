@@ -23,10 +23,10 @@ def check(repo: Path) -> None:
     required_hub = (
         '"PRINTER STATUS"',
         '"PRINT JOB"',
-        '"FILAMENT"',
+        '"Filament Inventory"',
         '"ATTENTION"',
-        '"PRINT READINESS"',
-        '"FILAMENT / PLACEMENT"',
+        '"Print Readiness"',
+        '"Loaded Spools"',
         '"Use - / + to change"',
         '"24-Hour Clock"',
         '"CURRENT VERSION"',
