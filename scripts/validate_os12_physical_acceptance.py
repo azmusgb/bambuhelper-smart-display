@@ -28,8 +28,8 @@ def main() -> int:
         for needle in (
             "--expect-source-sha",
             "exactly 40 lowercase hex characters",
-            "protected root is reachable without authentication",
-            "refusing",
+            "assert_code_free_portal",
+            'portalMode"] = "local-code-free"',
             'identity["runningSourceCommit"]',
             "args.expect_source_sha",
         ):
@@ -53,7 +53,7 @@ def main() -> int:
     )
 
     print(
-        "PASS: physical acceptance is fail-closed on authentication and pinned to the exact running source SHA"
+        "PASS: physical acceptance is fail-closed on the code-free same-origin portal contract and pinned to the exact running source SHA"
     )
     return 0
 
