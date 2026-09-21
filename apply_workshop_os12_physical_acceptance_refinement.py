@@ -157,7 +157,7 @@ static void drawWorkshop(bool full) {
 
   hubOs12EvidenceRow(
       readiness,
-      "PRINT READINESS",
+      "Print Readiness",
       "Undetermined",
       "Print requirements or inventory evidence missing",
       C10_MUTED);
