@@ -99,6 +99,39 @@ static void handleWorkshopMediaStatus() {
   sendWorkshopMediaStatus();
 }
 
+static void handleWorkshopMediaSpeakerVolume() {
+  if (!server.hasArg("percent")) {
+    sendWorkshopMediaStatus(400);
+    return;
+  }
+  const int requested = server.arg("percent").toInt();
+  if (requested < 0 || requested > 100) {
+    sendWorkshopMediaStatus(400);
+    return;
+  }
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool changed = media.setVolume((uint8_t)requested);
+  sendWorkshopMediaStatus(changed ? 200 : 409);
+}
+
+static void handleWorkshopMediaSpeakerMute() {
+  if (!server.hasArg("muted")) {
+    sendWorkshopMediaStatus(400);
+    return;
+  }
+  const String raw = server.arg("muted");
+  bool muted = false;
+  if (raw == "1" || raw == "true") muted = true;
+  else if (raw == "0" || raw == "false") muted = false;
+  else {
+    sendWorkshopMediaStatus(400);
+    return;
+  }
+  workshop::media::MediaService& media = workshopMediaService();
+  const bool changed = media.setMuted(muted);
+  sendWorkshopMediaStatus(changed ? 200 : 409);
+}
+
 static void handleWorkshopMediaSpeakerTest() {
   workshop::media::MediaService& media = workshopMediaService();
   const bool started = media.testSpeaker(millis());
@@ -155,7 +188,7 @@ static void handleWorkshopMediaStop() {
 }
 '''
 
-ROUTES = '''  SECURE_GET("/os12/media/status", handleWorkshopMediaStatus);\n  SECURE_POST("/os12/media/speaker-test", handleWorkshopMediaSpeakerTest);\n  SECURE_POST("/os12/media/microphone-sample", handleWorkshopMediaMicrophoneSample);\n  SECURE_POST("/os12/media/record/start", handleWorkshopMediaRecordStart);\n  SECURE_POST("/os12/media/record/stop", handleWorkshopMediaRecordStop);\n  SECURE_POST("/os12/media/record/play", handleWorkshopMediaRecordPlay);\n  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n  SECURE_POST("/os12/media/video/pause", handleWorkshopMediaVideoPause);\n  SECURE_POST("/os12/media/video/resume", handleWorkshopMediaVideoResume);\n  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n'''
+ROUTES = '''  SECURE_GET("/os12/media/status", handleWorkshopMediaStatus);\n  SECURE_POST("/os12/media/volume", handleWorkshopMediaSpeakerVolume);\n  SECURE_POST("/os12/media/mute", handleWorkshopMediaSpeakerMute);\n  SECURE_POST("/os12/media/speaker-test", handleWorkshopMediaSpeakerTest);\n  SECURE_POST("/os12/media/microphone-sample", handleWorkshopMediaMicrophoneSample);\n  SECURE_POST("/os12/media/record/start", handleWorkshopMediaRecordStart);\n  SECURE_POST("/os12/media/record/stop", handleWorkshopMediaRecordStop);\n  SECURE_POST("/os12/media/record/play", handleWorkshopMediaRecordPlay);\n  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n  SECURE_POST("/os12/media/video/pause", handleWorkshopMediaVideoPause);\n  SECURE_POST("/os12/media/video/resume", handleWorkshopMediaVideoResume);\n  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n'''
 
 
 def load(path: Path) -> str:
@@ -192,6 +225,8 @@ def apply(repo: Path) -> None:
 
     for route in (
         '/os12/media/status',
+        '/os12/media/volume',
+        '/os12/media/mute',
         '/os12/media/speaker-test',
         '/os12/media/microphone-sample',
         '/os12/media/record/start',
