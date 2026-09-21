@@ -36,12 +36,17 @@ python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ui_finish.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface_complete.py" --repo "$BUILD"
-# Re-validate authentication after the final portal/control-plane overlay. This
-# catches any later layer that accidentally reintroduces an open-LAN bypass.
+
+# Validate the hardened control plane first, then apply the intentional final
+# production policy: no user-facing device code on the trusted local LAN.
 python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
   --repo "$BUILD" \
   --contract "$ROOT/contracts/filament-inventory-device-feed-v1.schema.json"
+
+python3 "$ROOT/apply_workshop_os12_code_free_portal.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_code_free_portal.py" --repo "$BUILD"
+python3 -m py_compile "$ROOT/scripts/accept_os12_code_free_portal_runtime.py"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
@@ -49,21 +54,21 @@ if [[ "${1:-}" == "--build" ]]; then
   echo "PlatformIO: $PIO_BIN"
   "$PIO_BIN" --version
 
-  echo "=== Build WS350 OS12 portal control-plane v4 candidate ==="
+  echo "=== Build WS350 OS12 code-free local-portal candidate ==="
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
-  test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 v4 image missing' >&2; exit 1; }
+  test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 image missing' >&2; exit 1; }
 
   echo "=== Cross-board compile regression ==="
   (cd "$BUILD" && "$PIO_BIN" run -e jc3248w535)
-  test -s "$BUILD/.pio/build/jc3248w535/firmware.bin" || { echo 'FAIL: cross-board v4 image missing' >&2; exit 1; }
+  test -s "$BUILD/.pio/build/jc3248w535/firmware.bin" || { echo 'FAIL: cross-board image missing' >&2; exit 1; }
 fi
 
 echo "=== OS12 portal control-plane reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
 echo "Root portal IA: Home / Printer / Workshop / More; shared WS350 UI finish applied across roots, child views, controls, tabs, media, telemetry and AMS."
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
-echo "Portal security: persisted requirePortalCode policy; secure default ON; OFF opens read-only LAN browsing only."
-echo "Mutation security: same-origin + authenticated portal session required."
+echo "Portal security: device code disabled by product policy; local portal opens directly on the trusted LAN."
+echo "Mutation security: same-origin enforcement remains mandatory; no user-entered device code or portal session is required."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
 echo "Home/Workshop: Unknown/Undetermined until authoritative profile-scoped inventory/readiness evidence is available."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."
