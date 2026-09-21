@@ -9,6 +9,7 @@ must never be confused with the retired temporary physical-test bypass.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 
@@ -231,17 +232,22 @@ def patch_web_server(repo: Path) -> None:
 def patch_portal_html(repo: Path) -> None:
     path = repo / "include" / "web_pages.h"
     text = load(path)
-    start = text.find('<section class="os12-security-panel"')
-    end_marker = '<section class="os12-integration">'
-    end = text.find(end_marker, start if start >= 0 else 0)
-    if start < 0 or end < 0:
-        raise PatchError("portal security panel markers missing")
 
     replacement = '''<section class="os12-security-panel os12-local-access" aria-labelledby="localAccessTitle">
     <div><small>LOCAL ACCESS</small><h3 id="localAccessTitle">No device code required</h3><p>Workshop OS opens directly on the trusted local network. Mutating requests remain protected by same-origin enforcement.</p></div>
-  </section>
-  '''
-    text = text[:start] + replacement + text[end:]
+  </section>'''
+
+    # Reconstructed web_pages.h may carry additional attributes/spacing from
+    # earlier UI layers, so match the semantic section rather than one literal
+    # opening tag. The integration section is the stable following boundary.
+    pattern = re.compile(
+        r'<section\\b[^>]*class=["\\\'][^"\\\']*\\bos12-security-panel\\b[^"\\\']*["\\\'][^>]*>.*?</section>\\s*(?=<section\\b[^>]*class=["\\\'][^"\\\']*\\bos12-integration\\b)',
+        re.S,
+    )
+    text, count = pattern.subn(replacement + "\\n  ", text, count=1)
+    if count != 1:
+        raise PatchError(f"portal security panel semantic match expected once, found {count}")
+
     save(path, text)
 
 
