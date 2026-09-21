@@ -66,7 +66,7 @@ def main()->int:
     forbid(home,"const bool configured=isAnyPrinterConfigured()","Home normalized state")
 
     workshop=block(hub,"static void drawWorkshop(bool full)")
-    for n in ('"Print Readiness"','"Undetermined"','"Placement evidence unavailable"','"Filament Inventory device feed not authoritative here"'):
+    for n in ('"Print Readiness"','"Undetermined"','"Loaded Spools"','"Canonical placement unknown"'):
         req(workshop,n,"Workshop")
     for n in ("matchSpoolByColor","matchSpoolByMaterial","resolveSpool"): forbid(workshop,n,"Workshop inventory boundary")
 
@@ -90,8 +90,8 @@ def main()->int:
         "static void drawUi13PrinterPower()":('"Printer & Power"','"Fresh printer connection"','"No fresh printer connection"','"Automatic Power Off"'),
         "static void drawUi13PowerOptions()":('"Power Options"','"Unavailable"','"Advanced Setup"'),
         "static void drawUi13AutoOffConfirm()":('"Guarded automation"','"Automatic printer power-off"','"Cancel"','"Enable"'),
-        "static void drawUi13DateTime()":('"Date & Time"','"Time Zone"','"24-Hour Time"','"Date Format"'),
-        "static void drawUi13SoftwareUpdate()":('"Software Update"','"Candidate build · acceptance required"','"Install only exact validated candidate artifacts"'),
+        "static void drawUi13DateTime()":('"Date & Time"','"Time Zone"','"24-Hour Clock"','"Date Format"','"Use - / + to change"'),
+        "static void drawUi13SoftwareUpdate()":('"Software Update"','"CURRENT VERSION"','"Release State"','"Physical acceptance required"','"Update Method"','"Only exact validated artifacts"'),
         "static void drawUi13Diagnostics()":('"Diagnostics"','"Touch"','"Recovery"','"Connectivity is not device-health proof"'),
         "static void drawUi12PortalAccess()":('"Local Portal"','"Authenticated local administration"','securityPortalCode()'),
     }
