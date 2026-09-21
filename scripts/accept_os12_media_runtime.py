@@ -33,9 +33,15 @@ ACTIVE = {
 }
 
 
-def api(client: Client, path: str, *, method: str = "GET") -> dict:
+def api(
+    client: Client,
+    path: str,
+    *,
+    method: str = "GET",
+    form: dict[str, str] | None = None,
+) -> dict:
     headers = {"X-BambuHelper-Client": "1", "Accept": "application/json"}
-    response = client.request(path, method=method, headers=headers, timeout=15.0)
+    response = client.request(path, method=method, form=form, headers=headers, timeout=15.0)
     check(
         response.status in (200, 202, 409),
         f"{method} {path} returned HTTP {response.status}: {response.body[:200]}",
@@ -117,6 +123,30 @@ def meter(level: int, width: int = 30) -> str:
     return "[" + "#" * filled + "-" * (width - filled) + f"] {level:3d}%"
 
 
+def set_output_level(client: Client, percent: int) -> dict:
+    payload = api(
+        client,
+        "/os12/media/volume",
+        method="POST",
+        form={"percent": str(max(0, min(100, int(percent))))},
+    )
+    validate_status(payload)
+    check(payload["_http_status"] == 200, "speaker volume change was refused")
+    return payload
+
+
+def set_output_muted(client: Client, muted: bool) -> dict:
+    payload = api(
+        client,
+        "/os12/media/mute",
+        method="POST",
+        form={"muted": "true" if muted else "false"},
+    )
+    validate_status(payload)
+    check(payload["_http_status"] == 200, "speaker mute change was refused")
+    return payload
+
+
 def diagnostics_line(payload: dict) -> str:
     return (
         f"codecReady={payload.get('audioCodecReady')} "
@@ -135,14 +165,13 @@ def exercise_speaker(client: Client, interactive: bool) -> bool | None:
     check(initial["speakerAvailable"], "--exercise requested but speaker is not available")
     print("\n=== SPEAKER — AUDIBLE TEST ===")
     print(
-        "Listen at the WS350. Three short diagnostic tones will play. "
-        "The test is intentionally repeated so a 180 ms pulse cannot be missed."
+        "Listen at the WS350. The diagnostic temporarily forces speaker output "
+        "to 100% and unmuted, then plays three 1.2-second tones."
     )
     print("PRECHECK " + diagnostics_line(initial))
-    if initial.get("muted"):
-        print("WARNING: runtime reports the speaker MUTED. An inaudible result is expected.")
-    if int(initial.get("volumePercent", 0)) < 30:
-        print("WARNING: runtime reports low speaker volume.")
+    set_output_muted(client, False)
+    boosted = set_output_level(client, 100)
+    print("TEST OUTPUT " + diagnostics_line(boosted))
 
     observed_active = None
     for idx in range(1, 4):
@@ -156,10 +185,8 @@ def exercise_speaker(client: Client, interactive: bool) -> bool | None:
         diag = status(client)
         observed_active = diag
         print(f"TONE {idx}/3  " + diagnostics_line(diag))
-        # Current firmware has a short bounded diagnostic pulse. Wait for Idle
-        # before issuing the next one rather than colliding with Busy.
-        wait_for_session(client, {"Idle"}, 2.0)
-        time.sleep(0.25)
+        wait_for_session(client, {"Idle"}, 3.0)
+        time.sleep(0.35)
 
     print("PASS  speaker diagnostic lifecycle executed three times")
     if not interactive:
@@ -228,9 +255,15 @@ def exercise_microphone(client: Client, interactive: bool) -> tuple[bool | None,
     max_peak = max(live_peaks) if live_peaks else 0
     delta = max_level - baseline_level
 
+    objective = delta >= 15.0 or (baseline_peak > 0 and max_peak >= baseline_peak * 2)
     print(
         f"MIC SUMMARY baseline={baseline_level:.1f}% max={max_level}% delta={delta:.1f}pp "
         f"baselinePeak={baseline_peak} maxPeak={max_peak}"
+    )
+    print(
+        "OBJECTIVE MIC RESPONSE: "
+        + ("STRONG" if objective else "WEAK/INCONCLUSIVE")
+        + " — this is diagnostic evidence, not a substitute for operator confirmation."
     )
     last = status(client)
     print(
@@ -339,9 +372,10 @@ def exercise_video(client: Client, initial: dict, interactive: bool = False) -> 
         " (built-in WS350 demo source must be available)",
     )
     print("STATE PlayingVideo: built-in WS350 demo video started")
+    motion_start = None
     if interactive:
-        print("Look at the WS350: the demo object/progress indicator should be moving.")
-        time.sleep(3.0)
+        time.sleep(1.0)
+        motion_start = ask("Is the demo visibly moving on the WS350 right now?")
     else:
         time.sleep(2.0)
 
@@ -354,9 +388,10 @@ def exercise_video(client: Client, initial: dict, interactive: bool = False) -> 
     check(pause["_http_status"] == 200 and pause["session"] == "Paused",
           f"video pause refused: {pause['error']}")
     print("STATE Paused: video paused")
+    motion_paused = None
     if interactive:
-        print("Confirm visually that motion stops for ~2 seconds...")
-        time.sleep(2.0)
+        time.sleep(0.7)
+        motion_paused = ask("Has the demo motion actually stopped while paused?")
     else:
         time.sleep(0.5)
 
@@ -365,9 +400,10 @@ def exercise_video(client: Client, initial: dict, interactive: bool = False) -> 
     check(resume["_http_status"] == 200 and resume["session"] == "PlayingVideo",
           f"video resume refused: {resume['error']}")
     print("STATE PlayingVideo: video resumed")
+    motion_resumed = None
     if interactive:
-        print("Confirm visually that motion resumes...")
-        time.sleep(2.0)
+        time.sleep(0.7)
+        motion_resumed = ask("Is the demo visibly moving again after resume?")
     else:
         time.sleep(0.5)
 
@@ -379,7 +415,13 @@ def exercise_video(client: Client, initial: dict, interactive: bool = False) -> 
 
     if not interactive:
         return None
-    visible = ask("Did you see clear motion, a visible pause, and motion resume on the WS350?")
+    observed = (motion_start, motion_paused, motion_resumed)
+    if any(v is False for v in observed):
+        visible = False
+    elif any(v is None for v in observed):
+        visible = None
+    else:
+        visible = True
     if visible is False:
         print("PHYSICAL FAIL: video lifecycle ran but visible motion/pause/resume was not confirmed.")
     elif visible is True:
@@ -423,13 +465,27 @@ def run(args: argparse.Namespace) -> int:
         print("\nINTERACTIVE MODE: OFF — runtime lifecycle only")
 
     observations: dict[str, object] = {}
-    if args.exercise:
-        observations.update(exercise_audio(client, initial, interactive))
-    if args.exercise_video:
-        idle = status(client)
-        check(idle["session"] == "Idle",
-              f"video exercise requires Idle media service, got {idle['session']}")
-        observations["videoVisible"] = exercise_video(client, idle, interactive)
+    original_volume = int(initial["volumePercent"])
+    original_muted = bool(initial["muted"])
+    try:
+        if args.exercise:
+            observations.update(exercise_audio(client, initial, interactive))
+        if args.exercise_video:
+            idle = status(client)
+            check(idle["session"] == "Idle",
+                  f"video exercise requires Idle media service, got {idle['session']}")
+            observations["videoVisible"] = exercise_video(client, idle, interactive)
+    finally:
+        if args.exercise:
+            try:
+                set_output_level(client, original_volume)
+                set_output_muted(client, original_muted)
+                print(
+                    f"RESTORED speaker output to {original_volume}% "
+                    f"muted={original_muted}"
+                )
+            except Exception as exc:
+                print(f"WARNING: could not restore speaker output state: {exc}")
 
     final = status(client)
     check(final["session"] == "Idle",
