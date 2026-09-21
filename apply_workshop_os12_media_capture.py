@@ -71,6 +71,8 @@ volatile bool gOs12CaptureKeepAlive = false;
 uint32_t gOs12RecordingDeadlineMs = 0;
 volatile bool gOs12PlaybackActive = false;
 volatile size_t gOs12PlaybackPosition = 0;
+uint32_t gOs12PlaybackGainQ8 = 256U;
+uint16_t gOs12PlaybackSourcePeak = 0U;
 '''
 
 CAPTURE_API = r'''
@@ -96,6 +98,8 @@ void os12FreeRecording() {
   gOs12RecordingActive = false;
   gOs12PlaybackActive = false;
   gOs12PlaybackPosition = 0;
+  gOs12PlaybackGainQ8 = 256U;
+  gOs12PlaybackSourcePeak = 0U;
 }
 
 void os12FinishRecording() {
@@ -188,6 +192,38 @@ bool buzzerBackendMicHasRecording() {
 bool buzzerBackendMicPlaybackBegin() {
   if (gOs12RecordingActive || gOs12CaptureKeepAlive || !buzzerBackendMicHasRecording()) return false;
   if (!ensureAudioRunning()) return false;
+
+  // Recorded microphone PCM can be substantially below full-scale even with the
+  // analog route/gain configured correctly. Normalize only the local playback
+  // copy so authoritative captured samples remain untouched. The gain is derived
+  // from the recording's actual peak and hard-capped to avoid unbounded noise
+  // amplification or clipping.
+  uint16_t peak = 0U;
+  const size_t sampleCount = gOs12RecordingBytes / sizeof(int16_t);
+  const int16_t* samples = reinterpret_cast<const int16_t*>(gOs12RecordingData);
+  for (size_t i = 0; i < sampleCount; ++i) {
+    int32_t value = samples[i];
+    if (value < 0) value = -value;
+    if (value > 32767) value = 32767;
+    if ((uint16_t)value > peak) peak = (uint16_t)value;
+  }
+  gOs12PlaybackSourcePeak = peak;
+
+  constexpr uint32_t kPlaybackTargetPeak = 16000U;
+  constexpr uint32_t kPlaybackMaxGainQ8 = 96U * 256U;
+  uint32_t gainQ8 = 256U;
+  if (peak > 0U && peak < kPlaybackTargetPeak) {
+    gainQ8 = (kPlaybackTargetPeak * 256U) / peak;
+    if (gainQ8 > kPlaybackMaxGainQ8) gainQ8 = kPlaybackMaxGainQ8;
+  }
+  gOs12PlaybackGainQ8 = gainQ8;
+
+  Serial.printf(
+      "OS12 playback normalize: sourcePeak=%u gainQ8=%lu gain=%.2fx\n",
+      (unsigned)gOs12PlaybackSourcePeak,
+      (unsigned long)gOs12PlaybackGainQ8,
+      (double)gOs12PlaybackGainQ8 / 256.0);
+
   gOs12CaptureKeepAlive = true;
   gIdleStartMs = millis();
   buzzerBackendStop();
@@ -249,6 +285,17 @@ def apply(repo: Path) -> None:
       const size_t copyBytes = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
       memset(chunk, 0, sizeof(chunk));
       memcpy(chunk, gOs12RecordingData + gOs12PlaybackPosition, copyBytes);
+
+      // Apply bounded playback-only normalization. The stored recording remains
+      // byte-for-byte unchanged; only the TX chunk is amplified with saturation.
+      const size_t playbackSamples = copyBytes / sizeof(int16_t);
+      for (size_t i = 0; i < playbackSamples; ++i) {
+        int32_t scaled = ((int32_t)chunk[i] * (int32_t)gOs12PlaybackGainQ8) >> 8;
+        if (scaled > 32767) scaled = 32767;
+        if (scaled < -32768) scaled = -32768;
+        chunk[i] = (int16_t)scaled;
+      }
+
       gOs12PlaybackPosition += copyBytes;
       if (gOs12PlaybackPosition >= gOs12RecordingBytes) {
         gOs12PlaybackActive = false;
@@ -306,6 +353,9 @@ def apply(repo: Path) -> None:
         "if (!gOs12CaptureKeepAlive) shutdownAudio();",
         "if (gOs12PlaybackActive) gIdleStartMs = millis();",
         "gOs12PlaybackActive = false;\n        gOs12CaptureKeepAlive = false;",
+        "kPlaybackTargetPeak = 16000U", "kPlaybackMaxGainQ8 = 96U * 256U",
+        "gOs12PlaybackGainQ8", "OS12 playback normalize: sourcePeak=%u",
+        "only the TX chunk is amplified with saturation",
     ):
         if needle not in final_cpp:
             raise PatchError(f"bounded capture implementation missing {needle}")
