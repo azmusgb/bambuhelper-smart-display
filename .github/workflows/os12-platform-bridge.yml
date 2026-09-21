@@ -117,10 +117,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PlatformIO
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare pinned PlatformIO toolchain
         run: |
-          python3 -m pip install --upgrade platformio
-          pio --version
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          "$PIO_BIN" --version
+          "$(dirname "$PIO_BIN")/python" --version
 
       - name: Validate device-native update source contract
         run: python3 scripts/validate_os12_device_update.py --source-root .

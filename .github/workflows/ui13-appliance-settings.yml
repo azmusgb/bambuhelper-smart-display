@@ -15,6 +15,7 @@ on:
       - 'firmware/ui-v11.28-ui13/**'
       - 'assets/v11_25_*.css'
       - 'scripts/capture-ws350-views.zsh'
+      - 'scripts/ensure-platformio.sh'
       - 'scripts/run_rc10_local.sh'
       - 'scripts/run_ui12_local.sh'
       - 'scripts/run_ui13_local.sh'
@@ -61,9 +62,18 @@ jobs:
           python -m py_compile scripts/validate_ui13_appliance_settings.py
           python -m py_compile scripts/validate_ui13_product_finish.py
           bash -n scripts/capture-ws350-views.zsh
+          bash -n scripts/ensure-platformio.sh
           bash -n scripts/run_rc10_local.sh
           bash -n scripts/run_ui12_local.sh
           bash -n scripts/run_ui13_local.sh
+
+      - name: Prepare pinned PlatformIO toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          "$PIO_BIN" --version
+          "$(dirname "$PIO_BIN")/python" --version
 
       - name: Reconstruct, validate, and build UI13
         env:

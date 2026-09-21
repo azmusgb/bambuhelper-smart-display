@@ -12,6 +12,7 @@ on:
       - 'apply_workshop_os12_ux_physical_fit.py'
       - 'apply_workshop_os12_portal_control_plane.py'
       - 'contracts/**'
+      - 'scripts/ensure-platformio.sh'
       - 'scripts/run_os12_ux_local.sh'
       - 'scripts/validate_os12_ux_architecture.py'
       - 'scripts/validate_os12_ux_geometry.py'
@@ -31,6 +32,7 @@ on:
       - 'apply_workshop_os12_ux_physical_fit.py'
       - 'apply_workshop_os12_portal_control_plane.py'
       - 'contracts/**'
+      - 'scripts/ensure-platformio.sh'
       - 'scripts/run_os12_ux_local.sh'
       - 'scripts/validate_os12_ux_architecture.py'
       - 'scripts/validate_os12_ux_geometry.py'
@@ -58,6 +60,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Validate script syntax
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
@@ -74,9 +80,17 @@ jobs:
             scripts/validate_os12_ux_physical_fit.py \
             scripts/validate_os12_portal_control_plane.py
           python3 -m json.tool contracts/filament-inventory-device-feed-v1.schema.json >/dev/null
+          bash -n scripts/ensure-platformio.sh
           bash -n scripts/run_os12_ux_local.sh
           zsh -n scripts/capture-ws350-views.zsh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
+
+      - name: Prepare pinned PlatformIO toolchain
+        run: |
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          "$PIO_BIN" --version
+          "$(dirname "$PIO_BIN")/python" --version
 
       - name: Reconstruct and build exact-head UX candidate
         run: BUILD=/tmp/ws350-os12-ux-build bash scripts/run_os12_ux_local.sh --build
@@ -101,9 +115,9 @@ jobs:
           {
             echo '### WS350 exact-head OS12 control-plane candidate'
             echo
-            echo "- Source SHA: \`$OS12_SOURCE_SHA\`"
-            echo "- Firmware SHA-256: \`$FW_SHA\`"
-            echo "- Firmware bytes: \`$FW_SIZE\`"
+            echo "- Source SHA: `$OS12_SOURCE_SHA`"
+            echo "- Firmware SHA-256: `$FW_SHA`"
+            echo "- Firmware bytes: `$FW_SIZE`"
             echo '- Portal architecture: control-plane-v4'
             echo '- Inventory contract: device-feed/v1'
             echo '- Release state: built/tested in CI only'
