@@ -8,7 +8,6 @@ touch responsiveness remain physical acceptance observations.
 from __future__ import annotations
 
 import argparse
-import getpass
 import json
 import os
 import time
@@ -16,11 +15,8 @@ import time
 from accept_os12_portal_runtime import (
     AcceptanceError,
     Client,
-    assert_login_markup,
+    assert_code_free_portal,
     check,
-    login,
-    normalized_code,
-    protected_root_is_open,
 )
 
 TERMINAL = {"Idle", "Fault"}
@@ -94,15 +90,6 @@ def wait_for_session(client: Client, wanted: set[str], timeout: float) -> dict:
             return payload
         time.sleep(0.10)
     raise AcceptanceError(f"timed out waiting for media session in {sorted(wanted)}")
-
-
-def read_code() -> str:
-    raw = os.environ.get("WORKSHOP_OS_PORTAL_CODE")
-    if not raw:
-        raw = getpass.getpass("Current portal code shown on WS350 System screen: ")
-    code = normalized_code(raw)
-    raw = ""
-    return code
 
 
 def exercise_audio(client: Client, initial: dict) -> None:
@@ -211,15 +198,9 @@ def run(args: argparse.Namespace) -> int:
     check(base_url.startswith(("http://", "https://")),
           "--base-url must start with http:// or https://")
     print(f"Target: {base_url}")
-    assert_login_markup(Client(base_url))
-
     client = Client(base_url)
-    if protected_root_is_open(client):
-        print("DEV OPEN  portal/session code bypass is active for this physical-test build")
-    else:
-        code = read_code()
-        login(client, code, "media acceptance session")
-        code = ""
+    assert_code_free_portal(client)
+    print("PASS  code-free local portal contract")
 
     initial = status(client)
     print(
