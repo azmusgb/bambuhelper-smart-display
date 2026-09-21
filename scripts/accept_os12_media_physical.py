@@ -14,6 +14,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+import re
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -26,6 +27,8 @@ from accept_os12_portal_runtime import (
     login,
     protected_root_is_open,
 )
+HEX40 = re.compile(r"^[0-9a-f]{40}$")
+
 from accept_os12_media_runtime import (
     api,
     read_code,
@@ -271,6 +274,8 @@ def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
     check(base_url.startswith(("http://", "https://")),
           "--base-url must start with http:// or https://")
+    check(HEX40.fullmatch(args.expect_source_sha) is not None,
+          "--expect-source-sha must be exactly 40 lowercase hex characters")
 
     now = datetime.now(timezone.utc)
     stamp = now.strftime("%Y%m%d-%H%M%S")
@@ -280,6 +285,7 @@ def run(args: argparse.Namespace) -> int:
         "kind": "workshop-os12-media-physical-acceptance",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
+        "expectedSourceSha": args.expect_source_sha,
         "runtimeIdentity": None,
         "initialMediaStatus": None,
         "finalMediaStatus": None,
@@ -310,16 +316,24 @@ def run(args: argparse.Namespace) -> int:
     try:
         assert_login_markup(client)
         if protected_root_is_open(client):
-            evidence["portalMode"] = "temporary-open-lan"
-            print("DEV OPEN  portal/session code bypass is active for this physical-test build")
-        else:
-            evidence["portalMode"] = "portal-code"
-            code = read_code()
-            login(client, code, "physical media acceptance session")
-            code = ""
+            evidence["portalMode"] = "insecure-open-lan"
+            raise AcceptanceError(
+                "protected root is reachable without authentication; refusing physical "
+                "acceptance against an obsolete/insecure open-LAN image"
+            )
+        evidence["portalMode"] = "portal-code"
+        code = read_code()
+        login(client, code, "physical media acceptance session")
+        code = ""
 
         identity = update_identity(client)
         evidence["runtimeIdentity"] = identity
+        check(
+            identity["runningSourceCommit"] == args.expect_source_sha,
+            "runtime source SHA does not match --expect-source-sha; refusing to record "
+            "physical acceptance against the wrong firmware candidate",
+        )
+        print(f"PASS  exact runtime source identity: {args.expect_source_sha}")
 
         initial = status(client)
         evidence["initialMediaStatus"] = public_status(initial)
@@ -506,6 +520,11 @@ def main() -> int:
     parser.add_argument(
         "--base-url",
         default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"),
+    )
+    parser.add_argument(
+        "--expect-source-sha",
+        required=True,
+        help="exact 40-character source SHA of the CI physical candidate",
     )
     parser.add_argument(
         "--output",

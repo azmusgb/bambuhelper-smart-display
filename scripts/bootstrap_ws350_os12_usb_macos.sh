@@ -327,7 +327,8 @@ Recovery capture: $BACKUP_DIR
 Next runtime gates once the device is reachable:
   python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --exercise-rate-limit
   python3 scripts/accept_os12_media_runtime.py --base-url "$BASE_URL" --exercise --exercise-video
-  python3 scripts/accept_os12_media_physical.py --base-url "$BASE_URL"
+  python3 scripts/accept_os12_media_physical.py --base-url "$BASE_URL" --expect-source-sha "$HEAD_SHA"
+  python3 scripts/accept_os12_device_ui_physical.py --base-url "$BASE_URL" --expect-source-sha "$HEAD_SHA"
   python3 scripts/accept_os12_update_runtime.py --base-url "$BASE_URL" --channel candidate
 
 Do not call the device accepted/stable yet. Touch/navigation, recovery, printer-control,

@@ -78,13 +78,17 @@ jobs:
       - name: Validate OS12 exact-head merge-gate coverage
         run: python3 scripts/validate_os12_merge_gate.py
 
+      - name: Validate OS12 physical-acceptance provenance
+        run: python3 scripts/validate_os12_physical_acceptance.py
+
       - name: Validate runtime acceptance helper syntax
         run: |
           python3 -m py_compile \
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_update_runtime.py \
             scripts/accept_os12_media_runtime.py \
-            scripts/accept_os12_media_physical.py
+            scripts/accept_os12_media_physical.py \
+            scripts/accept_os12_device_ui_physical.py
 
       - name: Validate OS12 patcher/publication helper syntax
         run: |
@@ -101,6 +105,7 @@ jobs:
             scripts/prepare_os12_device_candidate.py \
             scripts/validate_os12_candidate_publisher.py \
             scripts/validate_os12_merge_gate.py \
+            scripts/validate_os12_physical_acceptance.py \
             scripts/validate_os12_media_hardware.py \
             scripts/validate_os12_media_service.py \
             scripts/validate_os12_media_runtime.py \

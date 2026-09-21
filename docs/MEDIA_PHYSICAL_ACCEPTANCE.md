@@ -45,7 +45,8 @@ Run:
 
 ```bash
 python3 scripts/accept_os12_media_physical.py \
-  --base-url http://10.0.0.124
+  --base-url http://10.0.0.124 \
+  --expect-source-sha <EXACT_CI_SOURCE_SHA>
 ```
 
 The helper drives the media diagnostics and requires explicit operator observations for:
@@ -62,7 +63,7 @@ The helper drives the media diagnostics and requires explicit operator observati
 - LAN reachability after media stop;
 - no watchdog reset or unexpected recovery entry.
 
-The helper writes a timestamped JSON evidence bundle under `~/Downloads` by default. The portal code is never written to the bundle.
+The helper refuses an open-LAN image and requires the running device's exact source SHA to equal `--expect-source-sha` before any physical result can pass. It writes a timestamped JSON evidence bundle under `~/Downloads` by default. The portal code is never written to the bundle.
 
 ## Acceptance rule
 

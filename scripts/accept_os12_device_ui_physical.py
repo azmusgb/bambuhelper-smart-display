@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -105,16 +106,19 @@ def output_path(arg: str|None, stamp: str)->Path:
 def main()->int:
     ap=argparse.ArgumentParser()
     ap.add_argument("--base-url",default=os.environ.get("WORKSHOP_OS_URL","http://10.0.0.124"))
+    ap.add_argument("--expect-source-sha",required=True,help="exact 40-character source SHA of the CI physical candidate")
     ap.add_argument("--output")
     args=ap.parse_args()
     base=args.base_url.rstrip("/")
     check(base.startswith(("http://","https://")),"--base-url must start with http:// or https://")
+    check(HEX40.fullmatch(args.expect_source_sha) is not None,"--expect-source-sha must be exactly 40 lowercase hex characters")
     now=datetime.now(timezone.utc);stamp=now.strftime("%Y%m%d-%H%M%S");dest=output_path(args.output,stamp)
     evidence={
         "schemaVersion":1,
         "kind":"workshop-os12-whole-device-ui-physical-acceptance",
         "recordedAt":now.isoformat(),
         "targetHost":urlparse(base).hostname,
+        "expectedSourceSha":args.expect_source_sha,
         "runtimeIdentity":None,
         "portalMode":"unknown",
         "requiredViews":list(REQUIRED_VIEWS),
@@ -131,13 +135,21 @@ def main()->int:
     client=Client(base)
     try:
         if protected_root_is_open(client):
-            evidence["portalMode"]="temporary-open-lan"
-            print("DEV OPEN  temporary physical-test portal mode detected")
-        else:
-            evidence["portalMode"]="portal-code"
-            code=read_code();login(client,code,"whole-device UI acceptance");code=""
+            evidence["portalMode"]="insecure-open-lan"
+            raise AcceptanceError(
+                "protected root is reachable without authentication; refusing whole-device "
+                "physical acceptance against an obsolete/insecure open-LAN image"
+            )
+        evidence["portalMode"]="portal-code"
+        code=read_code();login(client,code,"whole-device UI acceptance");code=""
 
         identity=update_identity(client);evidence["runtimeIdentity"]=identity
+        check(
+            identity["runningSourceCommit"]==args.expect_source_sha,
+            "runtime source SHA does not match --expect-source-sha; refusing to record "
+            "whole-device physical acceptance against the wrong firmware candidate",
+        )
+        print(f"PASS  exact runtime source identity: {args.expect_source_sha}")
         views=catalog(client);by_id={str(v.get("id","")):v for v in views}
         missing=[v for v in REQUIRED_VIEWS if v not in by_id]
         check(not missing,"required native views missing: "+", ".join(missing))

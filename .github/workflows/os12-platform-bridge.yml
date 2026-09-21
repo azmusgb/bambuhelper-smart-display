@@ -155,7 +155,8 @@ jobs:
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_update_runtime.py \
             scripts/accept_os12_media_runtime.py \
-            scripts/accept_os12_media_physical.py
+            scripts/accept_os12_media_physical.py \
+            scripts/accept_os12_device_ui_physical.py
 
       - name: Validate USB/bootstrap helper syntax
         run: |
