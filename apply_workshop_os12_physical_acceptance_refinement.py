@@ -123,9 +123,9 @@ static void drawHome(bool full) {
 
   hubOs12EvidenceRow(
       inventory,
-      "FILAMENT",
+      "Filament Inventory",
       "Unknown",
-      "Awaiting Filament Inventory evidence",
+      "Awaiting authoritative inventory evidence",
       C10_MUTED);
 
   hubMarkFrameDirty();
@@ -164,9 +164,9 @@ static void drawWorkshop(bool full) {
 
   hubOs12EvidenceRow(
       inventory,
-      "FILAMENT / PLACEMENT",
+      "Loaded Spools",
       "Unknown",
-      "Loaded spools, placement and remaining quantity unavailable",
+      "Canonical placement and remaining quantity unavailable",
       C10_MUTED);
 
   hubMarkFrameDirty();
