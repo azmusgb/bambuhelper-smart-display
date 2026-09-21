@@ -48,10 +48,23 @@ def main() -> int:
     for needle in (
         'PIO_PYTHON="$(dirname "$PIO_BIN")/python"',
         '"$PIO_PYTHON" -m venv "$venv"',
+        "--expect-source-sha",
+        "--expect-firmware-sha256",
+        "local source SHA does not match the exact-head CI candidate",
+        "locally reconstructed firmware does not match the exact-head CI candidate bytes",
+        "PASS: local firmware bytes exactly match the recorded CI candidate SHA-256.",
         "=== Partition-layout gate ===",
         "Cross-line migration must use the approved Full image at flash offset 0x0",
     ):
-        require(bootstrap, needle, "USB bootstrap toolchain/recovery boundary")
+        require(bootstrap, needle, "USB bootstrap toolchain/recovery/artifact boundary")
+
+    for needle in (
+        'if [[ "$FLASH" -eq 1 && -z "$EXPECT_SOURCE_SHA" ]]',
+        'if [[ "$FLASH" -eq 1 && -z "$EXPECT_FIRMWARE_SHA256" ]]',
+        'if [[ "$HEAD_SHA" != "$EXPECT_SOURCE_SHA" ]]',
+        'if [[ "$FIRMWARE_SHA256" != "$EXPECT_FIRMWARE_SHA256" ]]',
+    ):
+        require(bootstrap, needle, "physical flash exact-artifact guard")
 
     for needle in (
         'PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"',
@@ -82,7 +95,10 @@ def main() -> int:
     ):
         forbid(workflow, "python3 -m pip install --upgrade platformio", f"{label} global PlatformIO install")
 
-    print("PASS: Workshop OS build/flash tooling has one pinned PlatformIO authority and rejects known-bad Python 3.13+")
+    print(
+        "PASS: Workshop OS build/flash tooling has one pinned PlatformIO authority, "
+        "rejects known-bad Python 3.13+, and requires exact CI source+firmware identity for physical flash"
+    )
     return 0
 
 

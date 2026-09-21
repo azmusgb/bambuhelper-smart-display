@@ -8,26 +8,38 @@ FLASH=0
 CONFIRM_IDLE=0
 ALLOW_DIRTY=0
 FULL_BACKUP=0
+EXPECT_SOURCE_SHA=""
+EXPECT_FIRMWARE_SHA256=""
 
 usage() {
   cat <<'EOF'
 Usage:
   bash scripts/bootstrap_ws350_os12_usb_macos.sh
-  bash scripts/bootstrap_ws350_os12_usb_macos.sh --flash --confirm-printer-idle
+  bash scripts/bootstrap_ws350_os12_usb_macos.sh \
+    --flash \
+    --confirm-printer-idle \
+    --expect-source-sha <40-hex-source-sha> \
+    --expect-firmware-sha256 <64-hex-ci-firmware-sha256>
 
 Options:
-  --flash                  Perform the guarded USB bootstrap upload after checks.
-  --confirm-printer-idle   Required with --flash. Confirms no printer is preparing,
-                           printing, or paused before the display is rebooted.
-  --full-backup            Read the full 16 MB device flash before upload. Slower.
-  --allow-dirty            Allow building from a dirty local checkout.
-  --base-url URL           Local portal base URL used for the post-flash probe.
-  -h, --help               Show this help.
+  --flash                    Perform the guarded USB bootstrap upload after checks.
+  --confirm-printer-idle     Required with --flash. Confirms no printer is preparing,
+                             printing, or paused before the display is rebooted.
+  --expect-source-sha SHA    Exact CI candidate source SHA. Required with --flash.
+  --expect-firmware-sha256 H Exact CI candidate firmware.bin SHA-256. Required with
+                             --flash. The locally reconstructed bytes must match.
+  --full-backup              Read the full 16 MB device flash before upload. Slower.
+  --allow-dirty              Allow building from a dirty local checkout.
+  --base-url URL             Local portal base URL used for the post-flash probe.
+  -h, --help                 Show this help.
 
 Default mode is non-mutating with respect to device firmware: build the exact local
 OS12 image, identify the attached WS350, back up critical flash metadata, and compare
 the live partition table with the expected Workshop OS 16 MB layout. A partition
 mismatch fails closed; cross-line migration must use the approved Full image at 0x0.
+
+A physical-acceptance flash must also be byte-identical to the recorded exact-head
+CI physical candidate. Source SHA alone is not sufficient release evidence.
 EOF
 }
 
@@ -37,6 +49,16 @@ while (( $# )); do
     --confirm-printer-idle) CONFIRM_IDLE=1 ;;
     --full-backup) FULL_BACKUP=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --expect-source-sha)
+      shift
+      [[ $# -gt 0 ]] || { echo "ERROR: --expect-source-sha requires a value" >&2; exit 64; }
+      EXPECT_SOURCE_SHA="$1"
+      ;;
+    --expect-firmware-sha256)
+      shift
+      [[ $# -gt 0 ]] || { echo "ERROR: --expect-firmware-sha256 requires a value" >&2; exit 64; }
+      EXPECT_FIRMWARE_SHA256="$1"
+      ;;
     --base-url)
       shift
       [[ $# -gt 0 ]] || { echo "ERROR: --base-url requires a value" >&2; exit 64; }
@@ -47,6 +69,23 @@ while (( $# )); do
   esac
   shift
 done
+
+if [[ -n "$EXPECT_SOURCE_SHA" && ! "$EXPECT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "ERROR: --expect-source-sha must be exactly 40 lowercase hex characters." >&2
+  exit 64
+fi
+if [[ -n "$EXPECT_FIRMWARE_SHA256" && ! "$EXPECT_FIRMWARE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "ERROR: --expect-firmware-sha256 must be exactly 64 lowercase hex characters." >&2
+  exit 64
+fi
+if [[ "$FLASH" -eq 1 && -z "$EXPECT_SOURCE_SHA" ]]; then
+  echo "ERROR: --flash requires --expect-source-sha from the exact-head CI candidate." >&2
+  exit 64
+fi
+if [[ "$FLASH" -eq 1 && -z "$EXPECT_FIRMWARE_SHA256" ]]; then
+  echo "ERROR: --flash requires --expect-firmware-sha256 from the exact-head CI candidate." >&2
+  exit 64
+fi
 
 cd "$ROOT"
 [[ -d .git ]] || { echo "ERROR: not inside the Workshop OS git repository" >&2; exit 2; }
@@ -65,12 +104,26 @@ fi
 
 HEAD_SHA="$(git rev-parse HEAD)"
 BRANCH="$(git branch --show-current || true)"
+if [[ -n "$EXPECT_SOURCE_SHA" && "$HEAD_SHA" != "$EXPECT_SOURCE_SHA" ]]; then
+  echo "STOP: local source SHA does not match the exact-head CI candidate." >&2
+  echo "Local:    $HEAD_SHA" >&2
+  echo "Expected: $EXPECT_SOURCE_SHA" >&2
+  echo "No build, device read, or firmware upload was attempted." >&2
+  exit 22
+fi
+
 printf '=== Workshop OS 12 WS350 USB bootstrap ===\n'
 printf 'Repository: %s\n' "$ROOT"
 printf 'Branch: %s\n' "${BRANCH:-detached}"
 printf 'Source SHA: %s\n' "$HEAD_SHA"
 printf 'Build root: %s\n' "$BUILD"
 printf 'Portal probe: %s\n' "$BASE_URL"
+if [[ -n "$EXPECT_SOURCE_SHA" ]]; then
+  printf 'Expected CI source SHA: %s\n' "$EXPECT_SOURCE_SHA"
+fi
+if [[ -n "$EXPECT_FIRMWARE_SHA256" ]]; then
+  printf 'Expected CI firmware SHA-256: %s\n' "$EXPECT_FIRMWARE_SHA256"
+fi
 
 PIO_BIN="$(ROOT="$ROOT" bash scripts/ensure-platformio.sh)"
 [[ -x "$PIO_BIN" ]] || { echo "ERROR: PlatformIO setup did not return an executable" >&2; exit 4; }
@@ -86,10 +139,22 @@ FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
 PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"
 [[ -s "$FIRMWARE" ]] || { echo "ERROR: expected WS350 firmware.bin missing" >&2; exit 4; }
 [[ -s "$PARTITIONS" ]] || { echo "ERROR: expected WS350 partitions.bin missing" >&2; exit 4; }
+FIRMWARE_SHA256="$(shasum -a 256 "$FIRMWARE" | awk '{print $1}')"
 
 printf '\n=== Candidate identity ===\n'
 ls -lh "$FIRMWARE" "$PARTITIONS"
-shasum -a 256 "$FIRMWARE"
+printf '%s  %s\n' "$FIRMWARE_SHA256" "$FIRMWARE"
+
+if [[ -n "$EXPECT_FIRMWARE_SHA256" ]]; then
+  if [[ "$FIRMWARE_SHA256" != "$EXPECT_FIRMWARE_SHA256" ]]; then
+    echo "STOP: locally reconstructed firmware does not match the exact-head CI candidate bytes." >&2
+    echo "Local:    $FIRMWARE_SHA256" >&2
+    echo "Expected: $EXPECT_FIRMWARE_SHA256" >&2
+    echo "No device read or firmware upload was attempted." >&2
+    exit 23
+  fi
+  echo "PASS: local firmware bytes exactly match the recorded CI candidate SHA-256."
+fi
 
 PORT="$(PIO_BIN="$PIO_BIN" bash scripts/waveshare-usb.sh port)"
 printf '\n=== Attached device ===\n'
@@ -162,11 +227,15 @@ fi
 {
   echo "captured_at=$STAMP"
   echo "source_sha=$HEAD_SHA"
+  echo "expected_source_sha=${EXPECT_SOURCE_SHA:-not-supplied}"
+  echo "source_sha_verified=$([[ -n "$EXPECT_SOURCE_SHA" && "$HEAD_SHA" == "$EXPECT_SOURCE_SHA" ]] && echo true || echo false)"
   echo "branch=${BRANCH:-detached}"
   echo "usb_port=$PORT"
   echo "build_root=$BUILD"
   echo "firmware=$FIRMWARE"
-  echo "firmware_sha256=$(shasum -a 256 "$FIRMWARE" | awk '{print $1}')"
+  echo "firmware_sha256=$FIRMWARE_SHA256"
+  echo "expected_firmware_sha256=${EXPECT_FIRMWARE_SHA256:-not-supplied}"
+  echo "firmware_sha256_verified=$([[ -n "$EXPECT_FIRMWARE_SHA256" && "$FIRMWARE_SHA256" == "$EXPECT_FIRMWARE_SHA256" ]] && echo true || echo false)"
   echo "partition_sha256=$(shasum -a 256 "$BACKUP_DIR/partition-table.bin" | awk '{print $1}')"
   echo "expected_partition_sha256=$(shasum -a 256 "$PARTITIONS" | awk '{print $1}')"
 } > "$BACKUP_DIR/BOOTSTRAP-INFO.txt"
@@ -191,8 +260,15 @@ if [[ "$FLASH" -ne 1 ]]; then
 PRE-FLASH CHECKS: PASS
 No firmware was changed.
 
-To install this exact reconstructed OS12 UX/control-plane image after confirming the Bambu printer is idle:
-  bash scripts/bootstrap_ws350_os12_usb_macos.sh --flash --confirm-printer-idle
+For a physical-acceptance flash, rerun only after exact-head CI is green and use
+the CI-recorded source SHA + firmware SHA-256:
+
+  bash scripts/bootstrap_ws350_os12_usb_macos.sh \
+    --full-backup \
+    --flash \
+    --confirm-printer-idle \
+    --expect-source-sha <EXACT_HEAD_SHA> \
+    --expect-firmware-sha256 <CI_FIRMWARE_SHA256>
 EOF
   exit 0
 fi
@@ -204,7 +280,10 @@ if [[ "$CONFIRM_IDLE" -ne 1 ]]; then
 fi
 
 printf '\n=== Guarded USB bootstrap upload ===\n'
-echo "The partition layout matched exactly; uploading the exact reconstructed OS12 UX/control-plane candidate with the ws_lcd_350 PlatformIO target."
+echo "Source identity: VERIFIED against exact-head CI expectation."
+echo "Firmware bytes: VERIFIED against exact-head CI SHA-256."
+echo "Partition layout: VERIFIED against the attached WS350."
+echo "Uploading the byte-identical reconstructed OS12 UX/control-plane candidate with the ws_lcd_350 PlatformIO target."
 echo "NVS is not erased. Critical pre-flash recovery data is already captured."
 (
   cd "$BUILD"
@@ -240,7 +319,9 @@ cat <<EOF
 
 USB BOOTSTRAP COMPLETE
 Source SHA: $HEAD_SHA
-Firmware SHA-256: $(shasum -a 256 "$FIRMWARE" | awk '{print $1}')
+Firmware SHA-256: $FIRMWARE_SHA256
+CI source identity verified: YES
+CI firmware identity verified: YES
 Recovery capture: $BACKUP_DIR
 
 Next runtime gates once the device is reachable:
