@@ -176,12 +176,19 @@ uint16_t buzzerBackendAudioCurrentGain();
 """
     es = once(es, mic_meter_old, mic_meter_new, "ES8311 raw microphone diagnostics")
 
-    media = once(
-        media,
-        "  speakerTestEndsAtMs_ = nowMs + 180U;\n",
-        "  speakerTestEndsAtMs_ = nowMs + 750U;\n",
-        "physical speaker diagnostic duration",
-    )
+    speaker_duration_target = "  speakerTestEndsAtMs_ = nowMs + 1200U;\n"
+    if speaker_duration_target not in media:
+        legacy_durations = (
+            "  speakerTestEndsAtMs_ = nowMs + 180U;\n",
+            "  speakerTestEndsAtMs_ = nowMs + 750U;\n",
+        )
+        matches = [anchor for anchor in legacy_durations if anchor in media]
+        if len(matches) != 1:
+            raise PatchError(
+                "physical speaker diagnostic duration: expected current 1200 ms "
+                "contract or exactly one supported legacy anchor"
+            )
+        media = media.replace(matches[0], speaker_duration_target, 1)
 
     diagnostics_impl = r'''
 bool buzzerBackendCodecReady() { return gCodecReady; }
