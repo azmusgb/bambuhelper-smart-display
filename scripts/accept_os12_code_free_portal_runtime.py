@@ -35,7 +35,7 @@ class Client:
         handlers = [] if follow_redirects else [NoRedirect()]
         self.opener = urllib.request.build_opener(*handlers)
 
-    def request(self, path: str, *, method: str = "GET", headers: dict[str, str] | None = None, form: dict[str, str] | None = None) -> Response:
+    def request(self, path: str, *, method: str = "GET", headers: dict[str, str] | None = None, form: dict[str, str] | None = None, timeout: float = 10.0) -> Response:
         url = urllib.parse.urljoin(self.base_url + "/", path.lstrip("/"))
         req_headers = {"User-Agent": "WorkshopOS-CodeFree-Acceptance/1", "Accept": "*/*"}
         if headers:
@@ -46,7 +46,7 @@ class Client:
             req_headers["Content-Type"] = "application/x-www-form-urlencoded"
         req = urllib.request.Request(url, data=data, method=method, headers=req_headers)
         try:
-            with self.opener.open(req, timeout=10) as resp:
+            with self.opener.open(req, timeout=timeout) as resp:
                 return Response(resp.status, resp.read().decode("utf-8", "replace"), resp.headers, resp.geturl())
         except urllib.error.HTTPError as exc:
             return Response(exc.code, exc.read().decode("utf-8", "replace"), exc.headers, exc.geturl())
@@ -57,6 +57,37 @@ class Client:
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise AcceptanceError(message)
+
+
+
+def assert_code_free_portal(client: Client) -> None:
+    root = client.request("/")
+    check(root.status == 200, f"GET / returned HTTP {root.status}")
+    check("/login" not in urllib.parse.urlparse(root.final_url).path,
+          "root unexpectedly redirected to /login")
+
+    login = Client(client.base_url, follow_redirects=False).request("/login")
+    check(login.status in (302, 303, 307, 308),
+          f"GET /login returned HTTP {login.status}, expected redirect")
+    location = login.headers.get("Location") if login.headers else None
+    check(location == "/", f"/login did not redirect to / (Location={location!r})")
+    check("Portal code" not in login.body and "name='code'" not in login.body,
+          "device-code prompt leaked from /login")
+
+    status = client.request("/api/portal-security", headers={"Accept": "application/json"})
+    check(status.status == 200, f"GET /api/portal-security returned HTTP {status.status}")
+    try:
+        policy = json.loads(status.body)
+    except Exception as exc:
+        raise AcceptanceError("portal security status is not valid JSON") from exc
+    check(policy.get("requirePortalCode") is False, "requirePortalCode is not false")
+    check(policy.get("deviceCodeEnabled") is False, "deviceCodeEnabled is not false")
+    check(policy.get("authMode") == "local-code-free",
+          f"unexpected authMode: {policy.get('authMode')!r}")
+    check(policy.get("mutationsRequireSession") is False,
+          "mutationsRequireSession is not false")
+    check(policy.get("sameOriginProtection") is True,
+          "sameOriginProtection is not true")
 
 
 def run(args: argparse.Namespace) -> int:
