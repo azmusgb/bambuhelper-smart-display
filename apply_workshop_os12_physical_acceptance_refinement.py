@@ -166,7 +166,7 @@ static void drawWorkshop(bool full) {
       inventory,
       "Loaded Spools",
       "Unknown",
-      "Canonical placement and remaining quantity unavailable",
+      "Canonical placement unknown",
       C10_MUTED);
 
   hubMarkFrameDirty();
