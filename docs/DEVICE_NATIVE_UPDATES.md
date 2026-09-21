@@ -92,7 +92,11 @@ After the bootstrap installation and reboot, future ordinary candidates can be c
 
 ## Preparing a candidate
 
-The build pipeline creates an exact-head WS350 **CI artifact** with SHA-256 and build metadata, but intentionally does not publish it into `releases/device-update.json` automatically.
+There is exactly one flashable CI physical-candidate authority: **Workshop OS 12 UX Architecture** (`.github/workflows/os12-ux-architecture.yml`). Its `os12-ux-ws350-<sourceSha>` artifact contains `firmware.bin`, `candidate.json`, and `SHA256SUMS.txt`.
+
+The lower-level **Workshop OS 12 Platform Bridge** workflow is regression/build evidence only. Its output may have a different firmware hash because the UX/control-plane layers are applied later. It intentionally does **not** upload a `.bin` file and must never be used as a physical-acceptance or release candidate.
+
+The build pipeline creates the exact-head WS350 **UX physical-candidate CI artifact** with SHA-256 and build metadata, but intentionally does not publish it into `releases/device-update.json` automatically.
 
 For a reviewed publication change, use `scripts/prepare_os12_device_candidate.py` against the exact `ws_lcd_350` PlatformIO `firmware.bin`. The helper:
 

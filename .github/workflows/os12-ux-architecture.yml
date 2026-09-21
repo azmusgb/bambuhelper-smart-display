@@ -108,7 +108,7 @@ jobs:
           FW_SHA="$(sha256sum "$OUT/firmware.bin" | awk '{print $1}')"
           FW_SIZE="$(stat -c '%s' "$OUT/firmware.bin")"
           printf '%s  %s\n' "$FW_SHA" firmware.bin > "$OUT/SHA256SUMS.txt"
-          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "portalArchitecture": "control-plane-v4",\n  "inventoryContract": "device-feed/v1",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
+          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "artifactRole": "physical-acceptance-candidate",\n  "candidateAuthority": "os12-ux-architecture",\n  "portalArchitecture": "control-plane-v4",\n  "inventoryContract": "device-feed/v1",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
             "$OS12_RELEASE_VERSION" "$OS12_SOURCE_SHA" "$FW_SHA" "$FW_SIZE" > "$OUT/candidate.json"
           echo "firmware_sha256=$FW_SHA" >> "$GITHUB_OUTPUT"
           echo "firmware_size=$FW_SIZE" >> "$GITHUB_OUTPUT"
@@ -118,6 +118,8 @@ jobs:
             echo "- Source SHA: `$OS12_SOURCE_SHA`"
             echo "- Firmware SHA-256: `$FW_SHA`"
             echo "- Firmware bytes: `$FW_SIZE`"
+            echo '- Artifact role: physical-acceptance-candidate'
+            echo '- Candidate authority: os12-ux-architecture'
             echo '- Portal architecture: control-plane-v4'
             echo '- Inventory contract: device-feed/v1'
             echo '- Release state: built/tested in CI only'
@@ -137,7 +139,7 @@ jobs:
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
+          echo 'This workflow is the sole CI authority for the flashable WS350 OS12 physical-acceptance candidate and proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
           echo 'Inventory facts remain authoritative only when supplied by the profile-scoped Filament Inventory device-feed contract.'
           echo 'Do not integrate this candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'

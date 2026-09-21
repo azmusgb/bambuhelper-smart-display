@@ -96,9 +96,33 @@ def main() -> int:
     ):
         forbid(workflow, "python3 -m pip install --upgrade platformio", f"{label} global PlatformIO install")
 
+    for needle in (
+        "artifact_role=platform-regression-evidence",
+        "physical_candidate=false",
+        "flashable_artifact_published=false",
+        "physical_candidate_authority=.github/workflows/os12-ux-architecture.yml",
+        "name: workshop-os12-platform-regression-evidence-",
+    ):
+        require(platform_workflow, needle, "OS12 platform workflow artifact role")
+    for needle in (
+        "name: workshop-os12-ws350-ota-",
+        'cp "$SOURCE" "$OUT/$NAME"',
+        "artifact_type=OTA/application image",
+    ):
+        forbid(platform_workflow, needle, "parallel flashable platform artifact")
+
+    for needle in (
+        '"artifactRole": "physical-acceptance-candidate"',
+        '"candidateAuthority": "os12-ux-architecture"',
+        "name: os12-ux-ws350-",
+        'cp "$SRC" "$OUT/firmware.bin"',
+    ):
+        require(ux_workflow, needle, "OS12 UX physical candidate authority")
+
     print(
         "PASS: Workshop OS build/flash tooling has one pinned PlatformIO authority, "
-        "rejects known-bad Python 3.13+, and requires exact CI source+firmware identity for physical flash"
+        "rejects known-bad Python 3.13+, requires exact CI source+firmware identity for physical flash, "
+        "and keeps the OS12 UX workflow as the sole flashable physical-candidate authority"
     )
     return 0
 

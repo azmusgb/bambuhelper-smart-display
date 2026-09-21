@@ -154,31 +154,32 @@ jobs:
           bash -n scripts/waveshare-usb.sh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
 
-      - name: Package exact-head WS350 OTA candidate
+      - name: Record intermediate platform-regression build identity
         run: |
           set -euo pipefail
           BUILD=/tmp/ws350-os12-platform-build
           SOURCE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
           test -s "$SOURCE"
 
-          OUT=/tmp/workshop-os12-ws350-ota
+          OUT=/tmp/workshop-os12-platform-regression-evidence
           rm -rf "$OUT"
           mkdir -p "$OUT"
-          NAME="Workshop-OS-${OS12_RELEASE_VERSION}-WS350-${OS12_SOURCE_SHA}.bin"
-          cp "$SOURCE" "$OUT/$NAME"
-          (
-            cd "$OUT"
-            sha256sum "$NAME" > SHA256SUMS.txt
-          )
+          FW_SHA="$(sha256sum "$SOURCE" | awk '{print $1}')"
+          FW_SIZE="$(stat -c '%s' "$SOURCE")"
 
           {
-            echo "release_state=built-tested-candidate-only"
+            echo "release_state=intermediate-regression-built-tested-ci-only"
             echo "release_version=${OS12_RELEASE_VERSION}"
             echo "repository=${GITHUB_REPOSITORY}"
             echo "source_sha=${OS12_SOURCE_SHA}"
             echo "workflow_run=${GITHUB_RUN_ID}"
             echo "board=ws_lcd_350"
-            echo "artifact_type=OTA/application image"
+            echo "artifact_role=platform-regression-evidence"
+            echo "physical_candidate=false"
+            echo "flashable_artifact_published=false"
+            echo "physical_candidate_authority=.github/workflows/os12-ux-architecture.yml"
+            echo "intermediate_firmware_sha256=$FW_SHA"
+            echo "intermediate_firmware_size=$FW_SIZE"
             echo "full_image=false"
             echo "device_native_update_service=true"
             echo "media_service=true"
@@ -197,23 +198,23 @@ jobs:
               "$BUILD/include/smart_home_build.h" || true
           } > "$OUT/BUILD-INFO.txt"
 
-          cat "$OUT/SHA256SUMS.txt"
           cat "$OUT/BUILD-INFO.txt"
 
-      - name: Upload exact-head WS350 OTA candidate
+      - name: Upload platform-regression evidence
         uses: actions/upload-artifact@v4
         with:
-          name: workshop-os12-ws350-ota-${{ env.OS12_SOURCE_SHA }}
-          path: /tmp/workshop-os12-ws350-ota/
+          name: workshop-os12-platform-regression-evidence-${{ env.OS12_SOURCE_SHA }}
+          path: /tmp/workshop-os12-platform-regression-evidence/
           if-no-files-found: error
           retention-days: 14
 
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves buildability and publishes a CI candidate artifact only.'
+          echo 'This workflow proves the intermediate platform reconstruction/build only and publishes metadata evidence, not a flashable firmware candidate.'
           echo 'Media speaker/microphone/recording capability is not physically accepted by this workflow.'
           echo 'WS350 analog microphone signal-path hardening is implemented/tested but requires physical acceptance.'
           echo 'WS350-owned demo video and read-only printer camera telemetry are implemented/built/tested; physical video acceptance is not established by CI.'
-          echo 'It does not publish the artifact into the device discovery manifest.'
+          echo 'The OS12 UX Architecture workflow is the sole CI authority for the flashable physical-acceptance candidate.'
+          echo 'This workflow does not upload firmware.bin and does not publish anything into the device discovery manifest.'
           echo 'It does not establish runtime, physical, accepted, or stable state.'
