@@ -25,6 +25,7 @@ python3 "$ROOT/apply_workshop_os12_ux_physical_fit.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_ui_finish.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_product_surface.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_product_surface_complete.py" --repo "$BUILD" --apply
+python3 "$ROOT/apply_workshop_os12_physical_acceptance_refinement.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_portal_control_plane.py" --repo "$BUILD" --apply
 # The device-feed transport is installed by the platform stage. Its browser
 # controls are applied only after the OS12 portal owns the integration surface.
@@ -36,6 +37,7 @@ python3 "$ROOT/scripts/validate_os12_ux_physical_fit.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_ui_finish.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface_complete.py" --repo "$BUILD"
+python3 "$ROOT/scripts/validate_os12_physical_acceptance_refinement.py" --repo "$BUILD"
 
 # Validate the hardened control plane first, then apply the intentional final
 # production policy: no user-facing device code on the trusted local LAN.
