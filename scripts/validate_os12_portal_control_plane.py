@@ -70,6 +70,7 @@ def main() -> int:
     need(sec,'if (cookieMatches(server)) return true;','mutation session gate')
 
     need(sec,'RC6 secure physical acceptance forbids WORKSHOP_OS_TEMP_NO_CODE_LAN','legacy bypass fail-closed guard')
+    forbid(sec,'kTemporaryNoCodeLan','temporary no-code LAN bypass')
     forbid(sec,'if (!isAPMode()) return true;','station-LAN blanket auth bypass')
     forbid(sec,'TEMPORARY physical-test mode: station-LAN authentication is bypassed','legacy no-code implementation')
 
