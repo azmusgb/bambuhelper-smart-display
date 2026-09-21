@@ -27,6 +27,8 @@ from accept_os12_media_physical import (
 )
 from accept_os12_portal_runtime import assert_code_free_portal
 
+HEX40 = re.compile(r"^[0-9a-f]{40}$")
+
 REQUIRED_VIEWS = (
     "home",
     "printer",
