@@ -97,9 +97,13 @@ static void hubOs12EvidenceRow(const HubRect& r,const char* title,const char* va
   const int16_t inset=OS12V_INSET;
   const int16_t dotReserve=(vc!=OS12V_MUTED)?28:8;
   const int16_t textW=r.w-inset*2-dotReserve;
+  const bool compact=r.h<64;
+  const uint8_t valueFont=compact?FONT_SMALL:FONT_BODY;
+  const int16_t valueY=r.y+(compact?22:25);
+  const int16_t detailBottom=r.y+r.h-(compact?5:7);
   uiDrawFit(title,r.x+inset,r.y+6,textW,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
-  uiDrawFit(value,r.x+inset,r.y+25,textW,FONT_BODY,TL_DATUM,vc,OS12V_SURFACE);
-  uiDrawFit(detail,r.x+inset,r.y+r.h-7,textW,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+  uiDrawFit(value,r.x+inset,valueY,textW,valueFont,TL_DATUM,vc,OS12V_SURFACE);
+  uiDrawFit(detail,r.x+inset,detailBottom,textW,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE);
 
   if(vc!=OS12V_MUTED)tft.fillCircle(r.x+r.w-17,r.y+17,4,vc);
 }
