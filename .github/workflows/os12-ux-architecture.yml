@@ -105,6 +105,7 @@ jobs:
           zsh -n scripts/capture-ws350-views.zsh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
           bash -n scripts/flash_os12_ci_candidate_macos.sh
+          bash -n scripts/install_accept_os12_candidate_macos.sh
 
       - name: Prepare pinned PlatformIO toolchain
         run: |
