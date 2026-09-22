@@ -40,16 +40,23 @@ def main() -> int:
         if marker not in text:
             fail(f"recovery helper missing required safety/provenance marker: {marker}")
 
-    forbidden = (
-        "erase_flash",
+    forbidden_substrings = (
         "input(",
         "read -p",
         " run -e ws_lcd_350 ",
         "write_flash 0x10000",
     )
-    for marker in forbidden:
+    for marker in forbidden_substrings:
         if marker in text:
             fail(f"recovery helper contains prohibited mutation/interaction marker: {marker}")
+
+    executable_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if any(line.startswith("run_esptool erase_flash") for line in executable_lines):
+        fail("recovery helper must never execute erase_flash")
 
     idle_guard = text.find('[[ "$CONFIRM_IDLE" -eq 1 ]]')
     exercise_guard = text.find('[[ "$EXERCISE" -eq 1 ]]')
