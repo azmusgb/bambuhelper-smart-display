@@ -11,10 +11,10 @@ Workshop OS deliberately keeps accepted source, merged-but-unaccepted source, st
 | Surface | Current state | Meaning |
 | --- | --- | --- |
 | accepted source baseline | **Workshop OS v11.22 Display Expert RC1** | Last physically accepted source baseline; remains authoritative for accepted/stable state. |
-| `main` | **Workshop OS 12.0.0 Consolidated Candidate — merged, physical acceptance pending** | PR #122 merged as the documented merged-but-unaccepted exception. Exact candidate CI/install/unattended acceptance passed; accepted/stable promotion has not occurred. |
-| active candidate | **None** | There is no open source candidate PR after PR #122 merged. |
-| tested OS12 candidate | **5d3b039c6e3c760a3387b3b139a0757d45323ad9** | Exact firmware source installed on the WS350; unattended whole-device acceptance passed before merge. |
-| main merge commit | **6b4cb4afee05e9c23bbcd3fac84fc11e329118b4** | Merge commit preserving the tested candidate as a parent. |
+| `main` | **Workshop OS 12.0.0 Post-Capture UI Hardening Candidate — merged, physical acceptance pending** | PR #128 merged the post-capture UI hardening after exact-head CI. The exact CI candidate was then installed on the WS350, exact runtime identity was verified, unattended whole-device acceptance passed, and a fresh 15-view 480×320 capture passed; sensory physical acceptance and accepted/stable promotion remain pending. |
+| active candidate | **None** | There is no open firmware source candidate PR; PR #129 only records current acceptance evidence and release metadata. |
+| tested OS12 candidate | **f1cd6cf2385de1b41900f1c216e10c197f907e3c** | Exact CI firmware source installed on the WS350; exact runtime identity and unattended whole-device acceptance passed. |
+| main merge commit | **10a154875d0b669671520eba3f69139c76a2833b** | PR #128 merge commit; its Git tree matches the exact tested candidate tree. |
 | static installer | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative downloadable Full + OTA channel; intentionally not promoted by the source merge. |
 | static rollback | **Smart Home v7.2** | Known static rollback pair retained for recovery. |
 | published device OTA candidate | **Workshop OS v11.26 UI11 Cupertino** | Existing published, unaccepted OTA candidate in `releases/device-update.json`; unchanged by PR #122. |

@@ -24,9 +24,12 @@ The script:
   3. requires local git HEAD to match the artifact source SHA;
   4. invokes the canonical guarded macOS physical-candidate installer;
   5. verifies post-reboot runningSourceCommit;
-  6. runs unattended whole-device acceptance against that exact installed SHA.
+  6. runs unattended whole-device acceptance against that exact installed SHA;
+  7. captures all 15 required native 480x320 views without prompts;
+  8. validates the machine-produced evidence bundle for one exact candidate.
 
 It does not locally rebuild firmware and does not weaken physical/recovery gates.
+Sensory observations remain separate because they cannot be established honestly by automation.
 EOF
 }
 
@@ -109,19 +112,45 @@ if [[ "$RUNNING_SHA" != "$SOURCE_SHA" ]]; then
 fi
 echo "PASS: runningSourceCommit=$RUNNING_SHA"
 
+STAMP="$(date +%Y%m%d-%H%M%S)"
+EVIDENCE_DIR="${WS350_ACCEPTANCE_EVIDENCE_DIR:-$HOME/Downloads/workshop-os12-auto-acceptance-$STAMP}"
+mkdir -p "$EVIDENCE_DIR"
+
 echo
 echo "=== Unattended whole-device acceptance ==="
 python3 scripts/accept_os12_unattended.py \
   --base-url "$BASE_URL" \
-  --expect-source-sha "$SOURCE_SHA"
+  --expect-source-sha "$SOURCE_SHA" \
+  --output "$EVIDENCE_DIR/unattended.json"
+
+echo
+echo "=== Unattended 15-view framebuffer capture ==="
+python3 scripts/capture_os12_views_unattended.py \
+  --base-url "$BASE_URL" \
+  --expect-source-sha "$SOURCE_SHA" \
+  --output-dir "$EVIDENCE_DIR/view-capture"
+
+echo
+echo "=== Automatic evidence-bundle validation ==="
+python3 scripts/validate_os12_automatic_candidate.py \
+  --unattended "$EVIDENCE_DIR/unattended.json" \
+  --capture-manifest "$EVIDENCE_DIR/view-capture/manifest.json" \
+  --expect-source-sha "$SOURCE_SHA" \
+  --expect-firmware-sha256 "$FIRMWARE_SHA" \
+  --output "$EVIDENCE_DIR/automatic-validation.json"
 
 cat <<EOF
 
-OS12 EXACT-CANDIDATE INSTALL + UNATTENDED ACCEPTANCE COMPLETE
+OS12 EXACT-CANDIDATE INSTALL + AUTOMATIC VALIDATION COMPLETE
 Source SHA: $SOURCE_SHA
 Firmware SHA-256: $FIRMWARE_SHA
+Evidence bundle: $EVIDENCE_DIR
 
-This proves guarded exact-candidate installation plus unattended objective acceptance.
-It does not convert LCD appearance, finger-touch comfort, acoustic quality, or
-recovery/rollback into automated physical truth.
+Automatic machine-verifiable validation: PASS
+Sensory physical acceptance: PENDING
+
+The automatic path now includes exact runtime identity, whole-device unattended
+acceptance, all 15 native 480x320 framebuffer captures, and cross-evidence
+consistency validation. It does not fabricate LCD appearance, finger-touch feel,
+speaker quality, microphone intelligibility, or recovery/rollback evidence.
 EOF
