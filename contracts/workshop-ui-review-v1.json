@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "workshop-ui-review-v1",
+  "appliesTo": [
+    "ws350-touch-ui",
+    "local-portal",
+    "device-control-surfaces"
+  ],
+  "reviewLayers": [
+    {
+      "id": "artifact",
+      "requiredChecks": [
+        "valid-markup",
+        "fail-safe-initial-state",
+        "accessible-navigation",
+        "focus-management",
+        "loading-empty-error-states",
+        "reduced-motion"
+      ]
+    },
+    {
+      "id": "control-plane",
+      "requiredChecks": [
+        "authenticated-mutations",
+        "freshness-before-command",
+        "command-eligibility",
+        "destructive-action-classification",
+        "capability-gating",
+        "double-submit-prevention"
+      ]
+    },
+    {
+      "id": "recovery",
+      "requiredChecks": [
+        "ota-structure-validation",
+        "board-compatibility-validation",
+        "artifact-size-and-sha256-verification",
+        "rollback-or-recovery-path",
+        "interrupted-update-behavior",
+        "network-recovery"
+      ]
+    },
+    {
+      "id": "architecture",
+      "requiredChecks": [
+        "workshop-os-is-firmware-authority",
+        "filament-inventory-is-inventory-authority",
+        "no-inferred-ams-placement",
+        "unknown-remains-unknown",
+        "least-authority-device-credential",
+        "capabilities-not-model-string-feature-gates"
+      ]
+    },
+    {
+      "id": "acceptance",
+      "requiredChecks": [
+        "exact-source-sha",
+        "test-evidence",
+        "runtime-evidence",
+        "physical-evidence",
+        "artifact-identity",
+        "no-state-promotion-without-evidence"
+      ]
+    }
+  ],
+  "telemetryStates": [
+    "Fresh",
+    "Stale",
+    "Unavailable",
+    "Connecting",
+    "CommandChannelUnavailable",
+    "InvalidForCurrentState"
+  ],
+  "actionClasses": [
+    "ordinary",
+    "guarded",
+    "destructive",
+    "recovery-impacting"
+  ],
+  "operationStates": [
+    "Idle",
+    "Pending",
+    "Success",
+    "RecoverableError",
+    "FatalError"
+  ],
+  "acceptanceStates": [
+    "implemented",
+    "built",
+    "tested",
+    "runtime-validated",
+    "production-validated",
+    "physically-validated",
+    "accepted",
+    "stable"
+  ],
+  "priorityOrder": [
+    "fail-safe-markup",
+    "control-semantics",
+    "accessibility-architecture",
+    "privileged-api-hardening",
+    "recovery-and-ota",
+    "maintainability",
+    "polish"
+  ],
+  "capabilityPolicy": {
+    "deviceIdentityMayResolveCapabilities": true,
+    "modelStringMayDirectlyGateFeatures": false,
+    "unknownCapabilitiesFailClosed": true
+  },
+  "routingPolicy": {
+    "hashRoutingRequiredOnWs350": false,
+    "predictableBackRequired": true,
+    "safeWorkspacePersistencePreferred": true
+  }
+}

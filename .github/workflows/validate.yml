@@ -32,9 +32,108 @@ jobs:
       - name: Validate Workshop Companion protocol
         run: python3 scripts/validate_companion_protocol.py
 
+      - name: Validate Workshop UI review contract
+        run: python3 scripts/validate_workshop_ui_review_contract.py
+
+      - name: Validate Workshop OS build toolchain authority
+        run: python3 scripts/validate_platformio_toolchain.py
+
+      - name: Validate Workshop OS 12 device contract
+        run: python3 scripts/validate_os12_device_contract.py
+
+      - name: Validate Filament Inventory device-feed v1 contract
+        run: python3 scripts/validate_filament_inventory_device_feed.py
+
+      - name: Validate Workshop OS 12 platform bridge
+        run: python3 scripts/validate_os12_platform_bridge.py
+
+      - name: Validate OS12 inventory service source
+        run: |
+          python3 -m py_compile apply_workshop_os12_inventory_service.py scripts/validate_os12_inventory_service.py
+
+      - name: Validate Workshop OS 12 media service
+        run: python3 scripts/validate_os12_media_service.py
+
+      - name: Validate Workshop OS 12 UI state reads
+        run: python3 scripts/validate_os12_ui_state_reads.py
+
+      - name: Validate Workshop OS 12 system state reads
+        run: python3 scripts/validate_os12_system_state_reads.py
+
+      - name: Validate Workshop OS 12 non-destructive controls
+        run: python3 scripts/validate_os12_non_destructive_controls.py
+
+      - name: Validate Workshop OS 12 guarded Stop
+        run: python3 scripts/validate_os12_guarded_stop.py
+
+      - name: Validate Workshop OS 12 portal login hardening
+        run: python3 scripts/validate_os12_portal_login.py
+
+      - name: Validate Workshop OS 12 device-native updates
+        run: python3 scripts/validate_os12_device_update.py --source-root .
+
+      - name: Validate OS12 candidate publication safety
+        run: python3 scripts/validate_os12_candidate_publisher.py
+
+      - name: Validate OS12 exact-head merge-gate coverage
+        run: python3 scripts/validate_os12_merge_gate.py
+
+      - name: Validate OS12 physical-acceptance provenance
+        run: python3 scripts/validate_os12_physical_acceptance.py
+
+      - name: Validate runtime acceptance helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/accept_os12_portal_runtime.py \
+            scripts/accept_os12_update_runtime.py \
+            scripts/accept_os12_media_runtime.py \
+            scripts/accept_os12_media_physical.py \
+            scripts/accept_os12_device_ui_physical.py
+
+      - name: Validate OS12 patcher/publication helper syntax
+        run: |
+          python3 -m py_compile \
+            apply_workshop_os12_device_update.py \
+            apply_workshop_os12_inventory_service.py \
+            apply_workshop_os12_release_identity.py \
+            apply_workshop_os12_media_hardware.py \
+            apply_workshop_os12_media_runtime.py \
+            apply_workshop_os12_media_ui.py \
+            apply_workshop_os12_media_api.py \
+            scripts/validate_os12_device_update.py \
+            scripts/validate_os12_inventory_service.py \
+            scripts/prepare_os12_device_candidate.py \
+            scripts/validate_os12_candidate_publisher.py \
+            scripts/validate_os12_merge_gate.py \
+            scripts/validate_os12_physical_acceptance.py \
+            scripts/validate_os12_media_hardware.py \
+            scripts/validate_os12_media_service.py \
+            scripts/validate_os12_media_runtime.py \
+            scripts/validate_os12_media_ui.py \
+            scripts/validate_os12_media_api.py \
+            scripts/validate_filament_inventory_device_feed.py \
+            scripts/validate_workshop_ui_review_contract.py \
+            scripts/validate_platformio_toolchain.py
+
+      - name: Compile Workshop OS 12 platform contracts
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/workshop-os12-tests
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+            tests/workshop_os12_state_smoke.cpp \
+            -o /tmp/workshop-os12-tests/state-smoke
+          /tmp/workshop-os12-tests/state-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
+            tests/workshop_os12_inventory_projection_smoke.cpp \
+            -o /tmp/workshop-os12-tests/inventory-projection-smoke
+          /tmp/workshop-os12-tests/inventory-projection-smoke
+
       - name: Validate shell helpers
         run: |
+          bash -n scripts/ensure-platformio.sh
           bash -n scripts/waveshare-usb.sh
+          bash -n scripts/run_os12_platform_local.sh
+          bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
 
       - name: Check ignored build output
         run: |

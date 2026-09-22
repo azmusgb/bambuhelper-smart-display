@@ -1,0 +1,606 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://filamentinventory.local/contracts/device-feed-v1.schema.json",
+  "title": "Filament Inventory Device Feed v1",
+  "description": "Versioned, profile-scoped, redacted projection owned by Filament Inventory and consumed by Workshop OS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "scope",
+    "freshness",
+    "inventory",
+    "readiness",
+    "unknowns",
+    "attention"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "const": "profile"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceUpdatedAt",
+        "ageSeconds",
+        "stale"
+      ],
+      "properties": {
+        "sourceUpdatedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ageSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "stale": {
+          "type": "boolean"
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "spools"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "spools": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "spoolId",
+              "material",
+              "stockState",
+              "color",
+              "quantity",
+              "placement"
+            ],
+            "properties": {
+              "spoolId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "material": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64
+              },
+              "quantity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "evidenceId",
+                  "remainingGrams",
+                  "method",
+                  "source",
+                  "grossGrams",
+                  "tareGrams",
+                  "observedAt",
+                  "staleAfter",
+                  "confidence",
+                  "status",
+                  "evidenceCount",
+                  "conflict",
+                  "conflictEvidenceIds",
+                  "verificationRequired"
+                ],
+                "properties": {
+                  "evidenceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "remainingGrams": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "method": {
+                    "enum": [
+                      "Measured",
+                      "CalculatedFromMeasured",
+                      "PrinterEstimatedUsage",
+                      "VisualEstimate",
+                      "ImportedEstimate",
+                      "Unknown"
+                    ]
+                  },
+                  "source": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "grossGrams": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "tareGrams": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "observedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "staleAfter": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "confidence": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 32
+                  },
+                  "status": {
+                    "enum": [
+                      "Current",
+                      "Stale",
+                      "Conflict",
+                      "InvalidLineage",
+                      "Unknown"
+                    ]
+                  },
+                  "evidenceCount": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "conflict": {
+                    "type": "boolean"
+                  },
+                  "conflictEvidenceIds": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "verificationRequired": {
+                    "type": "boolean"
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "Current"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "remainingGrams": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "method": {
+                          "enum": [
+                            "Measured",
+                            "CalculatedFromMeasured",
+                            "PrinterEstimatedUsage",
+                            "VisualEstimate",
+                            "ImportedEstimate"
+                          ]
+                        },
+                        "verificationRequired": {
+                          "const": false
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "Unknown"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "remainingGrams": {
+                          "type": "null"
+                        },
+                        "method": {
+                          "enum": [
+                            "VisualEstimate",
+                            "Unknown"
+                          ]
+                        },
+                        "verificationRequired": {
+                          "const": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "Stale",
+                            "Conflict",
+                            "InvalidLineage"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "verificationRequired": {
+                          "const": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "Conflict"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "conflict": {
+                          "const": true
+                        },
+                        "conflictEvidenceIds": {
+                          "minItems": 2
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "placement": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "state",
+                  "printerId",
+                  "feederId",
+                  "slot",
+                  "external",
+                  "observedAt",
+                  "source",
+                  "verificationRequired"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "Current",
+                      "Stale",
+                      "Conflict",
+                      "Unknown"
+                    ]
+                  },
+                  "state": {
+                    "enum": [
+                      "Stored",
+                      "Loaded",
+                      "Unknown"
+                    ]
+                  },
+                  "printerId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "feederId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "slot": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "external": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "observedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "source": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 128
+                  },
+                  "verificationRequired": {
+                    "type": "boolean"
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "Current"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "verificationRequired": {
+                          "const": false
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "Stale",
+                            "Conflict",
+                            "Unknown"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "verificationRequired": {
+                          "const": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "state": {
+                          "const": "Stored"
+                        }
+                      },
+                      "required": [
+                        "state"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "printerId": {
+                          "type": "null"
+                        },
+                        "feederId": {
+                          "type": "null"
+                        },
+                        "slot": {
+                          "type": "null"
+                        },
+                        "external": {
+                          "const": false
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "state": {
+                          "const": "Unknown"
+                        }
+                      },
+                      "required": [
+                        "state"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "printerId": {
+                          "type": "null"
+                        },
+                        "feederId": {
+                          "type": "null"
+                        },
+                        "slot": {
+                          "type": "null"
+                        },
+                        "external": {
+                          "type": "null"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "stockState": {
+                "enum": [
+                  "Available",
+                  "Low",
+                  "Empty",
+                  "Unknown"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "reason",
+        "requiredGrams"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "Ready",
+            "ReadyWithSubstitute",
+            "NeedsLoad",
+            "NeedsDry",
+            "InsufficientQuantity",
+            "EvidenceStale",
+            "Undetermined"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "requiredGrams": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "attention": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "message"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "spoolId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    }
+  }
+}
