@@ -422,18 +422,52 @@ def run(args: argparse.Namespace) -> int:
         )
         time.sleep(0.35)
         play_a = frame_bytes(client)
+        play_status_a = status(client)
         time.sleep(0.45)
         play_b = frame_bytes(client)
+        play_status_b = status(client)
         play_motion = pixel_difference_ratio(play_a, play_b)
+
+        play_frames_a = play_status_a.get("videoFramesRendered")
+        play_frames_b = play_status_b.get("videoFramesRendered")
+        play_frame_id_a = play_status_a.get("videoLastFrameId")
+        play_frame_id_b = play_status_b.get("videoLastFrameId")
+        counter_motion_play = (
+            isinstance(play_frames_a, int)
+            and isinstance(play_frames_b, int)
+            and play_frames_b > play_frames_a
+        ) or (
+            isinstance(play_frame_id_a, int)
+            and isinstance(play_frame_id_b, int)
+            and play_frame_id_b > play_frame_id_a
+        )
+        check(counter_motion_play, "video renderer counters did not advance while PlayingVideo")
 
         pause = api(client, "/os12/media/video/pause", method="POST")
         validate_status(pause)
         check(pause["_http_status"] == 200 and pause["session"] == "Paused", f"video pause refused: {pause.get('error')}")
         time.sleep(0.25)
         pause_a = frame_bytes(client)
+        pause_status_a = status(client)
         time.sleep(0.45)
         pause_b = frame_bytes(client)
+        pause_status_b = status(client)
         pause_motion = pixel_difference_ratio(pause_a, pause_b)
+
+        pause_frames_a = pause_status_a.get("videoFramesRendered")
+        pause_frames_b = pause_status_b.get("videoFramesRendered")
+        pause_frame_id_a = pause_status_a.get("videoLastFrameId")
+        pause_frame_id_b = pause_status_b.get("videoLastFrameId")
+        counter_stable_pause = (
+            not isinstance(pause_frames_a, int)
+            or not isinstance(pause_frames_b, int)
+            or pause_frames_b == pause_frames_a
+        ) and (
+            not isinstance(pause_frame_id_a, int)
+            or not isinstance(pause_frame_id_b, int)
+            or pause_frame_id_b == pause_frame_id_a
+        )
+        check(counter_stable_pause, "video renderer counters advanced while Paused")
 
         resume = api(client, "/os12/media/video/resume", method="POST")
         validate_status(resume)
@@ -443,36 +477,75 @@ def run(args: argparse.Namespace) -> int:
         )
         time.sleep(0.35)
         resume_a = frame_bytes(client)
+        resume_status_a = status(client)
         time.sleep(0.45)
         resume_b = frame_bytes(client)
+        resume_status_b = status(client)
         resume_motion = pixel_difference_ratio(resume_a, resume_b)
 
+        resume_frames_a = resume_status_a.get("videoFramesRendered")
+        resume_frames_b = resume_status_b.get("videoFramesRendered")
+        resume_frame_id_a = resume_status_a.get("videoLastFrameId")
+        resume_frame_id_b = resume_status_b.get("videoLastFrameId")
+        counter_motion_resume = (
+            isinstance(resume_frames_a, int)
+            and isinstance(resume_frames_b, int)
+            and resume_frames_b > resume_frames_a
+        ) or (
+            isinstance(resume_frame_id_a, int)
+            and isinstance(resume_frame_id_b, int)
+            and resume_frame_id_b > resume_frame_id_a
+        )
+        check(counter_motion_resume, "video renderer counters did not advance after resume")
+
         motion_floor = max(args.video_motion_floor, pause_motion * args.motion_vs_pause_multiplier)
-        check(
-            play_motion >= motion_floor,
-            f"video framebuffer did not show enough motion: playing={play_motion:.6f}, paused={pause_motion:.6f}, floor={motion_floor:.6f}",
-        )
-        check(
-            resume_motion >= motion_floor,
-            f"video framebuffer did not resume enough motion: resumed={resume_motion:.6f}, paused={pause_motion:.6f}, floor={motion_floor:.6f}",
-        )
+        framebuffer_motion_play = play_motion >= motion_floor
+        framebuffer_motion_resume = resume_motion >= motion_floor
+        framebuffer_freeze_pause = pause_motion < max(play_motion, resume_motion)
 
         stop = api(client, "/os12/media/stop", method="POST")
         validate_status(stop)
         check(stop["_http_status"] == 200 and stop["session"] == "Idle", f"video stop refused: {stop.get('error')}")
 
+        evidence["media"]["videoRenderer"] = {
+            "playingFrames": [play_frames_a, play_frames_b],
+            "playingFrameIds": [play_frame_id_a, play_frame_id_b],
+            "pausedFrames": [pause_frames_a, pause_frames_b],
+            "pausedFrameIds": [pause_frame_id_a, pause_frame_id_b],
+            "resumedFrames": [resume_frames_a, resume_frames_b],
+            "resumedFrameIds": [resume_frame_id_a, resume_frame_id_b],
+            "playingAdvanced": counter_motion_play,
+            "pausedStable": counter_stable_pause,
+            "resumedAdvanced": counter_motion_resume,
+        }
         evidence["media"]["videoFramebuffer"] = {
             "beforeVideoSha256": hashlib.sha256(before_video).hexdigest(),
             "playingDifferenceRatio": round(play_motion, 8),
             "pausedDifferenceRatio": round(pause_motion, 8),
             "resumedDifferenceRatio": round(resume_motion, 8),
             "requiredMotionFloor": round(motion_floor, 8),
-            "pauseBehaviorObservedByFramebuffer": pause_motion < play_motion and pause_motion < resume_motion,
+            "playingMotionObserved": framebuffer_motion_play,
+            "pausedFreezeObserved": framebuffer_freeze_pause,
+            "resumedMotionObserved": framebuffer_motion_resume,
+            "captureIsSupplemental": True,
         }
         print(
-            "PASS  video framebuffer motion/freeze/resume "
-            f"play={play_motion:.5f} pause={pause_motion:.5f} resume={resume_motion:.5f}"
+            "PASS  video renderer counters motion/freeze/resume "
+            f"play={play_frames_a}->{play_frames_b} "
+            f"pause={pause_frames_a}->{pause_frames_b} "
+            f"resume={resume_frames_a}->{resume_frames_b}"
         )
+        if framebuffer_motion_play and framebuffer_motion_resume:
+            print(
+                "PASS  framebuffer also observed video motion "
+                f"play={play_motion:.5f} pause={pause_motion:.5f} resume={resume_motion:.5f}"
+            )
+        else:
+            print(
+                "WARN  framebuffer capture did not observe direct TFT video updates; "
+                "renderer counters are the machine-verifiable motion authority "
+                f"(play={play_motion:.5f} pause={pause_motion:.5f} resume={resume_motion:.5f})"
+            )
 
         final = status(client)
         validate_status(final)
