@@ -6,20 +6,20 @@ Workshop OS owns the WS350 firmware, touchscreen UX, printer/device controls, ha
 
 ## Current release state
 
-Workshop OS deliberately keeps source acceptance, static distribution, device OTA publication, and hardware candidates separate. A green build is not physical acceptance, and physical acceptance is not automatically stable promotion.
+Workshop OS deliberately keeps accepted source, merged-but-unaccepted source, static distribution, device OTA publication, and hardware candidates separate. A green build is not physical acceptance, and physical acceptance is not automatically stable promotion.
 
 | Surface | Current state | Meaning |
 | --- | --- | --- |
-| accepted source baseline | **Workshop OS v11.22 Display Expert RC1** | Physically accepted on a real WS350 on 2026-09-04. |
-| `main` | **v11.22 accepted source** | Current accepted source authority until a later hardware candidate passes physical acceptance and promotion. |
-| static installer | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative downloadable Full + OTA channel. |
+| accepted source baseline | **Workshop OS v11.22 Display Expert RC1** | Last physically accepted source baseline; remains authoritative for accepted/stable state. |
+| `main` | **Workshop OS 12.0.0 Consolidated Candidate — merged, physical acceptance pending** | PR #122 merged as the documented merged-but-unaccepted exception. Exact candidate CI/install/unattended acceptance passed; accepted/stable promotion has not occurred. |
+| active candidate | **None** | There is no open source candidate PR after PR #122 merged. |
+| tested OS12 candidate | **5d3b039c6e3c760a3387b3b139a0757d45323ad9** | Exact firmware source installed on the WS350; unattended whole-device acceptance passed before merge. |
+| main merge commit | **6b4cb4afee05e9c23bbcd3fac84fc11e329118b4** | Merge commit preserving the tested candidate as a parent. |
+| static installer | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative downloadable Full + OTA channel; intentionally not promoted by the source merge. |
 | static rollback | **Smart Home v7.2** | Known static rollback pair retained for recovery. |
-| published device OTA candidate | **Workshop OS v11.26 UI11 Cupertino** | Published, unaccepted OTA candidate in `releases/device-update.json`; Full image is not published for this candidate. |
-| source acceptance candidate | **Workshop OS v11.28 UI13 Appliance Settings — PR #109** | Direct-to-`main` source candidate; exact-head CI and physical WS350 acceptance are required. |
-| OS12 platform candidate | **Workshop OS 12.0.0 — PR #118** | Built/tested platform foundation with hardened portal, normalized control/state boundary, guarded Mac USB bootstrap, and device-native GitHub OTA; runtime/physical acceptance still required. |
-| physical acceptance record | **Issue #111** | Canonical checklist and evidence record for the exact frozen UI13 artifact. |
+| published device OTA candidate | **Workshop OS v11.26 UI11 Cupertino** | Existing published, unaccepted OTA candidate in `releases/device-update.json`; unchanged by PR #122. |
 
-`releases/current.json` is authoritative for accepted source, the active source candidate, `main` state, and the conservative static download channel. `releases/device-update.json` is the versioned device-facing OTA discovery contract and may intentionally lag or differ from the active source candidate until publication is deliberately advanced.
+`releases/current.json` is authoritative for the accepted source baseline, any active source candidate, merged-but-unaccepted `main` state, and the conservative static download channel. `releases/device-update.json` is the versioned device-facing OTA discovery contract and is not automatically advanced by a source merge.
 
 ## Workshop OS v11.28 UI13 Appliance Settings
 
@@ -53,9 +53,9 @@ Routine landscape controls expose at least a **48 px** touch target. Back and pr
 
 Copy is written as product language rather than implementation language. The touchscreen presents what a person needs while standing at the printer; advanced administration stays in the authenticated Local Portal.
 
-## Workshop OS 12 platform candidate
+## Workshop OS 12 merged source state
 
-PR **#118** layers the long-lived OS12 platform architecture over frozen UI13 without redefining UI13 acceptance. The current slice includes normalized state/service contracts, physical Light/Pause/Resume/guarded Stop through the OS12 facade, hardened local portal authentication, exact release/source identity, and device-native GitHub OTA.
+PR **#122** is now merged to `main` as Workshop OS 12.0.0 under the documented merged-but-unaccepted exception. The exact tested firmware source remains `5d3b039c6e3c760a3387b3b139a0757d45323ad9`; merge commit `6b4cb4afee05e9c23bbcd3fac84fc11e329118b4` preserves that tested candidate as a parent. Exact-head CI, guarded installation, runtime identity, 15/15 unattended native-view acceptance, and unattended media lifecycle checks passed. This is **not** yet an accepted/stable promotion; the prior physically accepted v11.22 source remains the accepted baseline until promotion evidence is explicitly recorded.
 
 For a WS350 that is physically attached to a Mac but still running pre-OS12 firmware, the guarded bootstrap helper is:
 
