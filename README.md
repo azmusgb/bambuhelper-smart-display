@@ -98,24 +98,15 @@ OS12 implements device-native GitHub OTA through one normalized `UpdateService`:
 
 Firmware is reconstructed deterministically from pinned upstream BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the versioned Workshop OS patch stack.
 
-Hardware-facing source changes are expected to pass:
+Hardware-facing source changes are expected to pass repository validation, deterministic reconstruction, product/interaction contracts, native/shared-target builds, release coordination, exact artifact identity capture, and applicable unattended runtime/hardware checks before merge. Routine merge testing must not depend on operator `y/n/u` prompts.
 
-1. repository validation;
-2. accepted static-installer integrity validation;
-3. deterministic Workshop OS reconstruction;
-4. product/interaction contract validation;
-5. native `ws_lcd_350` build;
-6. shared `jc3248w535` regression build;
-7. release/merge gate coordination;
-8. exact artifact identity capture;
-9. runtime validation on the physical device;
-10. physical WS350 acceptance.
+A merge is not an acceptance promotion. Sensory evidence that cannot be established honestly by automation—real LCD appearance, finger touch feel/responsiveness, speaker quality, microphone intelligibility—and recovery/rollback exercises when due remain explicit physical-promotion evidence.
 
 The lifecycle is kept explicit:
 
-`implemented → built → tested → runtime validated → production validated → physically validated → accepted → stable`
+`implemented → built → tested → runtime validated → merged-unaccepted → physically validated → accepted → stable`
 
-CI cannot skip the physical stages.
+Automation may establish objective machine-observable behavior, but it must not manufacture sensory physical truth.
 
 ## Repository map
 
@@ -141,8 +132,8 @@ CI cannot skip the physical stages.
 
 ## Repository discipline
 
-- `main` remains the accepted source authority until promotion is earned.
-- Hardware-facing changes require exact-head CI and physical acceptance before source promotion.
+- The last physically accepted source remains authoritative for accepted/stable state until a later source earns promotion.
+- Hardware-facing changes require exact-head CI and applicable unattended objective hardware evidence before merge; a merged candidate remains `merged-unaccepted` until physical promotion evidence is completed.
 - Generated PlatformIO output, local capture bundles, credentials, and ad-hoc reports stay out of source control.
 - Physical framebuffer evidence redacts the Local Portal credential before retained output is written.
 - Printer configuration/settings exports are excluded from credential-safe capture bundles.
