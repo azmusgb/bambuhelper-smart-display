@@ -76,6 +76,46 @@ static void hubV1125Card(const HubRect& r,uint16_t rail=UI_BORDER_2,bool strong=
 }
 '''
 
+
+MODE_TABS=r'''
+static void hubV1125ModeTabs() {
+  static const char* labels[3]={"Status","AMS","Control"};
+  const int16_t W=tft.width();HubRect group=hr(OS12V_INSET,44,W-OS12V_INSET*2,48);
+  tft.fillRoundRect(group.x,group.y,group.w,group.h,12,OS12V_SURFACE);tft.drawRoundRect(group.x,group.y,group.w,group.h,12,OS12V_LINE);
+  for(uint8_t i=0;i<3;i++){
+    HubRect r=hubV1125PrinterModeRect(i);const bool selected=g_printerMode==i;
+    const uint16_t bg=selected?OS12V_SURFACE2:OS12V_SURFACE;
+    if(selected){tft.fillRoundRect(r.x+4,r.y+4,r.w-8,r.h-8,9,bg);tft.fillRoundRect(r.x+r.w/2-18,r.y+r.h-6,36,3,2,OS12V_ACCENT);}
+    uiDrawFit(labels[i],r.x+r.w/2,r.y+r.h/2-1,r.w-18,FONT_BODY,MC_DATUM,selected?OS12V_TEXT:OS12V_MUTED,bg);
+  }
+}
+'''
+
+TELEMETRY=r'''
+static void hubV1125TelemetryColumn(const HubRect& r,const BambuState& s) {
+  hubV1125Card(r,s.connected?OS12V_GREEN:OS12V_AMBER,false);
+  uiDrawFit("TEMPERATURES",r.x+14,r.y+11,r.w-28,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+  const char* labels[3]={"Nozzle","Bed","Chamber"};char vals[3][14];
+  if(s.connected){snprintf(vals[0],sizeof(vals[0]),"%.0f C",s.nozzleTemp);snprintf(vals[1],sizeof(vals[1]),"%.0f C",s.bedTemp);snprintf(vals[2],sizeof(vals[2]),"%.0f C",s.chamberTemp);}
+  else for(uint8_t i=0;i<3;i++)strlcpy(vals[i],"--",sizeof(vals[i]));
+  const int16_t top=r.y+34,row=(r.h-38)/3;
+  for(uint8_t i=0;i<3;i++){if(i)tft.drawFastHLine(r.x+14,top+i*row,r.w-28,OS12V_LINE);uiDrawFit(labels[i],r.x+14,top+i*row+row/2,r.w/2-18,FONT_SMALL,ML_DATUM,OS12V_MUTED,OS12V_SURFACE);uiDrawFit(vals[i],r.x+r.w-14,top+i*row+row/2,r.w/2-18,FONT_BODY,MR_DATUM,s.connected?OS12V_TEXT:OS12V_MUTED,OS12V_SURFACE);}
+}
+'''
+
+AMS_SLOT=r'''
+static void hubV1125AmsSlot(const HubRect& r,const AmsTray* tr,bool active,uint8_t index) {
+  const bool present=tr&&tr->present;const uint16_t bg=active?OS12V_SURFACE2:OS12V_SURFACE;
+  tft.fillRoundRect(r.x,r.y,r.w,r.h,12,bg);tft.drawRoundRect(r.x,r.y,r.w,r.h,12,active?OS12V_ACCENT:OS12V_LINE);
+  if(active)tft.fillCircle(r.x+r.w-15,r.y+15,4,OS12V_ACCENT);
+  char slot[8];snprintf(slot,sizeof(slot),"%u",(unsigned)(index+1));char remain[12];
+  if(present&&tr->remain>=0)snprintf(remain,sizeof(remain),"%d%%",(int)tr->remain);else strlcpy(remain,"--",sizeof(remain));
+  uiDrawFit(slot,r.x+12,r.y+10,28,FONT_BODY,TL_DATUM,active?OS12V_ACCENT:OS12V_MUTED,bg);uiDrawFit(remain,r.x+r.w-12,r.y+10,42,FONT_SMALL,TR_DATUM,present?OS12V_TEXT:OS12V_MUTED,bg);
+  uint16_t filament=present?tr->colorRgb565:OS12V_LINE;if(present&&filament==0)filament=0x1082;uiSpoolScaled(r.x+r.w/2,r.y+49,filament,active,present?tr->remain:-1,13);
+  uiDrawFit(present&&tr->type[0]?tr->type:"Empty",r.x+r.w/2,r.y+74,r.w-18,FONT_BODY,TC_DATUM,present?OS12V_TEXT:OS12V_MUTED,bg);
+}
+'''
+
 HEADER=r'''
 static void drawHeader(const char* title,const char* right,uint8_t page) {
   const int16_t W=tft.width(),HH=hubHeaderH();
@@ -377,6 +417,9 @@ def apply(repo: Path) -> None:
 
     for sig,repl in (
         ("static void hubV1125Card(",CARD),
+        ("static void hubV1125ModeTabs()",MODE_TABS),
+        ("static void hubV1125TelemetryColumn(",TELEMETRY),
+        ("static void hubV1125AmsSlot(",AMS_SLOT),
         ("static void drawHeader(",HEADER),
         ("static void uiBottomNav(",BOTTOM),
         ("static void hubV1125Action(",ACTION),
@@ -413,6 +456,7 @@ def apply(repo: Path) -> None:
         "static void drawUi13AutoOffConfirm()",
         "static void drawUi13Diagnostics()",
         "static void drawUi12PortalAccess()",
+        "static void hubOs12StatePanel(",
     ):
         text=remap_visual_tokens(text,sig)
 
