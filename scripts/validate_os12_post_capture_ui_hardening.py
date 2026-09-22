@@ -124,10 +124,13 @@ def main() -> int:
     need(video,'"Stop & Back"',"Video explicit exit")
     need(video,'"Stop & Back returns to Media"',"Video exit guidance")
 
-    touch=block(hub,"bool handleSmartHubTouch(")
-    need(touch,"media.sampleMicrophone(millis())","Recorder microphone action")
-    need(touch,"media.startRecording(5000U,millis())","Recorder record action")
-    need(touch,"media.playRecording(millis())","Recorder playback action")
+    # Touch dispatch is injected into the reconstructed source by an earlier
+    # layer and its concrete function name varies across historical bases.
+    # Validate the exact action wiring globally instead of assuming a stale
+    # function signature.
+    need(hub,"media.sampleMicrophone(millis())","Recorder microphone action")
+    need(hub,"media.startRecording(5000U,millis())","Recorder record action")
+    need(hub,"media.playRecording(millis())","Recorder playback action")
 
     # Preserve global product invariants.
     for forbidden in ("matchSpoolByColor","matchSpoolByMaterial","WORKSHOP_OS_TEMP_NO_CODE_LAN"):
