@@ -54,8 +54,8 @@ static constexpr uint16_t OS12V_SURFACE2 = 0x18E3; // selected/interactive
 static constexpr uint16_t OS12V_LINE     = 0x2945; // quiet separator
 static constexpr uint16_t OS12V_TEXT     = 0xF7BE; // warm white
 static constexpr uint16_t OS12V_MUTED    = 0x9D33; // cool gray
-static constexpr uint16_t OS12V_ACCENT   = 0x05F6; // cyan/teal
-static constexpr uint16_t OS12V_BLUE     = 0x3CFF; // information
+static constexpr uint16_t OS12V_ACCENT   = 0xFBC0; // primary / selected orange
+static constexpr uint16_t OS12V_BLUE     = 0x061F; // information cyan
 static constexpr uint16_t OS12V_GREEN    = 0x36EA; // ready
 static constexpr uint16_t OS12V_AMBER    = 0xFDC0; // attention
 static constexpr uint16_t OS12V_RED      = 0xF3AA; // destructive/fault
@@ -80,13 +80,17 @@ static void hubV1125Card(const HubRect& r,uint16_t rail=UI_BORDER_2,bool strong=
 MODE_TABS=r'''
 static void hubV1125ModeTabs() {
   static const char* labels[3]={"Status","AMS","Control"};
-  const int16_t W=tft.width();HubRect group=hr(OS12V_INSET,44,W-OS12V_INSET*2,48);
-  tft.fillRoundRect(group.x,group.y,group.w,group.h,12,OS12V_SURFACE);tft.drawRoundRect(group.x,group.y,group.w,group.h,12,OS12V_LINE);
+  const int16_t W=tft.width();
+  HubRect group=hr(OS12V_INSET,44,W-OS12V_INSET*2,48);
+  tft.fillRoundRect(group.x,group.y,group.w,group.h,12,OS12V_SURFACE);
+  tft.drawRoundRect(group.x,group.y,group.w,group.h,12,OS12V_LINE);
   for(uint8_t i=0;i<3;i++){
-    HubRect r=hubV1125PrinterModeRect(i);const bool selected=g_printerMode==i;
-    const uint16_t bg=selected?OS12V_SURFACE2:OS12V_SURFACE;
-    if(selected){tft.fillRoundRect(r.x+4,r.y+4,r.w-8,r.h-8,9,bg);tft.fillRoundRect(r.x+r.w/2-18,r.y+r.h-6,36,3,2,OS12V_ACCENT);}
-    uiDrawFit(labels[i],r.x+r.w/2,r.y+r.h/2-1,r.w-18,FONT_BODY,MC_DATUM,selected?OS12V_TEXT:OS12V_MUTED,bg);
+    HubRect r=hubV1125PrinterModeRect(i);
+    const bool selected=g_printerMode==i;
+    const uint16_t bg=selected?OS12V_ACCENT:OS12V_SURFACE;
+    const uint16_t fg=selected?OS12V_BG:OS12V_MUTED;
+    if(selected)tft.fillRoundRect(r.x+4,r.y+4,r.w-8,r.h-8,9,OS12V_ACCENT);
+    uiDrawFit(labels[i],r.x+r.w/2,r.y+r.h/2-1,r.w-18,FONT_BODY,MC_DATUM,fg,bg);
   }
 }
 '''
@@ -122,13 +126,14 @@ static void drawHeader(const char* title,const char* right,uint8_t page) {
   const bool online=WiFi.status()==WL_CONNECTED;
   const bool explicitState=right&&right[0];
   tft.fillRect(0,0,W,HH,OS12V_BG);
-  uiDrawFit(title?title:"Home",OS12V_INSET,7,286,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_BG);
+  tft.fillRoundRect(OS12V_INSET,9,4,19,2,OS12V_ACCENT);
+  uiDrawFit(title?title:"Home",OS12V_INSET+11,7,272,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_BG);
   const char* state=explicitState?right:(online?"ONLINE":"OFFLINE");
-  uint16_t c=OS12V_MUTED;
-  if(explicitState)c=hubUi13HeaderStateColor(state,true,online);
-  else c=online?OS12V_GREEN:OS12V_AMBER;
-  tft.fillCircle(W-100,17,4,c);
-  uiDrawFit(state,W-OS12V_INSET,17,82,FONT_SMALL,MR_DATUM,c,OS12V_BG);
+  uint16_t stateColor=explicitState?hubUi13HeaderStateColor(state,true,online):(online?OS12V_GREEN:OS12V_AMBER);
+  tft.fillRoundRect(W-108,8,96,21,10,OS12V_SURFACE);
+  tft.drawRoundRect(W-108,8,96,21,10,OS12V_LINE);
+  tft.fillCircle(W-98,18,4,stateColor);
+  uiDrawFit(state,W-17,18,72,FONT_SMALL,MR_DATUM,stateColor,OS12V_SURFACE);
   tft.drawFastHLine(OS12V_INSET,HH-1,W-OS12V_INSET*2,OS12V_LINE);
   (void)hubV1125UiFingerprint(page);
 }
@@ -142,28 +147,33 @@ static void uiBottomNav(uint8_t active,const char* nextPage) {
   tft.fillRect(0,y,W,hubNavH(),OS12V_SURFACE);
   tft.drawFastHLine(0,y,W,OS12V_LINE);
   for(uint8_t i=0;i<4;i++){
-    HubRect r=hubNavRect(i);const bool selected=i==active;
+    HubRect r=hubNavRect(i);
+    const bool selected=i==active;
     const uint16_t fg=selected?OS12V_ACCENT:OS12V_MUTED;
+    const uint16_t bg=selected?OS12V_SURFACE2:OS12V_SURFACE;
     if(selected){
-      tft.fillRoundRect(r.x+8,r.y+4,r.w-16,r.h-8,10,OS12V_SURFACE2);
-      tft.fillRoundRect(r.x+r.w/2-18,r.y+3,36,3,2,OS12V_ACCENT);
+      tft.fillRoundRect(r.x+6,r.y+3,r.w-12,r.h-6,11,OS12V_SURFACE2);
+      tft.drawRoundRect(r.x+6,r.y+3,r.w-12,r.h-6,11,OS12V_ACCENT);
+      tft.fillRoundRect(r.x+r.w/2-20,r.y+2,40,3,2,OS12V_ACCENT);
     }
     const int16_t cx=r.x+r.w/2;
     hubV1125TabIcon(i,cx,r.y+16,fg);
-    uiDrawFit(labels[i],cx,r.y+34,r.w-12,FONT_SMALL,TC_DATUM,fg,selected?OS12V_SURFACE2:OS12V_SURFACE);
+    uiDrawFit(labels[i],cx,r.y+34,r.w-12,FONT_SMALL,TC_DATUM,fg,bg);
   }
 }
 '''
 
 ACTION=r'''
 static void hubV1125Action(const HubRect& r,const char* label,uint16_t c,bool enabled=true,bool destructive=false) {
-  const uint16_t bg=enabled?OS12V_SURFACE2:OS12V_SURFACE;
+  const bool secondary=!destructive&&(strcmp(label,"Back")==0||strcmp(label,"Cancel")==0||strcmp(label,"Discard")==0);
   const uint16_t semantic=destructive?OS12V_RED:((c==C10_GREEN||c==OS12V_GREEN)?OS12V_GREEN:((c==C10_ORANGE||c==OS12V_AMBER)?OS12V_AMBER:OS12V_ACCENT));
-  const uint16_t fg=enabled?(destructive?OS12V_RED:OS12V_TEXT):OS12V_MUTED;
+  const uint16_t bg=!enabled?OS12V_SURFACE:(destructive?OS12V_RED:(secondary?OS12V_SURFACE2:semantic));
+  const uint16_t border=!enabled?OS12V_LINE:(destructive?OS12V_RED:(secondary?OS12V_LINE:semantic));
+  const uint16_t fg=!enabled?OS12V_MUTED:((destructive||!secondary)?OS12V_BG:OS12V_TEXT);
   tft.fillRoundRect(r.x,r.y,r.w,r.h,OS12V_RADIUS,bg);
-  tft.drawRoundRect(r.x,r.y,r.w,r.h,OS12V_RADIUS,enabled?semantic:OS12V_LINE);
-  if(enabled)tft.fillCircle(r.x+17,r.y+r.h/2,4,semantic);
-  uiDrawFit(label,r.x+r.w/2+5,r.y+r.h/2,r.w-44,FONT_BODY,MC_DATUM,fg,bg);
+  tft.drawRoundRect(r.x,r.y,r.w,r.h,OS12V_RADIUS,border);
+  if(enabled&&secondary)tft.fillCircle(r.x+17,r.y+r.h/2,4,semantic);
+  uiDrawFit(label,r.x+r.w/2+(secondary?5:0),r.y+r.h/2,r.w-(secondary?44:22),FONT_BODY,MC_DATUM,fg,bg);
 }
 '''
 
@@ -181,8 +191,24 @@ static void hubOs12NavRow(const HubRect& r,const char* title,const char* detail,
   if(valueColor==C10_GREEN||valueColor==OS12V_GREEN)detailColor=OS12V_GREEN;
   else if(valueColor==C10_ORANGE||valueColor==OS12V_AMBER)detailColor=OS12V_AMBER;
   else if(valueColor==C10_RED||valueColor==OS12V_RED)detailColor=OS12V_RED;
-  uiDrawFit(title,r.x+OS12V_INSET,r.y+8,r.w-58,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_SURFACE);
-  uiDrawFit(detail,r.x+OS12V_INSET,r.y+r.h-9,r.w-58,FONT_SMALL,BL_DATUM,detailColor,OS12V_SURFACE);
+
+  uint16_t iconColor=OS12V_BLUE;
+  if(strstr(title,"Display"))iconColor=OS12V_ACCENT;
+  else if(strstr(title,"Sound")||strstr(title,"Media"))iconColor=OS12V_BLUE;
+  else if(strstr(title,"Network"))iconColor=OS12V_BLUE;
+  else if(strstr(title,"System")||strstr(title,"Device"))iconColor=OS12V_AMBER;
+  else if(strstr(title,"Printer")||strstr(title,"Power"))iconColor=OS12V_GREEN;
+  else if(strstr(title,"Update"))iconColor=OS12V_BLUE;
+
+  HubRect badge=hr(r.x+9,r.y+(r.h-30)/2,30,30);
+  tft.fillRoundRect(badge.x,badge.y,badge.w,badge.h,8,OS12V_SURFACE2);
+  tft.drawRoundRect(badge.x,badge.y,badge.w,badge.h,8,iconColor);
+  char glyph[2]={title&&title[0]?title[0]:'?',0};
+  uiDrawFit(glyph,badge.x+badge.w/2,badge.y+badge.h/2,badge.w-8,FONT_BODY,MC_DATUM,iconColor,OS12V_SURFACE2);
+
+  const int16_t textX=r.x+48;
+  uiDrawFit(title,textX,r.y+7,r.w-96,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_SURFACE);
+  uiDrawFit(detail,textX,r.y+r.h-9,r.w-96,FONT_SMALL,BL_DATUM,detailColor,OS12V_SURFACE);
   const int16_t cx=r.x+r.w-18,cy=r.y+r.h/2;
   tft.drawLine(cx-4,cy-5,cx+1,cy,OS12V_MUTED);
   tft.drawLine(cx+1,cy,cx-4,cy+5,OS12V_MUTED);
@@ -198,10 +224,14 @@ static void hubOs12EvidenceRow(const HubRect& r,const char* title,const char* va
   else if(valueColor==C10_RED||valueColor==OS12V_RED)vc=OS12V_RED;
   else if(valueColor==C10_ACCENT||valueColor==OS12V_ACCENT)vc=OS12V_ACCENT;
   else if(valueColor==C10_TEXT||valueColor==OS12V_TEXT)vc=OS12V_TEXT;
-  const int16_t valueW=180;
+
   uiDrawFit(title,r.x+OS12V_INSET,r.y+7,r.w-OS12V_INSET*2,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
-  uiDrawFit(value,r.x+OS12V_INSET,r.y+r.h-10,valueW,FONT_BODY,BL_DATUM,vc,OS12V_SURFACE);
-  uiDrawFit(detail,r.x+r.w-OS12V_INSET,r.y+r.h-10,r.w-valueW-OS12V_INSET*3,FONT_SMALL,BR_DATUM,OS12V_MUTED,OS12V_SURFACE);
+  uiDrawFit(value,r.x+OS12V_INSET,r.y+27,205,FONT_BODY,TL_DATUM,vc,OS12V_SURFACE);
+  uiDrawFit(detail,r.x+OS12V_INSET,r.y+r.h-8,r.w-OS12V_INSET*2,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+
+  if(vc!=OS12V_MUTED){
+    tft.fillCircle(r.x+r.w-17,r.y+17,4,vc);
+  }
 }
 '''
 
@@ -231,6 +261,56 @@ static void hubUi13StepperRow(const HubRect& r,const char* label,const char* val
   uiDrawFit("-",minus.x+minus.w/2,minus.y+minus.h/2,minus.w-8,FONT_LARGE,MC_DATUM,OS12V_ACCENT,OS12V_SURFACE2);
   uiDrawFit("+",plus.x+plus.w/2,plus.y+plus.h/2,plus.w-8,FONT_LARGE,MC_DATUM,OS12V_ACCENT,OS12V_SURFACE2);
   uiDrawFit(value,minus.x+minus.w+8,r.y+r.h/2,plus.x-minus.x-minus.w-16,FONT_BODY,MC_DATUM,OS12V_TEXT,OS12V_SURFACE);
+}
+'''
+
+PRINTER=r'''
+static void drawPrinter(bool full) {
+  (void)full;const int16_t W=tft.width();
+  tft.fillScreen(OS12V_BG);drawHeader("Printer",nullptr,1);uiBottomNav(1,nullptr);hubV1125ModeTabs();
+
+  if(workshopPlatformState().configuredPrinterCount==0){
+    HubRect r=hr(OS12V_INSET,104,W-OS12V_INSET*2,138);
+    hubV1125Card(r,OS12V_AMBER,true);
+    uiDrawFit("No printer configured",r.x+16,r.y+18,r.w-32,FONT_LARGE,TL_DATUM,OS12V_TEXT,OS12V_SURFACE2);
+    uiDrawFit("Configure printer access from System.",r.x+16,r.y+72,r.w-32,FONT_BODY,TL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+    hubMarkFrameDirty();g_dirty=false;return;
+  }
+
+  const PrinterSlot& p=displayedPrinter();const BambuState& s=p.state;
+  const uint8_t slot=rotState.displayIndex<MAX_PRINTERS?rotState.displayIndex:0;
+  const bool paused=workshopPlatformPrinterPaused(slot),printing=workshopPlatformPrinterPrinting(slot),active=workshopPlatformPrinterActive(slot),online=workshopPlatformPrinterOnline(slot);
+  const uint16_t sc=!online?OS12V_AMBER:(paused?OS12V_AMBER:(printing?OS12V_GREEN:OS12V_GREEN));
+  const char* state=!online?"Offline":(paused?"Paused":(printing?"Printing":"Ready"));
+
+  if(g_printerMode==HUB_PRINTER_STATUS){
+    HubRect hero=hr(OS12V_INSET,100,292,150),telem=hr(312,100,W-OS12V_INSET-312,150);
+    hubV1125Card(hero,sc,true);
+    uiDrawFit(p.config.name[0]?p.config.name:"Printer",hero.x+16,hero.y+12,hero.w-32,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+    uiDrawFit(state,hero.x+16,hero.y+34,hero.w-32,FONT_LARGE,TL_DATUM,sc,OS12V_SURFACE2);
+    if(active){
+      char rem[20],meta[42];formatDuration(s.remainingMinutes,rem,sizeof(rem));snprintf(meta,sizeof(meta),"%u%%  ·  %s left",(unsigned)s.progress,rem);
+      uiDrawFit(jobDisplayName(s),hero.x+16,hero.y+74,hero.w-32,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_SURFACE2);
+      uiProgressBar(hero.x+16,hero.y+106,hero.w-32,s.progress,OS12V_BLUE);
+      uiDrawFit(meta,hero.x+16,hero.y+136,hero.w-32,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+    }else{
+      uiDrawFit(online?"Ready for the next print":"Check printer connection",hero.x+16,hero.y+90,hero.w-32,FONT_BODY,TL_DATUM,online?OS12V_TEXT:OS12V_AMBER,OS12V_SURFACE2);
+    }
+    hubV1125TelemetryColumn(telem,s);
+  }else if(g_printerMode==HUB_PRINTER_AMS){
+    const int16_t gap=8,cw=(W-OS12V_INSET*2-gap*3)/4;
+    uint8_t n=s.ams.present?s.ams.unitCount*4:0;if(n>4)n=4;
+    for(uint8_t i=0;i<4;i++){HubRect r=hr(OS12V_INSET+i*(cw+gap),104,cw,122);hubV1125AmsSlot(r,(i<n)?&s.ams.trays[i]:nullptr,s.ams.present&&s.ams.activeTray==i,i);}
+    uiDrawFit(s.ams.present?"PRINTER-REPORTED AMS TELEMETRY":"NO AMS TELEMETRY",OS12V_INSET,244,W-OS12V_INSET*2,FONT_SMALL,BL_DATUM,s.ams.present?OS12V_MUTED:OS12V_AMBER,OS12V_BG);
+    uiDrawFit("Inventory identity and placement remain authoritative in Filament Inventory.",OS12V_INSET,259,W-OS12V_INSET*2,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_BG);
+  }else{
+    const char* light=s.lightState==1?"Light Off":"Light On";const char* pause=paused?"Resume":"Pause";
+    const uint8_t plug=tasmotaControlPlugForSlot(rotState.displayIndex);const bool powerMapped=plug!=0xFF;
+    const char* labels[4]={printerFeedbackLabel(0,light),printerFeedbackLabel(1,pause),powerMapped?"Printer Power":"Power Unavailable",printerFeedbackLabel(3,active?"Hold to Stop":"Stop")};
+    for(uint8_t i=0;i<4;i++){HubRect r=hubPrinterActionRect(i);const bool enabled=i==0?online:i==1?(online&&active):i==2?powerMapped:(online&&active);const uint16_t col=i==1&&paused?OS12V_GREEN:(i==2?OS12V_AMBER:(i==3?OS12V_RED:OS12V_ACCENT));hubV1125Action(r,labels[i],col,enabled,i==3);}
+    uiDrawFit(active?"Commands remain pending until fresh printer telemetry confirms state.":"Controls become available when printer state permits.",OS12V_INSET,258,W-OS12V_INSET*2,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_BG);
+  }
+  hubMarkFrameDirty();g_dirty=false;
 }
 '''
 
@@ -428,6 +508,7 @@ def apply(repo: Path) -> None:
         ("static void hubOs12EvidenceRow(",EVIDENCE),
         ("static void hubUi13ToggleRow(",TOGGLE),
         ("static void hubUi13StepperRow(",STEPPER),
+        ("static void drawPrinter(bool full)",PRINTER),
         ("static void drawHome(bool full)",HOME),
         ("static void drawWorkshop(bool full)",WORKSHOP),
         ("static void drawMore(bool full)",MORE),
