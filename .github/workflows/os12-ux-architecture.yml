@@ -11,6 +11,8 @@ on:
       - 'apply_workshop_os12_ux_geometry.py'
       - 'apply_workshop_os12_ux_physical_fit.py'
       - 'apply_workshop_os12_portal_control_plane.py'
+      - 'apply_workshop_os12_visual_overhaul.py'
+      - 'scripts/validate_os12_visual_overhaul.py'
       - 'contracts/**'
       - 'scripts/ensure-platformio.sh'
       - 'scripts/run_os12_ux_local.sh'
@@ -85,10 +87,12 @@ jobs:
             apply_workshop_os12_ux_geometry.py \
             apply_workshop_os12_ux_physical_fit.py \
             apply_workshop_os12_portal_control_plane.py \
+            apply_workshop_os12_visual_overhaul.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
             scripts/validate_os12_ux_physical_fit.py \
             scripts/validate_os12_portal_control_plane.py \
+            scripts/validate_os12_visual_overhaul.py \
             scripts/accept_os12_code_free_portal_runtime.py \
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_media_runtime.py \
