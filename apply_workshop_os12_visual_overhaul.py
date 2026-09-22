@@ -70,7 +70,7 @@ static void hubV1125Card(const HubRect& r,uint16_t rail=UI_BORDER_2,bool strong=
   tft.drawRoundRect(r.x,r.y,r.w,r.h,OS12V_RADIUS,strong?OS12V_LINE:OS12V_LINE);
   const bool semantic=rail!=UI_BORDER_2 && rail!=UI_BORDER && rail!=W25_LINE;
   if(semantic){
-    const uint16_t c=(rail==C10_RED)?OS12V_RED:(rail==C10_ORANGE?OS12V_AMBER:(rail==C10_GREEN?OS12V_GREEN:OS12V_ACCENT));
+    const uint16_t c=(rail==C10_RED||rail==OS12V_RED)?OS12V_RED:((rail==C10_ORANGE||rail==OS12V_AMBER)?OS12V_AMBER:((rail==C10_GREEN||rail==OS12V_GREEN)?OS12V_GREEN:OS12V_ACCENT));
     tft.fillRoundRect(r.x,r.y,4,r.h,2,c);
   }
 }
@@ -118,7 +118,7 @@ static void uiBottomNav(uint8_t active,const char* nextPage) {
 ACTION=r'''
 static void hubV1125Action(const HubRect& r,const char* label,uint16_t c,bool enabled=true,bool destructive=false) {
   const uint16_t bg=enabled?OS12V_SURFACE2:OS12V_SURFACE;
-  const uint16_t semantic=destructive?OS12V_RED:(c==C10_GREEN?OS12V_GREEN:(c==C10_ORANGE?OS12V_AMBER:OS12V_ACCENT));
+  const uint16_t semantic=destructive?OS12V_RED:((c==C10_GREEN||c==OS12V_GREEN)?OS12V_GREEN:((c==C10_ORANGE||c==OS12V_AMBER)?OS12V_AMBER:OS12V_ACCENT));
   const uint16_t fg=enabled?(destructive?OS12V_RED:OS12V_TEXT):OS12V_MUTED;
   tft.fillRoundRect(r.x,r.y,r.w,r.h,OS12V_RADIUS,bg);
   tft.drawRoundRect(r.x,r.y,r.w,r.h,OS12V_RADIUS,enabled?semantic:OS12V_LINE);
@@ -138,9 +138,9 @@ NAVROW=r'''
 static void hubOs12NavRow(const HubRect& r,const char* title,const char* detail,uint16_t valueColor=C10_MUTED) {
   hubOs12RowSurface(r);
   uint16_t detailColor=OS12V_MUTED;
-  if(valueColor==C10_GREEN)detailColor=OS12V_GREEN;
-  else if(valueColor==C10_ORANGE)detailColor=OS12V_AMBER;
-  else if(valueColor==C10_RED)detailColor=OS12V_RED;
+  if(valueColor==C10_GREEN||valueColor==OS12V_GREEN)detailColor=OS12V_GREEN;
+  else if(valueColor==C10_ORANGE||valueColor==OS12V_AMBER)detailColor=OS12V_AMBER;
+  else if(valueColor==C10_RED||valueColor==OS12V_RED)detailColor=OS12V_RED;
   uiDrawFit(title,r.x+OS12V_INSET,r.y+8,r.w-58,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_SURFACE);
   uiDrawFit(detail,r.x+OS12V_INSET,r.y+r.h-9,r.w-58,FONT_SMALL,BL_DATUM,detailColor,OS12V_SURFACE);
   const int16_t cx=r.x+r.w-18,cy=r.y+r.h/2;
@@ -153,11 +153,11 @@ EVIDENCE=r'''
 static void hubOs12EvidenceRow(const HubRect& r,const char* title,const char* value,const char* detail,uint16_t valueColor=C10_MUTED) {
   hubOs12RowSurface(r);
   uint16_t vc=OS12V_MUTED;
-  if(valueColor==C10_GREEN)vc=OS12V_GREEN;
-  else if(valueColor==C10_ORANGE)vc=OS12V_AMBER;
-  else if(valueColor==C10_RED)vc=OS12V_RED;
-  else if(valueColor==C10_ACCENT)vc=OS12V_ACCENT;
-  else if(valueColor==C10_TEXT)vc=OS12V_TEXT;
+  if(valueColor==C10_GREEN||valueColor==OS12V_GREEN)vc=OS12V_GREEN;
+  else if(valueColor==C10_ORANGE||valueColor==OS12V_AMBER)vc=OS12V_AMBER;
+  else if(valueColor==C10_RED||valueColor==OS12V_RED)vc=OS12V_RED;
+  else if(valueColor==C10_ACCENT||valueColor==OS12V_ACCENT)vc=OS12V_ACCENT;
+  else if(valueColor==C10_TEXT||valueColor==OS12V_TEXT)vc=OS12V_TEXT;
   const int16_t valueW=180;
   uiDrawFit(title,r.x+OS12V_INSET,r.y+7,r.w-OS12V_INSET*2,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
   uiDrawFit(value,r.x+OS12V_INSET,r.y+r.h-10,valueW,FONT_BODY,BL_DATUM,vc,OS12V_SURFACE);
@@ -338,6 +338,30 @@ static void drawOs12VideoViewer() {
 }
 '''
 
+
+def remap_visual_tokens(text: str, signature: str) -> str:
+    start=text.find(signature)
+    if start<0: return text
+    if text.find(signature,start+1)>=0: raise PatchError(f"function non-unique: {signature}")
+    end=braced_end(text,start,signature)
+    body=text[start:end]
+    mapping=(
+        ("C10_BG","OS12V_BG"),
+        ("C10_SURFACE_3","OS12V_SURFACE2"),
+        ("C10_SURFACE_2","OS12V_SURFACE2"),
+        ("C10_SURFACE","OS12V_SURFACE"),
+        ("C10_SEPARATOR","OS12V_LINE"),
+        ("C10_TEXT","OS12V_TEXT"),
+        ("C10_MUTED","OS12V_MUTED"),
+        ("C10_ACCENT","OS12V_ACCENT"),
+        ("C10_GREEN","OS12V_GREEN"),
+        ("C10_ORANGE","OS12V_AMBER"),
+        ("C10_RED","OS12V_RED"),
+    )
+    for old,new in mapping:
+        body=body.replace(old,new)
+    return text[:start]+body+text[end:]
+
 def apply(repo: Path) -> None:
     path=repo/"src"/"smart_hub.cpp";text=load(path)
 
@@ -372,6 +396,25 @@ def apply(repo: Path) -> None:
         ("static void drawOs12VideoViewer()",VIDEO),
     ):
         text=replace_function(text,sig,repl)
+
+    # Extend the palette to every active device surface without changing touch
+    # geometry or control dispatch. These functions retain their existing
+    # semantics and only consume the final visual tokens.
+    for sig in (
+        "static void drawPrinter(bool full)",
+        "static void drawUi13Display()",
+        "static void drawUi13AfterPrint()",
+        "static void drawUi13Sound()",
+        "static void drawUi13PrinterAlerts()",
+        "static void drawUi13AlertSignals()",
+        "static void drawUi13Network()",
+        "static void drawUi13PrinterPower()",
+        "static void drawUi13PowerOptions()",
+        "static void drawUi13AutoOffConfirm()",
+        "static void drawUi13Diagnostics()",
+        "static void drawUi12PortalAccess()",
+    ):
+        text=remap_visual_tokens(text,sig)
 
     path.write_text(text,encoding="utf-8")
     print("Workshop OS 12 whole-device visual overhaul applied")
