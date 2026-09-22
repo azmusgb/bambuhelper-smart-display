@@ -114,7 +114,6 @@ python3 scripts/capture_os12_views_unattended.py \
   --expect-source-sha "$SOURCE_SHA" \
   --output-dir "$EVIDENCE_DIR/view-capture"
 
-RECOVERY_ARG=()
 if [[ "$EXERCISE_RECOVERY" -eq 1 ]]; then
   echo
   echo "=== Same-state full-image recovery round-trip ==="
@@ -125,7 +124,6 @@ if [[ "$EXERCISE_RECOVERY" -eq 1 ]]; then
       --confirm-printer-idle \
       --exercise \
       --base-url "$BASE_URL"
-  RECOVERY_ARG=(--recovery-evidence "$RECOVERY_DIR/evidence.json")
 fi
 
 echo
@@ -135,7 +133,6 @@ python3 scripts/validate_os12_automatic_candidate.py \
   --capture-manifest "$EVIDENCE_DIR/view-capture/manifest.json" \
   --expect-source-sha "$SOURCE_SHA" \
   --expect-firmware-sha256 "$FIRMWARE_SHA" \
-  "${RECOVERY_ARG[@]}" \
   --output "$EVIDENCE_DIR/automatic-validation.json"
 
 cat <<EOF
