@@ -339,9 +339,11 @@ def apply(repo: Path) -> None:
     text=replace_function(text,"static void drawWorkshop(bool full)",WORKSHOP)
 
     if "static const char* hubOs12CompactTimezoneLabel()" not in text:
-        anchor="static void drawSystem(bool full)"
+        # Date & Time is emitted before System in the reconstructed source, so
+        # the helper must be declared before the first consumer.
+        anchor="static void drawUi13DateTime()"
         if text.count(anchor)!=1:
-            raise PatchError("System helper insertion anchor missing/non-unique")
+            raise PatchError("Date & Time helper insertion anchor missing/non-unique")
         text=text.replace(anchor,COMPACT_HELPERS.strip()+"\n\n"+anchor,1)
 
     text=replace_function(text,"static void drawSystem(bool full)",SYSTEM)
