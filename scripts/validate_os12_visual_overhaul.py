@@ -48,7 +48,8 @@ def main()->int:
 
     for marker in (
         "OS12V_BG","OS12V_SURFACE","OS12V_SURFACE2","OS12V_TEXT","OS12V_MUTED",
-        "OS12V_ACCENT","OS12V_GREEN","OS12V_AMBER","OS12V_RED","OS12V_RADIUS"
+        "OS12V_ACCENT","OS12V_BLUE","OS12V_GREEN","OS12V_AMBER","OS12V_RED","OS12V_RADIUS",
+        "0xFBC0","0x061F"
     ): need(hub,marker,"visual palette")
 
     header=block(hub,"static void drawHeader(")
@@ -58,12 +59,18 @@ def main()->int:
     for marker in ('{"Home","Printer","Workshop","More"}',"OS12V_SURFACE2","OS12V_ACCENT"): need(nav,marker,"bottom navigation")
 
     action=block(hub,"static void hubV1125Action(")
-    for marker in ("OS12V_SURFACE2","OS12V_RED","OS12V_ACCENT"): need(action,marker,"actions")
+    for marker in ("secondary","OS12V_SURFACE2","OS12V_RED","OS12V_ACCENT"): need(action,marker,"actions")
 
     for sig in ("static void hubOs12RowSurface(","static void hubOs12NavRow(","static void hubOs12EvidenceRow(",
                 "static void hubUi13ToggleRow(","static void hubUi13StepperRow("):
         b=block(hub,sig)
         need(b,"OS12V_",sig)
+
+    printer=block(hub,"static void drawPrinter(bool full)")
+    for marker in ('hubV1125ModeTabs()','OS12V_BLUE','"PRINTER-REPORTED AMS TELEMETRY"','hubV1125Action('):
+        need(printer,marker,"Printer")
+    for forbidden in ("matchSpoolByColor","matchSpoolByMaterial","resolveSpool"):
+        forbid(printer,forbidden,"Printer authority")
 
     home=block(hub,"static void drawHome(bool full)")
     for marker in ('drawHeader("Home",state,0)','"CURRENT PRINT"','"FILAMENT INVENTORY"','"No authoritative inventory evidence"'):
