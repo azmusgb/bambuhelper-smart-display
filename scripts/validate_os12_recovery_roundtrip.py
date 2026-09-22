@@ -44,8 +44,7 @@ def main() -> int:
         "erase_flash",
         "input(",
         "read -p",
-        "PlatformIO",
-        "firmware.bin",
+        " run -e ws_lcd_350 ",
         "write_flash 0x10000",
     )
     for marker in forbidden:
