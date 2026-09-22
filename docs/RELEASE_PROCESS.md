@@ -56,7 +56,7 @@ Hardware-facing work uses two deliberately different evidence classes.
 - machine-verifiable control, media lifecycle, health, freshness, and fail-closed checks that can be observed deterministically;
 - recovery capture when the installation procedure requires it.
 
-These checks must be unattended after the guarded invocation. Routine candidate/merge testing must not require the operator to answer interactive `y/n/u` prompts.
+These checks must be unattended after the guarded invocation. Routine candidate/merge testing must not require the operator to answer interactive `y/n/u` prompts. The canonical macOS exact-candidate installer must automatically run the unattended whole-device suite, capture the complete 15-view 480×320 framebuffer set, and validate that both evidence sets refer to the same exact source identity before it reports automatic validation PASS.
 
 **Reserved for physical acceptance/promotion:**
 
@@ -66,7 +66,7 @@ These checks must be unattended after the guarded invocation. Routine candidate/
 - microphone intelligibility/acoustic quality;
 - recovery/rollback exercises when due for the release. A same-state full-image recovery round-trip may prove the `0x0` recovery/write/boot mechanism without claiming a historical-version rollback; those evidence types must remain distinct.
 
-Interactive physical scripts may be used as optional diagnostic/audit tools, but they are not ordinary merge gates. Automation must not convert sensory observations into fabricated physical truth.
+Interactive physical scripts may be used as optional diagnostic/audit tools, but they are not ordinary merge gates. Automation must not convert sensory observations into fabricated physical truth. Manual prompts must never be required merely to prove machine-verifiable runtime, framebuffer, routing, media-lifecycle, or evidence-consistency properties.
 
 Record unattended objective evidence separately from sensory/recovery evidence. A successful unattended hardware run may advance a candidate through runtime validation and support merge, but it does not by itself establish `physically validated`, `accepted`, or `stable`.
 
