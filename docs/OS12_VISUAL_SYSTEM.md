@@ -17,7 +17,7 @@ Primary navigation remains:
 
 ## Palette
 
-The active native UI uses a restrained graphite/teal semantic palette:
+The active native UI uses an industrial graphite palette with orange as the primary interaction/selection color and cyan reserved for informational emphasis:
 
 | Token | Role |
 | --- | --- |
@@ -27,13 +27,13 @@ The active native UI uses a restrained graphite/teal semantic palette:
 | `OS12V_LINE` | quiet separators and outlines |
 | `OS12V_TEXT` | primary text |
 | `OS12V_MUTED` | secondary text / Unknown |
-| `OS12V_ACCENT` | interaction and active state |
+| `OS12V_ACCENT` | primary interaction / selected state (orange) |
 | `OS12V_GREEN` | ready / healthy |
 | `OS12V_AMBER` | attention / unavailable / degraded |
 | `OS12V_RED` | destructive / fault |
-| `OS12V_BLUE` | informational state |
+| `OS12V_BLUE` | informational emphasis (cyan) |
 
-Color is semantic, not decorative. Unknown remains muted; printer connectivity is not inventory truth.
+Color is semantic, not decorative. Orange is reserved for selected/primary interaction, cyan for informational emphasis, green for healthy/ready, amber for degraded/attention, and red for destructive/fault. Unknown remains muted; printer connectivity is not inventory truth.
 
 ## Geometry and interaction
 
@@ -45,6 +45,8 @@ Color is semantic, not decorative. Unknown remains muted; printer connectivity i
 - no hidden hold gesture for ordinary navigation
 - destructive Stop remains guarded
 - card radius and spacing are consistent across primary and child views
+- primary actions use filled treatment; Back/Cancel remain secondary; destructive actions use red
+- selected bottom-navigation and printer-mode states are visually explicit
 
 ## Home
 
@@ -60,7 +62,7 @@ No printer telemetry may create inventory identity, quantity, ownership, or plac
 
 Printer is the operational machine view:
 
-- Status / AMS / Control segmented modes
+- Status / AMS / Control segmented modes with explicit selected state
 - current printer state and job
 - temperatures
 - printer-reported AMS telemetry
