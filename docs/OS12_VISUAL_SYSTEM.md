@@ -150,3 +150,17 @@ Physical acceptance still owns:
 Release state remains:
 
 `implemented -> built -> tested -> runtime validated -> production validated -> physically validated -> accepted -> stable`
+
+## One-command candidate install + unattended acceptance
+
+For exact CI candidates on macOS, use the repository-owned orchestrator after downloading the UX Architecture artifact and updating the local checkout to that exact source SHA:
+
+```bash
+bash scripts/install_accept_os12_candidate_macos.sh \
+  --artifact-zip ~/Downloads/os12-ux-ws350-<source-sha>.zip \
+  --confirm-printer-idle \
+  --full-backup \
+  --base-url http://10.0.0.124
+```
+
+The orchestrator derives the exact source and firmware hashes from `candidate.json`, refuses source mismatch, delegates to the guarded installer, verifies the post-reboot source identity, and runs unattended acceptance. It does not rebuild firmware locally and does not waive the residual physical sensory/recovery gates.
