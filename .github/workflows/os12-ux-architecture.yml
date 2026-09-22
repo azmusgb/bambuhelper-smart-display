@@ -100,7 +100,9 @@ jobs:
             scripts/accept_os12_media_runtime.py \
             scripts/accept_os12_media_physical.py \
             scripts/accept_os12_device_ui_physical.py \
-            scripts/accept_os12_update_runtime.py
+            scripts/accept_os12_update_runtime.py \
+            scripts/capture_os12_views_unattended.py \
+            scripts/validate_os12_automatic_candidate.py
           python3 -m json.tool contracts/filament-inventory-device-feed-v1.schema.json >/dev/null
           bash -n scripts/ensure-platformio.sh
           bash -n scripts/run_os12_ux_local.sh
