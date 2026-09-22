@@ -51,6 +51,11 @@ python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
 python3 "$ROOT/apply_workshop_os12_visual_overhaul.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_visual_overhaul.py" --repo "$BUILD"
 
+# Real-device 480x320 framebuffer review identified layout and action-mapping
+# defects that must remain later than the broad visual composition layer.
+python3 "$ROOT/apply_workshop_os12_post_capture_ui_hardening.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_post_capture_ui_hardening.py" --repo "$BUILD"
+
 python3 "$ROOT/apply_workshop_os12_code_free_portal.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_code_free_portal.py" --repo "$BUILD"
 python3 -m py_compile "$ROOT/scripts/accept_os12_code_free_portal_runtime.py"
@@ -72,7 +77,7 @@ fi
 
 echo "=== OS12 portal control-plane reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
-echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overhaul applied across shell, hierarchy, cards, rows, controls, media and system surfaces."
+echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overhaul plus post-capture 480x320 hardening applied across shell, hierarchy, cards, rows, controls, media and system surfaces."
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
 echo "Portal security: device code disabled by product policy; local portal opens directly on the trusted LAN."
 echo "Mutation security: same-origin enforcement remains mandatory; no user-entered device code or portal session is required."
