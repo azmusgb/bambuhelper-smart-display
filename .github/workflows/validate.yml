@@ -81,6 +81,9 @@ jobs:
       - name: Validate OS12 physical-acceptance provenance
         run: python3 scripts/validate_os12_physical_acceptance.py
 
+      - name: Validate OS12 unattended recovery round-trip
+        run: python3 scripts/validate_os12_recovery_roundtrip.py
+
       - name: Validate runtime acceptance helper syntax
         run: |
           python3 -m py_compile \
@@ -134,6 +137,7 @@ jobs:
           bash -n scripts/waveshare-usb.sh
           bash -n scripts/run_os12_platform_local.sh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
+          bash -n scripts/accept_os12_recovery_roundtrip_macos.sh
 
       - name: Check ignored build output
         run: |

@@ -117,12 +117,26 @@ python3 scripts/accept_os12_update_runtime.py \
 
 Formal GitHub OTA install acceptance requires a strictly newer published candidate with an explicitly expected version and source SHA. Do not reuse the bootstrap version for different bytes.
 
-Exercise recovery/rollback separately and retain the result. CI, USB upload success, and runtime API success do not substitute for physical recovery evidence.
+Exercise recovery separately and retain the result. The repository now provides an unattended same-state full-image recovery round-trip for the attached WS350:
+
+```bash
+bash scripts/accept_os12_recovery_roundtrip_macos.sh \
+  --artifact-zip ~/Downloads/os12-ux-ws350-<source-sha>.zip \
+  --confirm-printer-idle \
+  --exercise \
+  --base-url http://10.0.0.124
+```
+
+This helper validates the exact CI artifact against `releases/current.json`, verifies the running source, byte-compares the live partition table to the CI artifact, captures the current full 16 MB flash, writes **only that just-captured image** back at offset `0x0`, and requires the same exact source SHA after reboot. It uses no interactive `y/n/u` prompts and does not rebuild firmware.
+
+A PASS proves the current-device full-image recovery/write/boot path while preserving the intended installed source. It does **not** prove rollback to a historical firmware generation. Historical-version rollback, if required for stable promotion, remains a separate explicitly identified exercise using an approved known-good artifact.
+
+CI, USB upload success, and runtime API success do not substitute for the physical recovery round-trip actually running and passing on the WS350.
 
 ## Release-state boundary
 
 Only evidence actually obtained may advance the state:
 
-`implemented -> built -> tested -> runtime validated -> production validated -> physically validated -> accepted -> stable`
+`implemented -> built -> tested -> runtime validated -> merged-unaccepted -> physically validated -> accepted -> stable`
 
 A green CI candidate is **not** physically validated. A flashed candidate is **not** accepted. Physical acceptance is not stable promotion.

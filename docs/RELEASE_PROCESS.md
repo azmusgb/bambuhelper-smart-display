@@ -64,7 +64,7 @@ These checks must be unattended after the guarded invocation. Routine candidate/
 - finger touch comfort and responsiveness;
 - audible speaker quality/distortion;
 - microphone intelligibility/acoustic quality;
-- recovery/rollback exercises when due for the release.
+- recovery/rollback exercises when due for the release. A same-state full-image recovery round-trip may prove the `0x0` recovery/write/boot mechanism without claiming a historical-version rollback; those evidence types must remain distinct.
 
 Interactive physical scripts may be used as optional diagnostic/audit tools, but they are not ordinary merge gates. Automation must not convert sensory observations into fabricated physical truth.
 
