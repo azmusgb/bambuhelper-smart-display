@@ -42,37 +42,63 @@ Firmware candidates must pass the gates appropriate to their scope. The normal h
 
 Failures in a contract gate are release blockers until explained and intentionally changed.
 
-## 4. Physical acceptance
+## 4. Runtime, unattended hardware, and physical acceptance
 
-Changes that can affect the real panel, touch, speaker/microphone, recovery, authentication, printer commands, smart-plug power, settings persistence, or other hardware behavior require real-device acceptance.
+Hardware-facing work uses two deliberately different evidence classes.
 
-Visual releases should use the authenticated WS350 framebuffer capture workflow and compare the complete required view set. Control changes must exercise the affected command in a disposable/safe scenario and confirm guard behavior as well as success behavior. Authentication changes must verify correct-code login, wrong-code rejection, logout/reboot invalidation, protected controls/OTA and Recovery AP access.
+**Required before candidate merge when applicable:**
 
-Record physical acceptance in the PR and current-version evidence doc before promotion.
+- exact-head CI and deterministic reconstruction;
+- exact artifact identity and hash capture;
+- guarded installation of the exact candidate;
+- runtime source-identity verification;
+- machine-verifiable 480×320 route/framebuffer checks;
+- machine-verifiable control, media lifecycle, health, freshness, and fail-closed checks that can be observed deterministically;
+- recovery capture when the installation procedure requires it.
 
-## 5. Source promotion
+These checks must be unattended after the guarded invocation. Routine candidate/merge testing must not require the operator to answer interactive `y/n/u` prompts.
 
-The normal rule is: merge the accepted candidate to `main` only after required CI and physical gates are green. Then update `releases/current.json` so:
+**Reserved for physical acceptance/promotion:**
 
-- `channel` is `accepted-source`;
-- `version` is the accepted source version;
-- `source.acceptedFirmwareCommit` identifies the physically accepted firmware commit;
-- `source.physicalAcceptance` is `passed`;
-- `candidate` is `null` until a new formal candidate exists.
+- real LCD readability, color, and panel artifacts;
+- finger touch comfort and responsiveness;
+- audible speaker quality/distortion;
+- microphone intelligibility/acoustic quality;
+- recovery/rollback exercises when due for the release.
 
-### Merged-but-unaccepted exception
+Interactive physical scripts may be used as optional diagnostic/audit tools, but they are not ordinary merge gates. Automation must not convert sensory observations into fabricated physical truth.
 
-If a hardware-facing candidate is merged before physical acceptance, **do not relabel it as accepted**. Immediately make repository state explicit:
+Record unattended objective evidence separately from sensory/recovery evidence. A successful unattended hardware run may advance a candidate through runtime validation and support merge, but it does not by itself establish `physically validated`, `accepted`, or `stable`.
+
+## 5. Source merge and promotion
+
+A hardware-facing candidate may merge to `main` after its required exact-head CI and applicable unattended objective hardware gates pass. Merge is not acceptance.
+
+If physical acceptance has not yet passed, immediately record the merged source as **merged-unaccepted**:
 
 - keep the last physically accepted version/commit in `source`;
 - set `candidate` to `null` if there is no longer an open candidate PR;
 - record the code currently present on `main` in `mainState` with `status: merged-unaccepted`;
 - record the originating PR/branch and exact merge commit;
-- record CI results separately from `physicalAcceptance: pending`;
-- do not promote its binaries into `release.json` / Netlify;
-- complete physical acceptance or intentionally revert the unaccepted delta.
+- preserve the exact tested candidate commit and artifact identity;
+- record CI, install, runtime, and unattended acceptance separately from `physicalAcceptance: pending`;
+- do not promote its binaries into `release.json`, the stable device channel, or Netlify;
+- complete required sensory/recovery evidence before accepted/stable promotion, or intentionally revert the unaccepted delta.
 
-This is an exception/recovery state, not a normal promotion path.
+When physical acceptance is explicitly completed and accepted-source promotion is approved, update `releases/current.json` so:
+
+- `channel` remains `accepted-source`;
+- `version` is the accepted source version;
+- `source.acceptedFirmwareCommit` identifies the exact physically accepted firmware commit;
+- `source.physicalAcceptance` is `passed`;
+- `candidate` is `null`;
+- `mainState` is cleared only when the accepted-source metadata fully represents the code being promoted.
+
+The lifecycle remains explicit:
+
+`implemented -> built -> tested -> runtime validated -> merged-unaccepted -> physically validated -> accepted -> stable`
+
+`merged-unaccepted` is a valid repository state, not an accepted release state.
 
 ## 6. Static download promotion
 
@@ -98,7 +124,7 @@ When intentionally promoting the download channel:
 - block force pushes and branch deletion;
 - do not allow bypass of required checks for routine firmware promotion.
 
-Physical acceptance remains a human hardware gate. Record it explicitly; CI cannot prove it.
+Physical acceptance remains a hardware promotion gate. CI and unattended runtime checks can prove objective machine-observable behavior, but they cannot prove sensory observations such as LCD appearance, finger feel, speaker quality, or microphone intelligibility. Record those claims only when actually observed.
 
 ## 8. Upstream synchronization
 

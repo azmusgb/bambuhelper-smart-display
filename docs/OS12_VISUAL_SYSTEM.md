@@ -141,7 +141,9 @@ Automated checks validate:
 - renderer motion counters
 - authority boundaries
 
-Physical acceptance still owns:
+Unattended objective acceptance may establish runtime/device behavior such as exact source identity, native route reachability, framebuffer geometry/content, media lifecycle, renderer counters, and fail-closed state behavior. It is the normal hardware evidence for candidate/merge and must not require operator `y/n/u` participation.
+
+Physical promotion evidence still owns claims automation cannot truthfully establish:
 
 - real LCD readability/color/artifacts
 - finger touch comfort/responsiveness
@@ -149,9 +151,11 @@ Physical acceptance still owns:
 - microphone intelligibility
 - recovery/rollback when due
 
+Interactive physical scripts are optional diagnostic/audit tools, not ordinary merge gates. Unknown sensory evidence stays unknown rather than being inferred from automated counters or framebuffer captures.
+
 Release state remains:
 
-`implemented -> built -> tested -> runtime validated -> production validated -> physically validated -> accepted -> stable`
+`implemented -> built -> tested -> runtime validated -> merged-unaccepted -> physically validated -> accepted -> stable`
 
 ## One-command candidate install + unattended acceptance
 

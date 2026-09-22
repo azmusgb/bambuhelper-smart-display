@@ -103,11 +103,35 @@ def validate_main_state(main_state: object, readme_text: str) -> str:
         fail("mainState.status must be merged-unaccepted")
     if main_state.get("exactHeadCi") != "passed" or main_state.get("physicalAcceptance") != "pending":
         fail("merged-unaccepted mainState must have CI passed and physical acceptance pending")
+    if main_state.get("unattendedAcceptance") != "passed":
+        fail("merged-unaccepted mainState must record unattendedAcceptance=passed")
+    tested_commit = require_nonempty_string(main_state, "testedCandidateCommit", "mainState")
+    if not SHA40.fullmatch(tested_commit):
+        fail("mainState.testedCandidateCommit must be a 40-character lowercase SHA")
+    tested_firmware_sha = require_nonempty_string(main_state, "testedFirmwareSha256", "mainState")
+    if not re.fullmatch(r"[0-9a-f]{64}", tested_firmware_sha):
+        fail("mainState.testedFirmwareSha256 must be a 64-character lowercase SHA-256")
     if branch == "main":
         fail("mainState.originatingBranch must identify the source branch")
     if name not in readme_text or "merged, physical acceptance pending" not in readme_text:
         fail("README must explain merged-unaccepted main state")
     return f"{version} / physical acceptance pending"
+
+
+def validate_acceptance_policy() -> None:
+    release_process = (ROOT / "docs" / "RELEASE_PROCESS.md").read_text(encoding="utf-8")
+    required = [
+        "Routine candidate/merge testing must not require the operator to answer interactive `y/n/u` prompts.",
+        "Interactive physical scripts may be used as optional diagnostic/audit tools, but they are not ordinary merge gates.",
+        "Automation must not convert sensory observations into fabricated physical truth.",
+        "merged-unaccepted",
+        "physically validated",
+        "accepted",
+        "stable",
+    ]
+    for marker in required:
+        if marker not in release_process:
+            fail(f"release acceptance policy missing required boundary: {marker}")
 
 
 def validate_capture_security() -> None:
@@ -201,6 +225,7 @@ def main() -> int:
         if "permissions:\n  contents: read" not in text:
             fail(f"workflow must declare contents: read: {name}")
     validate_stable_merge_gate(workflows_dir)
+    validate_acceptance_policy()
     validate_capture_security()
 
     release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
