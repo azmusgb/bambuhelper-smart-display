@@ -281,6 +281,8 @@ def run(args: argparse.Namespace) -> int:
         "viewCatalogCount": 0,
         "viewHashDiversity": None,
         "media": {},
+        "recoveredInitialMediaSession": None,
+        "cleanupAfterFailure": None,
         "networkReachableAtEnd": False,
         "uptimeMonotonic": None,
         "automatedPassed": False,
@@ -317,6 +319,18 @@ def run(args: argparse.Namespace) -> int:
         initial = status(client)
         validate_status(initial)
         start_uptime = initial.get("deviceUptimeMs")
+        if initial["session"] != "Idle":
+            stale_session = initial["session"]
+            recovery = api(client, "/os12/media/stop", method="POST")
+            validate_status(recovery)
+            check(
+                recovery["_http_status"] == 200 and recovery["session"] == "Idle",
+                f"could not recover stale media session {stale_session}: {recovery.get('error')}",
+            )
+            evidence["recoveredInitialMediaSession"] = stale_session
+            print(f"PASS  recovered stale media session: {stale_session} -> Idle")
+            initial = status(client)
+            validate_status(initial)
         check(initial["session"] == "Idle", f"media service must start Idle, got {initial['session']}")
 
         views = catalog(client)
@@ -579,6 +593,33 @@ def run(args: argparse.Namespace) -> int:
 
     except (AcceptanceError, OSError, ValueError) as exc:
         evidence["failure"] = str(exc)
+        try:
+            cleanup = status(client)
+            validate_status(cleanup)
+            if cleanup["session"] != "Idle":
+                cleanup_from = cleanup["session"]
+                stopped = api(client, "/os12/media/stop", method="POST")
+                validate_status(stopped)
+                cleanup_ok = stopped["_http_status"] == 200 and stopped["session"] == "Idle"
+                evidence["cleanupAfterFailure"] = {
+                    "fromSession": cleanup_from,
+                    "attempted": True,
+                    "succeeded": cleanup_ok,
+                }
+                if cleanup_ok:
+                    print(f"PASS  failure cleanup returned media session {cleanup_from} -> Idle")
+            else:
+                evidence["cleanupAfterFailure"] = {
+                    "fromSession": "Idle",
+                    "attempted": False,
+                    "succeeded": True,
+                }
+        except Exception as cleanup_exc:
+            evidence["cleanupAfterFailure"] = {
+                "attempted": True,
+                "succeeded": False,
+                "error": str(cleanup_exc),
+            }
         evidence["completed"] = True
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -601,7 +642,7 @@ def main() -> int:
     parser.add_argument("--channel", choices=("stable", "candidate"), default="candidate")
     parser.add_argument(
         "--expect-source-sha",
-        help="optional exact source SHA; otherwise derived from the selected manifest channel",
+        help="optional exact source SHA; otherwise derived from local git HEAD, then the selected manifest channel",
     )
     parser.add_argument("--output")
     parser.add_argument("--video-motion-floor", type=float, default=0.002)
