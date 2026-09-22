@@ -19,20 +19,23 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": {
-    "version": "11.28-ui13",
-    "branch": "feature/ui12-settings-control-center",
-    "pullRequest": 109,
-    "name": "Workshop OS v11.28 UI13 Appliance Settings",
-    "purpose": "Direct-to-main hardware candidate that finishes the WS350 appliance UI with explicit touch controls, coherent Settings information architecture, semantic state treatment, guarded printer power behavior, and preserved recovery/security/inventory-authority boundaries.",
-    "securityBoundary": "Normal LAN administration remains authenticated with the rotating boot-scoped portal/session model and same-origin mutation protection. Credentials and advanced administration remain outside ordinary touchscreen Settings; Full-image recovery remains separate from OTA.",
-    "acceptanceBranch": "acceptance/v11.28-ui13-appliance-settings",
-    "acceptanceIssue": 111,
-    "status": "physical-acceptance-required",
-    "exactHeadCi": "required",
-    "physicalAcceptance": "required"
+  "candidate": null,
+  "mainState": {
+    "version": "12.0.0",
+    "commit": "6b4cb4afee05e9c23bbcd3fac84fc11e329118b4",
+    "name": "Workshop OS 12.0.0 Consolidated Candidate",
+    "originatingBranch": "fix/os12-media-native-navigation-acceptance",
+    "originatingPullRequest": 122,
+    "status": "merged-unaccepted",
+    "exactHeadCi": "passed",
+    "testedCandidateCommit": "5d3b039c6e3c760a3387b3b139a0757d45323ad9",
+    "testedFirmwareSha256": "4b419c2645d667f13fd149ad9a78bb172b2e259afae8dbd03d5a1c660ccc84be",
+    "physicalInstall": "passed",
+    "unattendedAcceptance": "passed",
+    "physicalAcceptance": "pending",
+    "recoveryCapture": "workshop-os12-ws350-preflash-20260922-110344",
+    "note": "Merged under the documented merged-but-unaccepted exception. Interactive sensory checks are not merge gates; accepted/stable promotion remains blocked until the physical acceptance policy is explicitly satisfied."
   },
-  "mainState": null,
   "validation": {
     "acceptedSource": {
       "exactHeadCi": "passed",
@@ -47,15 +50,21 @@
       "physicalAcceptance": "passed"
     },
     "candidate": {
-      "exactHeadCi": "required",
-      "ws350Build": "required",
-      "shared320x480Regression": "required",
-      "productFinish": "required",
-      "physicalAcceptance": "required"
+      "exactHeadCi": "none-open-candidate",
+      "ws350Build": "none-open-candidate",
+      "shared320x480Regression": "none-open-candidate",
+      "productFinish": "none-open-candidate",
+      "physicalAcceptance": "none-open-candidate"
     },
     "staticDownload": {
       "version": "11.19.1",
       "status": "retained-conservative-channel"
+    },
+    "mainState": {
+      "exactHeadCi": "passed",
+      "exactCandidateInstalled": "passed",
+      "unattendedWholeDeviceAcceptance": "passed",
+      "physicalAcceptance": "pending"
     }
   }
 }
