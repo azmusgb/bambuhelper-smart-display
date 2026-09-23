@@ -103,7 +103,7 @@ python3 scripts/accept_os12_device_ui_physical.py \
   --expect-source-sha <EXACT_HEAD_SHA>
 ```
 
-Walk every required root/child view and record clipping, hierarchy, touch-target, navigation, responsiveness, and reboot/watchdog observations. Sensitive views are not retained as framebuffer evidence.
+Walk every required root/child view and record clipping, hierarchy, touch-target, navigation, responsiveness, and reboot/watchdog observations. On Workshop, explicitly prove that the visible **Refresh** and **Local Portal / Set Up Inventory** controls respond as labeled and that tapping the read-only evidence rows does not trigger hidden legacy actions. Sensitive views are not retained as framebuffer evidence.
 
 ## 8. Device-native update / recovery
 
