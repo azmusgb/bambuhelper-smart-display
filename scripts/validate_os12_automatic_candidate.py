@@ -23,7 +23,7 @@ REQUIRED_VIEWS = (
 )
 MANUAL_RESIDUALS = (
     "physical LCD panel appearance/readability",
-    "finger-driven touchscreen comfort/responsiveness",
+    "finger-driven touchscreen comfort/responsiveness + Workshop Refresh/Portal action mapping",
     "audible speaker quality/distortion",
     "microphone intelligibility/acoustic quality",
     "full-image recovery/rollback when due",

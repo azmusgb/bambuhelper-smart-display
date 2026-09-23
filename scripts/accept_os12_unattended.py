@@ -53,7 +53,7 @@ REQUIRED_VIEWS = (
 
 MANUAL_RESIDUALS = (
     "physical LCD panel appearance: brightness, color, panel artifacts, and real-world readability",
-    "actual finger-driven touchscreen responsiveness and target comfort",
+    "actual finger-driven touchscreen responsiveness, target comfort, and Workshop Refresh/Portal action mapping",
     "audible speaker quality/distortion in the room",
     "microphone intelligibility/acoustic quality in the room",
     "physical full-image recovery/rollback when that release gate is due",

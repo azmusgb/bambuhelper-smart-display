@@ -157,7 +157,7 @@ def main()->int:
             sensitive=bool(item.get("sensitive"))
             print(f"VIEW {label} ({view_id})")
             show(client,view_id)
-            record={"label":label,"group":item.get("group"),"sensitive":sensitive,"frame":None,"visible":None,"noClipping":None,"hierarchyClear":None,"controlsComfortable":None}
+            record={"label":label,"group":item.get("group"),"sensitive":sensitive,"frame":None,"visible":None,"noClipping":None,"hierarchyClear":None,"controlsComfortable":None,"workshopActionsFunctional":None}
             if sensitive:
                 print("  Sensitive view: framebuffer hash/capture evidence intentionally skipped.")
             else:
@@ -169,6 +169,11 @@ def main()->int:
             record["noClipping"]=observation(f"Does {label} have no obvious clipping, overlap, or off-screen content?")
             record["hierarchyClear"]=observation(f"Is the information hierarchy/state on {label} immediately understandable?")
             record["controlsComfortable"]=observation(f"Are visible controls on {label} comfortably finger-sized and clearly enabled/disabled?")
+            if view_id=="workshop":
+                record["workshopActionsFunctional"]=observation(
+                    "Do Workshop Refresh and Local Portal/Set Up Inventory respond exactly as labeled, "
+                    "with no hidden action when tapping the evidence rows?"
+                )
             evidence["views"][view_id]=record
 
         print("\nGLOBAL NAVIGATION / RESPONSIVENESS")
@@ -179,8 +184,10 @@ def main()->int:
 
         evidence["completed"]=True
         required_bool=[]
-        for rec in evidence["views"].values():
+        for vid,rec in evidence["views"].items():
             required_bool.extend([rec["visible"],rec["noClipping"],rec["hierarchyClear"],rec["controlsComfortable"]])
+            if vid=="workshop":
+                required_bool.append(rec["workshopActionsFunctional"])
         required_bool.extend([evidence["rootNavigation"],evidence["childNavigation"],evidence["touchResponsiveness"],evidence["noUnexpectedReboot"]])
         evidence["passed"]=all(v is True for v in required_bool)
         dest.parent.mkdir(parents=True,exist_ok=True)
@@ -193,7 +200,10 @@ def main()->int:
         failed=[]
         unknown=[]
         for vid,rec in evidence["views"].items():
-            for key in ("visible","noClipping","hierarchyClear","controlsComfortable"):
+            keys=["visible","noClipping","hierarchyClear","controlsComfortable"]
+            if vid=="workshop":
+                keys.append("workshopActionsFunctional")
+            for key in keys:
                 if rec[key] is False: failed.append(f"{vid}.{key}")
                 elif rec[key] is None: unknown.append(f"{vid}.{key}")
         for key in ("rootNavigation","childNavigation","touchResponsiveness","noUnexpectedReboot"):
