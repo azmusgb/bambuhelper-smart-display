@@ -56,6 +56,11 @@ python3 "$ROOT/scripts/validate_os12_visual_overhaul.py" --repo "$BUILD"
 python3 "$ROOT/apply_workshop_os12_post_capture_ui_hardening.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_post_capture_ui_hardening.py" --repo "$BUILD"
 
+# Physical evidence showed the Workshop root had stale hidden v11.25 touch zones
+# and did not consume the already-authoritative device-feed runtime snapshot.
+python3 "$ROOT/apply_workshop_os12_workshop_surface_runtime.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_workshop_surface_runtime.py" --repo "$BUILD"
+
 python3 "$ROOT/apply_workshop_os12_code_free_portal.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_code_free_portal.py" --repo "$BUILD"
 python3 -m py_compile "$ROOT/scripts/accept_os12_code_free_portal_runtime.py"
