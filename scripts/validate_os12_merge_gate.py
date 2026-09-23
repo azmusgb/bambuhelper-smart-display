@@ -73,7 +73,7 @@ def main() -> int:
     for needle in (
         "apply_workshop_os12_*.py",
         "scripts/run_os12_ux_local.sh",
-        "scripts/validate_os12_*.py",
+        "scripts/validate_os12_ux_architecture.py",
         "firmware/platform/**",
     ):
         require(ux, needle, "UX Architecture PR trigger coverage")
