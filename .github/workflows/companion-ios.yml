@@ -1,0 +1,47 @@
+name: Workshop Companion iOS
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'companion/**'
+      - 'scripts/validate_companion_protocol.py'
+      - '.github/workflows/companion-ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'companion/**'
+      - 'scripts/validate_companion_protocol.py'
+      - '.github/workflows/companion-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workshop-companion-ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate companion protocol and build iOS
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Workshop Companion protocol
+        run: python3 scripts/validate_companion_protocol.py
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: companion/ios
+        run: xcodegen generate --spec project.yml
+
+      - name: Compile iOS Simulator app
+        working-directory: companion/ios
+        run: |
+          set -euo pipefail
+          xcodebuild             -project WorkshopCompanion.xcodeproj             -scheme WorkshopCompanion             -configuration Debug             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             CODE_SIGNING_ALLOWED=NO             COMPILER_INDEX_STORE_ENABLE=NO             build

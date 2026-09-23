@@ -1,0 +1,92 @@
+name: Workshop OS 12 Tooling Checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/os12-tooling.yml'
+      - 'scripts/accept_os12_*.py'
+      - 'scripts/accept_os12_*.sh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
+      - 'scripts/capture-ws350-views.zsh'
+      - 'scripts/capture_os12_views_unattended.py'
+      - 'scripts/flash_os12_ci_candidate_macos.sh'
+      - 'scripts/install_accept_os12_candidate_macos.sh'
+      - 'scripts/prepare_os12_device_candidate.py'
+      - 'scripts/validate_os12_automatic_candidate.py'
+      - 'scripts/validate_os12_candidate_publisher.py'
+      - 'scripts/validate_os12_merge_gate.py'
+      - 'scripts/validate_os12_physical_acceptance.py'
+      - 'scripts/validate_os12_recovery_roundtrip.py'
+      - 'scripts/waveshare-usb.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/os12-tooling.yml'
+      - 'scripts/accept_os12_*.py'
+      - 'scripts/accept_os12_*.sh'
+      - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
+      - 'scripts/capture-ws350-views.zsh'
+      - 'scripts/capture_os12_views_unattended.py'
+      - 'scripts/flash_os12_ci_candidate_macos.sh'
+      - 'scripts/install_accept_os12_candidate_macos.sh'
+      - 'scripts/prepare_os12_device_candidate.py'
+      - 'scripts/validate_os12_automatic_candidate.py'
+      - 'scripts/validate_os12_candidate_publisher.py'
+      - 'scripts/validate_os12_merge_gate.py'
+      - 'scripts/validate_os12_physical_acceptance.py'
+      - 'scripts/validate_os12_recovery_roundtrip.py'
+      - 'scripts/waveshare-usb.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: os12-tooling-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate OS12 acceptance/recovery tooling
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate Python tooling syntax
+        run: |
+          python3 -m py_compile             scripts/accept_os12_code_free_portal_runtime.py             scripts/accept_os12_device_ui_physical.py             scripts/accept_os12_media_physical.py             scripts/accept_os12_media_runtime.py             scripts/accept_os12_portal_runtime.py             scripts/accept_os12_unattended.py             scripts/accept_os12_update_runtime.py             scripts/capture_os12_views_unattended.py             scripts/prepare_os12_device_candidate.py             scripts/validate_os12_automatic_candidate.py             scripts/validate_os12_candidate_publisher.py             scripts/validate_os12_merge_gate.py             scripts/validate_os12_physical_acceptance.py             scripts/validate_os12_recovery_roundtrip.py
+
+      - name: Validate shell tooling syntax
+        run: |
+          bash -n scripts/accept_os12_installed_candidate_macos.sh
+          bash -n scripts/accept_os12_recovery_roundtrip_macos.sh
+          bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
+          bash -n scripts/flash_os12_ci_candidate_macos.sh
+          bash -n scripts/install_accept_os12_candidate_macos.sh
+          bash -n scripts/waveshare-usb.sh
+
+      - name: Validate zsh capture helper syntax
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y zsh >/dev/null
+          fi
+          zsh -n scripts/capture-ws350-views.zsh
+
+      - name: Validate candidate publication boundary
+        run: python3 scripts/validate_os12_candidate_publisher.py
+
+      - name: Validate exact-head merge-gate contract
+        run: python3 scripts/validate_os12_merge_gate.py
+
+      - name: Validate physical-acceptance provenance
+        run: python3 scripts/validate_os12_physical_acceptance.py
+
+      - name: Validate recovery round-trip contract
+        run: python3 scripts/validate_os12_recovery_roundtrip.py
