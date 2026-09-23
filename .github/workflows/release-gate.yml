@@ -121,13 +121,11 @@ jobs:
             required+=("Workshop Companion iOS")
           fi
 
-          printf '%s
-' "${required[@]}" | awk '!seen[$0]++' | jq -R . | jq -s -c . > required.json
+          printf '%s\\n' "${required[@]}" | awk '!seen[$0]++' | jq -R . | jq -s -c . > required.json
           echo "required=$(cat required.json)" >> "$GITHUB_OUTPUT"
 
           echo "Changed paths:"
-          printf '  %s
-' "${files[@]}"
+          printf '  %s\\n' "${files[@]}"
           echo "Required workflow gates:"
           jq -r '.[] | "  " + .' required.json
 
