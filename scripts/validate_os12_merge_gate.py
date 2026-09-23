@@ -13,56 +13,99 @@ def require(text: str, needle: str, label: str) -> None:
         raise ValidationError(f"{label}: missing {needle!r}")
 
 
+def forbid(text: str, needle: str, label: str) -> None:
+    if needle in text:
+        raise ValidationError(f"{label}: forbidden broad ownership marker {needle!r}")
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    workflow = (root / ".github/workflows/release-gate.yml").read_text(encoding="utf-8")
+    workflows = root / ".github" / "workflows"
+    release_gate = (workflows / "release-gate.yml").read_text(encoding="utf-8")
+    platform = (workflows / "os12-platform-bridge.yml").read_text(encoding="utf-8")
+    ux = (workflows / "os12-ux-architecture.yml").read_text(encoding="utf-8")
+    tooling = (workflows / "os12-tooling.yml").read_text(encoding="utf-8")
 
+    # Release Gate is the path-aware aggregator. It must always require the
+    # lightweight core Validate workflow and conditionally add OS12 owners.
     for needle in (
+        'required=("Validate")',
         "os12_required=0",
+        "platform_required=0",
+        "tooling_required=0",
         ".github/workflows/os12-platform-bridge.yml",
         ".github/workflows/os12-ux-architecture.yml",
-        "apply_workshop_os12_*.py",
-        "firmware/platform/*",
-        "scripts/*os12*",
-        "scripts/ensure-platformio.sh",
-        "docs/DEVICE_NATIVE_UPDATES.md",
+        ".github/workflows/os12-tooling.yml",
         'required+=("Workshop OS 12 Platform Bridge")',
         'required+=("Workshop OS 12 UX Architecture")',
+        'required+=("Workshop OS 12 Tooling Checks")',
+        "Wait for required workflow gates",
     ):
-        require(workflow, needle, "OS12 merge-gate coverage")
+        require(release_gate, needle, "OS12 merge-gate coverage")
 
-    platform_i = workflow.index('required+=("Workshop OS 12 Platform Bridge")')
-    ux_i = workflow.index('required+=("Workshop OS 12 UX Architecture")')
-    poll_i = workflow.index("Wait for required conditional workflow gates")
-    if platform_i > poll_i or ux_i > poll_i:
-        raise ValidationError("OS12 workflows are not added before merge-gate polling")
+    poll_i = release_gate.index("Wait for required workflow gates")
+    for needle in (
+        'required+=("Workshop OS 12 Platform Bridge")',
+        'required+=("Workshop OS 12 UX Architecture")',
+        'required+=("Workshop OS 12 Tooling Checks")',
+    ):
+        if release_gate.index(needle) > poll_i:
+            raise ValidationError(f"{needle} is added after merge-gate polling")
 
-    platform_workflow = (root / ".github/workflows/os12-platform-bridge.yml").read_text(encoding="utf-8")
-    ux_workflow = (root / ".github/workflows/os12-ux-architecture.yml").read_text(encoding="utf-8")
-    shared_trigger_needles = (
-        "apply_workshop_os12_*.py",
-        "contracts/**",
+    # Platform Bridge owns platform/service/control inputs only. Presentation
+    # reconstruction and acceptance helpers must not broaden this trigger.
+    for needle in (
         "firmware/platform/**",
-        "firmware/ui-v11.25-rc10/**",
-        "firmware/ui-v11.26-ui11/**",
-        "firmware/ui-v11.27-ui12/**",
-        "firmware/ui-v11.28-ui13/**",
+        "apply_workshop_os12_platform_bridge.py",
+        "apply_workshop_os12_inventory_service.py",
+        "scripts/run_os12_platform_local.sh",
+    ):
+        require(platform, needle, "Platform Bridge PR trigger coverage")
+    for needle in (
+        "apply_workshop_os12_*.py",
         "scripts/*os12*",
-        "scripts/ensure-platformio.sh",
-        "scripts/waveshare-usb.sh",
+        ".github/workflows/validate.yml",
+    ):
+        forbid(platform, needle, "Platform Bridge PR trigger")
+
+    # UX Architecture owns final reconstruction/build inputs and validators,
+    # not physical-acceptance/capture/recovery helpers.
+    for needle in (
+        "apply_workshop_os12_*.py",
+        "scripts/run_os12_ux_local.sh",
+        "scripts/validate_os12_*.py",
+        "firmware/platform/**",
+    ):
+        require(ux, needle, "UX Architecture PR trigger coverage")
+    for needle in (
+        "scripts/*os12*",
+        "scripts/accept_os12_*.py",
+        "scripts/accept_os12_*.sh",
         "scripts/capture-ws350-views.zsh",
+        "scripts/bootstrap_ws350_os12_usb_macos.sh",
         "docs/WORKSHOP_OS12_DEVICE_PLATFORM.md",
         "docs/DEVICE_NATIVE_UPDATES.md",
         "docs/MEDIA_PHYSICAL_ACCEPTANCE.md",
-        "releases/device-update.json",
-        ".github/workflows/os12-platform-bridge.yml",
-        ".github/workflows/os12-ux-architecture.yml",
-    )
-    for needle in shared_trigger_needles:
-        require(platform_workflow, needle, "Platform Bridge PR trigger coverage")
-        require(ux_workflow, needle, "UX Architecture PR trigger coverage")
+    ):
+        forbid(ux, needle, "UX Architecture PR trigger")
 
-    print("PASS: OS12-sensitive PRs require exact-head Platform Bridge and UX Architecture workflows before merge")
+    # Acceptance/recovery tooling has its own cheap, non-firmware workflow.
+    for needle in (
+        "name: Workshop OS 12 Tooling Checks",
+        "scripts/accept_os12_*.py",
+        "scripts/accept_os12_*.sh",
+        "scripts/validate_os12_physical_acceptance.py",
+        "scripts/validate_os12_recovery_roundtrip.py",
+        "Validate recovery round-trip contract",
+    ):
+        require(tooling, needle, "OS12 Tooling PR trigger coverage")
+    for needle in ("run_os12_ux_local.sh --build", "pio run", "PlatformIO"):
+        forbid(tooling, needle, "OS12 Tooling workflow")
+
+    print(
+        "PASS: OS12 merge gate is path-aware; platform, UX, and "
+        "acceptance/recovery tooling retain separate ownership"
+    )
     return 0
 
 
