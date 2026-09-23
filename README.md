@@ -11,10 +11,10 @@ Workshop OS deliberately keeps accepted source, merged-but-unaccepted source, st
 | Surface | Current state | Meaning |
 | --- | --- | --- |
 | accepted source baseline | **Workshop OS v11.22 Display Expert RC1** | Last physically accepted source baseline; remains authoritative for accepted/stable state. |
-| `main` | **Workshop OS 12.0.0 Post-Capture UI Hardening Candidate — merged, physical acceptance pending** | PR #128 merged the post-capture UI hardening after exact-head CI. The exact CI candidate was then installed on the WS350, exact runtime identity was verified, unattended whole-device acceptance passed, and a fresh 15-view 480×320 capture passed; sensory physical acceptance and accepted/stable promotion remain pending. |
-| active candidate | **None** | There is no open firmware source candidate PR; PR #129 only records current acceptance evidence and release metadata. |
-| tested OS12 candidate | **f1cd6cf2385de1b41900f1c216e10c197f907e3c** | Exact CI firmware source installed on the WS350; exact runtime identity and unattended whole-device acceptance passed. |
-| main merge commit | **10a154875d0b669671520eba3f69139c76a2833b** | PR #128 merge commit; its Git tree matches the exact tested candidate tree. |
+| `main` | **Workshop OS 12.0.0 Exact Main Physical-Acceptance Candidate — merged, physical acceptance pending** | `main` at `2fe7576f49060b92180218452e64e4766c382af0` produced the exact CI artifact installed on the WS350. Exact runtime identity, unattended whole-device acceptance, and the 15-view 480×320 capture passed; sensory physical acceptance and the due full-image recovery round-trip remain pending. |
+| active candidate | **None** | There is no open firmware source candidate PR; PR #136 only records current acceptance evidence and release metadata. |
+| tested OS12 candidate | **2fe7576f49060b92180218452e64e4766c382af0** | Exact CI firmware source installed on the WS350; exact runtime identity and unattended whole-device acceptance passed. |
+| main source commit | **2fe7576f49060b92180218452e64e4766c382af0** | Exact merged `main` source used by the installed physical-acceptance candidate. |
 | static installer | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative downloadable Full + OTA channel; intentionally not promoted by the source merge. |
 | static rollback | **Smart Home v7.2** | Known static rollback pair retained for recovery. |
 | published device OTA candidate | **Workshop OS v11.26 UI11 Cupertino** | Existing published, unaccepted OTA candidate in `releases/device-update.json`; unchanged by PR #122. |
@@ -55,7 +55,7 @@ Copy is written as product language rather than implementation language. The tou
 
 ## Workshop OS 12 merged source state
 
-PR **#122** is now merged to `main` as Workshop OS 12.0.0 under the documented merged-but-unaccepted exception. The exact tested firmware source remains `5d3b039c6e3c760a3387b3b139a0757d45323ad9`; merge commit `6b4cb4afee05e9c23bbcd3fac84fc11e329118b4` preserves that tested candidate as a parent. Exact-head CI, guarded installation, runtime identity, 15/15 unattended native-view acceptance, and unattended media lifecycle checks passed. This is **not** yet an accepted/stable promotion; the prior physically accepted v11.22 source remains the accepted baseline until promotion evidence is explicitly recorded.
+Workshop OS 12.0.0 is present on `main` under the documented merged-but-unaccepted exception. The exact tested firmware source is `2fe7576f49060b92180218452e64e4766c382af0`, produced by the OS12 UX Architecture candidate build from merged `main`. Guarded installation, exact runtime identity, 15/15 unattended native-view acceptance, unattended media lifecycle checks, and automatic evidence validation passed. This is **not** yet an accepted/stable promotion; the prior physically accepted v11.22 source remains the accepted baseline until the remaining physical sensory checks and due full-image recovery evidence are explicitly completed.
 
 For a WS350 that is physically attached to a Mac but still running pre-OS12 firmware, the guarded bootstrap helper is:
 
