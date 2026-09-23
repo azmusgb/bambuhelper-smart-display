@@ -95,6 +95,7 @@ jobs:
             apply_workshop_os12_visual_overhaul.py \
             apply_workshop_os12_post_capture_ui_hardening.py \
             apply_workshop_os12_workshop_surface_runtime.py \
+            apply_workshop_os12_physical_polish.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
             scripts/validate_os12_ux_physical_fit.py \
@@ -102,6 +103,7 @@ jobs:
             scripts/validate_os12_visual_overhaul.py \
             scripts/validate_os12_post_capture_ui_hardening.py \
             scripts/validate_os12_workshop_surface_runtime.py \
+            scripts/validate_os12_physical_polish.py \
             scripts/accept_os12_code_free_portal_runtime.py \
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_media_runtime.py \
