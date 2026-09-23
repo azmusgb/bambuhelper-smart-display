@@ -85,12 +85,23 @@ def main() -> int:
 
     action = block(hub, "static HubRect hubOs12WorkshopActionRect(")
     for marker in ("y=220", "h=44", "(W-2*m-g)/2"):
-        need(action, marker, "Workshop visible action geometry")
+        need(action, marker, "Workshop configured action geometry")
+
+    setup_action = block(hub, "static HubRect hubOs12WorkshopSetupRect(")
+    for marker in ("x=56", "y=166", "h=46", "W-x*2"):
+        need(setup_action, marker, "Workshop setup action geometry")
 
     workshop = block(hub, "static void drawWorkshop(bool full)")
     for marker in (
         "workshopInventorySnapshot()",
-        "hubOs12WorkshopHeaderState(inv)",
+        'drawHeader("Workshop",inv.credentialConfigured?hubOs12WorkshopHeaderState(inv):nullptr,2)',
+        'if(!inv.credentialConfigured)',
+        '"FILAMENT INVENTORY"',
+        '"Inventory not connected"',
+        '"Connect this display in Local Portal"',
+        '"for readiness, loaded spools, and alerts."',
+        '"Set Up Inventory"',
+        "hubOs12WorkshopSetupRect()",
         '"PRINT READINESS"',
         '"LOADED SPOOLS"',
         '"ATTENTION"',
@@ -98,7 +109,7 @@ def main() -> int:
         "state.readiness",
         "state.quantityVerificationRequired",
         "state.placementVerificationRequired",
-        'inv.credentialConfigured?"Local Portal":"Set Up Inventory"',
+        '"Local Portal"',
         'inv.busy?"Refreshing":"Refresh"',
         "hubOs12WorkshopActionRect(0)",
         "hubOs12WorkshopActionRect(1)",
@@ -116,9 +127,20 @@ def main() -> int:
     ):
         forbid(workshop, forbidden, "Workshop authority/runtime wiring")
 
+    setup_branch = workshop.find("if(!inv.credentialConfigured)")
+    evidence_branch = workshop.find('hubOs12EvidenceRow(readiness,"PRINT READINESS"')
+    if setup_branch < 0 or evidence_branch < 0 or setup_branch > evidence_branch:
+        raise ValidationError("Workshop setup state must short-circuit before configured evidence rows")
+    need(workshop[setup_branch:evidence_branch], "return;", "Workshop setup state must return before dashboard rendering")
+    forbid(workshop[setup_branch:evidence_branch], '"PRINT READINESS"', "Setup state must not render dashboard placeholders")
+    forbid(workshop[setup_branch:evidence_branch], '"LOADED SPOOLS"', "Setup state must not render dashboard placeholders")
+    forbid(workshop[setup_branch:evidence_branch], '"ATTENTION"', "Setup state must not render dashboard placeholders")
+
     touch = block(hub, "if(cur==SCREEN_HUB_WORKSHOP){")
     for marker in (
         "workshopInventorySnapshot()",
+        "if(!inv.credentialConfigured)",
+        "hubOs12WorkshopSetupRect().contains(x,y)",
         "hubOs12WorkshopActionRect(0).contains(x,y)",
         "workshopInventoryRequestRefresh()",
         "hubOs12WorkshopActionRect(1).contains(x,y)",
@@ -138,8 +160,9 @@ def main() -> int:
         forbid(touch, forbidden, "Workshop hidden action regression")
 
     print(
-        "PASS: Workshop surface uses authoritative device-feed state, exposes two visible "
-        "44px actions, and has no stale hidden v11.25 touch zones"
+        "PASS: Workshop surface uses a focused single-panel setup state, preserves the "
+        "authoritative configured dashboard, maps visible setup/refresh/portal actions, "
+        "and has no stale hidden v11.25 touch zones"
     )
     return 0
 
