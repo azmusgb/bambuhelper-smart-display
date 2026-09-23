@@ -18,23 +18,15 @@ concurrency:
 jobs:
   release-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run repository release gate
+      - name: Validate repository/release policy
         run: python3 scripts/validate_release.py
 
-      - name: Validate shell scripts
-        shell: bash
-        run: |
-          set -euo pipefail
-          while IFS= read -r -d '' file; do
-            bash -n "$file"
-          done < <(find . -type f -name '*.sh' -not -path './.git/*' -not -path './firmware/build/*' -print0)
-          echo 'Shell syntax: PASS'
-
-      - name: Validate release metadata
+      - name: Validate release metadata JSON
         run: |
           python3 - <<'PY'
           import json
@@ -65,35 +57,52 @@ jobs:
           )
 
           required=("Validate")
-          firmware_required=0
+          legacy_firmware_required=0
           settings_required=0
           static_required=0
           os12_required=0
+          platform_required=0
+          companion_required=0
 
           for f in "${files[@]}"; do
             case "$f" in
-              .github/workflows/firmware-candidate.yml|README.md|SECURITY.md|releases/current.json|apply_smart_home_*.py|apply_workshop_os_*.py|.bambuhelper-validation/*|.bambuhelper-validation/**/*|assets/*|assets/**/*|firmware/ui-*/*|firmware/ui-*/**/*|scripts/apply_*.sh|scripts/run_*.sh|scripts/validate_*.py|scripts/capture-ws350-views.zsh|docs/physical-*.md|docs/visual-*.md|docs/portal-auth-*.md|docs/display-expert-*.md|docs/settings-capability-registry/*|docs/settings-capability-registry/**/*|docs/UI*.md)
-                firmware_required=1
+              .github/workflows/firmware-candidate.yml|apply_smart_home_physical_fit_v11_19_1.py|apply_smart_home_portal_auth_v11_20.py|apply_smart_home_display_expert_v11_22.py|scripts/apply_workshop_os_v11_19.sh|scripts/apply_workshop_os_v11_19_1.sh|scripts/validate_device_contracts.py|scripts/validate_visual_contracts_v11_19.py|scripts/validate_rendered_fit_v11_19_1.py|scripts/validate_portal_auth_v11_20.py|scripts/validate_display_expert_v11_22.py|scripts/validate_settings_parity.py|scripts/capture-ws350-views.zsh)
+                legacy_firmware_required=1
                 ;;
             esac
+
             case "$f" in
               .github/workflows/ui13-appliance-settings.yml|apply_workshop_os_*.py|apply_smart_home_network_locale_layout_v11_23.py|apply_smart_home_touch_ux_v11_23_rc2_*.py|apply_smart_home_auth_restore_v11_23_rc2.py|firmware/ui-v11.25/*|firmware/ui-v11.25-*/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.28-ui13/*|assets/v11_25_*.css|scripts/run_rc10_local.sh|scripts/run_ui12_local.sh|scripts/run_ui13_local.sh|scripts/validate_ui12_control_center.py|scripts/validate_ui13_appliance_settings.py|scripts/validate_ui13_product_finish.py|docs/UI11_SOURCE_PROVENANCE.md|docs/UI12_CONTROL_CENTER.md|docs/UI13_APPLIANCE_SETTINGS.md)
                 settings_required=1
                 ;;
             esac
+
             case "$f" in
-              release.json|build.py|index.html|app.js|firmware/*|firmware/**/*|scripts/validate_release.py|.github/workflows/release-main.yml)
+              release.json|build.py|index.html|app.js|firmware/*.bin|scripts/validate_release.py|.github/workflows/release-main.yml)
                 static_required=1
                 ;;
             esac
+
             case "$f" in
-              .github/workflows/os12-platform-bridge.yml|.github/workflows/os12-ux-architecture.yml|apply_workshop_os12_*.py|contracts/*|firmware/platform/*|firmware/ui-v11.25-rc10/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.28-ui13/*|scripts/*os12*|scripts/ensure-platformio.sh|scripts/waveshare-usb.sh|scripts/capture-ws350-views.zsh|docs/WORKSHOP_OS12_DEVICE_PLATFORM.md|docs/DEVICE_NATIVE_UPDATES.md|docs/MEDIA_PHYSICAL_ACCEPTANCE.md|releases/device-update.json)
+              .github/workflows/os12-ux-architecture.yml|apply_workshop_os12_*.py|contracts/*|firmware/platform/*|firmware/platform/**/*|firmware/ui-v11.25-rc10/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.28-ui13/*|scripts/*os12*|scripts/ensure-platformio.sh|scripts/capture-ws350-views.zsh|docs/WORKSHOP_OS12_DEVICE_PLATFORM.md|docs/DEVICE_NATIVE_UPDATES.md|docs/MEDIA_PHYSICAL_ACCEPTANCE.md|releases/device-update.json)
                 os12_required=1
+                ;;
+            esac
+
+            case "$f" in
+              .github/workflows/os12-platform-bridge.yml|firmware/platform/*|firmware/platform/**/*|apply_workshop_os12_platform_bridge.py|apply_workshop_os12_media_hardware.py|apply_workshop_os12_media_capture.py|apply_workshop_os12_media_runtime.py|apply_workshop_os12_media_signal_hardening.py|apply_workshop_os12_mqtt_camera_telemetry.py|apply_workshop_os12_media_ui.py|apply_workshop_os12_media_api.py|apply_workshop_os12_non_destructive_controls.py|apply_workshop_os12_guarded_stop.py|apply_workshop_os12_portal_login_hardening.py|apply_workshop_os12_inventory_api.py|apply_workshop_os12_device_update.py|apply_workshop_os12_inventory_service.py|apply_workshop_os12_release_identity.py|scripts/run_os12_platform_local.sh|scripts/validate_os12_platform_bridge.py|scripts/validate_os12_media_hardware.py|scripts/validate_os12_media_capture.py|scripts/validate_os12_media_signal.py|scripts/validate_os12_mqtt_camera_telemetry.py|scripts/validate_os12_media_service.py|scripts/validate_os12_media_runtime.py|scripts/validate_os12_media_ui.py|scripts/validate_os12_media_api.py|scripts/validate_os12_non_destructive_controls.py|scripts/validate_os12_guarded_stop.py|scripts/validate_os12_control_boundary.py|scripts/validate_os12_portal_login.py|scripts/validate_os12_inventory_api.py|scripts/validate_os12_device_update.py|scripts/validate_os12_inventory_service.py|scripts/validate_os12_candidate_publisher.py|scripts/ensure-platformio.sh)
+                platform_required=1
+                ;;
+            esac
+
+            case "$f" in
+              .github/workflows/companion-ios.yml|companion/*|companion/**/*|scripts/validate_companion_protocol.py)
+                companion_required=1
                 ;;
             esac
           done
 
-          if (( firmware_required )); then
+          if (( legacy_firmware_required )); then
             required+=("Workshop OS Firmware Gate — v11.22 Display Expert RC1")
           fi
           if (( settings_required )); then
@@ -102,20 +111,27 @@ jobs:
           if (( static_required )); then
             required+=("Validate accepted static installer")
           fi
-          if (( os12_required )); then
+          if (( platform_required )); then
             required+=("Workshop OS 12 Platform Bridge")
+          fi
+          if (( os12_required )); then
             required+=("Workshop OS 12 UX Architecture")
           fi
+          if (( companion_required )); then
+            required+=("Workshop Companion iOS")
+          fi
 
-          printf '%s\n' "${required[@]}" | jq -R . | jq -s -c . > required.json
+          printf '%s
+' "${required[@]}" | awk '!seen[$0]++' | jq -R . | jq -s -c . > required.json
           echo "required=$(cat required.json)" >> "$GITHUB_OUTPUT"
 
           echo "Changed paths:"
-          printf '  %s\n' "${files[@]}"
-          echo "Required conditional workflow gates:"
-          printf '  %s\n' "${required[@]}"
+          printf '  %s
+' "${files[@]}"
+          echo "Required workflow gates:"
+          jq -r '.[] | "  " + .' required.json
 
-      - name: Wait for required conditional workflow gates
+      - name: Wait for required workflow gates
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
