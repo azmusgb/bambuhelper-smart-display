@@ -151,11 +151,20 @@ jobs:
 
           mapfile -t required < <(jq -r '.[]' <<< "$REQUIRED")
 
-          for attempt in $(seq 1 210); do
-            runs="$(gh api "/repos/$REPO/actions/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100")"
-            all_passed=1
-
+          # Never allow a transient/hung GitHub API request to pin the merge gate
+          # until the 70-minute job timeout. Each poll is independently bounded and
+          # retried, while gate semantics remain fail-closed.
+          for attempt in $(seq 1 120); do
             echo "Merge Gate poll $attempt"
+
+            if ! runs="$(timeout 30s gh api "/repos/$REPO/actions/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100")"; then
+              rc=$?
+              echo "  RETRY GitHub Actions API query failed or timed out (rc=$rc)"
+              sleep 20
+              continue
+            fi
+
+            all_passed=1
             for name in "${required[@]}"; do
               row="$(jq -c --arg n "$name" '[.workflow_runs[] | select(.name == $n)] | sort_by(.created_at) | last // empty' <<< "$runs")"
               if [[ -z "$row" ]]; then
