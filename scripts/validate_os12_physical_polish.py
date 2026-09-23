@@ -96,6 +96,15 @@ def main() -> int:
     toggle = block(hub, "static void hubUi13ToggleRow(const HubRect& r,const char* label,const char* detail,bool on,uint16_t accent=C10_ACCENT)")
     need(toggle, "on?OS12V_BG:OS12V_MUTED", "Quiet OFF-toggle knob")
 
+    home_decl = "static const char* hubOs12WorkshopReadinessLabel(\n    workshop::platform::InventoryReadinessState state);"
+    color_decl = "static uint16_t hubOs12WorkshopReadinessColor(\n    workshop::platform::InventoryReadinessState state);"
+    need(hub, home_decl, "Home readiness helper declaration")
+    need(hub, color_decl, "Home readiness color declaration")
+    if hub.find(home_decl) > hub.find("static void drawHome(bool full)"):
+        raise ValidationError("Home readiness helper declaration must precede drawHome")
+    if hub.find(color_decl) > hub.find("static void drawHome(bool full)"):
+        raise ValidationError("Home readiness color declaration must precede drawHome")
+
     home = block(hub, "static void drawHome(bool full)")
     need(home, "workshopInventorySnapshot()", "Home inventory authority")
     need(home, 'drawHeader("Home",nullptr,0)', "Home avoids duplicate printer-state badge")
