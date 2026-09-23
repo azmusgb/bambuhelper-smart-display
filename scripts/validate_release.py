@@ -241,7 +241,7 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
     for marker in (
         "- 'apply_workshop_os12_*.py'",
         "- 'scripts/run_os12_ux_local.sh'",
-        "- 'scripts/validate_os12_*.py'",
+        "- 'scripts/validate_os12_ux_architecture.py'",
         "- 'firmware/platform/**'",
     ):
         if marker not in ux:
