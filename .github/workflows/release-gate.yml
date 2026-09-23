@@ -84,7 +84,7 @@ jobs:
             esac
 
             case "$f" in
-              .github/workflows/os12-ux-architecture.yml|apply_workshop_os12_*.py|contracts/*|firmware/platform/*|firmware/platform/**/*|firmware/ui-v11.25-rc10/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.28-ui13/*|scripts/*os12*|scripts/ensure-platformio.sh|scripts/capture-ws350-views.zsh|docs/WORKSHOP_OS12_DEVICE_PLATFORM.md|docs/DEVICE_NATIVE_UPDATES.md|docs/MEDIA_PHYSICAL_ACCEPTANCE.md|releases/device-update.json)
+              .github/workflows/os12-ux-architecture.yml|apply_workshop_os12_*.py|contracts/*|contracts/**/*|firmware/platform/*|firmware/platform/**/*|firmware/ui-v11.25-rc10/*|firmware/ui-v11.25-rc10/**/*|firmware/ui-v11.26-ui11/*|firmware/ui-v11.26-ui11/**/*|firmware/ui-v11.27-ui12/*|firmware/ui-v11.27-ui12/**/*|firmware/ui-v11.28-ui13/*|firmware/ui-v11.28-ui13/**/*|scripts/ensure-platformio.sh|scripts/run_os12_platform_local.sh|scripts/run_os12_ux_local.sh|scripts/validate_os12_*.py)
                 os12_required=1
                 ;;
             esac
