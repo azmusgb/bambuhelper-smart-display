@@ -57,7 +57,7 @@ def main() -> int:
     hub=load(repo/"src"/"smart_hub.cpp")
 
     evidence=block(hub,"static void hubOs12EvidenceRow(")
-    for marker in ("dotReserve","textW","r.y+25","r.y+r.h-7"):
+    for marker in ("dotReserve","textW","r.h<64","valueFont=compact?FONT_SMALL:FONT_BODY","valueY=r.y+(compact?22:25)","detailBottom=r.y+r.h-(compact?5:7)"):
         need(evidence,marker,"evidence row non-overlap")
     forbid(evidence,"BR_DATUM","evidence row stacked layout")
 
