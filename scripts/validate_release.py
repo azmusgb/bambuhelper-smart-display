@@ -25,6 +25,7 @@ ALLOWED_FIRMWARE = {
     ROLLBACK_OTA.as_posix(),
 }
 ALLOWED_WORKFLOWS = {
+    "companion-ios.yml",
     "firmware-candidate.yml",
     "os12-platform-bridge.yml",
     "os12-ux-architecture.yml",
@@ -165,22 +166,77 @@ def validate_capture_security() -> None:
             fail(f"capture helper may disclose sensitive/environment-specific configuration: {marker}")
 
 
-def validate_stable_merge_gate(workflows_dir: Path) -> None:
-    workflow = (workflows_dir / "firmware-candidate.yml").read_text(encoding="utf-8")
-    required = [
-        "pull_request:\n    branches: [main]",
-        "scope:\n    name: Classify Firmware Scope",
-        "validate:\n    name: Native Firmware Validation",
-        "merge-gate:\n    name: Merge Gate",
-        "needs: [scope, validate]", "if: always()",
-        "Native firmware validation required:",
-    ]
-    for marker in required:
-        if marker not in workflow:
-            fail(f"stable Merge Gate contract missing: {marker}")
-    pull_request_header = workflow.split("workflow_dispatch:", 1)[0]
-    if "\n    paths:\n" in pull_request_header or "\n    paths-ignore:\n" in pull_request_header:
-        fail("firmware-candidate pull_request trigger must run on every PR to main")
+def validate_ci_ownership(workflows_dir: Path) -> None:
+    validate = (workflows_dir / "validate.yml").read_text(encoding="utf-8")
+    if "name: Core repository validation" not in validate:
+        fail("Validate must remain the lightweight core repository gate")
+    for forbidden in (
+        "Workshop Companion iOS",
+        "xcodebuild",
+        "brew install xcodegen",
+        "run_os12_platform_local.sh",
+        "run_os12_ux_local.sh",
+        "accept_os12_recovery_roundtrip",
+    ):
+        if forbidden in validate:
+            fail(f"Validate contains domain-specific/heavy work: {forbidden}")
+
+    companion = (workflows_dir / "companion-ios.yml").read_text(encoding="utf-8")
+    for marker in (
+        "name: Workshop Companion iOS",
+        "paths:",
+        "- 'companion/**'",
+        "- 'scripts/validate_companion_protocol.py'",
+        "Compile iOS Simulator app",
+    ):
+        if marker not in companion:
+            fail(f"Companion workflow missing path-owned contract: {marker}")
+
+    legacy = (workflows_dir / "firmware-candidate.yml").read_text(encoding="utf-8")
+    legacy_header = legacy.split("workflow_dispatch:", 1)[0]
+    if "\n    paths:\n" not in legacy_header:
+        fail("legacy firmware gate must be path-filtered")
+    for forbidden in (
+        "'scripts/validate_*.py'",
+        "'apply_smart_home_*.py'",
+        "'README.md'",
+        "'SECURITY.md'",
+    ):
+        if forbidden in legacy_header:
+            fail(f"legacy firmware gate trigger is too broad: {forbidden}")
+
+    platform = (workflows_dir / "os12-platform-bridge.yml").read_text(encoding="utf-8")
+    for forbidden in (
+        "- 'apply_workshop_os12_*.py'",
+        "- 'scripts/*os12*'",
+        "- '.github/workflows/validate.yml'",
+    ):
+        if forbidden in platform:
+            fail(f"OS12 Platform Bridge trigger is too broad: {forbidden}")
+    for marker in (
+        "- 'firmware/platform/**'",
+        "- 'apply_workshop_os12_platform_bridge.py'",
+        "- 'apply_workshop_os12_inventory_service.py'",
+        "- 'scripts/run_os12_platform_local.sh'",
+    ):
+        if marker not in platform:
+            fail(f"OS12 Platform Bridge lost an authoritative platform input: {marker}")
+
+    release_gate = (workflows_dir / "release-gate.yml").read_text(encoding="utf-8")
+    for marker in (
+        'required=("Validate")',
+        "legacy_firmware_required=0",
+        "platform_required=0",
+        "os12_required=0",
+        "companion_required=0",
+        'required+=("Workshop OS 12 UX Architecture")',
+        'required+=("Workshop OS 12 Platform Bridge")',
+        'required+=("Workshop Companion iOS")',
+    ):
+        if marker not in release_gate:
+            fail(f"Release Gate missing path-aware aggregation contract: {marker}")
+    if "Validate shell scripts" in release_gate:
+        fail("Release Gate must not duplicate Core Validate shell syntax work")
 
 
 def main() -> int:
@@ -224,7 +280,7 @@ def main() -> int:
         text = (workflows_dir / name).read_text(encoding="utf-8")
         if "permissions:\n  contents: read" not in text:
             fail(f"workflow must declare contents: read: {name}")
-    validate_stable_merge_gate(workflows_dir)
+    validate_ci_ownership(workflows_dir)
     validate_acceptance_policy()
     validate_capture_security()
 
@@ -281,7 +337,7 @@ def main() -> int:
     print("Static download channel: Workshop OS v11.19.1 Full + OTA")
     print("Immediate static rollback: Smart Home v7.2 Full + OTA")
     print("Visual capture credential redaction: REQUIRED BEFORE RETENTION")
-    print("Firmware workflows: reusable path-aware firmware gate + repository/release gates")
+    print("CI ownership: lightweight core validate + path-owned domain gates + release aggregation")
     return 0
 
 
