@@ -215,12 +215,17 @@ static void drawWorkshop(bool full) {
       state.unknownQuantityCount+state.staleQuantityCount+state.conflictCount+state.invalidLineageCount;
   const uint16_t placementReview=
       state.unknownPlacementCount+state.stalePlacementCount+state.placementConflictCount;
+  const bool quantityNeedsVerification=state.quantityVerificationRequired||quantityReview>0;
+  const bool placementNeedsVerification=state.placementVerificationRequired||placementReview>0;
   const bool readinessNeedsAction=
       fresh&&(state.readiness==InventoryReadinessState::NeedsLoad||
              state.readiness==InventoryReadinessState::NeedsDry||
              state.readiness==InventoryReadinessState::InsufficientQuantity||
              state.readiness==InventoryReadinessState::EvidenceStale);
-  const uint16_t reviewCount=state.lowCount+quantityReview+placementReview+(readinessNeedsAction?1U:0U);
+  const uint16_t reviewCount=
+      state.lowCount+quantityReview+placementReview+(readinessNeedsAction?1U:0U)+
+      ((quantityNeedsVerification&&quantityReview==0)?1U:0U)+
+      ((placementNeedsVerification&&placementReview==0)?1U:0U);
   char attentionValue[28];
   char attentionDetail[72];
   uint16_t attentionColor=C10_MUTED;
