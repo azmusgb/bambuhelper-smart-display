@@ -35,12 +35,13 @@ CI is intentionally **scope-owned**. A guarantee should have one authoritative w
 - **Workshop Companion iOS** runs only for `companion/**`, its protocol validator, or its own workflow.
 - **Workshop OS 12 Platform Bridge** runs only when platform/service/control inputs change.
 - **Workshop OS 12 UX Architecture** is the authoritative final OS12 reconstruction + WS350/cross-board compile and the sole CI producer of the flashable physical-acceptance candidate.
+- **Workshop OS 12 Tooling Checks** owns acceptance, capture, install, recovery, and candidate-publication tooling without rebuilding firmware.
 - **Workshop OS Firmware Gate — v11.22 Display Expert RC1** is a legacy reconstruction gate and runs only when its actual legacy reconstruction inputs change.
 - **Workshop OS UI13 Appliance Settings Gate** remains scoped to the UI13 lineage.
 - **Validate accepted static installer** owns the static download/install surface.
 - **Release Gate / merge-gate** validates release policy and waits for only the workflows required by the PR's changed paths; it does not duplicate those test suites.
 
-For a normal OS12 presentation/runtime-composition change, the expected expensive path is one final **OS12 UX Architecture** candidate build. Platform, legacy firmware, UI13, Companion, and static-installer builds must not run merely because a generic OS12/Python file changed.
+For a normal OS12 presentation/runtime-composition change, the expected expensive path is one final **OS12 UX Architecture** candidate build. Acceptance/recovery-helper changes use the lightweight **OS12 Tooling Checks** workflow instead. Platform, legacy firmware, UI13, Companion, and static-installer builds must not run merely because a generic OS12/Python file changed.
 
 Failures in an applicable owned gate are release blockers until explained and intentionally changed.
 
