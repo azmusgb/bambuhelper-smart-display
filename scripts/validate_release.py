@@ -205,6 +205,26 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
         if forbidden in legacy_header:
             fail(f"legacy firmware gate trigger is too broad: {forbidden}")
 
+    ux = (workflows_dir / "os12-ux-architecture.yml").read_text(encoding="utf-8")
+    for forbidden in (
+        "- 'scripts/*os12*'",
+        "- 'scripts/capture-ws350-views.zsh'",
+        "- 'scripts/bootstrap_ws350_os12_usb_macos.sh'",
+        "- 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'",
+        "- 'docs/DEVICE_NATIVE_UPDATES.md'",
+        "- 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'",
+    ):
+        if forbidden in ux:
+            fail(f"OS12 UX candidate trigger is too broad: {forbidden}")
+    for marker in (
+        "- 'apply_workshop_os12_*.py'",
+        "- 'scripts/run_os12_ux_local.sh'",
+        "- 'scripts/validate_os12_*.py'",
+        "- 'firmware/platform/**'",
+    ):
+        if marker not in ux:
+            fail(f"OS12 UX candidate lost a reconstruction input: {marker}")
+
     platform = (workflows_dir / "os12-platform-bridge.yml").read_text(encoding="utf-8")
     for forbidden in (
         "- 'apply_workshop_os12_*.py'",
