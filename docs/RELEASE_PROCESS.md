@@ -56,7 +56,7 @@ Hardware-facing work uses two deliberately different evidence classes.
 - machine-verifiable control, media lifecycle, health, freshness, and fail-closed checks that can be observed deterministically;
 - recovery capture when the installation procedure requires it.
 
-These checks must be unattended after the guarded invocation. Routine candidate/merge testing must not require the operator to answer interactive `y/n/u` prompts. The canonical macOS exact-candidate installer must automatically run the unattended whole-device suite, capture the complete 15-view 480×320 framebuffer set, and validate that both evidence sets refer to the same exact source identity before it reports automatic validation PASS.
+These checks must be unattended after the guarded invocation. Routine candidate/merge testing must not require the operator to answer interactive `y/n/u` prompts. The canonical macOS exact-candidate installer must automatically run the unattended whole-device suite, capture the complete 15-view 480×320 framebuffer set, and validate that both evidence sets refer to the same exact source identity before it reports automatic validation PASS. For an already-installed exact candidate, `scripts/accept_os12_installed_candidate_macos.sh` provides the same machine-verifiable validation without reflashing; when explicitly invoked with `--exercise-recovery --confirm-printer-idle`, it also runs the same-state full-image recovery round-trip as a separate evidence class.
 
 **Reserved for physical acceptance/promotion:**
 
