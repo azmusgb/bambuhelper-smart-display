@@ -25,6 +25,9 @@ def main() -> int:
     platform = (workflows / "os12-platform-bridge.yml").read_text(encoding="utf-8")
     ux = (workflows / "os12-ux-architecture.yml").read_text(encoding="utf-8")
     tooling = (workflows / "os12-tooling.yml").read_text(encoding="utf-8")
+    platform_trigger = platform.split("permissions:", 1)[0]
+    ux_trigger = ux.split("permissions:", 1)[0]
+    tooling_trigger = tooling.split("permissions:", 1)[0]
 
     # Release Gate is the path-aware aggregator. It must always require the
     # lightweight core Validate workflow and conditionally add OS12 owners.
@@ -60,13 +63,13 @@ def main() -> int:
         "apply_workshop_os12_inventory_service.py",
         "scripts/run_os12_platform_local.sh",
     ):
-        require(platform, needle, "Platform Bridge PR trigger coverage")
+        require(platform_trigger, needle, "Platform Bridge PR trigger coverage")
     for needle in (
         "apply_workshop_os12_*.py",
         "scripts/*os12*",
         ".github/workflows/validate.yml",
     ):
-        forbid(platform, needle, "Platform Bridge PR trigger")
+        forbid(platform_trigger, needle, "Platform Bridge PR trigger")
 
     # UX Architecture owns final reconstruction/build inputs and validators,
     # not physical-acceptance/capture/recovery helpers.
@@ -76,7 +79,7 @@ def main() -> int:
         "scripts/validate_os12_ux_architecture.py",
         "firmware/platform/**",
     ):
-        require(ux, needle, "UX Architecture PR trigger coverage")
+        require(ux_trigger, needle, "UX Architecture PR trigger coverage")
     for needle in (
         "scripts/*os12*",
         "scripts/accept_os12_*.py",
@@ -87,7 +90,7 @@ def main() -> int:
         "docs/DEVICE_NATIVE_UPDATES.md",
         "docs/MEDIA_PHYSICAL_ACCEPTANCE.md",
     ):
-        forbid(ux, needle, "UX Architecture PR trigger")
+        forbid(ux_trigger, needle, "UX Architecture PR trigger")
 
     # Acceptance/recovery tooling has its own cheap, non-firmware workflow.
     for needle in (
