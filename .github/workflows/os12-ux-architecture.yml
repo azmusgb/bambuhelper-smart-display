@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - feature/os12-ux-architecture-overhaul
       - feature/os12-portal-control-plane-v4
     paths:
