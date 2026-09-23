@@ -28,6 +28,7 @@ ALLOWED_WORKFLOWS = {
     "companion-ios.yml",
     "firmware-candidate.yml",
     "os12-platform-bridge.yml",
+    "os12-tooling.yml",
     "os12-ux-architecture.yml",
     "release-gate.yml",
     "release-main.yml",
@@ -181,6 +182,25 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
         if forbidden in validate:
             fail(f"Validate contains domain-specific/heavy work: {forbidden}")
 
+    tooling = (workflows_dir / "os12-tooling.yml").read_text(encoding="utf-8")
+    for marker in (
+        "name: Workshop OS 12 Tooling Checks",
+        "- 'scripts/accept_os12_*.py'",
+        "- 'scripts/accept_os12_*.sh'",
+        "- 'scripts/validate_os12_physical_acceptance.py'",
+        "- 'scripts/validate_os12_recovery_roundtrip.py'",
+        "Validate recovery round-trip contract",
+    ):
+        if marker not in tooling:
+            fail(f"OS12 Tooling workflow missing owned contract: {marker}")
+    for forbidden in (
+        "run_os12_ux_local.sh --build",
+        "pio run",
+        "PlatformIO",
+    ):
+        if forbidden in tooling:
+            fail(f"OS12 Tooling workflow contains firmware-build work: {forbidden}")
+
     companion = (workflows_dir / "companion-ios.yml").read_text(encoding="utf-8")
     for marker in (
         "name: Workshop Companion iOS",
@@ -208,6 +228,8 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
     ux = (workflows_dir / "os12-ux-architecture.yml").read_text(encoding="utf-8")
     for forbidden in (
         "- 'scripts/*os12*'",
+        "- 'scripts/accept_os12_*.py'",
+        "- 'scripts/accept_os12_*.sh'",
         "- 'scripts/capture-ws350-views.zsh'",
         "- 'scripts/bootstrap_ws350_os12_usb_macos.sh'",
         "- 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'",
@@ -249,9 +271,11 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
         "platform_required=0",
         "os12_required=0",
         "companion_required=0",
+        "tooling_required=0",
         'required+=("Workshop OS 12 UX Architecture")',
         'required+=("Workshop OS 12 Platform Bridge")',
         'required+=("Workshop Companion iOS")',
+        'required+=("Workshop OS 12 Tooling Checks")',
     ):
         if marker not in release_gate:
             fail(f"Release Gate missing path-aware aggregation contract: {marker}")
