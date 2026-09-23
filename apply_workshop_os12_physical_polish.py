@@ -81,6 +81,23 @@ def replace_function(text: str, signature: str, replacement: str) -> str:
     return text[:start] + replacement.strip() + text[end:]
 
 
+def insert_before_once(text: str, anchor: str, addition: str, label: str) -> str:
+    if addition.strip() in text:
+        return text
+    count = text.count(anchor)
+    if count != 1:
+        raise PatchError(f"{label}: expected one anchor, found {count}")
+    return text.replace(anchor, addition.rstrip() + "\n\n" + anchor, 1)
+
+
+WORKSHOP_READINESS_DECLS = r'''
+static const char* hubOs12WorkshopReadinessLabel(
+    workshop::platform::InventoryReadinessState state);
+static uint16_t hubOs12WorkshopReadinessColor(
+    workshop::platform::InventoryReadinessState state);
+'''
+
+
 HEADER = r'''
 static uint16_t hubOs12HeaderStatusColor(const char* state) {
   if(!state||!state[0])return OS12V_BLUE;
@@ -421,6 +438,16 @@ static void drawUi13SoftwareUpdate() {
 def apply(repo: Path) -> None:
     path = repo / "src" / "smart_hub.cpp"
     text = load(path)
+
+    # Home appears before the Workshop helper definitions in the reconstructed
+    # source. Declare the two read-only readiness projection helpers before
+    # Home so the final C++ translation unit has a valid compile order.
+    text = insert_before_once(
+        text,
+        "static void drawHome(bool full)",
+        WORKSHOP_READINESS_DECLS,
+        "Workshop readiness forward declarations",
+    )
 
     for signature, replacement in (
         ("static void drawHeader(const char* title,const char* right,uint8_t page)", HEADER),
