@@ -3,6 +3,20 @@ name: Workshop OS Firmware Gate — v11.22 Display Expert RC1
 on:
   pull_request:
     branches: [main]
+    paths:
+      - '.github/workflows/firmware-candidate.yml'
+      - 'apply_smart_home_physical_fit_v11_19_1.py'
+      - 'apply_smart_home_portal_auth_v11_20.py'
+      - 'apply_smart_home_display_expert_v11_22.py'
+      - 'scripts/apply_workshop_os_v11_19.sh'
+      - 'scripts/apply_workshop_os_v11_19_1.sh'
+      - 'scripts/validate_device_contracts.py'
+      - 'scripts/validate_visual_contracts_v11_19.py'
+      - 'scripts/validate_rendered_fit_v11_19_1.py'
+      - 'scripts/validate_portal_auth_v11_20.py'
+      - 'scripts/validate_display_expert_v11_22.py'
+      - 'scripts/validate_settings_parity.py'
+      - 'scripts/capture-ws350-views.zsh'
   workflow_dispatch:
 
 permissions:
@@ -50,20 +64,18 @@ jobs:
 
           patterns = (
               '.github/workflows/firmware-candidate.yml',
-              'README.md',
-              'SECURITY.md',
-              'releases/current.json',
-              'apply_smart_home_*.py',
-              '.bambuhelper-validation/**',
-              'assets/**',
-              'scripts/apply_*.sh',
-              'scripts/validate_*.py',
+              'apply_smart_home_physical_fit_v11_19_1.py',
+              'apply_smart_home_portal_auth_v11_20.py',
+              'apply_smart_home_display_expert_v11_22.py',
+              'scripts/apply_workshop_os_v11_19.sh',
+              'scripts/apply_workshop_os_v11_19_1.sh',
+              'scripts/validate_device_contracts.py',
+              'scripts/validate_visual_contracts_v11_19.py',
+              'scripts/validate_rendered_fit_v11_19_1.py',
+              'scripts/validate_portal_auth_v11_20.py',
+              'scripts/validate_display_expert_v11_22.py',
+              'scripts/validate_settings_parity.py',
               'scripts/capture-ws350-views.zsh',
-              'docs/physical-*.md',
-              'docs/visual-*.md',
-              'docs/portal-auth-*.md',
-              'docs/display-expert-*.md',
-              'docs/settings-capability-registry/**',
           )
 
           changed = [
