@@ -3,7 +3,8 @@
 
 This layer is intentionally later than the post-capture visual hardening. It:
 - wires Workshop to the authoritative Filament Inventory device-feed snapshot;
-- adds visible Refresh + Local Portal/Setup actions;
+- presents a focused single-panel setup state until device-feed access exists;
+- shows Refresh + Local Portal actions only when inventory access is configured;
 - removes four stale hidden Workshop touch zones inherited from v11.25;
 - preserves Unknown/stale/conflict states instead of deriving inventory from AMS telemetry.
 """
@@ -94,6 +95,12 @@ static HubRect hubOs12WorkshopActionRect(uint8_t i) {
   return hr(m+cw+g,y,W-m-(m+cw+g),h);
 }
 
+static HubRect hubOs12WorkshopSetupRect() {
+  const int16_t W=tft.width();
+  const int16_t x=56,y=166,h=46;
+  return hr(x,y,W-x*2,h);
+}
+
 static const char* hubOs12WorkshopReadinessLabel(
     workshop::platform::InventoryReadinessState state) {
   using workshop::platform::InventoryReadinessState;
@@ -151,8 +158,30 @@ static void drawWorkshop(bool full) {
   using workshop::platform::InventoryReadinessState;
 
   tft.fillScreen(OS12V_BG);
-  drawHeader("Workshop",hubOs12WorkshopHeaderState(inv),2);
+  drawHeader("Workshop",inv.credentialConfigured?hubOs12WorkshopHeaderState(inv):nullptr,2);
   uiBottomNav(2,nullptr);
+
+  if(!inv.credentialConfigured){
+    const HubRect panel=hr(OS12V_INSET,52,W-OS12V_INSET*2,164);
+    tft.fillRoundRect(panel.x,panel.y,panel.w,panel.h,OS12V_RADIUS,OS12V_SURFACE2);
+    tft.drawRoundRect(panel.x,panel.y,panel.w,panel.h,OS12V_RADIUS,OS12V_LINE);
+
+    uiDrawFit("FILAMENT INVENTORY",W/2,68,panel.w-36,FONT_SMALL,MC_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+    uiDrawFit("Inventory not connected",W/2,96,panel.w-36,FONT_LARGE,MC_DATUM,OS12V_TEXT,OS12V_SURFACE2);
+    uiDrawFit("Connect this display in Local Portal",W/2,126,panel.w-44,FONT_BODY,MC_DATUM,OS12V_TEXT,OS12V_SURFACE2);
+    uiDrawFit("for readiness, loaded spools, and alerts.",W/2,148,panel.w-44,FONT_SMALL,MC_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+
+    hubV1125Action(
+        hubOs12WorkshopSetupRect(),
+        "Set Up Inventory",
+        C10_ACCENT,
+        workshopPlatformWifiOnline(),
+        false);
+
+    hubMarkFrameDirty();
+    g_dirty=false;
+    return;
+  }
 
   HubRect readiness=hr(OS12V_INSET,48,W-OS12V_INSET*2,50);
   HubRect loaded=hr(OS12V_INSET,104,W-OS12V_INSET*2,50);
@@ -163,10 +192,7 @@ static void drawWorkshop(bool full) {
   const char* readinessDetail="No authoritative inventory evidence";
   uint16_t readinessColor=C10_MUTED;
 
-  if(!inv.credentialConfigured){
-    readinessValue="Not configured";
-    readinessDetail="Set up WS350 inventory access in Local Portal";
-  }else if(inv.busy){
+  if(inv.busy){
     readinessValue="Refreshing";
     readinessDetail="Waiting for profile-scoped Filament Inventory evidence";
     readinessColor=C10_ACCENT;
@@ -187,10 +213,7 @@ static void drawWorkshop(bool full) {
   char loadedValue[28];
   char loadedDetail[72];
   uint16_t loadedColor=C10_MUTED;
-  if(!inv.credentialConfigured){
-    strlcpy(loadedValue,"Not configured",sizeof(loadedValue));
-    strlcpy(loadedDetail,"Use Local Portal to add device access",sizeof(loadedDetail));
-  }else if(!state.available){
+  if(!state.available){
     strlcpy(loadedValue,"Unknown",sizeof(loadedValue));
     strlcpy(loadedDetail,inv.statusMessage[0]?inv.statusMessage:"Placement evidence unavailable",sizeof(loadedDetail));
   }else if(state.placementState==InventoryPlacementState::Current&&!state.placementVerificationRequired){
@@ -230,11 +253,7 @@ static void drawWorkshop(bool full) {
   char attentionDetail[72];
   uint16_t attentionColor=C10_MUTED;
 
-  if(!inv.credentialConfigured){
-    strlcpy(attentionValue,"Setup required",sizeof(attentionValue));
-    strlcpy(attentionDetail,"Add read-only WS350 access in Local Portal",sizeof(attentionDetail));
-    attentionColor=C10_ORANGE;
-  }else if(!state.available){
+  if(!state.available){
     strlcpy(attentionValue,"Unknown",sizeof(attentionValue));
     strlcpy(attentionDetail,inv.statusMessage[0]?inv.statusMessage:"No authoritative attention evidence",sizeof(attentionDetail));
   }else if(reviewCount==0&&fresh){
@@ -253,11 +272,11 @@ static void drawWorkshop(bool full) {
       hubOs12WorkshopActionRect(0),
       inv.busy?"Refreshing":"Refresh",
       C10_ACCENT,
-      inv.credentialConfigured&&!inv.busy,
+      !inv.busy,
       false);
   hubV1125Action(
       hubOs12WorkshopActionRect(1),
-      inv.credentialConfigured?"Local Portal":"Set Up Inventory",
+      "Local Portal",
       C10_ACCENT,
       workshopPlatformWifiOnline(),
       false);
@@ -271,8 +290,22 @@ static void drawWorkshop(bool full) {
 WORKSHOP_TOUCH = r'''
 if(cur==SCREEN_HUB_WORKSHOP){
     const WorkshopInventoryRuntimeSnapshot inv=workshopInventorySnapshot();
+
+    if(!inv.credentialConfigured){
+      if(hubOs12WorkshopSetupRect().contains(x,y)&&workshopPlatformWifiOnline()){
+        g_ui12SettingsView=0;
+        g_ui12SystemView=1;
+        g_networkSettingsView=false;
+        g_audioSettingsView=false;
+        setPage(SCREEN_HUB_SYSTEM);
+        buzzerPlay(BUZZ_CLICK);
+        g_dirty=true;
+      }
+      return true;
+    }
+
     if(hubOs12WorkshopActionRect(0).contains(x,y)){
-      if(inv.credentialConfigured&&!inv.busy){
+      if(!inv.busy){
         if(workshopInventoryRequestRefresh())buzzerPlay(BUZZ_CLICK);
         g_dirty=true;
       }
