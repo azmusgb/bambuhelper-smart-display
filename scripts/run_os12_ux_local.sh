@@ -61,6 +61,11 @@ python3 "$ROOT/scripts/validate_os12_post_capture_ui_hardening.py" --repo "$BUIL
 python3 "$ROOT/apply_workshop_os12_workshop_surface_runtime.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_workshop_surface_runtime.py" --repo "$BUILD"
 
+# Focused real-panel polish: hierarchy, status semantics, secondary-action weight,
+# settings pictograms, Home inventory projection, and Software Update content.
+python3 "$ROOT/apply_workshop_os12_physical_polish.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_physical_polish.py" --repo "$BUILD"
+
 python3 "$ROOT/apply_workshop_os12_code_free_portal.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_code_free_portal.py" --repo "$BUILD"
 python3 -m py_compile "$ROOT/scripts/accept_os12_code_free_portal_runtime.py"
@@ -82,11 +87,11 @@ fi
 
 echo "=== OS12 portal control-plane reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
-echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overhaul plus post-capture 480x320 hardening applied across shell, hierarchy, cards, rows, controls, media and system surfaces."
+echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overhaul, post-capture hardening, Workshop runtime repair, and focused physical product-polish pass applied across shell, hierarchy, cards, rows, controls, media and system surfaces."
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
 echo "Portal security: device code disabled by product policy; local portal opens directly on the trusted LAN."
 echo "Mutation security: same-origin enforcement remains mandatory; no user-entered device code or portal session is required."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
-echo "Home/Workshop: Unknown/Undetermined until authoritative profile-scoped inventory/readiness evidence is available."
+echo "Home/Workshop: consume the same profile-scoped Filament Inventory projection; Unknown/Undetermined is preserved when authoritative evidence is absent."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."
 echo "Stable promotion: forbidden by this script."
