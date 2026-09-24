@@ -22,19 +22,20 @@
   "candidate": null,
   "mainState": {
     "version": "12.0.0",
-    "commit": "e11a47ea7fc507280174dcc273c3f6d2a237c953",
+    "commit": "48ddd5819e578bc85a391d9607653e71ca5c6aa2",
     "name": "Workshop OS 12.0.0 Exact Main Physical-Acceptance Candidate",
-    "originatingBranch": "fix/os12-workshop-empty-state",
-    "originatingPullRequest": 137,
+    "originatingBranch": "fix/os12-network-video-visible-state",
+    "originatingPullRequest": 140,
     "status": "merged-unaccepted",
     "exactHeadCi": "passed",
-    "testedCandidateCommit": "e11a47ea7fc507280174dcc273c3f6d2a237c953",
-    "testedFirmwareSha256": "d25db5c9ac16814c8429280010b998438d9ca293680d6c811581e714e832471c",
+    "testedCandidateCommit": "48ddd5819e578bc85a391d9607653e71ca5c6aa2",
+    "testedFirmwareSha256": "79c007b801a3208ccdc199a95390a5bd430afeaeeb49d36ba2277ddf57922a23",
     "physicalInstall": "passed",
     "unattendedAcceptance": "passed",
     "physicalAcceptance": "pending",
-    "recoveryCapture": "e11a47e-20260924-120629",
-    "note": "Exact CI candidate e11a47ea7fc507280174dcc273c3f6d2a237c953 was installed on the WS350, exact running source was verified, unattended whole-device acceptance and the 15-view 480x320 capture passed. Manual LCD/touch/acoustic sensory checks and the due full-image recovery round-trip remain required before accepted/stable promotion."
+    "recoveryCapture": "workshop-os12-ws350-preflash-20260924-152648",
+    "automaticEvidence": "workshop-os12-auto-acceptance-20260924-155204",
+    "note": "Exact CI candidate 48ddd5819e578bc85a391d9607653e71ca5c6aa2 was installed on the WS350, exact running source was verified, unattended whole-device acceptance, all 15 native 480x320 captures, media lifecycle checks, and automatic cross-evidence validation passed. Network status fit and Video Viewer visible-state fixes are included. Manual LCD/touch/acoustic sensory checks remain pending, and a full-image recovery round-trip for this exact candidate has not been rerun; no accepted/stable promotion is claimed."
   },
   "validation": {
     "acceptedSource": {
@@ -64,6 +65,7 @@
       "exactHeadCi": "passed",
       "exactCandidateInstalled": "passed",
       "unattendedWholeDeviceAcceptance": "passed",
+      "automaticEvidenceValidation": "passed",
       "physicalAcceptance": "pending"
     }
   }
