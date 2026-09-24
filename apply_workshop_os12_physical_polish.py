@@ -464,7 +464,7 @@ NETWORK = r'''
 static void drawUi13Network() {
   const bool wifi=workshopPlatformWifiOnline();
   String ip=wifi?WiFi.localIP().toString():String("Unknown");
-  tft.fillScreen(OS12V_BG);drawHeader("Network",wifi?"CONNECTED":"OFFLINE",3);
+  tft.fillScreen(OS12V_BG);drawHeader("Network",wifi?"ONLINE":"OFFLINE",3);
   hubUi13InfoRow(hubUi13RowRect(0),"Wi-Fi",wifi?"Connected":"Unavailable",wifi?ip.c_str():"No active network connection",wifi?C10_GREEN:C10_ORANGE);
   hubUi13ToggleRow(hubUi13RowRect(1),"Local Hostname","Advertise the device on the LAN",netSettings.mdnsEnabled,C10_ACCENT);
   hubUi13ToggleRow(hubUi13RowRect(2),"Show IP at Startup","Show address after connection",netSettings.showIPAtStartup,C10_ACCENT);
