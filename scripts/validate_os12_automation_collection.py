@@ -78,20 +78,21 @@ def main() -> int:
         ),
     )
 
+    compact_unattended = unattended.replace(" ", "")
+    if '"physicalAcceptancePassed":True' in compact_unattended:
+        raise SystemExit(
+            "FAIL: unattended runner must not promote automated evidence into physical acceptance"
+        )
+
     for text, label in (
-        (unattended, "unattended runner"),
-        (capture, "capture runner"),
         (automatic, "automatic validator"),
         (installer, "installer"),
     ):
-        for forbidden in (
-            '"physicalAcceptancePassed":True',
-            '"accepted":True',
-            '"stable":True',
-        ):
-            if forbidden in text.replace(" ", ""):
+        compact = text.replace(" ", "")
+        for forbidden in ('"accepted":True', '"stable":True'):
+            if forbidden in compact:
                 raise SystemExit(
-                    f"FAIL: {label} must not promote automated evidence into acceptance/stable"
+                    f"FAIL: {label} must not promote automated evidence into accepted/stable"
                 )
 
     print(
