@@ -80,6 +80,9 @@ def main() -> int:
         ROOT / "scripts" / "collect_os12_candidate_evidence_macos.sh",
         (
             "Device mutation:   NO",
+            '"deviceFlashMutationPerformed":False',
+            '"runtimeDiagnosticMutationsPerformed":True',
+            '"collectionMode":"no-flash-runtime-evidence"',
             "collection-context.json",
             "accept_os12_unattended.py",
             "capture_os12_views_unattended.py",
@@ -126,6 +129,18 @@ def main() -> int:
             "indexed SHA-256 mismatch",
         ),
     )
+
+    for forbidden in (
+        "flash_os12_ci_candidate_macos.sh",
+        "esptool",
+        "write_flash",
+        "erase_flash",
+        "--confirm-printer-idle",
+    ):
+        if forbidden in collector:
+            raise SystemExit(
+                f"FAIL: no-flash collector contains prohibited flash/mutation marker: {forbidden}"
+            )
 
     compact_unattended = unattended.replace(" ", "")
     if '"physicalAcceptancePassed":True' in compact_unattended:
