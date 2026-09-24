@@ -62,24 +62,27 @@ for f in candidate.json SHA256SUMS.txt firmware.bin partitions.bin; do
   [[ -s "$WORK_DIR/$f" ]] || { echo "ERROR: artifact missing $f" >&2; exit 24; }
 done
 
-read -r SOURCE_SHA FIRMWARE_SHA < <(
+read -r SOURCE_SHA FIRMWARE_SHA PARTITION_SHA < <(
 python3 - "$WORK_DIR/candidate.json" <<'PY'
 import json, re, sys
 with open(sys.argv[1], "r", encoding="utf-8") as fh:
     d=json.load(fh)
 source=str(d.get("sourceSha","")).lower()
 firmware=str(d.get("firmwareSha256","")).lower()
+partition=str(d.get("partitionSha256","")).lower()
 if not re.fullmatch(r"[0-9a-f]{40}",source):
     raise SystemExit("FAIL: candidate sourceSha invalid")
 if not re.fullmatch(r"[0-9a-f]{64}",firmware):
     raise SystemExit("FAIL: candidate firmwareSha256 invalid")
+if not re.fullmatch(r"[0-9a-f]{64}",partition):
+    raise SystemExit("FAIL: candidate partitionSha256 invalid")
 if d.get("artifactRole")!="physical-acceptance-candidate":
     raise SystemExit("FAIL: artifact is not a physical-acceptance candidate")
 if d.get("candidateAuthority")!="os12-ux-architecture":
     raise SystemExit("FAIL: candidate authority is not os12-ux-architecture")
 if d.get("accepted") is not False or d.get("stable") is not False:
     raise SystemExit("FAIL: CI candidate metadata improperly claims accepted/stable")
-print(source, firmware)
+print(source, firmware, partition)
 PY
 )
 
@@ -116,6 +119,37 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 EVIDENCE_DIR="${WS350_ACCEPTANCE_EVIDENCE_DIR:-$HOME/Downloads/workshop-os12-auto-acceptance-$STAMP}"
 mkdir -p "$EVIDENCE_DIR"
 
+python3 - "$EVIDENCE_DIR/collection-context.json" "$SOURCE_SHA" "$FIRMWARE_SHA" "$PARTITION_SHA" "$LOCAL_SHA" "$BASE_URL" "$ARTIFACT_ZIP" <<'PY'
+from datetime import datetime, timezone
+import hashlib, json, pathlib, sys
+out, source, firmware, partition, collector, base_url, artifact = sys.argv[1:]
+artifact_path=pathlib.Path(artifact).expanduser().resolve()
+h=hashlib.sha256()
+with artifact_path.open("rb") as fh:
+    for chunk in iter(lambda: fh.read(1024*1024), b""):
+        h.update(chunk)
+payload={
+    "schemaVersion":1,
+    "kind":"workshop-os12-automatic-evidence-collection-context",
+    "recordedAt":datetime.now(timezone.utc).isoformat(),
+    "candidateSourceSha":source,
+    "firmwareSha256":firmware,
+    "partitionSha256":partition,
+    "collectorSourceSha":collector,
+    "baseUrl":base_url,
+    "candidateArtifact":{
+        "fileName":artifact_path.name,
+        "sha256":h.hexdigest(),
+        "bytes":artifact_path.stat().st_size,
+    },
+    "deviceMutationPerformed":True,
+    "collectionMode":"install-and-accept",
+    "accepted":False,
+    "stable":False,
+}
+pathlib.Path(out).write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+PY
+
 echo
 echo "=== Unattended whole-device acceptance ==="
 python3 scripts/accept_os12_unattended.py \
@@ -140,60 +174,23 @@ python3 scripts/validate_os12_automatic_candidate.py \
   --output "$EVIDENCE_DIR/automatic-validation.json"
 
 echo
-echo "=== Finalize tamper-evident evidence bundle ==="
+echo "=== Finalize and independently verify tamper-evident evidence bundle ==="
+FINAL_JSON="$(python3 scripts/finalize_os12_evidence_bundle.py \
+  --evidence-dir "$EVIDENCE_DIR" \
+  --source-sha "$SOURCE_SHA" \
+  --firmware-sha256 "$FIRMWARE_SHA" \
+  --artifact-zip "$ARTIFACT_ZIP" \
+  --collector-source-sha "$LOCAL_SHA")"
 read -r EVIDENCE_INDEX_SHA BUNDLE_PATH BUNDLE_SHA < <(
-python3 - "$EVIDENCE_DIR" "$SOURCE_SHA" "$FIRMWARE_SHA" "$ARTIFACT_ZIP" <<'PY'
-from datetime import datetime, timezone
-import hashlib, json, pathlib, sys, zipfile
-
-root=pathlib.Path(sys.argv[1]).resolve()
-source, firmware = sys.argv[2], sys.argv[3]
-artifact=pathlib.Path(sys.argv[4]).expanduser().resolve()
-
-def digest(path):
-    h=hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024*1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-files=[]
-for path in sorted(p for p in root.rglob("*") if p.is_file() and p.name != "evidence-index.json"):
-    files.append({
-        "path": path.relative_to(root).as_posix(),
-        "sha256": digest(path),
-        "bytes": path.stat().st_size,
-    })
-
-index={
-    "schemaVersion":1,
-    "kind":"workshop-os12-evidence-bundle-index",
-    "recordedAt":datetime.now(timezone.utc).isoformat(),
-    "sourceSha":source,
-    "firmwareSha256":firmware,
-    "candidateArtifact":{
-        "fileName":artifact.name,
-        "sha256":digest(artifact),
-        "bytes":artifact.stat().st_size,
-    },
-    "files":files,
-    "accepted":False,
-    "stable":False,
-    "scope":"machine-produced acceptance evidence only; sensory physical truth remains separate",
-}
-index_path=root/"evidence-index.json"
-index_path.write_text(json.dumps(index,indent=2,sort_keys=True)+"\n",encoding="utf-8")
-index_sha=digest(index_path)
-
-bundle=root.with_suffix(".zip")
-with zipfile.ZipFile(bundle,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as zf:
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        zf.write(path,arcname=(root.name/path.relative_to(root)).as_posix())
-bundle_sha=digest(bundle)
-print(index_sha, bundle, bundle_sha)
+python3 - "$FINAL_JSON" <<'PY'
+import json,sys
+d=json.loads(sys.argv[1])
+print(d["evidenceIndexSha256"], d["bundleZip"], d["bundleSha256"])
 PY
 )
-printf '%s  %s\n' "$BUNDLE_SHA" "$(basename "$BUNDLE_PATH")" > "${BUNDLE_PATH}.sha256"
+python3 scripts/verify_os12_evidence_bundle.py \
+  --bundle "$BUNDLE_PATH" \
+  --expect-bundle-sha256 "$BUNDLE_SHA"
 echo "PASS: evidence index SHA-256=$EVIDENCE_INDEX_SHA"
 echo "PASS: bundle ZIP=$BUNDLE_PATH"
 echo "PASS: bundle ZIP SHA-256=$BUNDLE_SHA"
@@ -206,6 +203,7 @@ Firmware SHA-256: $FIRMWARE_SHA
 Evidence bundle: $EVIDENCE_DIR
 
 Automatic machine-verifiable validation: PASS
+Offline bundle verification: PASS
 Tamper-evident evidence bundle: $BUNDLE_PATH
 Evidence bundle SHA-256: $BUNDLE_SHA
 Sensory physical acceptance: PENDING
