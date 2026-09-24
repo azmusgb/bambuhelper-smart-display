@@ -106,12 +106,30 @@ def main() -> int:
         raise ValidationError("Home readiness color declaration must precede drawHome")
 
     home = block(hub, "static void drawHome(bool full)")
-    need(home, "workshopInventorySnapshot()", "Home inventory authority")
-    need(home, 'drawHeader("Home",nullptr,0)', "Home avoids duplicate printer-state badge")
-    need(home, "inventoryState.freshness", "Home inventory freshness")
-    need(home, "inventoryState.spoolCount", "Home inventory summary")
-    need(home, "hubOs12WorkshopReadinessLabel", "Home readiness projection")
-    forbid(home, '"FILAMENT INVENTORY","Unknown","Add or sync evidence in Filament Inventory"', "Hard-coded Home inventory")
+    for marker in (
+        "workshopInventorySnapshot()",
+        'drawHeader("Home",nullptr,0)',
+        "const bool active=printing||paused;",
+        'HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,active?78:64);',
+        '"Ready for your next print"',
+        '"Set up a printer"',
+        '"More  >  System  >  Printer & Power"',
+        "uiProgressBar(",
+        "HubRect printerCard=",
+        "HubRect inventoryCard=",
+        '"PRINTER"',
+        '"FILAMENT"',
+        '"Inventory unavailable"',
+        "inventoryState.freshness",
+        "inventoryState.spoolCount",
+        "inventoryState.loadedCount",
+        "hubOs12WorkshopReadinessLabel",
+    ):
+        need(home, marker, "Home v2 state-adaptive glance hierarchy")
+    forbid(home, "hubOs12EvidenceRow(", "Home v2 must not regress to stacked diagnostic evidence rows")
+    forbid(home, '"CURRENT PRINT"', "Home v2 must not duplicate the print state as a diagnostic section")
+    for forbidden in ("matchSpoolByColor", "matchSpoolByMaterial", "resolveSpool", "activeTray"):
+        forbid(home, forbidden, "Home inventory authority")
 
     more = block(hub, "static void drawMore(bool full)")
     need(more, 'drawHeader("More",nullptr,3)', "More header focus")
@@ -137,7 +155,7 @@ def main() -> int:
     print(
         "PASS: physical polish removes irrelevant header badges, demotes secondary navigation, "
         "adds distinct settings pictograms, quiets OFF toggles, makes Home inventory authoritative, "
-        "and simplifies Software Update without weakening release truth"
+        "adds a state-adaptive Home glance view, and simplifies Software Update without weakening release truth"
     )
     return 0
 

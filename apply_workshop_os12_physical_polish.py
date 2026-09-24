@@ -270,70 +270,129 @@ static void drawHome(bool full) {
   const PrinterSlot* p=configured?&displayedPrinter():nullptr;
   const BambuState* s=p?&p->state:nullptr;
   if(g_ambientEnabled&&g_ambientActive){drawAmbientHome(p,s);return;}
+
   const uint8_t slot=rotState.displayIndex<MAX_PRINTERS?rotState.displayIndex:0;
   const bool paused=configured&&workshopPlatformPrinterPaused(slot);
   const bool printing=configured&&workshopPlatformPrinterPrinting(slot);
+  const bool active=printing||paused;
   const bool online=configured&&workshopPlatformPrinterOnline(slot);
   const bool alert=s&&uiHmsCount(*s)>0;
-  const uint16_t sc=!configured?C10_MUTED:(!online?C10_ORANGE:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));
+  const uint16_t stateColor=!configured?C10_MUTED:(!online?C10_ORANGE:(alert?C10_RED:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN))));
   const char* state=!configured?"SETUP":(!online?"OFFLINE":(alert?"ATTENTION":(paused?"PAUSED":(printing?"PRINTING":"READY"))));
 
-  tft.fillScreen(OS12V_BG);drawHeader("Home",nullptr,0);uiBottomNav(0,nullptr);
+  tft.fillScreen(OS12V_BG);
+  drawHeader("Home",nullptr,0);
+  uiBottomNav(0,nullptr);
 
-  HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,76);
-  hubV1125Card(hero,sc,true);
-  uiDrawFit(p&&p->config.name[0]?p->config.name:"Printer",hero.x+14,hero.y+11,hero.w-28,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
-  uiDrawFit(state,hero.x+14,hero.y+31,hero.w-28,FONT_LARGE,TL_DATUM,
-      !configured?OS12V_MUTED:(!online?OS12V_AMBER:(alert?OS12V_RED:(printing?OS12V_ACCENT:OS12V_GREEN))),OS12V_SURFACE2);
-  uiDrawFit(printing||paused?"Print in progress":(online?"Ready for work":"Check connection"),hero.x+14,hero.y+65,hero.w-28,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+  if(!configured){
+    HubRect setup=hr(OS12V_INSET,60,W-OS12V_INSET*2,152);
+    hubV1125Card(setup,C10_ORANGE,true);
+    uiDrawFit("Set up a printer",setup.x+18,setup.y+22,setup.w-36,FONT_LARGE,TL_DATUM,OS12V_TEXT,OS12V_SURFACE2);
+    uiDrawFit("Connect Workshop OS to a printer before using the Home dashboard.",setup.x+18,setup.y+67,setup.w-36,FONT_BODY,TL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+    uiDrawFit("More  >  System  >  Printer & Power",setup.x+18,setup.y+119,setup.w-36,FONT_SMALL,TL_DATUM,OS12V_AMBER,OS12V_SURFACE2);
+    hubMarkFrameDirty();g_dirty=false;return;
+  }
 
-  HubRect job=hr(OS12V_INSET,128,W-OS12V_INSET*2,54);
-  if(printing||paused){
-    char meta[36],rem[20];
+  HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,active?78:64);
+  hubV1125Card(hero,stateColor,true);
+  uiDrawFit(p&&p->config.name[0]?p->config.name:"Printer",hero.x+14,hero.y+10,hero.w-128,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
+  uiDrawFit(state,hero.x+hero.w-14,hero.y+10,104,FONT_SMALL,TR_DATUM,
+      !online?OS12V_AMBER:(alert?OS12V_RED:(paused?OS12V_AMBER:(printing?OS12V_ACCENT:OS12V_GREEN))),OS12V_SURFACE2);
+
+  if(active){
+    char meta[40],rem[20];
     formatDuration(s->remainingMinutes,rem,sizeof(rem));
-    snprintf(meta,sizeof(meta),"%u%% · %s left",(unsigned)s->progress,rem);
-    hubOs12EvidenceRow(job,"CURRENT PRINT",jobDisplayName(*s),meta,C10_TEXT);
+    snprintf(meta,sizeof(meta),"%u%%  ·  %s left",(unsigned)s->progress,rem);
+    uiDrawFit(jobDisplayName(*s),hero.x+14,hero.y+28,hero.w-28,FONT_BODY,TL_DATUM,OS12V_TEXT,OS12V_SURFACE2);
+    uiProgressBar(hero.x+14,hero.y+51,hero.w-28,s->progress,OS12V_BLUE);
+    uiDrawFit(meta,hero.x+14,hero.y+hero.h-7,hero.w-28,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
   }else{
-    hubOs12EvidenceRow(job,"CURRENT PRINT",online?"None":"Unknown",online?"Printer idle":"No fresh printer evidence",online?C10_TEXT:C10_MUTED);
+    const char* headline=alert?"Printer needs attention":(online?"Ready for your next print":"Printer connection unavailable");
+    const char* detail=alert?"Open Printer for details":(online?"Standing by":"Check network and printer state");
+    uiDrawFit(headline,hero.x+14,hero.y+29,hero.w-28,FONT_BODY,TL_DATUM,alert?OS12V_RED:(online?OS12V_TEXT:OS12V_AMBER),OS12V_SURFACE2);
+    uiDrawFit(detail,hero.x+14,hero.y+hero.h-8,hero.w-28,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
   }
 
   const WorkshopInventoryRuntimeSnapshot inv=workshopInventorySnapshot();
   const auto& inventoryState=inv.state;
-  HubRect inventory=hr(OS12V_INSET,188,W-OS12V_INSET*2,62);
   char invValue[48];
-  char invDetail[96];
+  char invDetail[72];
+  char invHint[72];
   uint16_t invColor=C10_MUTED;
+
   if(!inv.credentialConfigured){
-    strlcpy(invValue,"Not configured",sizeof(invValue));
-    strlcpy(invDetail,"Open Workshop to set up inventory access",sizeof(invDetail));
+    strlcpy(invValue,"Inventory unavailable",sizeof(invValue));
+    strlcpy(invDetail,"Filament Inventory not connected",sizeof(invDetail));
+    strlcpy(invHint,"Open Workshop to connect",sizeof(invHint));
     invColor=C10_ORANGE;
   }else if(inv.busy){
     strlcpy(invValue,"Refreshing",sizeof(invValue));
-    strlcpy(invDetail,"Waiting for profile-scoped inventory evidence",sizeof(invDetail));
+    strlcpy(invDetail,"Waiting for authoritative evidence",sizeof(invDetail));
+    strlcpy(invHint,"Profile-scoped inventory sync",sizeof(invHint));
     invColor=C10_ACCENT;
   }else if(!inventoryState.available){
-    strlcpy(invValue,"Unknown",sizeof(invValue));
+    strlcpy(invValue,"Inventory unavailable",sizeof(invValue));
     strlcpy(invDetail,inv.statusMessage[0]?inv.statusMessage:"Authoritative inventory unavailable",sizeof(invDetail));
+    strlcpy(invHint,"Open Workshop for details",sizeof(invHint));
   }else if(inventoryState.freshness==workshop::platform::Freshness::Conflicting){
     strlcpy(invValue,"Evidence conflict",sizeof(invValue));
-    strlcpy(invDetail,"Open Workshop to review inventory evidence",sizeof(invDetail));
+    strlcpy(invDetail,"Inventory evidence needs review",sizeof(invDetail));
+    strlcpy(invHint,"Open Workshop to resolve",sizeof(invHint));
     invColor=C10_RED;
   }else if(inventoryState.freshness!=workshop::platform::Freshness::Fresh){
     strlcpy(invValue,"Evidence stale",sizeof(invValue));
-    strlcpy(invDetail,"Refresh or verify inventory evidence",sizeof(invDetail));
+    strlcpy(invDetail,"Inventory evidence is not current",sizeof(invDetail));
+    strlcpy(invHint,"Refresh or verify in Workshop",sizeof(invHint));
     invColor=C10_ORANGE;
   }else{
     snprintf(invValue,sizeof(invValue),"%u spools · %u loaded",
         (unsigned)inventoryState.spoolCount,(unsigned)inventoryState.loadedCount);
     snprintf(invDetail,sizeof(invDetail),"Current · %s",
         hubOs12WorkshopReadinessLabel(inventoryState.readiness));
+    strlcpy(invHint,"Filament Inventory",sizeof(invHint));
     invColor=hubOs12WorkshopReadinessColor(inventoryState.readiness);
   }
-  hubOs12EvidenceRow(inventory,"FILAMENT INVENTORY",invValue,invDetail,invColor);
+
+  const int16_t lowerY=active?130:116;
+  const int16_t lowerH=active?120:134;
+  const int16_t gap=8;
+  const int16_t cardW=(W-OS12V_INSET*2-gap)/2;
+  HubRect printerCard=hr(OS12V_INSET,lowerY,cardW,lowerH);
+  HubRect inventoryCard=hr(OS12V_INSET+cardW+gap,lowerY,cardW,lowerH);
+
+  hubV1125Card(printerCard,online?C10_GREEN:C10_ORANGE,false);
+  uiDrawFit("PRINTER",printerCard.x+12,printerCard.y+9,printerCard.w-24,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+  tft.drawFastHLine(printerCard.x+12,printerCard.y+30,printerCard.w-24,OS12V_LINE);
+
+  char nozzle[14],bed[14],chamber[14];
+  if(online&&s){
+    snprintf(nozzle,sizeof(nozzle),"%.0f C",s->nozzleTemp);
+    snprintf(bed,sizeof(bed),"%.0f C",s->bedTemp);
+    snprintf(chamber,sizeof(chamber),"%.0f C",s->chamberTemp);
+  }else{
+    strlcpy(nozzle,"--",sizeof(nozzle));
+    strlcpy(bed,"--",sizeof(bed));
+    strlcpy(chamber,"--",sizeof(chamber));
+  }
+  const char* tempLabels[3]={"Nozzle","Bed","Chamber"};
+  const char* tempValues[3]={nozzle,bed,chamber};
+  for(uint8_t i=0;i<3;i++){
+    const int16_t cy=printerCard.y+48+i*28;
+    uiDrawFit(tempLabels[i],printerCard.x+12,cy,printerCard.w/2-18,FONT_SMALL,ML_DATUM,OS12V_MUTED,OS12V_SURFACE);
+    uiDrawFit(tempValues[i],printerCard.x+printerCard.w-12,cy,printerCard.w/2-18,FONT_BODY,MR_DATUM,online?OS12V_TEXT:OS12V_MUTED,OS12V_SURFACE);
+  }
+
+  hubV1125Card(inventoryCard,invColor,false);
+  uiDrawFit("FILAMENT",inventoryCard.x+12,inventoryCard.y+9,inventoryCard.w-24,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+  tft.drawFastHLine(inventoryCard.x+12,inventoryCard.y+30,inventoryCard.w-24,OS12V_LINE);
+  uiDrawFit(invValue,inventoryCard.x+12,inventoryCard.y+39,inventoryCard.w-24,FONT_BODY,TL_DATUM,
+      invColor==C10_RED?OS12V_RED:(invColor==C10_ORANGE?OS12V_AMBER:(invColor==C10_GREEN?OS12V_GREEN:OS12V_TEXT)),OS12V_SURFACE);
+  uiDrawFit(invDetail,inventoryCard.x+12,inventoryCard.y+70,inventoryCard.w-24,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+  uiDrawFit(invHint,inventoryCard.x+12,inventoryCard.y+inventoryCard.h-10,inventoryCard.w-24,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+
   hubMarkFrameDirty();g_dirty=false;
 }
 '''
-
 
 MORE = r'''
 static void drawMore(bool full) {
