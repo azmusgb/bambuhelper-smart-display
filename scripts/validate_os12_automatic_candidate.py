@@ -9,6 +9,7 @@ consistent for one exact source SHA.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -46,6 +47,23 @@ def load_json(path: Path) -> dict:
     require(isinstance(data, dict), f"JSON root must be an object: {path}")
     return data
 
+
+def sha256_file(path: Path) -> str:
+    h=hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def resolve_relative_file(root: Path, value: object, label: str) -> Path:
+    require(isinstance(value,str) and value.strip(), f"{label} path missing")
+    rel=Path(value)
+    require(not rel.is_absolute(), f"{label} path must be relative")
+    candidate=(root/rel).resolve()
+    require(candidate.is_relative_to(root.resolve()), f"{label} path escapes capture directory")
+    require(candidate.is_file(), f"{label} file missing: {candidate}")
+    return candidate
+
 def main() -> int:
     ap=argparse.ArgumentParser()
     ap.add_argument("--unattended", required=True)
@@ -66,6 +84,7 @@ def main() -> int:
     unattended=load_json(unattended_path)
     capture=load_json(capture_path)
 
+    require(unattended.get("schemaVersion")==2, "unsupported unattended evidence schema")
     require(unattended.get("kind")=="workshop-os12-unattended-runtime-hardware-evidence",
             "wrong unattended evidence kind")
     require(unattended.get("expectedSourceSha")==source,
@@ -88,7 +107,17 @@ def main() -> int:
     require(isinstance(views,dict), "unattended evidence missing views")
     require(set(REQUIRED_VIEWS).issubset(views.keys()),
             "unattended evidence missing required native views")
+    isolation=(unattended.get("viewIsolation") or {}).get("mediaLabVsMediaVideo")
+    require(isinstance(isolation,dict), "unattended evidence missing Video Viewer isolation check")
+    require(isolation.get("passed") is True, "Video Viewer isolation check did not pass")
+    content_diff=isolation.get("contentDifferenceRatio")
+    minimum=isolation.get("minimumRequired")
+    require(isinstance(content_diff,(int,float)) and isinstance(minimum,(int,float)),
+            "Video Viewer isolation metrics are invalid")
+    require(content_diff >= minimum, "Video Viewer content is too similar to Recorder")
 
+
+    require(capture.get("schemaVersion")==2, "unsupported capture evidence schema")
     require(capture.get("kind")=="workshop-os12-native-view-capture",
             "wrong capture evidence kind")
     require(capture.get("expectedSourceSha")==source and capture.get("runningSourceSha")==source,
@@ -112,6 +141,48 @@ def main() -> int:
     require(len(set(hashes))==len(REQUIRED_VIEWS),
             "capture does not have 15/15 frame-hash diversity")
 
+    capture_root=capture_path.parent
+    verified_files=[]
+    for item in captured:
+        require(isinstance(item,dict), "capture view entry is not an object")
+        settle=item.get("settle")
+        require(isinstance(settle,dict) and settle.get("stable") is True,
+                f"{item.get('id')}: framebuffer did not record a stable settled capture")
+        require(isinstance(settle.get("attempts"),int) and settle["attempts"] >= 2,
+                f"{item.get('id')}: settle evidence requires at least two observations")
+        final_diff=settle.get("finalDifferenceRatio")
+        threshold=settle.get("threshold")
+        require(isinstance(final_diff,(int,float)) and isinstance(threshold,(int,float)),
+                f"{item.get('id')}: settle metrics are invalid")
+        require(final_diff <= threshold,
+                f"{item.get('id')}: final framebuffer difference exceeds settle threshold")
+
+        ppm=resolve_relative_file(capture_root,item.get("ppm"),f"{item.get('id')} ppm")
+        png=resolve_relative_file(capture_root,item.get("png"),f"{item.get('id')} png")
+        actual_ppm_sha=sha256_file(ppm)
+        require(actual_ppm_sha==item.get("sha256"),
+                f"{item.get('id')}: manifest SHA does not match retained PPM")
+        require(png.read_bytes()[:8]==b"\x89PNG\r\n\x1a\n",
+                f"{item.get('id')}: retained PNG signature is invalid")
+        verified_files.append({
+            "id": item.get("id"),
+            "ppmSha256": actual_ppm_sha,
+            "pngSha256": sha256_file(png),
+            "ppmBytes": ppm.stat().st_size,
+            "pngBytes": png.stat().st_size,
+        })
+
+    comparisons=capture.get("comparisons") or {}
+    video_compare=comparisons.get("mediaLabVsMediaVideo")
+    require(isinstance(video_compare,dict) and video_compare.get("passed") is True,
+            "capture manifest missing passing Media Lab vs Video Viewer isolation")
+    capture_content_diff=video_compare.get("contentDifferenceRatio")
+    capture_minimum=video_compare.get("minimumRequired")
+    require(isinstance(capture_content_diff,(int,float)) and isinstance(capture_minimum,(int,float)),
+            "capture Video Viewer isolation metrics are invalid")
+    require(capture_content_diff >= capture_minimum,
+            "capture Video Viewer isolation is below required threshold")
+
     result={
         "schemaVersion":1,
         "kind":"workshop-os12-automatic-candidate-validation",
@@ -122,6 +193,15 @@ def main() -> int:
         "captureManifest":str(capture_path),
         "requiredViews":list(REQUIRED_VIEWS),
         "viewHashDiversity":f"{len(set(hashes))}/{len(REQUIRED_VIEWS)}",
+        "inputDigests":{
+            "unattendedSha256":sha256_file(unattended_path),
+            "captureManifestSha256":sha256_file(capture_path),
+        },
+        "verifiedCaptureFiles":verified_files,
+        "videoViewerIsolation":{
+            "unattendedContentDifferenceRatio":content_diff,
+            "captureContentDifferenceRatio":capture_content_diff,
+        },
         "automaticValidationPassed":True,
         "physicalAcceptancePassed":None,
         "manualResiduals":list(MANUAL_RESIDUALS),
