@@ -228,6 +228,36 @@ def pixel_difference_ratio(first: bytes, second: bytes) -> float:
     return changed / total
 
 
+def pixel_difference_ratio_region(
+    first: bytes,
+    second: bytes,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> float:
+    """Compare a bounded framebuffer region while preserving exact geometry."""
+    w1, h1, p1 = parse_ppm(first)
+    w2, h2, p2 = parse_ppm(second)
+    check((w1, h1) == (w2, h2), "cannot compare framebuffers with different dimensions")
+    check(width > 0 and height > 0, "comparison region must be non-empty")
+    check(0 <= x < w1 and 0 <= y < h1, "comparison region origin is outside framebuffer")
+    check(x + width <= w1 and y + height <= h1, "comparison region exceeds framebuffer")
+    changed = 0
+    total = width * height
+    for py in range(y, y + height):
+        row = py * w1
+        for px in range(x, x + width):
+            offset = (row + px) * 3
+            if (
+                abs(p1[offset] - p2[offset]) > 6
+                or abs(p1[offset + 1] - p2[offset + 1]) > 6
+                or abs(p1[offset + 2] - p2[offset + 2]) > 6
+            ):
+                changed += 1
+    return changed / total
+
+
 def safe_public(payload: dict) -> dict:
     return {key: value for key, value in payload.items() if not key.startswith("_")}
 
@@ -267,7 +297,7 @@ def run(args: argparse.Namespace) -> int:
     destination = output_path(args.output, stamp)
 
     evidence: dict = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "kind": "workshop-os12-unattended-runtime-hardware-evidence",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
@@ -280,6 +310,7 @@ def run(args: argparse.Namespace) -> int:
         "views": {},
         "viewCatalogCount": 0,
         "viewHashDiversity": None,
+        "viewIsolation": {},
         "media": {},
         "recoveredInitialMediaSession": None,
         "cleanupAfterFailure": None,
@@ -340,10 +371,13 @@ def run(args: argparse.Namespace) -> int:
         check(not missing, "required native views missing: " + ", ".join(missing))
 
         hashes: set[str] = set()
+        view_frames: dict[str, bytes] = {}
         print("\nUNATTENDED UI WALK")
         for view_id in REQUIRED_VIEWS:
             show(client, view_id)
-            frame = analyze_frame(frame_bytes(client))
+            raw_frame = frame_bytes(client)
+            view_frames[view_id] = raw_frame
+            frame = analyze_frame(raw_frame)
             hashes.add(frame["sha256"])
             evidence["views"][view_id] = {
                 "label": by_id[view_id].get("label"),
@@ -366,6 +400,30 @@ def run(args: argparse.Namespace) -> int:
             f"native view routing looks stuck: only {len(hashes)} unique frames across {len(REQUIRED_VIEWS)} views",
         )
         print(f"PASS  native view hash diversity: {len(hashes)}/{len(REQUIRED_VIEWS)}")
+        video_full_diff = pixel_difference_ratio(
+            view_frames["media-lab"], view_frames["media-video"]
+        )
+        video_content_diff = pixel_difference_ratio_region(
+            view_frames["media-lab"], view_frames["media-video"],
+            0, 0, 480, 240,
+        )
+        video_isolated = video_content_diff >= 0.02
+        evidence["viewIsolation"]["mediaLabVsMediaVideo"] = {
+            "fullFrameDifferenceRatio": round(video_full_diff, 8),
+            "contentDifferenceRatio": round(video_content_diff, 8),
+            "contentRegion": {"x": 0, "y": 0, "width": 480, "height": 240},
+            "minimumRequired": 0.02,
+            "passed": video_isolated,
+        }
+        check(
+            video_isolated,
+            "media-video content region is too similar to media-lab; stale Recorder content suspected",
+        )
+        print(
+            "PASS  Video Viewer is visually isolated from Recorder "
+            f"contentDiff={video_content_diff:.5f}"
+        )
+
 
         print("\nUNATTENDED MEDIA WALK")
         for key in ("speakerAvailable", "microphoneAvailable", "videoDecoderAvailable", "psramAvailable"):
