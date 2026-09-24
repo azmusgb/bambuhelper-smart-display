@@ -35,7 +35,10 @@
     "physicalAcceptance": "pending",
     "recoveryCapture": "workshop-os12-ws350-preflash-20260924-152648",
     "automaticEvidence": "workshop-os12-auto-acceptance-20260924-155204",
-    "note": "Exact CI candidate 48ddd5819e578bc85a391d9607653e71ca5c6aa2 was installed on the WS350, exact running source was verified, unattended whole-device acceptance, all 15 native 480x320 captures, media lifecycle checks, and automatic cross-evidence validation passed. Network status fit and Video Viewer visible-state fixes are included. Manual LCD/touch/acoustic sensory checks remain pending, and a full-image recovery round-trip for this exact candidate has not been rerun; no accepted/stable promotion is claimed."
+    "note": "Exact CI candidate 48ddd5819e578bc85a391d9607653e71ca5c6aa2 was installed on the WS350, exact running source was verified, unattended whole-device acceptance, all 15 native 480x320 captures, media lifecycle checks, automatic cross-evidence validation, and exact-candidate full-image recovery round-trip passed. Network status fit and Video Viewer visible-state fixes are included. Manual LCD/touch/acoustic sensory checks remain pending; no accepted/stable promotion is claimed. The recovery exercise proves current-device full-image capture -> write at 0x0 -> reboot -> exact-source recovery, not historical-version rollback.",
+    "recoveryRoundtrip": "passed",
+    "recoveryEvidence": "workshop-os12-recovery-roundtrip-20260924-165917/evidence.json",
+    "recoveryFullImageSha256": "5c20946d478f86f2c0065fb9805c3d63f9a5145176306fcc5d8b1b9fd7b63d16"
   },
   "validation": {
     "acceptedSource": {
@@ -66,7 +69,8 @@
       "exactCandidateInstalled": "passed",
       "unattendedWholeDeviceAcceptance": "passed",
       "automaticEvidenceValidation": "passed",
-      "physicalAcceptance": "pending"
+      "physicalAcceptance": "pending",
+      "recoveryRoundtrip": "passed"
     }
   }
 }
