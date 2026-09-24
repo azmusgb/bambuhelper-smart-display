@@ -144,7 +144,9 @@ payload={
         "sha256":h.hexdigest(),
         "bytes":artifact_path.stat().st_size,
     },
-    "deviceMutationPerformed":False,
+    "deviceFlashMutationPerformed":False,
+    "runtimeDiagnosticMutationsPerformed":True,
+    "collectionMode":"no-flash-runtime-evidence",
     "accepted":False,
     "stable":False,
 }
