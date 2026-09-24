@@ -85,7 +85,7 @@ def main() -> int:
         (installer, "installer"),
     ):
         for forbidden in (
-            "physicalAcceptancePassed":True",
+            '"physicalAcceptancePassed":True',
             '"accepted":True',
             '"stable":True',
         ):
