@@ -68,13 +68,62 @@ def main() -> int:
     installer = require(
         ROOT / "scripts" / "install_accept_os12_candidate_macos.sh",
         (
-            "Finalize tamper-evident evidence bundle",
-            '"kind":"workshop-os12-evidence-bundle-index"',
-            '"candidateArtifact":{',
-            '"accepted":False',
-            '"stable":False',
-            "Evidence bundle SHA-256",
-            "Tamper-evident evidence bundle",
+            "finalize_os12_evidence_bundle.py",
+            "verify_os12_evidence_bundle.py",
+            "collection-context.json",
+            "Offline bundle verification: PASS",
+            "Sensory physical acceptance: PENDING",
+        ),
+    )
+
+    collector = require(
+        ROOT / "scripts" / "collect_os12_candidate_evidence_macos.sh",
+        (
+            "Device mutation:   NO",
+            "collection-context.json",
+            "accept_os12_unattended.py",
+            "capture_os12_views_unattended.py",
+            "validate_os12_automatic_candidate.py",
+            "finalize_os12_evidence_bundle.py",
+            "verify_os12_evidence_bundle.py",
+            "Offline bundle verification: PASS",
+            "Physical sensory acceptance: PENDING",
+            "Device flash mutation: NO",
+        ),
+    )
+
+    finalizer = require(
+        ROOT / "scripts" / "finalize_os12_evidence_bundle.py",
+        (
+            '"schemaVersion": 2',
+            '"kind": "workshop-os12-evidence-bundle-index"',
+            '"collectorSourceSha": collector',
+            '"candidateArtifact": {',
+            '"automaticValidationPassed": True',
+            '"physicalAcceptancePassed": None',
+            '"accepted": False',
+            '"stable": False',
+        ),
+    )
+
+    verifier = require(
+        ROOT / "scripts" / "verify_os12_evidence_bundle.py",
+        (
+            "path traversal archive member",
+            "bundle contains unindexed or missing evidence files",
+            "indexed SHA-256 mismatch",
+            'index.get("physicalAcceptancePassed") is None',
+            'index.get("accepted") is False',
+            'index.get("stable") is False',
+        ),
+    )
+
+    selftest = require(
+        ROOT / "scripts" / "test_os12_evidence_bundle.py",
+        (
+            "evidence bundle finalization verifies clean bytes and rejects tampering",
+            "tampered.zip",
+            "indexed SHA-256 mismatch",
         ),
     )
 
@@ -87,6 +136,10 @@ def main() -> int:
     for text, label in (
         (automatic, "automatic validator"),
         (installer, "installer"),
+        (collector, "collector"),
+        (finalizer, "finalizer"),
+        (verifier, "verifier"),
+        (selftest, "self-test"),
     ):
         compact = text.replace(" ", "")
         for forbidden in ('"accepted":True', '"stable":True'):
@@ -97,7 +150,8 @@ def main() -> int:
 
     print(
         "PASS: OS12 automated collection now requires settled captures, "
-        "cross-view isolation, retained-file integrity, and tamper-evident bundling"
+        "cross-view isolation, retained-file integrity, no-flash collection, "
+        "offline bundle verification, and tamper detection"
     )
     return 0
 
