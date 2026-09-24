@@ -286,6 +286,20 @@ VIDEO = r'''
 static void drawOs12VideoViewer() {
   const workshop::media::Snapshot& m=workshopMediaSnapshot();
   const bool paused=m.runtime.session==workshop::media::SessionState::Paused;
+  const bool videoActive=m.runtime.session==workshop::media::SessionState::PlayingVideo||paused;
+
+  if(!videoActive){
+    gOs12VideoViewerPrimed=false;
+    tft.fillScreen(TFT_BLACK);
+    uiDrawFit("Video Viewer",OS12V_INSET,14,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_TEXT,TFT_BLACK);
+    uiDrawFit("No active video session",OS12V_INSET,48,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_MUTED,TFT_BLACK);
+    uiDrawFit("Start the built-in motion test from Media.",OS12V_INSET,77,tft.width()-OS12V_INSET*2,FONT_SMALL,TL_DATUM,OS12V_MUTED,TFT_BLACK);
+    uiDrawFit("This surface never reuses Recorder content.",OS12V_INSET,98,tft.width()-OS12V_INSET*2,FONT_SMALL,TL_DATUM,OS12V_MUTED,TFT_BLACK);
+    hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);
+    hubV1125Action(hubUi13ActionRect(),"Pause",C10_ACCENT,false,false);
+    hubMarkFrameDirty();g_dirty=false;return;
+  }
+
   if(!gOs12VideoViewerPrimed){
     tft.fillScreen(TFT_BLACK);
     uiDrawFit("Video Viewer",OS12V_INSET,9,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_TEXT,TFT_BLACK);

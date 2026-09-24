@@ -140,7 +140,8 @@ def main() -> int:
     need(system, '"Candidate channel · physical validation pending"', "System update summary")
 
     network = block(hub, "static void drawUi13Network()")
-    need(network, 'wifi?"CONNECTED":"OFFLINE"', "Network status vocabulary")
+    need(network, 'wifi?"ONLINE":"OFFLINE"', "Network status vocabulary")
+    forbid(network, '"CONNECTED"', "Network header status must fit the 480x320 pill")
 
     update = block(hub, "static void drawUi13SoftwareUpdate()")
     for marker in ("CURRENT VERSION", "Update Channel", "Physical validation pending", "Build Details", "Source · artifact · recovery identity"):

@@ -121,8 +121,18 @@ def main() -> int:
         need(recorder,marker,"Recorder affordance")
 
     video=block(hub,"static void drawOs12VideoViewer()")
-    need(video,'"Stop & Back"',"Video explicit exit")
-    need(video,'"Stop & Back returns to Media"',"Video exit guidance")
+    for marker in (
+        "videoActive",
+        '"Video Viewer"',
+        '"No active video session"',
+        '"Start the built-in motion test from Media."',
+        '"This surface never reuses Recorder content."',
+        "gOs12VideoViewerPrimed=false",
+        '"Stop & Back"',
+        '"Stop & Back returns to Media"',
+    ):
+        need(video,marker,"Video visible-state isolation")
+    forbid(video,'drawHeader("Recorder"', "Video must not reuse Recorder chrome")
 
     # Touch dispatch is injected into the reconstructed source by an earlier
     # layer and its concrete function name varies across historical bases.
