@@ -22,19 +22,19 @@
   "candidate": null,
   "mainState": {
     "version": "12.0.0",
-    "commit": "2fe7576f49060b92180218452e64e4766c382af0",
+    "commit": "e11a47ea7fc507280174dcc273c3f6d2a237c953",
     "name": "Workshop OS 12.0.0 Exact Main Physical-Acceptance Candidate",
-    "originatingBranch": "ci/os12-main-candidate-build",
-    "originatingPullRequest": 135,
+    "originatingBranch": "fix/os12-workshop-empty-state",
+    "originatingPullRequest": 137,
     "status": "merged-unaccepted",
     "exactHeadCi": "passed",
-    "testedCandidateCommit": "2fe7576f49060b92180218452e64e4766c382af0",
-    "testedFirmwareSha256": "2e6f7d9cfdf0d216024a879db5660c98ff40916713b65df951bd90a5bc4d5b94",
+    "testedCandidateCommit": "e11a47ea7fc507280174dcc273c3f6d2a237c953",
+    "testedFirmwareSha256": "d25db5c9ac16814c8429280010b998438d9ca293680d6c811581e714e832471c",
     "physicalInstall": "passed",
     "unattendedAcceptance": "passed",
     "physicalAcceptance": "pending",
-    "recoveryCapture": "workshop-os12-ws350-preflash-20260923-173025",
-    "note": "Exact CI candidate 2fe7576f49060b92180218452e64e4766c382af0 was installed on the WS350, exact running source was verified, unattended whole-device acceptance and the 15-view 480x320 capture passed. Manual LCD/touch/acoustic sensory checks and the due full-image recovery round-trip remain required before accepted/stable promotion."
+    "recoveryCapture": "e11a47e-20260924-120629",
+    "note": "Exact CI candidate e11a47ea7fc507280174dcc273c3f6d2a237c953 was installed on the WS350, exact running source was verified, unattended whole-device acceptance and the 15-view 480x320 capture passed. Manual LCD/touch/acoustic sensory checks and the due full-image recovery round-trip remain required before accepted/stable promotion."
   },
   "validation": {
     "acceptedSource": {
