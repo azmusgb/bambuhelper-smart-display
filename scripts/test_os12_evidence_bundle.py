@@ -91,7 +91,7 @@ def main() -> int:
             zf.extractall(tamper_root)
         top = next(p for p in tamper_root.iterdir() if p.is_dir())
         target = top / "unattended.json"
-        target.write_text('{"automatedPassed": false}\n', encoding="utf-8")
+        target.write_text('{"automatedPassed": null}\n', encoding="utf-8")
         tampered = base / "tampered.zip"
         with zipfile.ZipFile(tampered, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for path in sorted(p for p in top.rglob("*") if p.is_file()):
