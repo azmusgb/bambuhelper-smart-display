@@ -1,0 +1,238 @@
+=== apply_smart_home_alerts_hms_v11_13.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_audio_essentials_v11_15.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_audio_home_v10_6.py ===
+PatchError: build version: expected one anchor, found 0
+=== apply_smart_home_auth_restore_v11_23_rc2.py ===
+auth restore requires reconstructed v11.23 RC2 source
+=== apply_smart_home_boot_persistence_v9_9_1.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_browser_v10_3.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_calm_v11_1.py ===
+error: web/app.js: patch does not apply
+=== apply_smart_home_clock_experience_v11_12.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_code_only_auth_v8_3.py ===
+scripts.smart_home_patch_utils.PatchError: server password gate: expected exactly 1 match, found 0
+=== apply_smart_home_control_polish_v11_4.py ===
+printer feedback globals: expected exactly one anchor, found 0
+=== apply_smart_home_dev_unlock_v9_3.py ===
+session dev unlock: expected exactly one anchor, found 0
+=== apply_smart_home_display_behavior_v11_10.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_display_experience_v11_8.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_display_experience_v9_9.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_display_expert_v11_22.py ===
+v11.22 patch requires reconstructed v11.20 Portal Auth source
+=== apply_smart_home_display_schedule_v11_9.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_display_visual_v11_11.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_evolution_v9_2.py ===
+v9.2 portal bootstrap: expected exactly one anchor, found 0
+=== apply_smart_home_experience_v9_5.py ===
+Smart Home smooth widgets experience applied on v9.4 RC3
+=== apply_smart_home_hardening_v8_1.py ===
+scripts.smart_home_patch_utils.PatchError: server password gate: expected exactly 1 match, found 0
+=== apply_smart_home_hardening_v8.py ===
+OTA SHA finalize: expected exactly one anchor, found 0
+=== apply_smart_home_hardware_v10_1.py ===
+build version: expected exactly one anchor, found 0
+=== apply_smart_home_home_v10_4_1.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_interaction_v9_7_fixup.py ===
+FixupError: v97/ui-wifi-glyph-boundary: expected exactly 1 match, found 0
+=== apply_smart_home_interaction_v9_7.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_led_essentials_v11_16_fixup.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_led_essentials_v11_16.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_live_state_v11_7.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_network_essentials_v11_14.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_network_locale_layout_v11_23.py ===
+v11.23 patch requires reconstructed v11.22 Display Expert source
+=== apply_smart_home_physical_fit_v11_19_1.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_physical_v10_5.py ===
+PatchError: printer/normalized: signature not found: static void drawPrinter(
+=== apply_smart_home_portal_auth_v11_20.py ===
+version: expected exactly one anchor, found 0
+=== apply_smart_home_portal_v10_4.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_portal_v9_6.py ===
+Smart Home v9.6 printer workspace applied
+=== apply_smart_home_power_automation_v11_17.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_print_ui_v9.py ===
+WS350 square print renderer: expected exactly one anchor, found 0
+=== apply_smart_home_printer_control_v11_3_fixup.py ===
+Smart Home v11.3 browser serialization already corrected
+=== apply_smart_home_printer_control_v11_3.py ===
+landscape printer control buttons: expected exactly one anchor, found 0
+=== apply_smart_home_printer_power_v11_5.py ===
+tools power button: expected exactly one anchor, found 0
+=== apply_smart_home_recovery_entry_v9_4_2.py ===
+scripts.smart_home_patch_utils.PatchError: AP captive redirects: expected 2 matches, found 0
+=== apply_smart_home_recovery_hardening_v9_4_1.py ===
+RC2 build label: expected exactly one anchor, found 0
+=== apply_smart_home_recovery_safari_v9_7_2.py ===
+version-neutral recovery subtitle: expected exactly one anchor, found 0
+=== apply_smart_home_recovery_v9_4.py ===
+portal identity: expected exactly one anchor, found 0
+=== apply_smart_home_release_identity_v8_3_rc3.py ===
+scripts.smart_home_patch_utils.PatchError: System RC3 header identity anchor missing
+=== apply_smart_home_reliability_v9_1.py ===
+manual OTA definitive finish response: expected exactly one anchor, found 0
+=== apply_smart_home_route_guard_v8.py ===
+Smart Home v8 route guard applied
+=== apply_smart_home_screen_retention_v10_3_1.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_secret_safe_backups_v8_2.py ===
+Smart Home v8.2 secret-safe backup patch applied
+=== apply_smart_home_session_auth_v8_3_rc3.py ===
+OTA response diagnostics: expected exactly one anchor, found 0
+=== apply_smart_home_session_route_compat_v8_3_rc3.py ===
+Smart Home v8.3 RC3 explicit login-route compatibility applied
+=== apply_smart_home_signature_v11.py ===
+PatchError: version: expected one anchor, found 0
+=== apply_smart_home_standby_v8_4.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_system_stability_v8_3_rc2.py ===
+System full-frame redraw removal: expected exactly one anchor, found 0
+=== apply_smart_home_touch_reliability_v9_7_1.py ===
+version: expected exactly one anchor, found 0
+=== apply_smart_home_touch_ux_v11_23_rc2_finalize_secure.py ===
+secure RC2 touch base marker missing
+=== apply_smart_home_touch_ux_v11_23_rc2_finalize.py ===
+RC2 finalization requires reconstructed v11.23 RC2 source
+=== apply_smart_home_touch_ux_v11_23_rc2_guard_feedback.py ===
+scripts.smart_home_patch_utils.PatchError: guarded-action feedback requires reconstructed v11.23 RC2
+=== apply_smart_home_touch_ux_v11_23_rc2_secure.py ===
+secure v11.23 RC2 touch patch requires reconstructed v11.23 RC1 source
+=== apply_smart_home_touch_ux_v11_23_rc2.py ===
+v11.23 RC2 patch requires reconstructed v11.23 RC1 source
+=== apply_smart_home_ui_v10_2.py ===
+build version: expected exactly one anchor, found 0
+=== apply_smart_home_unified_display_v9_8.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_visual_capture_v11_18.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_visual_correctness_v11_19.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_visual_v9.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_workshop_command_v11_6.py ===
+NameError: name 'PatchError' is not defined
+=== apply_smart_home_workshop_os_theme_v10.py ===
+v10_theme_core.PatchError: version: expected 1 match, found 0
+=== apply_smart_home_workshop_tools_v11_2.py ===
+RuntimeError: timer globals: expected exactly one anchor, found 0
+=== apply_smart_home_zero_blip_v9_6_1.py ===
+smart-hub/framebuffer-helper: expected exactly one anchor, found 0
+=== apply_workshop_os_appliance_settings_v11_28_ui13.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_control_center_v11_27_ui12.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_cupertino_ui_v11_25_rc10.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_cupertino_ui_v11_26_ui11.py ===
+ImportError: cannot import name 'PatchError' from 'apply_workshop_os_cupertino_ui_v11_25_rc10' (/Users/billrahe/dev/bambuhelper-smart-display/apply_workshop_os_cupertino_ui_v11_25_rc10.py)
+=== apply_workshop_os_physical_polish_v11_25_rc8.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_portal_runtime_hotfix_v11_25_rc7.py ===
+Workshop OS v11.25 RC7 portal runtime hotfix applied
+=== apply_workshop_os_premium_appliance_ui_v11_25_rc9.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_printer_credentials_v11_25_rc11.py ===
+Workshop OS RC11 printer credential reveal applied
+=== apply_workshop_os_secure_acceptance_v11_25_rc6.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_ui_overhaul_v11_25_rc2.py ===
+RC2 build label: expected exactly one anchor, found 0
+=== apply_workshop_os_ui_overhaul_v11_25_rc3.py ===
+RC3 build label: expected exactly one anchor, found 0
+=== apply_workshop_os_ui_overhaul_v11_25_rc4.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_ui_overhaul_v11_25_rc5.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_ui_overhaul_v11_25_rc7.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_ui_overhaul_v11_25.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os_ui13_compile_order_fix.py ===
+UI13 compile-order fix requires reconstructed v11.28 UI13 source
+=== apply_workshop_os_ui13_product_finish.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_camera_ownership.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_camera_transport_diagnostics.py ===
+Workshop OS 12 camera transport diagnostics installed
+=== apply_workshop_os12_code_free_portal.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_device_update.py ===
+FAIL: OS12 device update requires reconstructed UI13 source
+=== apply_workshop_os12_guarded_stop.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_inventory_api.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_inventory_service.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_media_api.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_media_capture.py ===
+Workshop OS 12 bounded microphone capture/playback installed
+=== apply_workshop_os12_media_hardware.py ===
+Workshop OS 12 media hardware contract installed
+=== apply_workshop_os12_media_runtime.py ===
+OS12 media runtime must be applied after release identity
+=== apply_workshop_os12_media_signal_hardening.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_media_ui.py ===
+media UI requires reconstructed OS12 media runtime
+=== apply_workshop_os12_mqtt_camera_telemetry.py ===
+Workshop OS 12 read-only MQTT camera telemetry installed
+=== apply_workshop_os12_non_destructive_controls.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_physical_acceptance_refinement.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_physical_polish.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_platform_bridge.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_portal_control_plane.py ===
+FAIL: portal control-plane v4 requires reconstructed Workshop OS 12 source
+=== apply_workshop_os12_portal_login_hardening.py ===
+FAIL: OS12 portal hardening requires the reconstructed UI13 baseline
+=== apply_workshop_os12_post_capture_ui_hardening.py ===
+FAIL: function missing/non-unique: static void hubOs12EvidenceRow(
+=== apply_workshop_os12_product_surface_complete.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_product_surface.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_release_identity.py ===
+apply_workshop_os12_release_identity.py: error: the following arguments are required: --version, --source-sha
+=== apply_workshop_os12_system_state_reads.py ===
+OS12 system read migration requires v11.28 UI13
+=== apply_workshop_os12_ui_finish.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_ui_state_reads.py ===
+OS12 UI read migration requires v11.28 UI13
+=== apply_workshop_os12_ux_architecture.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_ux_geometry.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_ux_physical_fit.py ===
+FAIL: bottom nav labels: expected one array, found 0
+=== apply_workshop_os12_visual_overhaul.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_workshop_surface_runtime.py ===
+NameError: name 'PatchError' is not defined
+=== apply_workshop_os12_x2d_camera_test_support.py ===
+Workshop OS 12 TEMP 20P/X2D camera physical-test support installed
