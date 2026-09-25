@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 NETWORK_OLD = '''static void drawUi13Network() {
@@ -39,15 +43,6 @@ POWER_OPTIONS_OLD = '''static void drawUi13PowerOptions() {
 POWER_OPTIONS_NEW = '''static void drawUi13PowerOptions() {
   const bool configured=workshopPlatformState().configuredPrinterCount>0;const uint8_t plug=configured?hubPowerConfigPlug():0xFF;const bool mapped=plug!=0xFF;
 '''
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if new in text:
-        return text
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected one source anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 def apply(repo: Path) -> None:

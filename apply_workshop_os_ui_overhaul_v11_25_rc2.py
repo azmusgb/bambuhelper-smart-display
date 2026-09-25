@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(path: Path) -> str:
@@ -72,13 +76,6 @@ def replace_block(text: str, signature: str, replacement: str, label: str) -> st
     if start < 0 or text.find(signature, start + 1) >= 0:
         raise PatchError(f"{label}: signature missing/non-unique")
     return text[:start] + replacement.rstrip() + text[block_end(text, start):]
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected one anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 HOME_RECT = r'''static HubRect hubHomeRect(uint8_t i) {

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
-class PatchError(RuntimeError): pass
-
-def replace_once(t,a,b,n):
-    c=t.count(a)
-    if c!=1: raise PatchError(f"{n}: expected 1 match, found {c}")
-    return t.replace(a,b,1)
 
 HELPER = r'''
 #if defined(BOARD_IS_WS350)

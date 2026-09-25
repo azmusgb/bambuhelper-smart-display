@@ -10,10 +10,14 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 LIGHT_PATTERN = re.compile(

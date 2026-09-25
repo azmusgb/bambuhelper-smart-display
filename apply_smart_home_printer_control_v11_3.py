@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse
-
-
-def replace_once(text, old, new, label):
-    if old not in text:
-        raise RuntimeError(f'missing anchor: {label}')
-    if text.count(old) != 1:
-        raise RuntimeError(f'non-unique anchor: {label} ({text.count(old)})')
-    return text.replace(old, new, 1)
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
 def patch(repo: Path):

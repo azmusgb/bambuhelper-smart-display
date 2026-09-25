@@ -12,14 +12,16 @@ from pathlib import Path
 
 import apply_smart_home_touch_ux_v11_23_rc2 as legacy_touch
 import apply_smart_home_touch_ux_v11_23_rc2_finalize as legacy_finalize
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 SAFE_MARKER = "Workshop OS v11.23 RC2 secure touch UX"
 LEGACY_MARKER = legacy_touch.MARKER
 FINAL_MARKER = legacy_finalize.MARKER
-
-
-def fail(message: str) -> None:
-    raise SystemExit(message)
 
 
 def assert_secure(repo: Path) -> None:

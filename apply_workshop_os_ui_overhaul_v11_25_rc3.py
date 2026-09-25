@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 HERE = Path(__file__).resolve().parent
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(path: Path) -> str:
@@ -60,12 +64,6 @@ def replace_block(text: str, signature: str, replacement: str, label: str) -> st
         raise PatchError(f"{label}: missing/non-unique signature {signature}")
     return text[:start] + replacement.rstrip() + text[block_end(text, start):]
 
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    n = text.count(old)
-    if n != 1:
-        raise PatchError(f"{label}: expected one anchor, found {n}")
-    return text.replace(old, new, 1)
 
 CARD = r'''static void hubV1125Card(const HubRect& r,uint16_t rail=UI_BORDER_2,bool strong=false) {
   const uint16_t bg=strong?UI_PANEL_3:UI_PANEL;

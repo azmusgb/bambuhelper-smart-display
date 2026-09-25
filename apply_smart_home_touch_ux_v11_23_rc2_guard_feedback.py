@@ -3,21 +3,18 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 MARKER = "Workshop OS v11.23 RC2 guarded-action feedback"
 ORDER_MARKER = "Workshop OS v11.23 RC2 rotation preview declaration-order fix"
 VISUAL_MARKER = "Workshop OS v11.23 RC2 calm product visual system"
 
 
-class PatchError(RuntimeError):
-    pass
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected exactly 1 anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 HOLD_FEEDBACK = r'''

@@ -4,8 +4,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from apply_workshop_os_printer_credentials_v11_25_rc11 import patch as patch_printer_credentials
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError  # noqa: F401 (re-export)
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
-class PatchError(RuntimeError): pass
 
 def load(path: Path) -> str:
     if not path.exists(): raise PatchError(f"missing {path}")

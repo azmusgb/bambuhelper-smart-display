@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError
 
-class PatchError(RuntimeError): pass
 
 def load(p):
     if not p.exists(): raise PatchError(f'missing {p}')

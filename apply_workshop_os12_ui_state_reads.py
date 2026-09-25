@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 INCLUDE = '#include "workshop_platform_bridge.h"\n'
@@ -59,15 +63,6 @@ PRINTER_STATE_NEW = (
     'const uint16_t sc=!online?C10_ORANGE:(paused?C10_ORANGE:(printing?C10_ACCENT:C10_GREEN));'
     'const char* state=!online?"Offline":(paused?"Paused":(printing?"Printing":"Ready"));\n'
 )
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if new in text:
-        return text
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected one source anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 def apply(repo: Path) -> None:

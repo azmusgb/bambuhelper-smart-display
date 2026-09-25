@@ -3,53 +3,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 MARKER = "Workshop OS v11.23 RC2 touch UX and temporary trusted-LAN portal bypass"
-
-
-def fail(message: str) -> None:
-    raise SystemExit(message)
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        fail(f"{label}: expected exactly one anchor, found {count}")
-    return text.replace(old, new, 1)
-
-
-def replace_braced_block(text: str, start: str, replacement: str, label: str) -> str:
-    pos = text.find(start)
-    if pos < 0:
-        fail(f"{label}: start anchor missing")
-    brace = text.find("{", pos)
-    if brace < 0:
-        fail(f"{label}: opening brace missing")
-    depth = 0
-    in_string = False
-    quote = ""
-    escape = False
-    for i in range(brace, len(text)):
-        c = text[i]
-        if in_string:
-            if escape:
-                escape = False
-            elif c == "\\":
-                escape = True
-            elif c == quote:
-                in_string = False
-            continue
-        if c in ("'", '"'):
-            in_string = True
-            quote = c
-            continue
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return text[:pos] + replacement + text[i + 1 :]
-    fail(f"{label}: closing brace missing")
 
 
 def get_braced_block(text: str, start: str, label: str) -> tuple[int, int, str]:
