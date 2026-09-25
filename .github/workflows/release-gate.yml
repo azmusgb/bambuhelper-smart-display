@@ -59,7 +59,7 @@ jobs:
           tooling_only=true
           for f in "${files[@]}"; do
             case "$f" in
-              apply_*.py|scripts/*.py|scripts/*.sh|docs/*.md|docs/*.txt|*.md)
+              apply_*.py|scripts/*.py|scripts/*.sh|docs/*|*.md)
                 ;;
               *)
                 tooling_only=false
