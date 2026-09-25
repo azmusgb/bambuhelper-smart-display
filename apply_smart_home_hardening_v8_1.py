@@ -8,6 +8,11 @@ from apply_smart_home_system_stability_v8_3_rc2 import apply as apply_system_sta
 from apply_smart_home_session_auth_v8_3_rc3 import apply as apply_session_auth
 from apply_smart_home_session_route_compat_v8_3_rc3 import apply as apply_session_route_compat
 from apply_smart_home_release_identity_v8_3_rc3 import apply as apply_rc3_identity
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
 from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 

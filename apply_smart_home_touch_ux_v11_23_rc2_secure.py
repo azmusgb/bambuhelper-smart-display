@@ -13,6 +13,11 @@ import argparse
 from pathlib import Path
 
 import apply_smart_home_touch_ux_v11_23_rc2 as legacy
+import sys as _sys
+from pathlib import Path as _Path
+_here = _Path(__file__).resolve().parent
+if str(_here) not in _sys.path:
+    _sys.path.insert(0, str(_here))
 from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 SAFE_MARKER = "Workshop OS v11.23 RC2 secure touch UX"
