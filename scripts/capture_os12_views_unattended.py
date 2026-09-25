@@ -24,7 +24,53 @@ import zlib
 
 from accept_os12_media_physical import update_identity
 from accept_os12_portal_runtime import AcceptanceError, Client, assert_code_free_portal, check
-from accept_os12_unattended import REQUIRED_VIEWS, catalog, frame_bytes, parse_ppm, show
+from accept_os12_unattended import (
+    REQUIRED_VIEWS,
+    analyze_frame,
+    catalog,
+    frame_bytes,
+    parse_ppm,
+    pixel_difference_ratio,
+    pixel_difference_ratio_region,
+    show,
+)
+
+
+SETTLE_DIFF_THRESHOLD = 0.003
+SETTLE_MAX_ATTEMPTS = 10
+SETTLE_INTERVAL_SECONDS = 0.08
+VIDEO_VIEW_ISOLATION_MIN = 0.02
+
+
+def capture_settled_frame(client: Client, view_id: str) -> tuple[bytes, dict]:
+    """Capture only after the routed view has stopped materially changing."""
+    started = time.monotonic()
+    previous: bytes | None = None
+    attempts: list[dict] = []
+    for attempt in range(1, SETTLE_MAX_ATTEMPTS + 1):
+        body = frame_bytes(client)
+        frame = analyze_frame(body)
+        diff = None if previous is None else pixel_difference_ratio(previous, body)
+        attempts.append({
+            "attempt": attempt,
+            "sha256": frame["sha256"],
+            "differenceFromPrevious": None if diff is None else round(diff, 8),
+        })
+        if previous is not None and diff is not None and diff <= SETTLE_DIFF_THRESHOLD:
+            return body, {
+                "stable": True,
+                "attempts": attempt,
+                "elapsedMs": round((time.monotonic() - started) * 1000),
+                "finalDifferenceRatio": round(diff, 8),
+                "threshold": SETTLE_DIFF_THRESHOLD,
+                "observations": attempts,
+            }
+        previous = body
+        time.sleep(SETTLE_INTERVAL_SECONDS)
+    raise AcceptanceError(
+        f"{view_id}: framebuffer did not settle within {SETTLE_MAX_ATTEMPTS} attempts "
+        f"at threshold {SETTLE_DIFF_THRESHOLD}"
+    )
 
 
 def png_bytes(width: int, height: int, rgb: bytes) -> bytes:
@@ -92,7 +138,7 @@ def capture(args: argparse.Namespace) -> int:
     ppm_dir.mkdir(parents=True, exist_ok=False)
 
     manifest = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "kind": "workshop-os12-native-view-capture",
         "recordedAt": datetime.now(timezone.utc).isoformat(),
         "baseUrl": base_url,
@@ -103,16 +149,24 @@ def capture(args: argparse.Namespace) -> int:
         "views": [],
         "sensitiveViewsRetained": False,
         "operatorPrompts": False,
+        "capturePolicy": {
+            "settleDifferenceThreshold": SETTLE_DIFF_THRESHOLD,
+            "settleMaxAttempts": SETTLE_MAX_ATTEMPTS,
+            "settleIntervalMs": round(SETTLE_INTERVAL_SECONDS * 1000),
+        },
+        "comparisons": {},
     }
 
     print(f"Output: {out_dir}")
     print(f"PASS  exact running source: {running}")
     print()
 
+    captured_frames: dict[str, bytes] = {}
     for index, view_id in enumerate(REQUIRED_VIEWS, 1):
         meta = by_id[view_id]
         show(client, view_id)
-        body = frame_bytes(client)
+        body, settle = capture_settled_frame(client, view_id)
+        captured_frames[view_id] = body
         width, height, rgb = parse_ppm(body)
         check((width, height) == (480, 320), f"{view_id}: expected 480x320, got {width}x{height}")
 
@@ -132,9 +186,37 @@ def capture(args: argparse.Namespace) -> int:
             "ppm": str(ppm_path.relative_to(out_dir)),
             "png": str(png_path.relative_to(out_dir)),
             "sha256": frame_sha,
+            "capturedAt": datetime.now(timezone.utc).isoformat(),
+            "settle": settle,
         })
-        print(f"PASS  {index:02d}/15  {view_id:24s}  sha256={frame_sha[:12]}...")
+        print(
+            f"PASS  {index:02d}/15  {view_id:24s}  sha256={frame_sha[:12]}... "
+            f"settled={settle['attempts']} attempts diff={settle['finalDifferenceRatio']:.6f}"
+        )
         time.sleep(0.08)
+
+    video_full_diff = pixel_difference_ratio(
+        captured_frames["media-lab"], captured_frames["media-video"]
+    )
+    video_content_diff = pixel_difference_ratio_region(
+        captured_frames["media-lab"], captured_frames["media-video"],
+        0, 0, 480, 240,
+    )
+    check(
+        video_content_diff >= VIDEO_VIEW_ISOLATION_MIN,
+        "media-video content region is too similar to media-lab; stale Recorder content suspected",
+    )
+    manifest["comparisons"]["mediaLabVsMediaVideo"] = {
+        "fullFrameDifferenceRatio": round(video_full_diff, 8),
+        "contentRegion": {"x": 0, "y": 0, "width": 480, "height": 240},
+        "contentDifferenceRatio": round(video_content_diff, 8),
+        "minimumRequired": VIDEO_VIEW_ISOLATION_MIN,
+        "passed": True,
+    }
+    print(
+        "PASS  Video Viewer isolation from Recorder "
+        f"contentDiff={video_content_diff:.5f}"
+    )
 
     # Return the physical display to Home after the review capture.
     show(client, "home")

@@ -139,6 +139,65 @@ python3 scripts/validate_os12_automatic_candidate.py \
   --expect-firmware-sha256 "$FIRMWARE_SHA" \
   --output "$EVIDENCE_DIR/automatic-validation.json"
 
+echo
+echo "=== Finalize tamper-evident evidence bundle ==="
+read -r EVIDENCE_INDEX_SHA BUNDLE_PATH BUNDLE_SHA < <(
+python3 - "$EVIDENCE_DIR" "$SOURCE_SHA" "$FIRMWARE_SHA" "$ARTIFACT_ZIP" <<'PY'
+from datetime import datetime, timezone
+import hashlib, json, pathlib, sys, zipfile
+
+root=pathlib.Path(sys.argv[1]).resolve()
+source, firmware = sys.argv[2], sys.argv[3]
+artifact=pathlib.Path(sys.argv[4]).expanduser().resolve()
+
+def digest(path):
+    h=hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024*1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+files=[]
+for path in sorted(p for p in root.rglob("*") if p.is_file() and p.name != "evidence-index.json"):
+    files.append({
+        "path": path.relative_to(root).as_posix(),
+        "sha256": digest(path),
+        "bytes": path.stat().st_size,
+    })
+
+index={
+    "schemaVersion":1,
+    "kind":"workshop-os12-evidence-bundle-index",
+    "recordedAt":datetime.now(timezone.utc).isoformat(),
+    "sourceSha":source,
+    "firmwareSha256":firmware,
+    "candidateArtifact":{
+        "fileName":artifact.name,
+        "sha256":digest(artifact),
+        "bytes":artifact.stat().st_size,
+    },
+    "files":files,
+    "accepted":False,
+    "stable":False,
+    "scope":"machine-produced acceptance evidence only; sensory physical truth remains separate",
+}
+index_path=root/"evidence-index.json"
+index_path.write_text(json.dumps(index,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+index_sha=digest(index_path)
+
+bundle=root.with_suffix(".zip")
+with zipfile.ZipFile(bundle,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as zf:
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        zf.write(path,arcname=(root.name/path.relative_to(root)).as_posix())
+bundle_sha=digest(bundle)
+print(index_sha, bundle, bundle_sha)
+PY
+)
+printf '%s  %s\n' "$BUNDLE_SHA" "$(basename "$BUNDLE_PATH")" > "${BUNDLE_PATH}.sha256"
+echo "PASS: evidence index SHA-256=$EVIDENCE_INDEX_SHA"
+echo "PASS: bundle ZIP=$BUNDLE_PATH"
+echo "PASS: bundle ZIP SHA-256=$BUNDLE_SHA"
+
 cat <<EOF
 
 OS12 EXACT-CANDIDATE INSTALL + AUTOMATIC VALIDATION COMPLETE
@@ -147,10 +206,13 @@ Firmware SHA-256: $FIRMWARE_SHA
 Evidence bundle: $EVIDENCE_DIR
 
 Automatic machine-verifiable validation: PASS
+Tamper-evident evidence bundle: $BUNDLE_PATH
+Evidence bundle SHA-256: $BUNDLE_SHA
 Sensory physical acceptance: PENDING
 
 The automatic path now includes exact runtime identity, whole-device unattended
-acceptance, all 15 native 480x320 framebuffer captures, and cross-evidence
-consistency validation. It does not fabricate LCD appearance, finger-touch feel,
+acceptance, settled 15-view native framebuffer captures, cross-view stale-content
+checks, retained-file hash verification, and a tamper-evident evidence index/ZIP.
+It does not fabricate LCD appearance, finger-touch feel,
 speaker quality, microphone intelligibility, or recovery/rollback evidence.
 EOF
