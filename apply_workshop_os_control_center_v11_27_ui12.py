@@ -12,8 +12,6 @@ import argparse
 from pathlib import Path
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(path: Path) -> str:

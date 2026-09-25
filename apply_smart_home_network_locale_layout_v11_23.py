@@ -3,15 +3,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 MARKER = "Smart Home v11.23 physical Network / Locale / Layout Expert controls"
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    n = text.count(old)
-    if n != 1:
-        raise SystemExit(f"{label}: expected exactly one anchor, found {n}")
-    return text.replace(old, new, 1)
 
 
 def replace_between(text: str, start: str, end: str, replacement: str, label: str) -> str:

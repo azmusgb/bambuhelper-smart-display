@@ -12,8 +12,6 @@ import re
 from pathlib import Path
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 LEGACY_STOP_PATTERN = re.compile(

@@ -3,17 +3,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
-
-
-def replace_once(text: str, old: str, new: str, name: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{name}: expected exactly 1 match, found {count}")
-    return text.replace(old, new, 1)
 
 
 SECURITY_HEADER = r'''#pragma once

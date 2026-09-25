@@ -3,15 +3,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 MARKER = "Smart Home v11.22 physical Display Expert controls"
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{label}: expected exactly one anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 def apply(repo: Path) -> None:

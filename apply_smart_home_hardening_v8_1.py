@@ -8,17 +8,9 @@ from apply_smart_home_system_stability_v8_3_rc2 import apply as apply_system_sta
 from apply_smart_home_session_auth_v8_3_rc3 import apply as apply_session_auth
 from apply_smart_home_session_route_compat_v8_3_rc3 import apply as apply_session_route_compat
 from apply_smart_home_release_identity_v8_3_rc3 import apply as apply_rc3_identity
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
-
-
-def replace_once(text: str, old: str, new: str, name: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{name}: expected exactly 1 match, found {count}")
-    return text.replace(old, new, 1)
 
 
 def apply(repo: Path) -> None:

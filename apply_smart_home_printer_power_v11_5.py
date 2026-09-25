@@ -1,10 +1,6 @@
 from pathlib import Path
 import shutil, sys
-
-def replace_once(text, old, new, label):
-    c=text.count(old)
-    if c!=1: raise RuntimeError(f'{label}: count={c}')
-    return text.replace(old,new,1)
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 def patch(repo):
     repo=Path(repo)

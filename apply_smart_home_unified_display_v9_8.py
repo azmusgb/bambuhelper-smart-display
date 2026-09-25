@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse, base64, zlib
 from pathlib import Path
 
-class PatchError(RuntimeError):
-    pass
 
 def once(text, old, new, label):
     n = text.count(old)

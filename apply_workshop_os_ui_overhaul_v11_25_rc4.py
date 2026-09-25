@@ -8,7 +8,6 @@ no-code boundary used only for physical acceptance.
 from pathlib import Path
 import argparse
 
-class PatchError(RuntimeError): pass
 
 def load(p):
     if not p.exists(): raise PatchError(f'missing {p}')

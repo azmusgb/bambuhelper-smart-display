@@ -5,7 +5,6 @@ import argparse
 from pathlib import Path
 from apply_workshop_os_printer_credentials_v11_25_rc11 import patch as patch_printer_credentials
 
-class PatchError(RuntimeError): pass
 
 def load(path: Path) -> str:
     if not path.exists(): raise PatchError(f"missing {path}")

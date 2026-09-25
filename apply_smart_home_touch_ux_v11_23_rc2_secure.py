@@ -13,14 +13,11 @@ import argparse
 from pathlib import Path
 
 import apply_smart_home_touch_ux_v11_23_rc2 as legacy
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 SAFE_MARKER = "Workshop OS v11.23 RC2 secure touch UX"
 LEGACY_MARKER = legacy.MARKER
 TEMP_DEFINE = "#define WORKSHOP_OS_TEMP_LAN_OPEN 1\n"
-
-
-def fail(message: str) -> None:
-    raise SystemExit(message)
 
 
 def assert_secure(repo: Path) -> None:

@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse, base64, zlib
 from pathlib import Path
 
-class PatchError(RuntimeError): pass
 
 def dec(s): return zlib.decompress(base64.b64decode(s)).decode()
 def rb(t,a,b,r,n):

@@ -12,8 +12,6 @@ import argparse
 from pathlib import Path
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def once(text: str, old: str, new: str, label: str) -> str:

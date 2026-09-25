@@ -3,12 +3,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 MARKER = "Workshop OS v11.23 RC2 physical touch finalization"
-
-
-def fail(message: str) -> None:
-    raise SystemExit(message)
 
 
 def replace_exact(text: str, old: str, new: str, label: str, expected: int = 1) -> str:

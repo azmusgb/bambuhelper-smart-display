@@ -10,23 +10,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(path: Path) -> str:
     if not path.exists():
         raise PatchError(f"missing {path}")
     return path.read_text(encoding="utf-8")
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected exactly one match, found {count}")
-    return text.replace(old, new, 1)
 
 
 def block_end(text: str, start: int) -> int:

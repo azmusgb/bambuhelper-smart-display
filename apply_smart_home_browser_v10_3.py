@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-class PatchError(RuntimeError): pass
 HERE=Path(__file__).resolve().parent
 
 def load(root,rel):

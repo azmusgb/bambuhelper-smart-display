@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import shutil
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 MEDIA_HEADERS = (
@@ -33,15 +32,6 @@ def copy_exact(source: Path, destination: Path) -> None:
         raise PatchError(f"missing media source asset: {source}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if new in text:
-        return text
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected one anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 def insert_once(text: str, anchor: str, addition: str, label: str) -> str:

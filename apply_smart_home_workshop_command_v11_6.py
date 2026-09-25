@@ -2,7 +2,6 @@
 from pathlib import Path
 import argparse
 
-class PatchError(RuntimeError): pass
 HERE=Path(__file__).resolve().parent
 
 def load(root,rel):

@@ -10,10 +10,9 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(path: Path) -> str:
@@ -78,13 +77,6 @@ def function_block(text: str, signature: str) -> tuple[int, int, str]:
 def replace_function(text: str, signature: str, replacement: str) -> str:
     start, end, _ = function_block(text, signature)
     return text[:start] + replacement.strip() + text[end:]
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected one anchor, found {count}")
-    return text.replace(old, new, 1)
 
 
 EVIDENCE_ROW = r'''

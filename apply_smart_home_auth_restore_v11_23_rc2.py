@@ -3,46 +3,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 MARKER = "Workshop OS v11.23 RC2 authenticated LAN restore"
-
-
-def fail(message: str) -> None:
-    raise SystemExit(message)
-
-
-def replace_braced_block(text: str, start: str, replacement: str, label: str) -> str:
-    pos = text.find(start)
-    if pos < 0:
-        fail(f"{label}: start anchor missing")
-    brace = text.find("{", pos)
-    if brace < 0:
-        fail(f"{label}: opening brace missing")
-    depth = 0
-    in_string = False
-    quote = ""
-    escape = False
-    for i in range(brace, len(text)):
-        c = text[i]
-        if in_string:
-            if escape:
-                escape = False
-            elif c == "\\":
-                escape = True
-            elif c == quote:
-                in_string = False
-            continue
-        if c in ("'", '"'):
-            in_string = True
-            quote = c
-            continue
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return text[:pos] + replacement + text[i + 1:]
-    fail(f"{label}: closing brace missing")
 
 
 def remove_preprocessor_block(text: str, start_marker: str, label: str) -> str:

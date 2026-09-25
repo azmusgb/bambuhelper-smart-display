@@ -12,8 +12,6 @@ import re
 from pathlib import Path
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 LIGHT_PATTERN = re.compile(

@@ -10,8 +10,6 @@ import argparse
 from pathlib import Path
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 HANDLERS = r'''

@@ -7,8 +7,6 @@ import shutil
 from pathlib import Path
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 PLATFORM_HEADERS = (

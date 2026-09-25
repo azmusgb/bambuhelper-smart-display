@@ -3,8 +3,6 @@ from pathlib import Path
 import argparse
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(root: Path, rel: str) -> str:

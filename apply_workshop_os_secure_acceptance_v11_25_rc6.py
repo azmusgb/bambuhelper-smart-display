@@ -14,8 +14,6 @@ from pathlib import Path
 TEMP_MARKER = "WORKSHOP_OS_TEMP_NO_CODE_LAN"
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load(path: Path) -> str:

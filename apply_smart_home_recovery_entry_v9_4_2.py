@@ -2,17 +2,9 @@
 from pathlib import Path
 import argparse
 import re
+from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
 
 
-class PatchError(RuntimeError):
-    pass
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise PatchError(f"{label}: expected exactly 1 match, found {count}")
-    return text.replace(old, new, 1)
 
 
 def apply_recovery_entry(repo: Path) -> None:

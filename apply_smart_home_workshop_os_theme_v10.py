@@ -8,8 +8,6 @@ from pathlib import Path
 CORE_URL = "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/eecddd896a3836da42bf8cbbb2c3723cca62b29a/apply_smart_home_workshop_os_theme_v10.py"
 
 
-class PatchError(RuntimeError):
-    pass
 
 
 def load_core():

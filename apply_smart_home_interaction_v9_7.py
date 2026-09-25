@@ -2,8 +2,6 @@
 from pathlib import Path
 import argparse, re
 
-class PatchError(RuntimeError):
-    pass
 
 def need_once(text, needle, name):
     n=text.count(needle)
