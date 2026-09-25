@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from apply_workshop_os_printer_credentials_v11_25_rc11 import patch as patch_printer_credentials
+from scripts.smart_home_patch_utils import PatchError  # noqa: F401 (re-export)
 
 
 def load(path: Path) -> str:

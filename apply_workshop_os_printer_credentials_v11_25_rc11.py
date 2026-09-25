@@ -7,6 +7,7 @@ it only after the user presses Reveal/Copy, and the response is no-store.
 from __future__ import annotations
 import argparse
 from pathlib import Path
+from scripts.smart_home_patch_utils import PatchError  # noqa: F401 (re-export)
 
 
 def once(text, old, new, label):
