@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HELPERS = ["fail", "replace_once", "replace_braced_block"]
-IMPORT_LINE = "from smart_home_patch_utils import fail, replace_once, replace_braced_block\n"
+IMPORT_LINE = "from scripts.smart_home_patch_utils import fail, replace_once, replace_braced_block\n"
 
 def strip_def(source: str, name: str) -> tuple[str, bool]:
     """Remove a top-level def block by name. Returns (new_source, changed)."""

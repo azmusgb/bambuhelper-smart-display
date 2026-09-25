@@ -5,6 +5,11 @@ def fail(message: str) -> None:
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
+    # If the replacement embeds the original anchor (e.g., "foo" -> "foo bar"),
+    # detect already-applied state by looking for the full replacement first.
+    if old in new and new in text:
+        print(f"{label}: already applied, skipping")
+        return text
     count = text.count(old)
     if count == 0 and new in text:
         print(f"{label}: already applied, skipping")
