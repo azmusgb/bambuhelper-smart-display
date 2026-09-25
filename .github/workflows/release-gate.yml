@@ -56,6 +56,22 @@ jobs:
             gh api --paginate "/repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename'
           )
 
+          tooling_only=true
+          for f in "${files[@]}"; do
+            case "$f" in
+              apply_*.py|scripts/*.py|scripts/*.sh|docs/*.md|docs/*.txt|*.md)
+                ;;
+              *)
+                tooling_only=false
+                break
+                ;;
+            esac
+          done
+          if [ "$tooling_only" = true ] && [ ${#files[@]} -gt 0 ]; then
+            echo 'required=["Validate"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           required=("Validate")
           legacy_firmware_required=0
           settings_required=0
