@@ -20,3 +20,19 @@ All 6 deserializeJson calls in bambu_mqtt.cpp are error-checked (either assigned
 ## Remaining checks
 - [ ] Audit the 11 other deserializeJson calls across other .cpp files
 - [ ] Verify otaAutoTaskFn frees its String* parameter
+
+## Final verdict (2026-09-25)
+
+All 17 deserializeJson call sites across 7 .cpp files are error-checked:
+- 9 assigned to DeserializationError err (immediately checked)
+- 6 wrapped in if (!deserializeJson(...))
+- 2 wrapped in if (deserializeJson(...)) as error branch
+
+No unguarded JSON parsing exists in the firmware.
+
+## Audit conclusion
+No exploitable vulnerabilities found in the reviewed attack surfaces:
+- No unsafe string functions
+- All destructive routes require authentication
+- All external JSON input is error-handled
+- OTA task memory transfer follows standard FreeRTOS ownership pattern
