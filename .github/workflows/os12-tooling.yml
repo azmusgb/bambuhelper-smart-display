@@ -10,6 +10,10 @@ on:
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/capture-ws350-views.zsh'
       - 'scripts/capture_os12_views_unattended.py'
+      - 'scripts/collect_os12_candidate_evidence_macos.sh'
+      - 'scripts/finalize_os12_evidence_bundle.py'
+      - 'scripts/verify_os12_evidence_bundle.py'
+      - 'scripts/test_os12_evidence_bundle.py'
       - 'scripts/flash_os12_ci_candidate_macos.sh'
       - 'scripts/install_accept_os12_candidate_macos.sh'
       - 'scripts/prepare_os12_device_candidate.py'
@@ -28,6 +32,10 @@ on:
       - 'scripts/bootstrap_ws350_os12_usb_macos.sh'
       - 'scripts/capture-ws350-views.zsh'
       - 'scripts/capture_os12_views_unattended.py'
+      - 'scripts/collect_os12_candidate_evidence_macos.sh'
+      - 'scripts/finalize_os12_evidence_bundle.py'
+      - 'scripts/verify_os12_evidence_bundle.py'
+      - 'scripts/test_os12_evidence_bundle.py'
       - 'scripts/flash_os12_ci_candidate_macos.sh'
       - 'scripts/install_accept_os12_candidate_macos.sh'
       - 'scripts/prepare_os12_device_candidate.py'
@@ -60,13 +68,14 @@ jobs:
 
       - name: Validate Python tooling syntax
         run: |
-          python3 -m py_compile             scripts/accept_os12_code_free_portal_runtime.py             scripts/accept_os12_device_ui_physical.py             scripts/accept_os12_media_physical.py             scripts/accept_os12_media_runtime.py             scripts/accept_os12_portal_runtime.py             scripts/accept_os12_unattended.py             scripts/accept_os12_update_runtime.py             scripts/capture_os12_views_unattended.py             scripts/prepare_os12_device_candidate.py             scripts/validate_os12_automatic_candidate.py             scripts/validate_os12_automation_collection.py             scripts/validate_os12_candidate_publisher.py             scripts/validate_os12_merge_gate.py             scripts/validate_os12_physical_acceptance.py             scripts/validate_os12_recovery_roundtrip.py
+          python3 -m py_compile             scripts/accept_os12_code_free_portal_runtime.py             scripts/accept_os12_device_ui_physical.py             scripts/accept_os12_media_physical.py             scripts/accept_os12_media_runtime.py             scripts/accept_os12_portal_runtime.py             scripts/accept_os12_unattended.py             scripts/accept_os12_update_runtime.py             scripts/capture_os12_views_unattended.py             scripts/prepare_os12_device_candidate.py             scripts/validate_os12_automatic_candidate.py             scripts/finalize_os12_evidence_bundle.py             scripts/verify_os12_evidence_bundle.py             scripts/test_os12_evidence_bundle.py             scripts/validate_os12_automation_collection.py             scripts/validate_os12_candidate_publisher.py             scripts/validate_os12_merge_gate.py             scripts/validate_os12_physical_acceptance.py             scripts/validate_os12_recovery_roundtrip.py
 
       - name: Validate shell tooling syntax
         run: |
           bash -n scripts/accept_os12_installed_candidate_macos.sh
           bash -n scripts/accept_os12_recovery_roundtrip_macos.sh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
+          bash -n scripts/collect_os12_candidate_evidence_macos.sh
           bash -n scripts/flash_os12_ci_candidate_macos.sh
           bash -n scripts/install_accept_os12_candidate_macos.sh
           bash -n scripts/waveshare-usb.sh
@@ -90,6 +99,9 @@ jobs:
 
       - name: Validate hardened automatic evidence collection
         run: python3 scripts/validate_os12_automation_collection.py
+
+      - name: Exercise evidence bundle integrity offline
+        run: python3 scripts/test_os12_evidence_bundle.py
 
       - name: Validate recovery round-trip contract
         run: python3 scripts/validate_os12_recovery_roundtrip.py

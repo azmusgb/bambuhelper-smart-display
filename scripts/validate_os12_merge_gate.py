@@ -97,8 +97,13 @@ def main() -> int:
         "name: Workshop OS 12 Tooling Checks",
         "scripts/accept_os12_*.py",
         "scripts/accept_os12_*.sh",
+        "scripts/collect_os12_candidate_evidence_macos.sh",
+        "scripts/finalize_os12_evidence_bundle.py",
+        "scripts/verify_os12_evidence_bundle.py",
+        "scripts/test_os12_evidence_bundle.py",
         "scripts/validate_os12_physical_acceptance.py",
         "scripts/validate_os12_recovery_roundtrip.py",
+        "Exercise evidence bundle integrity offline",
         "Validate recovery round-trip contract",
     ):
         require(tooling, needle, "OS12 Tooling PR trigger coverage")

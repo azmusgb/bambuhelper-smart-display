@@ -103,7 +103,7 @@ jobs:
             esac
 
             case "$f" in
-              .github/workflows/os12-tooling.yml|scripts/accept_os12_*.py|scripts/accept_os12_*.sh|scripts/bootstrap_ws350_os12_usb_macos.sh|scripts/capture-ws350-views.zsh|scripts/capture_os12_views_unattended.py|scripts/flash_os12_ci_candidate_macos.sh|scripts/install_accept_os12_candidate_macos.sh|scripts/prepare_os12_device_candidate.py|scripts/validate_os12_automatic_candidate.py|scripts/validate_os12_candidate_publisher.py|scripts/validate_os12_merge_gate.py|scripts/validate_os12_physical_acceptance.py|scripts/validate_os12_recovery_roundtrip.py|scripts/waveshare-usb.sh)
+              .github/workflows/os12-tooling.yml|scripts/accept_os12_*.py|scripts/accept_os12_*.sh|scripts/bootstrap_ws350_os12_usb_macos.sh|scripts/capture-ws350-views.zsh|scripts/capture_os12_views_unattended.py|scripts/collect_os12_candidate_evidence_macos.sh|scripts/finalize_os12_evidence_bundle.py|scripts/verify_os12_evidence_bundle.py|scripts/test_os12_evidence_bundle.py|scripts/flash_os12_ci_candidate_macos.sh|scripts/install_accept_os12_candidate_macos.sh|scripts/prepare_os12_device_candidate.py|scripts/validate_os12_automatic_candidate.py|scripts/validate_os12_candidate_publisher.py|scripts/validate_os12_merge_gate.py|scripts/validate_os12_physical_acceptance.py|scripts/validate_os12_recovery_roundtrip.py|scripts/waveshare-usb.sh)
                 tooling_required=1
                 ;;
             esac
