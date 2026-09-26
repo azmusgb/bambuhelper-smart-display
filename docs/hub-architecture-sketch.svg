@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 480 320" role="img" aria-labelledby="title desc">
+  <title id="title">480 by 320 Home Hub geometry proof</title>
+  <desc id="desc">Wireframe showing six home tiles in a three-column by two-row grid with persistent Home, Apps, Printer, and System navigation.</desc>
+  <rect x="0" y="0" width="480" height="320" fill="white" stroke="black" stroke-width="2"/>
+  <rect x="0" y="0" width="480" height="24" fill="white" stroke="black" stroke-width="1"/>
+  <text x="10" y="16" font-family="Arial, sans-serif" font-size="10">WORKSHOP OS</text>
+  <text x="470" y="16" text-anchor="end" font-family="Arial, sans-serif" font-size="9">2:49</text>
+  <g font-family="Arial, sans-serif" fill="black" stroke="black">
+    <g transform="translate(8 32)"><rect width="149" height="112" fill="white" stroke-width="1.5"/><circle cx="16" cy="18" r="6" fill="white" stroke-width="1"/><text x="28" y="21" stroke="none" font-size="8.5">NOW</text><text x="10" y="66" stroke="none" font-size="14">2:49 PM</text><text x="10" y="94" stroke="none" font-size="8">Sat · Sep 26</text></g>
+    <g transform="translate(165 32)"><rect width="149" height="112" fill="white" stroke-width="1.5"/><circle cx="16" cy="18" r="6" fill="white" stroke-width="1"/><text x="28" y="21" stroke="none" font-size="8.5">SMART HOME</text><text x="10" y="66" stroke="none" font-size="14">3 devices</text><text x="10" y="94" stroke="none" font-size="8">All normal</text></g>
+    <g transform="translate(322 32)"><rect width="149" height="112" fill="white" stroke-width="1.5"/><circle cx="16" cy="18" r="6" fill="white" stroke-width="1"/><text x="28" y="21" stroke="none" font-size="8.5">WORKSHOP</text><text x="10" y="66" stroke="none" font-size="14">Ready</text><text x="10" y="94" stroke="none" font-size="8">2 timers</text></g>
+    <g transform="translate(8 152)"><rect width="149" height="112" fill="white" stroke-width="1.5"/><circle cx="16" cy="18" r="6" fill="white" stroke-width="1"/><text x="28" y="21" stroke="none" font-size="8.5">PRINTER</text><text x="10" y="66" stroke="none" font-size="14">Idle</text><text x="10" y="94" stroke="none" font-size="8">Ready</text></g>
+    <g transform="translate(165 152)"><rect width="149" height="112" fill="white" stroke-width="1.5"/><circle cx="16" cy="18" r="6" fill="white" stroke-width="1"/><text x="28" y="21" stroke="none" font-size="8.5">APPS</text><text x="10" y="66" stroke="none" font-size="14">Sky Radar</text><text x="10" y="94" stroke="none" font-size="8">6 built-ins</text></g>
+    <g transform="translate(322 152)"><rect width="149" height="112" fill="white" stroke-width="1.5"/><circle cx="16" cy="18" r="6" fill="white" stroke-width="1"/><text x="28" y="21" stroke="none" font-size="8.5">SYSTEM</text><text x="10" y="66" stroke="none" font-size="14">Healthy</text><text x="10" y="94" stroke="none" font-size="8">Wi-Fi connected</text></g>
+  </g>
+  <rect x="0" y="272" width="480" height="48" fill="white" stroke="black" stroke-width="1.5"/>
+  <line x1="120" y1="272" x2="120" y2="320" stroke="black"/><line x1="240" y1="272" x2="240" y2="320" stroke="black"/><line x1="360" y1="272" x2="360" y2="320" stroke="black"/>
+  <g font-family="Arial, sans-serif" font-size="9" text-anchor="middle"><text x="60" y="300">HOME</text><text x="180" y="300">APPS</text><text x="300" y="300">PRINTER</text><text x="420" y="300">SYSTEM</text></g>
+</svg>
