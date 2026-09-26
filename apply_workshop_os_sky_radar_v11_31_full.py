@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Complete Sky Radar wiring — one pass, all sites."""
+"""Complete Sky Radar wiring — one pass, all sites.
+
+NOTE: Two cosmetic fixes (sprite background clear, retry-counter
+clamp) were applied by hand to the build tree after this script ran.
+They need to be folded in here next session."""
 from __future__ import annotations
 import argparse, re, sys
 from pathlib import Path
