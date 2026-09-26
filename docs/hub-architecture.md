@@ -344,7 +344,7 @@ It is **not** sufficient for simultaneous icon + title + value + secondary value
 
 See the attached wireframe:
 
-`docs/hub-architecture-sketch.png`
+`docs/hub-architecture-sketch.svg`
 
 ## Design constraints
 
