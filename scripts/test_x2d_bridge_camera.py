@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
@@ -73,19 +74,26 @@ class BridgeUrlTests(unittest.TestCase):
 
 
 class PatchIntegrationTests(unittest.TestCase):
-    def test_patch_keeps_source_fixed_and_route_authenticated(self) -> None:
+    def test_overlay_patches_reconstructed_copy_not_canonical_assets(self) -> None:
+        canonical_cpp = ROOT / "firmware/platform/media/ws350_media_backend.cpp"
+        canonical_h = ROOT / "firmware/platform/media/ws350_media_backend.h"
+        before_cpp = canonical_cpp.read_text(encoding="utf-8")
+        before_h = canonical_h.read_text(encoding="utf-8")
+        self.assertNotIn("HTTPClient", before_cpp)
+        self.assertNotIn("kX2dBridgeSource", before_cpp)
+        self.assertNotIn("X2dBridge", before_h)
+
         with tempfile.TemporaryDirectory() as td:
             repo = Path(td)
             src = repo / "src"
+            include = repo / "include"
             src.mkdir()
+            include.mkdir()
             backend = src / "ws350_media_backend.cpp"
+            backend_h = include / "ws350_media_backend.h"
             web = src / "web_server.cpp"
-            backend.write_text(
-                '#define WORKSHOP_X2D_BRIDGE_URL ""\n'
-                'static const char kX2dBridgeSource[] = "x2d-bridge";\n'
-                'void renderX2dBridgeFrame() {}\n',
-                encoding="utf-8",
-            )
+            shutil.copyfile(canonical_cpp, backend)
+            shutil.copyfile(canonical_h, backend_h)
             web.write_text(
                 'static void sendWorkshopMediaStatus(int code = 200) {}\n'
                 'static void handleWorkshopMediaVideoStart() {}\n'
@@ -100,14 +108,45 @@ class PatchIntegrationTests(unittest.TestCase):
             patch.apply(repo, configured)
 
             backend_text = backend.read_text(encoding="utf-8")
+            header_text = backend_h.read_text(encoding="utf-8")
             web_text = web.read_text(encoding="utf-8")
             self.assertIn(f'#define WORKSHOP_X2D_BRIDGE_URL "{configured}"', backend_text)
+            self.assertIn("#include <HTTPClient.h>", backend_text)
+            self.assertIn('kX2dBridgeSource[] = "x2d-bridge"', backend_text)
+            self.assertIn("renderX2dBridgeFrame", backend_text)
+            self.assertIn("X2dBridge", header_text)
             self.assertIn('media.playMjpeg("x2d-bridge", millis())', web_text)
             self.assertIn(
                 'SECURE_POST("/os12/media/video/start-x2d-bridge", handleWorkshopMediaVideoStartX2dBridge);',
                 web_text,
             )
             self.assertNotIn('server.on("/os12/media/video/start-x2d-bridge"', web_text)
+
+        self.assertEqual(canonical_cpp.read_text(encoding="utf-8"), before_cpp)
+        self.assertEqual(canonical_h.read_text(encoding="utf-8"), before_h)
+
+    def test_overlay_refuses_double_application(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            src = repo / "src"
+            include = repo / "include"
+            src.mkdir()
+            include.mkdir()
+            shutil.copyfile(ROOT / "firmware/platform/media/ws350_media_backend.cpp", src / "ws350_media_backend.cpp")
+            shutil.copyfile(ROOT / "firmware/platform/media/ws350_media_backend.h", include / "ws350_media_backend.h")
+            (src / "web_server.cpp").write_text(
+                'static void sendWorkshopMediaStatus(int code = 200) {}\n'
+                'static void handleWorkshopMediaVideoStart() {}\n'
+                'static void handleWorkshopMediaVideoPause() {}\n'
+                'void initWebServer() {\n'
+                '  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n'
+                '}\n',
+                encoding="utf-8",
+            )
+            configured = "http://10.0.0.16:8091/x2d/frame.jpg"
+            patch.apply(repo, configured)
+            with self.assertRaises(patch.PatchError):
+                patch.apply(repo, configured)
 
 
 if __name__ == "__main__":
