@@ -150,7 +150,13 @@ def apply(repo: Path) -> None:
         if not path.is_file():
             raise PatchError(f"missing reconstructed source: {path}")
 
+    # Stage every transformation in memory. Only write after all anchors and
+    # final invariants validate so a late mismatch cannot leave a half-patched
+    # physical candidate behind.
     backend_text = backend.read_text(encoding="utf-8")
+    hub = smart_hub.read_text(encoding="utf-8")
+    display = display_ui.read_text(encoding="utf-8")
+
     if "kX2dBridgeSource" not in backend_text or "renderX2dBridgeFrame" not in backend_text:
         raise PatchError("apply the X2D bridge overlay before viewer polish")
     backend_text = replace_once_or_verified(
@@ -160,9 +166,7 @@ def apply(repo: Path) -> None:
         "The bridge already produces the exact 480x270 viewport",
         "X2D per-frame black clear",
     )
-    backend.write_text(backend_text, encoding="utf-8")
 
-    hub = smart_hub.read_text(encoding="utf-8")
     if 'media.playMjpeg("x2d-bridge",millis())' not in hub or "directVideoViewer" not in hub:
         raise PatchError("X2D on-device viewer overlay must be present before polish")
 
@@ -186,14 +190,18 @@ def apply(repo: Path) -> None:
     elif new_title not in hub:
         raise PatchError("active viewer title: neither old nor polished title found")
 
+    # Current reconstructed UI renders the same Stop & Back action in both the
+    # inactive and active viewer branches. Both are ordinary navigation and both
+    # must be neutral. Older fixtures had only one occurrence, so accept 1 or 2.
     old_back = 'hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);'
     new_back = 'hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);'
-    if old_back in hub:
-        if hub.count(old_back) != 1:
-            raise PatchError(f"active viewer Back action: expected one anchor, found {hub.count(old_back)}")
-        hub = hub.replace(old_back, new_back, 1)
+    old_back_count = hub.count(old_back)
+    if old_back_count:
+        if old_back_count not in (1, 2):
+            raise PatchError(f"viewer Back action: expected one or two anchors, found {old_back_count}")
+        hub = hub.replace(old_back, new_back)
     elif new_back not in hub:
-        raise PatchError("active viewer Back action: neither old nor polished action found")
+        raise PatchError("viewer Back action: neither old nor polished action found")
 
     hub = replace_once_or_verified(
         hub, VIEWER_ACTION_OLD, VIEWER_ACTION_NEW, "if (controlsChanged)", "viewer redundant refresh"
@@ -218,9 +226,7 @@ def apply(repo: Path) -> None:
             SMART_CAPTURE_ROW,
             "Smart Hub capture row",
         )
-    smart_hub.write_text(hub, encoding="utf-8")
 
-    display = display_ui.read_text(encoding="utf-8")
     if DISPLAY_CAPTURE_MARKER not in display:
         count = display.count(DISPLAY_CAPTURE_INSERT_ANCHOR)
         if count != 1:
@@ -230,32 +236,46 @@ def apply(repo: Path) -> None:
             DISPLAY_CAPTURE_CODE + DISPLAY_CAPTURE_INSERT_ANCHOR,
             1,
         )
-    display_ui.write_text(display, encoding="utf-8")
 
     checks = {
-        backend: [
-            "The bridge already produces the exact 480x270 viewport",
-            "tft.drawJpg(frame, static_cast<uint32_t>(received), x, y);",
-        ],
-        smart_hub: [
-            'hubUi13InfoRow(hubUi13RowRect(2),"X2D Camera",m.runtime.session==',
-            new_title,
-            "const bool controlsChanged",
-            "Transfer display ownership back to Media",
-            "return displayCapturePrepare(width, height);",
-            "return displayCaptureRgbRow(y, out, outLen);",
-        ],
-        display_ui: [
-            DISPLAY_CAPTURE_MARKER,
-            "bool displayCaptureRgbRow(uint16_t y, uint8_t* out, size_t outLen)",
-            "_frame_sprite.readPixel",
-        ],
+        "ws350_media_backend.cpp": (
+            backend_text,
+            [
+                "The bridge already produces the exact 480x270 viewport",
+                "tft.drawJpg(frame, static_cast<uint32_t>(received), x, y);",
+            ],
+        ),
+        "smart_hub.cpp": (
+            hub,
+            [
+                'hubUi13InfoRow(hubUi13RowRect(2),"X2D Camera",m.runtime.session==',
+                new_title,
+                "const bool controlsChanged",
+                "Transfer display ownership back to Media",
+                "return displayCapturePrepare(width, height);",
+                "return displayCaptureRgbRow(y, out, outLen);",
+            ],
+        ),
+        "display_ui.cpp": (
+            display,
+            [
+                DISPLAY_CAPTURE_MARKER,
+                "bool displayCaptureRgbRow(uint16_t y, uint8_t* out, size_t outLen)",
+                "_frame_sprite.readPixel",
+            ],
+        ),
     }
-    for path, needles in checks.items():
-        body = path.read_text(encoding="utf-8")
+    for name, (body, needles) in checks.items():
         for needle in needles:
             if needle not in body:
-                raise PatchError(f"{path.name}: missing required marker {needle!r}")
+                raise PatchError(f"{name}: missing required marker {needle!r}")
+
+    if old_back in hub:
+        raise PatchError("smart_hub.cpp: destructive Stop & Back action remains after polish")
+
+    backend.write_text(backend_text, encoding="utf-8")
+    smart_hub.write_text(hub, encoding="utf-8")
+    display_ui.write_text(display, encoding="utf-8")
 
     print("Workshop OS 12 X2D viewer polish installed")
     print("Root framebuffer capture enabled for direct-video screenshots")
