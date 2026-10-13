@@ -7,7 +7,13 @@
 #include "display_ui.h"
 
 #if defined(ESP32)
+#include <HTTPClient.h>
+#include <WiFi.h>
 #include <esp_heap_caps.h>
+#endif
+
+#ifndef WORKSHOP_X2D_BRIDGE_URL
+#define WORKSHOP_X2D_BRIDGE_URL ""
 #endif
 
 namespace workshop {
@@ -15,10 +21,16 @@ namespace media {
 
 namespace {
 static const char kPrinterCameraSource[] = "printer-camera";
+static const char kX2dBridgeSource[] = "x2d-bridge";
 static const char kDemoVideoSource[] = "demo-video";
-static const uint32_t kVideoFrameIntervalMs = 200U;  // 5 fps diagnostic ceiling; preserve touch/main-loop headroom.
+static const uint32_t kVideoFrameIntervalMs = 200U;  // 5 fps ceiling; preserve touch/main-loop headroom.
+static const uint32_t kBridgeConnectTimeoutMs = 350U;
+static const uint32_t kBridgeReadTimeoutMs = 900U;
+static const size_t kBridgeMaxFrameBytes = 384U * 1024U;
 static const float kBambuCameraWidth = 1280.0f;
 static const float kBambuCameraHeight = 720.0f;
+static const int16_t kBridgeCameraWidth = 480;
+static const int16_t kBridgeCameraHeight = 270;
 }
 
 Ws350MediaBackend::Ws350MediaBackend()
@@ -45,8 +57,7 @@ Capabilities Ws350MediaBackend::probe() {
 #endif
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM)
   // Video is a WS350 media capability, not a printer capability. Individual
-  // sources (printer camera, network stream, local demo) perform their own
-  // availability checks when selected.
+  // sources perform their own availability checks when selected.
   caps.videoDecoderAvailable = caps.psramAvailable;
 #endif
   return caps;
@@ -146,6 +157,13 @@ bool Ws350MediaBackend::beginMjpeg(const char* source) {
     cameraBegin();
     if (!cameraActive()) return false;
     next = VideoSource::PrinterCamera;
+  } else if (std::strcmp(source, kX2dBridgeSource) == 0) {
+#if defined(ESP32)
+    if (WORKSHOP_X2D_BRIDGE_URL[0] == '\0' || WiFi.status() != WL_CONNECTED) return false;
+    next = VideoSource::X2dBridge;
+#else
+    return false;
+#endif
   } else {
     return false;
   }
@@ -183,10 +201,6 @@ void Ws350MediaBackend::renderDemoFrame(uint32_t nowMs) {
   const int16_t x = static_cast<int16_t>((frame * 11U) % motionWidth);
   const int16_t y = static_cast<int16_t>(54 + ((frame * 7U) % motionHeight));
 
-  // The first frame establishes the static scene. Subsequent frames update
-  // only the previous/current sprite and the two-pixel progress strip. This
-  // avoids repainting ~130k pixels every frame on the 40 MHz SPI panel and
-  // leaves materially more CPU/bus headroom for touch and printer telemetry.
   if (videoLastFrameId_ == 0U) {
     tft.fillRect(0, 0, W, viewportH, TFT_BLACK);
     tft.fillRoundRect(12, 12, W - 24, 34, 10, TFT_DARKGREY);
@@ -213,7 +227,7 @@ void Ws350MediaBackend::renderDemoFrame(uint32_t nowMs) {
   ++videoDiagnostics_.polls;
   ++videoDiagnostics_.frameObservations;
   ++videoDiagnostics_.framesRendered;
-  yield();  // Cooperative handoff: demo rendering must not starve touch/network tasks.
+  yield();
   videoDiagnostics_.lastFrameId = frame;
   videoDiagnostics_.lastFrameBytes = 0;
   videoDiagnostics_.lastFrameAtMs = nowMs;
@@ -265,6 +279,99 @@ void Ws350MediaBackend::renderLatestCameraFrame(uint32_t nowMs) {
 #endif
 }
 
+void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
+  if (!videoRequested_ || videoPaused_ || videoSource_ != VideoSource::X2dBridge) return;
+  if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
+
+  // Advance the poll deadline before network I/O so repeated failures remain bounded
+  // to the same 5 fps ceiling instead of spinning in the main loop.
+  videoLastRenderAtMs_ = nowMs;
+  ++videoDiagnostics_.polls;
+
+  if (WORKSHOP_X2D_BRIDGE_URL[0] == '\0' || WiFi.status() != WL_CONNECTED) {
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+
+  HTTPClient http;
+  http.setConnectTimeout(kBridgeConnectTimeoutMs);
+  http.setTimeout(kBridgeReadTimeoutMs);
+  http.setReuse(false);
+  if (!http.begin(WORKSHOP_X2D_BRIDGE_URL)) {
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+  http.addHeader("Cache-Control", "no-cache");
+
+  const int status = http.GET();
+  const int contentLength = http.getSize();
+  if (status != HTTP_CODE_OK || contentLength <= 4 ||
+      static_cast<size_t>(contentLength) > kBridgeMaxFrameBytes) {
+    http.end();
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+
+  uint8_t* frame = static_cast<uint8_t*>(
+      heap_caps_malloc(static_cast<size_t>(contentLength), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!frame) {
+    http.end();
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+
+  WiFiClient* stream = http.getStreamPtr();
+  size_t received = 0;
+  const uint32_t readStartedAt = millis();
+  while (received < static_cast<size_t>(contentLength) &&
+         millis() - readStartedAt < kBridgeReadTimeoutMs) {
+    const int available = stream->available();
+    if (available > 0) {
+      size_t request = static_cast<size_t>(available);
+      const size_t remaining = static_cast<size_t>(contentLength) - received;
+      if (request > remaining) request = remaining;
+      const int got = stream->read(frame + received, request);
+      if (got > 0) received += static_cast<size_t>(got);
+    } else if (!stream->connected()) {
+      break;
+    } else {
+      delay(1);
+    }
+    yield();
+  }
+  http.end();
+
+  const bool jpegValid =
+      received == static_cast<size_t>(contentLength) && received >= 4U &&
+      frame[0] == 0xFFU && frame[1] == 0xD8U &&
+      frame[received - 2U] == 0xFFU && frame[received - 1U] == 0xD9U;
+  if (!jpegValid) {
+    heap_caps_free(frame);
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+
+  ++videoDiagnostics_.frameObservations;
+  const int16_t controlBarH = 50;
+  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
+  const int16_t x = (tft.width() - kBridgeCameraWidth) / 2;
+  const int16_t y = (viewportH - kBridgeCameraHeight) / 2;
+  tft.fillRect(0, 0, tft.width(), viewportH, TFT_BLACK);
+  tft.drawJpg(frame, static_cast<uint32_t>(received), x, y);
+  heap_caps_free(frame);
+
+  markFrameDirty();
+  ++videoLastFrameId_;
+  ++videoDiagnostics_.framesRendered;
+  videoDiagnostics_.lastFrameId = videoLastFrameId_;
+  videoDiagnostics_.lastFrameBytes = static_cast<uint32_t>(received);
+  videoDiagnostics_.lastFrameAtMs = nowMs;
+#else
+  (void)nowMs;
+#endif
+}
+
 bool Ws350MediaBackend::stopMedia() {
 #if defined(BOARD_HAS_MICROPHONE)
   if (recordingRequested_) buzzerBackendMicRecordStop();
@@ -306,6 +413,8 @@ void Ws350MediaBackend::poll() {
       } else {
         renderLatestCameraFrame(millis());
       }
+    } else if (videoSource_ == VideoSource::X2dBridge) {
+      renderX2dBridgeFrame(millis());
     } else if (videoSource_ == VideoSource::Demo) {
       renderDemoFrame(millis());
     }
