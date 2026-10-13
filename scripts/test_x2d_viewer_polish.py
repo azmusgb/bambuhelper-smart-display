@@ -36,7 +36,10 @@ static void drawMedia() {{
 }}
 static void drawOs12VideoViewer() {{
 {polish.VIEWER_STATE_OLD}
-  if(!videoActive) return;
+  if(!videoActive) {{
+    hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);
+    return;
+  }}
   if(!gOs12VideoViewerPrimed) {{
     uiDrawFit("Video Viewer",OS12V_INSET,9,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_TEXT,TFT_BLACK);
     gOs12VideoViewerPrimed=true;
@@ -105,6 +108,7 @@ class ViewerPolishTests(unittest.TestCase):
             self.assertIn('"X2D Camera"', hub)
             self.assertIn("const bool controlsChanged", hub)
             self.assertNotIn('"Stop & Back"', hub)
+            self.assertGreaterEqual(hub.count('"Back",C10_ACCENT,true,false'), 2)
             self.assertIn("Transfer display ownership back to Media", hub)
             self.assertIn("return displayCapturePrepare(width, height);", hub)
             self.assertIn("return displayCaptureRgbRow(y, out, outLen);", hub)
@@ -125,6 +129,23 @@ class ViewerPolishTests(unittest.TestCase):
                 for p in (root / "src").iterdir()
             }
             self.assertEqual(first, second)
+
+    def test_polish_failure_is_transactional(self) -> None:
+        td, root = self.make_repo()
+        with td:
+            display = root / "src/display_ui.cpp"
+            display.write_text("static FakeSprite _frame_sprite;\n", encoding="utf-8")
+            before = {
+                p.name: p.read_text(encoding="utf-8")
+                for p in (root / "src").iterdir()
+            }
+            with self.assertRaises(Exception):
+                polish.apply(root)
+            after = {
+                p.name: p.read_text(encoding="utf-8")
+                for p in (root / "src").iterdir()
+            }
+            self.assertEqual(before, after)
 
 
 if __name__ == "__main__":
