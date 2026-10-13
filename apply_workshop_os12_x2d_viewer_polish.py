@@ -167,25 +167,34 @@ def apply(repo: Path) -> None:
         raise PatchError("X2D on-device viewer overlay must be present before polish")
 
     hub = replace_once_or_verified(
-        hub, MEDIA_ROW_OLD, MEDIA_ROW_NEW, '"X2D Camera"', "Media camera row"
+        hub,
+        MEDIA_ROW_OLD,
+        MEDIA_ROW_NEW,
+        'hubUi13InfoRow(hubUi13RowRect(2),"X2D Camera",m.runtime.session==',
+        "Media camera row",
     )
     hub = replace_once_or_verified(
         hub, VIEWER_STATE_OLD, VIEWER_STATE_NEW, "const bool controlsChanged", "viewer refresh state"
     )
-    if 'uiDrawFit("X2D Camera",OS12V_INSET,9,' not in hub:
-        count = hub.count('uiDrawFit("Video Viewer",OS12V_INSET,9,')
-        if count != 1:
-            raise PatchError(f"active viewer title: expected one anchor, found {count}")
-        hub = hub.replace('uiDrawFit("Video Viewer",OS12V_INSET,9,', 'uiDrawFit("X2D Camera",OS12V_INSET,9,', 1)
-    if 'hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);' not in hub:
-        count = hub.count('hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);')
-        if count != 1:
-            raise PatchError(f"active viewer Back action: expected one anchor, found {count}")
-        hub = hub.replace(
-            'hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);',
-            'hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);',
-            1,
-        )
+
+    old_title = 'uiDrawFit("Video Viewer",OS12V_INSET,9,'
+    new_title = 'uiDrawFit("X2D Camera",OS12V_INSET,9,'
+    if old_title in hub:
+        if hub.count(old_title) != 1:
+            raise PatchError(f"active viewer title: expected one anchor, found {hub.count(old_title)}")
+        hub = hub.replace(old_title, new_title, 1)
+    elif new_title not in hub:
+        raise PatchError("active viewer title: neither old nor polished title found")
+
+    old_back = 'hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);'
+    new_back = 'hubV1125Action(hubUi13BackRect(),"Back",C10_ACCENT,true,false);'
+    if old_back in hub:
+        if hub.count(old_back) != 1:
+            raise PatchError(f"active viewer Back action: expected one anchor, found {hub.count(old_back)}")
+        hub = hub.replace(old_back, new_back, 1)
+    elif new_back not in hub:
+        raise PatchError("active viewer Back action: neither old nor polished action found")
+
     hub = replace_once_or_verified(
         hub, VIEWER_ACTION_OLD, VIEWER_ACTION_NEW, "if (controlsChanged)", "viewer redundant refresh"
     )
@@ -223,14 +232,14 @@ def apply(repo: Path) -> None:
         )
     display_ui.write_text(display, encoding="utf-8")
 
-    # Fail closed if any required physical-test behavior is missing.
     checks = {
         backend: [
             "The bridge already produces the exact 480x270 viewport",
             "tft.drawJpg(frame, static_cast<uint32_t>(received), x, y);",
         ],
         smart_hub: [
-            '"X2D Camera"',
+            'hubUi13InfoRow(hubUi13RowRect(2),"X2D Camera",m.runtime.session==',
+            new_title,
             "const bool controlsChanged",
             "Transfer display ownership back to Media",
             "return displayCapturePrepare(width, height);",
