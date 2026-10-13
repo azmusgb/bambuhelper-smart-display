@@ -39,10 +39,9 @@ class Ws350MediaBackend : public HardwareBackend {
   const VideoDiagnostics& videoDiagnostics() const { return videoDiagnostics_; }
 
  private:
-  enum class VideoSource : uint8_t { None = 0, Demo, PrinterCamera, X2dBridge };
+  enum class VideoSource : uint8_t { None = 0, Demo, PrinterCamera };
   void renderDemoFrame(uint32_t nowMs);
   void renderLatestCameraFrame(uint32_t nowMs);
-  void renderX2dBridgeFrame(uint32_t nowMs);
 
   uint8_t requestedVolume_;
   bool muted_;
