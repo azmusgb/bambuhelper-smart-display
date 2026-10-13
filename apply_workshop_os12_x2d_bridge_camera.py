@@ -3,8 +3,9 @@
 
 The canonical Workshop OS 12 media backend deliberately remains transport-agnostic.
 This patch is applied only to a reconstructed firmware tree for physical testing.
-It installs one fixed private-LAN JPEG endpoint at build time and exposes a
-single authenticated start route. Arbitrary media URLs are never accepted.
+It installs one fixed private-LAN JPEG endpoint at build time, exposes a single
+authenticated start route, and wires the existing on-device Video row to the
+fixed X2D source. Arbitrary media URLs are never accepted.
 """
 from __future__ import annotations
 
@@ -27,6 +28,10 @@ static void handleWorkshopMediaVideoStartX2dBridge() {
   workshop::media::MediaService& media = workshopMediaService();
   // Fixed build-time bridge source only. No request URL/path is accepted.
   const bool started = media.playMjpeg("x2d-bridge", millis());
+  if (started) {
+    // Give the existing OS12 video viewer physical display ownership too.
+    smartHubShowPage("media-video");
+  }
   sendWorkshopMediaStatus(started ? 202 : 409);
 }
 
@@ -51,8 +56,12 @@ CPP_DIMENSION_ADDITION = (
 )
 CPP_BEGIN_MJPEG_ANCHOR = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
     if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
     cameraBegin();
-    if (!cameraActive()) return false;
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
     next = VideoSource::PrinterCamera;
   } else {
     return false;
@@ -60,8 +69,12 @@ CPP_BEGIN_MJPEG_ANCHOR = """  } else if (std::strcmp(source, kPrinterCameraSourc
 """
 CPP_BEGIN_MJPEG_REPLACEMENT = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
     if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
     cameraBegin();
-    if (!cameraActive()) return false;
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
     next = VideoSource::PrinterCamera;
   } else if (std::strcmp(source, kX2dBridgeSource) == 0) {
 #if defined(ESP32)
@@ -89,6 +102,43 @@ HEADER_ENUM_ANCHOR = "  enum class VideoSource : uint8_t { None = 0, Demo, Print
 HEADER_ENUM_REPLACEMENT = "  enum class VideoSource : uint8_t { None = 0, Demo, PrinterCamera, X2dBridge };\n"
 HEADER_METHOD_ANCHOR = "  void renderLatestCameraFrame(uint32_t nowMs);\n"
 HEADER_METHOD_ADDITION = "  void renderX2dBridgeFrame(uint32_t nowMs);\n"
+
+SMART_HUB_MEDIA_HINT_ANCHOR = '"Tap row to open motion test"'
+SMART_HUB_MEDIA_HINT_REPLACEMENT = '"Tap row to open X2D camera"'
+SMART_HUB_DEMO_START_ANCHOR = 'if(!media.playMjpeg("demo-video",millis()))g_ui12SettingsView=10;'
+SMART_HUB_X2D_START_REPLACEMENT = 'if(!media.playMjpeg("x2d-bridge",millis()))g_ui12SettingsView=10;'
+SMART_HUB_IDLE_HINT_ANCHOR = '"Start the built-in motion test from Media."'
+SMART_HUB_IDLE_HINT_REPLACEMENT = '"Start a video source from Media."'
+SMART_HUB_ACTIVE_HINT_ANCHOR = '"Built-in motion diagnostic"'
+SMART_HUB_ACTIVE_HINT_REPLACEMENT = '"Live video session"'
+SMART_HUB_COMPOSITOR_ANCHOR = """  lgfx::LovyanGFX* panel = tft_ptr;
+  const bool buffered = hubEnsureFrame();
+  if (buffered) {
+    panel = g_hubPanelCanvas;
+    tft_ptr = g_hubFrame;
+    g_hubFrameDirty = false;
+  }
+"""
+SMART_HUB_COMPOSITOR_REPLACEMENT = """  lgfx::LovyanGFX* panel = tft_ptr;
+
+  // Video playback already renders directly into the root framebuffer.
+  // Do not composite the stale full-screen Smart Hub sprite over it.
+  const bool directVideoViewer =
+      screen == SCREEN_HUB_MORE && g_ui12SettingsView == 12;
+
+  const bool buffered = !directVideoViewer && hubEnsureFrame();
+
+  if (directVideoViewer) {
+    // Force a complete buffered redraw after leaving the video viewer.
+    g_hubFramePrimed = false;
+  }
+
+  if (buffered) {
+    panel = g_hubPanelCanvas;
+    tft_ptr = g_hubFrame;
+    g_hubFrameDirty = false;
+  }
+"""
 
 RENDER_X2D = r'''
 void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
@@ -219,11 +269,46 @@ def insert_after_once(text: str, anchor: str, addition: str, label: str) -> str:
     return text.replace(anchor, anchor + addition, 1)
 
 
+def patch_smart_hub(text: str) -> str:
+    text = replace_once(
+        text,
+        SMART_HUB_MEDIA_HINT_ANCHOR,
+        SMART_HUB_MEDIA_HINT_REPLACEMENT,
+        "Media X2D launch hint",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_DEMO_START_ANCHOR,
+        SMART_HUB_X2D_START_REPLACEMENT,
+        "Media X2D launch action",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_IDLE_HINT_ANCHOR,
+        SMART_HUB_IDLE_HINT_REPLACEMENT,
+        "Video viewer idle hint",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_ACTIVE_HINT_ANCHOR,
+        SMART_HUB_ACTIVE_HINT_REPLACEMENT,
+        "Video viewer active hint",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_COMPOSITOR_ANCHOR,
+        SMART_HUB_COMPOSITOR_REPLACEMENT,
+        "Video viewer compositor ownership",
+    )
+    return text
+
+
 def apply(repo: Path, bridge_url: str) -> None:
     backend = repo / "src/ws350_media_backend.cpp"
     backend_h = repo / "include/ws350_media_backend.h"
     web = repo / "src/web_server.cpp"
-    for path in (backend, backend_h, web):
+    smart_hub = repo / "src/smart_hub.cpp"
+    for path in (backend, backend_h, web, smart_hub):
         if not path.is_file():
             raise PatchError(f"X2D bridge requires reconstructed OS12 source: missing {path}")
 
@@ -276,9 +361,18 @@ def apply(repo: Path, bridge_url: str) -> None:
         raise PatchError("X2D bridge route must remain authenticated")
     if 'media.playMjpeg("x2d-bridge", millis())' not in web_text:
         raise PatchError("X2D bridge handler is not fixed to x2d-bridge source")
+    if 'smartHubShowPage("media-video")' not in web_text:
+        raise PatchError("X2D bridge handler must transfer display ownership to video viewer")
 
     web.write_text(web_text, encoding="utf-8")
+
+    smart_hub_text = smart_hub.read_text(encoding="utf-8")
+    if SMART_HUB_X2D_START_REPLACEMENT in smart_hub_text or "directVideoViewer" in smart_hub_text:
+        raise PatchError("X2D on-device viewer overlay already applied or smart hub is not canonical")
+    smart_hub.write_text(patch_smart_hub(smart_hub_text), encoding="utf-8")
+
     print(f"Experimental Workshop OS 12 X2D bridge overlay enabled at {bridge_url}")
+    print("On-device launch enabled: Media > Video opens the fixed X2D bridge source")
 
 
 def main() -> int:
