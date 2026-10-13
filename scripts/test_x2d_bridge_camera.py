@@ -11,6 +11,39 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def prepare_reconstructed_backend(canonical_cpp: Path, destination: Path) -> None:
+    """Reproduce the shared-camera-ownership state that precedes the X2D overlay."""
+    text = canonical_cpp.read_text(encoding="utf-8")
+
+    old = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
+    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraBegin();
+    if (!cameraActive()) return false;
+    next = VideoSource::PrinterCamera;
+  } else {
+"""
+
+    new = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
+    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
+    cameraBegin();
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
+    next = VideoSource::PrinterCamera;
+  } else {
+"""
+
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(
+            f"expected one canonical printer-camera branch, found {count}"
+        )
+
+    destination.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
 def load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -92,7 +125,7 @@ class PatchIntegrationTests(unittest.TestCase):
             backend = src / "ws350_media_backend.cpp"
             backend_h = include / "ws350_media_backend.h"
             web = src / "web_server.cpp"
-            shutil.copyfile(canonical_cpp, backend)
+            prepare_reconstructed_backend(canonical_cpp, backend)
             shutil.copyfile(canonical_h, backend_h)
             web.write_text(
                 'static void sendWorkshopMediaStatus(int code = 200) {}\n'
@@ -116,6 +149,7 @@ class PatchIntegrationTests(unittest.TestCase):
             self.assertIn("renderX2dBridgeFrame", backend_text)
             self.assertIn("X2dBridge", header_text)
             self.assertIn('media.playMjpeg("x2d-bridge", millis())', web_text)
+            self.assertIn('smartHubShowPage("media-video")', web_text)
             self.assertIn(
                 'SECURE_POST("/os12/media/video/start-x2d-bridge", handleWorkshopMediaVideoStartX2dBridge);',
                 web_text,
@@ -132,7 +166,10 @@ class PatchIntegrationTests(unittest.TestCase):
             include = repo / "include"
             src.mkdir()
             include.mkdir()
-            shutil.copyfile(ROOT / "firmware/platform/media/ws350_media_backend.cpp", src / "ws350_media_backend.cpp")
+            prepare_reconstructed_backend(
+                ROOT / "firmware/platform/media/ws350_media_backend.cpp",
+                src / "ws350_media_backend.cpp",
+            )
             shutil.copyfile(ROOT / "firmware/platform/media/ws350_media_backend.h", include / "ws350_media_backend.h")
             (src / "web_server.cpp").write_text(
                 'static void sendWorkshopMediaStatus(int code = 200) {}\n'

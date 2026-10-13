@@ -80,6 +80,7 @@ class CameraPipeline:
         self.source: Optional[subprocess.Popen[bytes]] = None
         self.encoder: Optional[subprocess.Popen[bytes]] = None
         self.thread: Optional[threading.Thread] = None
+        self.pump_thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.last_error: Optional[str] = None
 
@@ -142,17 +143,98 @@ class CameraPipeline:
 
         self.encoder = subprocess.Popen(
             ffmpeg_cmd,
-            stdin=self.source.stdout,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=None,
             bufsize=0,
         )
-        self.source.stdout.close()
+        if self.encoder.stdin is None:
+            raise RuntimeError("FFmpeg stdin pipe unavailable")
         if self.encoder.stdout is None:
             raise RuntimeError("FFmpeg stdout pipe unavailable")
 
-        self.thread = threading.Thread(target=self._read_frames, name="x2d-jpeg-reader", daemon=True)
+        self.pump_thread = threading.Thread(
+            target=self._pump_clean_h264,
+            name="x2d-h264-scrubber",
+            daemon=True,
+        )
+        self.pump_thread.start()
+
+        self.thread = threading.Thread(
+            target=self._read_frames,
+            name="x2d-jpeg-reader",
+            daemon=True,
+        )
         self.thread.start()
+
+    def _pump_clean_h264(self) -> None:
+        """Remove bambu_source diagnostic lines embedded in its stdout H.264 stream."""
+        assert self.source is not None and self.source.stdout is not None
+        assert self.encoder is not None and self.encoder.stdin is not None
+
+        marker = b"BambuTunnel::"
+        keep_tail = len(marker) - 1
+        buffer = bytearray()
+
+        def write_chunk(data: bytes | bytearray) -> bool:
+            if not data:
+                return True
+            try:
+                self.encoder.stdin.write(data)
+                return True
+            except (BrokenPipeError, OSError):
+                return False
+
+        try:
+            while not self.stop_event.is_set():
+                chunk = self.source.stdout.read(64 * 1024)
+                if not chunk:
+                    break
+
+                buffer.extend(chunk)
+
+                while buffer:
+                    start = buffer.find(marker)
+
+                    if start < 0:
+                        # Preserve enough trailing bytes to detect a marker split
+                        # across two source reads.
+                        if len(buffer) > keep_tail:
+                            emit = bytes(buffer[:-keep_tail])
+                            del buffer[:-keep_tail]
+                            if not write_chunk(emit):
+                                return
+                        break
+
+                    if start > 0:
+                        emit = bytes(buffer[:start])
+                        del buffer[:start]
+                        if not write_chunk(emit):
+                            return
+
+                    newline = buffer.find(b"\n", len(marker))
+                    if newline < 0:
+                        # Complete diagnostic line has not arrived yet.
+                        break
+
+                    # Drop exactly one complete BambuTunnel diagnostic line.
+                    del buffer[: newline + 1]
+
+            if buffer and not self.stop_event.is_set():
+                start = buffer.find(marker)
+                if start < 0:
+                    write_chunk(buffer)
+                elif start > 0:
+                    write_chunk(buffer[:start])
+
+        except Exception as exc:
+            if not self.stop_event.is_set():
+                self.last_error = f"H264 scrubber error: {exc}"
+        finally:
+            try:
+                self.encoder.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
 
     def _read_frames(self) -> None:
         assert self.encoder is not None and self.encoder.stdout is not None
@@ -203,6 +285,8 @@ class CameraPipeline:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=1)
+        if self.pump_thread is not None:
+            self.pump_thread.join(timeout=1)
         if self.thread is not None:
             self.thread.join(timeout=1)
 

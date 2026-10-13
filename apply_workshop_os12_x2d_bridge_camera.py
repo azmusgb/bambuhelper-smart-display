@@ -27,6 +27,11 @@ static void handleWorkshopMediaVideoStartX2dBridge() {
   workshop::media::MediaService& media = workshopMediaService();
   // Fixed build-time bridge source only. No request URL/path is accepted.
   const bool started = media.playMjpeg("x2d-bridge", millis());
+  if (started) {
+    // Transfer physical display ownership to the existing OS12 video viewer.
+    // Without this, the normal Settings renderer races the X2D framebuffer.
+    smartHubShowPage("media-video");
+  }
   sendWorkshopMediaStatus(started ? 202 : 409);
 }
 
@@ -51,8 +56,12 @@ CPP_DIMENSION_ADDITION = (
 )
 CPP_BEGIN_MJPEG_ANCHOR = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
     if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
     cameraBegin();
-    if (!cameraActive()) return false;
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
     next = VideoSource::PrinterCamera;
   } else {
     return false;
@@ -60,8 +69,12 @@ CPP_BEGIN_MJPEG_ANCHOR = """  } else if (std::strcmp(source, kPrinterCameraSourc
 """
 CPP_BEGIN_MJPEG_REPLACEMENT = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
     if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
     cameraBegin();
-    if (!cameraActive()) return false;
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
     next = VideoSource::PrinterCamera;
   } else if (std::strcmp(source, kX2dBridgeSource) == 0) {
 #if defined(ESP32)
