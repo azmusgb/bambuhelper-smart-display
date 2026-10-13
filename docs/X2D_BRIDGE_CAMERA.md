@@ -2,11 +2,15 @@
 
 Status: **experimental / physical validation required**
 
-This path is a fallback for Bambu X2D camera viewing on the Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`). It keeps the printer camera session and Bambu-specific transport on a Mac running Bambu Studio components, then exposes only a downscaled JPEG frame to the WS350 over the trusted LAN.
+This path is a fallback for Bambu X2D camera viewing on the Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`). It keeps the Bambu/TUTK camera session on a Mac and sends only a small JPEG frame to the WS350 over the trusted LAN.
 
-It does **not** send video over the WS350 USB cable. USB remains appropriate for power, flashing, and serial diagnostics. Runtime camera frames use Wi-Fi.
+USB remains the power, flashing, and serial-diagnostics connection. Runtime camera frames use Wi-Fi.
 
-## Architecture
+## Architectural boundary
+
+The canonical Workshop OS 12 media backend under `firmware/platform/media/` remains unchanged and transport-agnostic. In particular, the canonical `Ws350MediaBackend` does **not** own `HTTPClient`/`WiFiClient` networking.
+
+X2D networking is installed only by `apply_workshop_os12_x2d_bridge_camera.py` into a **reconstructed firmware tree** for this hardware experiment. That keeps the accepted OS12 media contract intact while allowing the real WS350 to be tested before deciding whether the transport deserves a permanent service abstraction.
 
 ```text
 Bambu X2D
@@ -25,11 +29,11 @@ tools/x2d_camera_bridge.py
    |
    | HTTP GET /x2d/frame.jpg on trusted LAN
    v
-WS350 firmware
+reconstructed WS350 image + experimental X2D overlay
    |
-   | JPEG decode in PSRAM
+   | JPEG in PSRAM
    v
-480x270 camera viewport + existing 50 px controls
+480x270 camera viewport + existing controls
 ```
 
 The bridge never returns Bambu `url.txt`, printer UID, access code, credentials, or the raw Bambu camera URI.
@@ -39,14 +43,14 @@ The bridge never returns Bambu `url.txt`, printer UID, access code, credentials,
 On the Mac:
 
 - Bambu Studio camera works for the X2D.
-- The following Bambu Studio components exist:
+- These Bambu Studio components exist:
   - `~/Library/Application Support/BambuStudio/cameratools/bambu_source`
   - `~/Library/Application Support/BambuStudio/cameratools/url.txt`
   - `~/Library/Application Support/BambuStudio/plugins/libBambuSource.dylib`
 - `ffmpeg` is installed and on `PATH`.
-- Mac and WS350 are on the same trusted LAN, or are connected by an explicitly trusted routed VPN.
+- Mac and WS350 are on the same trusted LAN, or on an explicitly trusted routed VPN.
 
-Do not publish the bridge port on the public Internet.
+Do not expose the bridge port to the public Internet.
 
 ## 1. Start the Mac bridge
 
@@ -61,7 +65,7 @@ Defaults:
 - bind: `0.0.0.0`
 - port: `8091`
 - JPEG rate: `5 fps`
-- JPEG width: `480 px` (height resolves to `270 px` for the X2D 16:9 stream)
+- JPEG width: `480 px` (`270 px` high for the 16:9 X2D stream)
 
 Lower-load example:
 
@@ -69,44 +73,45 @@ Lower-load example:
 python3 tools/x2d_camera_bridge.py --fps 3 --width 480
 ```
 
-The process owns one Bambu camera session. Stop another manually launched `bambu_source` camera test before starting the bridge.
+The process owns one Bambu camera session. Stop other manually launched `bambu_source` camera tests first.
 
-## 2. Validate the bridge on the Mac
+## 2. Validate the bridge
 
 ```bash
 curl -fsS http://127.0.0.1:8091/x2d/health.json
+open http://127.0.0.1:8091/x2d/frame.jpg
 ```
 
-Expected shape:
+A healthy response resembles:
 
 ```json
 {"ok":true,"frameSequence":42,"frameAgeMs":120,"frameBytes":48321,"sourceRunning":true,"ffmpegRunning":true,"uptimeSeconds":12,"lastError":null}
 ```
 
-Open one current frame:
-
-```bash
-open http://127.0.0.1:8091/x2d/frame.jpg
-```
-
-Find the Mac LAN address:
+Find the active Mac LAN address. For Wi-Fi this is commonly:
 
 ```bash
 MAC_IP="$(ipconfig getifaddr en0)"
 printf '%s\n' "$MAC_IP"
 ```
 
-If the Mac uses a different active interface, substitute that interface rather than guessing an address.
+If `en0` is not the active interface, identify the correct interface rather than guessing an address.
 
-Validate from another LAN device before flashing the WS350:
+Validate from another LAN device:
 
 ```text
 http://<MAC_IP>:8091/x2d/frame.jpg
 ```
 
-## 3. Apply the firmware bridge configuration
+## 3. Reconstruct canonical OS12 first
 
-The existing OS12 media runtime and authenticated media API must already be reconstructed. Apply the bridge after those patches:
+Run the repository's normal OS12 reconstruction sequence, including the canonical media runtime and authenticated media API. At this point the reconstructed `src/ws350_media_backend.cpp` should still match the accepted transport-agnostic design.
+
+Do **not** edit `firmware/platform/media/ws350_media_backend.*` to add the bridge.
+
+## 4. Apply the experimental X2D overlay
+
+After canonical reconstruction:
 
 ```bash
 python3 apply_workshop_os12_x2d_bridge_camera.py \
@@ -115,81 +120,81 @@ python3 apply_workshop_os12_x2d_bridge_camera.py \
   --apply
 ```
 
-The patch accepts only:
+The overlay modifies only the reconstructed copy. It:
 
-- plain `http://`
-- a literal private IP address
-- an explicit port
-- the exact path `/x2d/frame.jpg`
-- no username/password
-- no query string or fragment
+- adds the fixed `x2d-bridge` media source to that reconstructed image,
+- adds bounded HTTP/JPEG acquisition there,
+- allocates the frame in PSRAM,
+- validates JPEG SOI/EOI markers and the 384 KiB limit,
+- adds authenticated `POST /os12/media/video/start-x2d-bridge`.
 
-The firmware does not accept a camera URL from an HTTP request. The endpoint is fixed at build time.
+The supplied bridge URL must be:
 
-## 4. Build and flash the WS350
+- plain `http://`,
+- a literal private IP address,
+- an explicit port,
+- exactly `/x2d/frame.jpg`,
+- without username, password, query string, or fragment.
 
-Use the repository's existing `ws_lcd_350` build/flash flow. Keep USB connected for power, flashing, and serial diagnostics.
+The firmware does not accept a camera URL from an HTTP request.
 
-A bridge-enabled image must be built from the patched reconstructed source; existing published binaries do not contain the private bridge URL.
+## 5. Build and flash the WS350
 
-## 5. Start the viewer
+Use the repository's normal `ws_lcd_350` build/flash flow. Keep USB attached for power, flashing, and serial diagnostics.
 
-The bridge viewer has a dedicated authenticated OS12 endpoint:
+An already-published firmware image will not contain this experimental overlay or its private bridge endpoint.
+
+## 6. Start and control the viewer
+
+Use the existing authenticated OS12 session mechanism.
 
 ```text
 POST /os12/media/video/start-x2d-bridge
-```
-
-It is intentionally separate from the existing fixed demo video route and does not accept arbitrary source parameters.
-
-Existing media controls remain in force:
-
-```text
 POST /os12/media/video/pause
 POST /os12/media/video/resume
 POST /os12/media/stop
 GET  /os12/media/status
 ```
 
-Use the same authenticated session mechanism already required by the OS12 diagnostics API.
+The X2D start route is fixed-source only and accepts no arbitrary URL/path argument.
 
 ## Device-side limits
 
-The WS350 path is intentionally conservative:
+The experimental overlay is deliberately conservative:
 
-- maximum polling cadence: 5 fps
-- JPEG maximum: 384 KiB
-- frame buffer allocated from PSRAM
-- expected frame size: 480x270
-- frame must have valid JPEG SOI/EOI markers
-- no arbitrary remote media URL
-- no public Internet dependency
-- current implementation requires `Content-Length`
+- maximum polling cadence: 5 fps,
+- JPEG maximum: 384 KiB,
+- PSRAM frame allocation,
+- expected frame dimensions: 480x270,
+- JPEG SOI/EOI validation,
+- bounded connect/read timeouts,
+- no public Internet dependency,
+- current implementation requires `Content-Length`.
 
-On any malformed, oversized, unavailable, or stale source frame, the firmware rejects the frame and increments existing video diagnostics rather than rendering untrusted bytes.
+Malformed, oversized, unavailable, or incomplete frames are rejected and counted as no-frame polls.
 
 ## Physical acceptance
 
-This feature is **not accepted** until tested on the real WS350. Record at least the following:
+Do not promote this overlay into the canonical media architecture until the real WS350 passes all of the following:
 
 1. Camera view starts from a normal connected state.
-2. Frames visibly update; they are not a repeated still image.
-3. Device remains touch-responsive while video is running.
+2. Frames visibly update and are not a repeated still image.
+3. Touch remains responsive while the viewer runs.
 4. Pause and resume work without rebooting.
-5. Stop returns to normal UI cleanly.
-6. Disconnect Mac Wi-Fi while viewing; device remains responsive and recovers when the bridge returns.
-7. Stop the Mac bridge process; device remains responsive and status diagnostics record failed/no-frame polls.
-8. Restart the bridge and confirm viewing can be started again without rebooting the WS350.
-9. Run for at least 30 minutes and check for PSRAM exhaustion, reboot, watchdog reset, or progressive UI slowdown.
-10. Confirm normal printer MQTT/control functions remain usable while the camera viewer runs.
-11. Confirm no Bambu credential, UID, access code, raw IP, or camera session URI appears in serial logs or exported diagnostics.
+5. Stop returns to the normal UI cleanly.
+6. Disconnect Mac Wi-Fi while viewing; the WS350 remains responsive.
+7. Stop the Mac bridge; failed/no-frame diagnostics advance without watchdog/reset behavior.
+8. Restart the bridge and start viewing again without rebooting the WS350.
+9. Run for at least 30 minutes with no PSRAM exhaustion, reboot, watchdog reset, or progressive UI slowdown.
+10. Normal printer MQTT/control functions remain usable while viewing.
+11. No Bambu credential, UID, access code, raw camera URI, or sensitive session data appears in serial logs or exported diagnostics.
 
-If touch stalls materially during bridge failure/recovery, do not promote this implementation. Move HTTP frame acquisition off the foreground media poll path before release.
+If touch materially stalls during bridge failure or recovery, this overlay is not acceptable. The next design must move frame acquisition out of the foreground media poll into a dedicated asynchronous transport/service boundary.
 
 ## Security and privacy
 
-The Mac bridge has no authentication of its own in this experimental version. That is acceptable only on a trusted private LAN/VPN during development. Do not port-forward TCP 8091.
+The development bridge has no HTTP authentication of its own. Use it only on a trusted private LAN/VPN and do not port-forward TCP 8091.
 
-For a persistent deployment, prefer host firewall restrictions to the WS350/VPN subnets and add bridge authentication before treating the service as generally deployable.
+For persistent deployment, restrict the host firewall to the WS350/VPN subnet and add bridge authentication before treating the service as generally deployable.
 
-The `url.txt` file remains local to the Mac and should never be committed, logged, uploaded, or returned by the bridge.
+`url.txt` remains local to the Mac and must never be committed, logged, uploaded, or returned by the bridge.
