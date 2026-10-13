@@ -256,7 +256,10 @@ def apply(repo: Path, bridge_url: str) -> None:
         raise PatchError("authenticated OS12 media API must be installed before X2D bridge route")
 
     if "handleWorkshopMediaVideoStartX2dBridge" not in web_text:
-        anchor = "static void handleWorkshopMediaVideoPause() {\n"
+        # Anchor on the function name rather than brace/newline formatting so the
+        # overlay remains compatible with both reconstructed source formatting
+        # and compact test fixtures while still requiring one unique insertion point.
+        anchor = "static void handleWorkshopMediaVideoPause()"
         if web_text.count(anchor) != 1:
             raise PatchError("media video pause handler anchor missing/non-unique")
         web_text = web_text.replace(anchor, HANDLER + anchor, 1)
