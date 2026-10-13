@@ -48,11 +48,12 @@ jobs:
           fi
           echo 'Python syntax: PASS'
 
-      - name: Test experimental X2D bridge overlay
+      - name: Test experimental X2D overlays
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/test_x2d_bridge_camera.py
+          python3 scripts/test_x2d_viewer_polish.py
 
       - name: Validate tracked shell syntax
         shell: bash
