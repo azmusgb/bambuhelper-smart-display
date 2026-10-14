@@ -48,7 +48,7 @@ def main() -> int:
         assert BASE.ASYNC_MARKER in text
         assert COMPAT.OWNERSHIP_STOP in text
         assert COMPAT.X2D_STOP in text
-        assert text.count("x2dStopFetchSession();") == 2  # helper definition + stop call
+        assert text.count("x2dStopFetchSession();") == 1  # one stopMedia() call site
 
         render_start = text.index("void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs)")
         stop_start = text.index("bool Ws350MediaBackend::stopMedia()", render_start)
