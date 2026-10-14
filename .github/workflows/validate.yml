@@ -55,6 +55,7 @@ jobs:
           python3 scripts/test_x2d_bridge_camera.py
           python3 scripts/test_x2d_viewer_polish.py
           python3 scripts/test_x2d_capture_hybrid.py
+          python3 scripts/test_x2d_async_fetch.py
 
       - name: Validate tracked shell syntax
         shell: bash
