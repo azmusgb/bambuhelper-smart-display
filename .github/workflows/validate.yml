@@ -48,11 +48,15 @@ jobs:
           fi
           echo 'Python syntax: PASS'
 
-      - name: Test experimental X2D bridge overlay
+      - name: Test experimental X2D overlays
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/test_x2d_bridge_camera.py
+          python3 scripts/test_x2d_viewer_polish.py
+          python3 scripts/test_x2d_capture_hybrid.py
+          python3 scripts/test_x2d_async_fetch.py
+          python3 scripts/test_x2d_async_fetch_compat.py
 
       - name: Validate tracked shell syntax
         shell: bash
@@ -68,9 +72,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/workshop-os12-tests
-          g++ -std=c++11 -Wall -Wextra -Werror -pedantic             tests/workshop_os12_state_smoke.cpp             -o /tmp/workshop-os12-tests/state-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_state_smoke.cpp -o /tmp/workshop-os12-tests/state-smoke
           /tmp/workshop-os12-tests/state-smoke
-          g++ -std=c++11 -Wall -Wextra -Werror -pedantic             tests/workshop_os12_inventory_projection_smoke.cpp             -o /tmp/workshop-os12-tests/inventory-projection-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_inventory_projection_smoke.cpp -o /tmp/workshop-os12-tests/inventory-projection-smoke
           /tmp/workshop-os12-tests/inventory-projection-smoke
 
       - name: Check repository hygiene

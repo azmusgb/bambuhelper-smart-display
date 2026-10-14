@@ -24,6 +24,53 @@ bridge = load_module("x2d_camera_bridge", ROOT / "tools/x2d_camera_bridge.py")
 patch = load_module("x2d_bridge_patch", ROOT / "apply_workshop_os12_x2d_bridge_camera.py")
 
 
+def prepare_reconstructed_backend(canonical_cpp: Path, destination: Path) -> None:
+    """Reproduce the shared-camera-ownership state that precedes the X2D overlay."""
+    text = canonical_cpp.read_text(encoding="utf-8")
+
+    old = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
+    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraBegin();
+    if (!cameraActive()) return false;
+    next = VideoSource::PrinterCamera;
+  } else {
+"""
+
+    new = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
+    if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
+    cameraBegin();
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
+    next = VideoSource::PrinterCamera;
+  } else {
+"""
+
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"expected one canonical printer-camera branch, found {count}")
+
+    destination.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+def write_smart_hub_fixture(path: Path) -> None:
+    path.write_text(
+        'static int g_ui12SettingsView = 10;\n'
+        'static void fixtureMedia() {\n'
+        f'  const char* mediaHint = {patch.SMART_HUB_MEDIA_HINT_ANCHOR};\n'
+        f'  {patch.SMART_HUB_DEMO_START_ANCHOR}\n'
+        f'  const char* idleHint = {patch.SMART_HUB_IDLE_HINT_ANCHOR};\n'
+        f'  const char* activeHint = {patch.SMART_HUB_ACTIVE_HINT_ANCHOR};\n'
+        '}\n'
+        'static void fixtureDraw(int screen) {\n'
+        + patch.SMART_HUB_COMPOSITOR_ANCHOR
+        + '}\n',
+        encoding="utf-8",
+    )
+
+
 class LatestFrameTests(unittest.TestCase):
     def test_accepts_complete_jpeg(self) -> None:
         latest = bridge.LatestFrame()
@@ -92,7 +139,8 @@ class PatchIntegrationTests(unittest.TestCase):
             backend = src / "ws350_media_backend.cpp"
             backend_h = include / "ws350_media_backend.h"
             web = src / "web_server.cpp"
-            shutil.copyfile(canonical_cpp, backend)
+            smart_hub = src / "smart_hub.cpp"
+            prepare_reconstructed_backend(canonical_cpp, backend)
             shutil.copyfile(canonical_h, backend_h)
             web.write_text(
                 'static void sendWorkshopMediaStatus(int code = 200) {}\n'
@@ -103,6 +151,7 @@ class PatchIntegrationTests(unittest.TestCase):
                 '}\n',
                 encoding="utf-8",
             )
+            write_smart_hub_fixture(smart_hub)
 
             configured = "http://10.0.0.16:8091/x2d/frame.jpg"
             patch.apply(repo, configured)
@@ -110,17 +159,25 @@ class PatchIntegrationTests(unittest.TestCase):
             backend_text = backend.read_text(encoding="utf-8")
             header_text = backend_h.read_text(encoding="utf-8")
             web_text = web.read_text(encoding="utf-8")
+            smart_hub_text = smart_hub.read_text(encoding="utf-8")
             self.assertIn(f'#define WORKSHOP_X2D_BRIDGE_URL "{configured}"', backend_text)
             self.assertIn("#include <HTTPClient.h>", backend_text)
             self.assertIn('kX2dBridgeSource[] = "x2d-bridge"', backend_text)
             self.assertIn("renderX2dBridgeFrame", backend_text)
             self.assertIn("X2dBridge", header_text)
             self.assertIn('media.playMjpeg("x2d-bridge", millis())', web_text)
+            self.assertIn('smartHubShowPage("media-video")', web_text)
             self.assertIn(
                 'SECURE_POST("/os12/media/video/start-x2d-bridge", handleWorkshopMediaVideoStartX2dBridge);',
                 web_text,
             )
             self.assertNotIn('server.on("/os12/media/video/start-x2d-bridge"', web_text)
+            self.assertIn(patch.SMART_HUB_X2D_START_REPLACEMENT, smart_hub_text)
+            self.assertIn('"Tap row to open X2D camera"', smart_hub_text)
+            self.assertIn('"Live video session"', smart_hub_text)
+            self.assertIn("directVideoViewer", smart_hub_text)
+            self.assertIn("const bool buffered = !directVideoViewer && hubEnsureFrame();", smart_hub_text)
+            self.assertNotIn(patch.SMART_HUB_DEMO_START_ANCHOR, smart_hub_text)
 
         self.assertEqual(canonical_cpp.read_text(encoding="utf-8"), before_cpp)
         self.assertEqual(canonical_h.read_text(encoding="utf-8"), before_h)
@@ -132,7 +189,10 @@ class PatchIntegrationTests(unittest.TestCase):
             include = repo / "include"
             src.mkdir()
             include.mkdir()
-            shutil.copyfile(ROOT / "firmware/platform/media/ws350_media_backend.cpp", src / "ws350_media_backend.cpp")
+            prepare_reconstructed_backend(
+                ROOT / "firmware/platform/media/ws350_media_backend.cpp",
+                src / "ws350_media_backend.cpp",
+            )
             shutil.copyfile(ROOT / "firmware/platform/media/ws350_media_backend.h", include / "ws350_media_backend.h")
             (src / "web_server.cpp").write_text(
                 'static void sendWorkshopMediaStatus(int code = 200) {}\n'
@@ -143,6 +203,7 @@ class PatchIntegrationTests(unittest.TestCase):
                 '}\n',
                 encoding="utf-8",
             )
+            write_smart_hub_fixture(src / "smart_hub.cpp")
             configured = "http://10.0.0.16:8091/x2d/frame.jpg"
             patch.apply(repo, configured)
             with self.assertRaises(patch.PatchError):
