@@ -186,6 +186,10 @@ def main() -> int:
         if "Serial." in line and ("g_portalCode" in line or "securityPortalCode" in line):
             raise ValidationError("portal code reaches Serial output")
     need(sec, "constantTimeEqual(code.c_str(), g_portalCode)", "constant-time code comparison")
+    retry = block(sec, "uint32_t retryAfterSeconds(WebServer& server)")
+    need(retry, "if (bucket.blockedUntilMs == 0) return 0;", "wrap-safe login backoff")
+    need(block(sec, "void noteLoginFailure(WebServer& server)"), "if (bucket.blockedUntilMs == 0) bucket.blockedUntilMs = 1;",
+         "non-zero login backoff deadline")
     need(sec, "HttpOnly; SameSite=Strict", "session cookie attributes")
     reset = block(sec, "void securityResetPortalPolicy()")
     need(reset, "g_requirePortalCode = true;", "factory reset restores locked portal")
@@ -213,6 +217,9 @@ def main() -> int:
     need(html, "Controls, settings, credentials, camera and screen capture, diagnostics and Recovery always require sign-in.",
          "access-code setting scope copy")
     forbid(html, "No device code required", "code-free portal copy")
+    app_js = read(root / "web/app.js")
+    need(app_js, "Status viewing is open on this Wi-Fi network without signing in.", "open-status setting copy")
+    forbid(app_js, "Read-only portal browsing is open on this LAN", "overbroad open-read copy")
     need(hub, "static void drawUi12PortalAccess()", "touchscreen Local Portal view")
     need(block(hub, "static void drawUi12PortalAccess()"), "securityPortalCode()", "touchscreen shows current code")
 

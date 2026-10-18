@@ -21,6 +21,7 @@ is no longer part of the recipe) and:
   docs/portal-auth-v11-20.md allows;
 * narrows the owner's optional "Require access code = off" setting (default on)
   to an explicit list of read-only status routes on station Wi-Fi;
+* fixes the login backoff so it keeps working after ~24.8 days of uptime;
 * reports the running release version and exact source commit on the public
   ``/recovery/status`` readiness probe, so install/recovery tooling can verify
   identity across reboots without a session.
@@ -145,6 +146,28 @@ def patch_security(repo: Path) -> None:
     text = replace_unique_block(
         text, "bool securityAuthorize(WebServer& server, bool mutating)", SECURITY_AUTHORIZE, "authorization policy"
     )
+
+    # Login backoff used blockedUntilMs == 0 to mean "not blocked", but
+    # deadlinePending(now, 0) is true whenever millis() is past 2^31 (about 24.8
+    # days of uptime). From then on every new client would be rate-limited for
+    # weeks. Treat 0 as "no block" explicitly and never store 0 as a deadline.
+    text = replace_once(
+        text,
+        "  if (!deadlinePending(now, bucket.blockedUntilMs)) return 0;\n",
+        "  if (bucket.blockedUntilMs == 0) return 0;\n"
+        "  if (!deadlinePending(now, bucket.blockedUntilMs)) {\n"
+        "    bucket.blockedUntilMs = 0;\n"
+        "    return 0;\n"
+        "  }\n",
+        "login backoff wrap-safe check",
+    )
+    text = replace_once(
+        text,
+        "  bucket.blockedUntilMs = millis() + backoffMs;\n",
+        "  bucket.blockedUntilMs = millis() + backoffMs;\n"
+        "  if (bucket.blockedUntilMs == 0) bucket.blockedUntilMs = 1;\n",
+        "login backoff non-zero deadline",
+    )
     save(path, text)
 
 
@@ -173,6 +196,22 @@ def patch_portal_html(repo: Path) -> None:
     save(path, text)
 
 
+APP_JS_COPY = (
+    ("'Read-only portal browsing is open on this LAN; changes still require authentication.'",
+     "'Status viewing is open on this Wi-Fi network without signing in. Controls, settings, credentials, capture and Recovery still require sign-in.'"),
+    ("'Access code disabled for read-only LAN browsing; authenticated sessions are still required for changes.'",
+     "'Access code off for status viewing only. Everything else, and every change, still requires sign-in.'"),
+)
+
+
+def patch_portal_js(repo: Path) -> None:
+    path = repo / "web" / "app.js"
+    text = load(path)
+    for old, new in APP_JS_COPY:
+        text = replace_once(text, old, new, "portal access setting status copy")
+    save(path, text)
+
+
 def install_policy(repo: Path, source_root: Path) -> None:
     source = source_root / POLICY_SOURCE
     if not source.is_file():
@@ -196,6 +235,7 @@ def apply(repo: Path, source_root: Path) -> None:
     patch_security(repo)
     patch_web_server(repo)
     patch_portal_html(repo)
+    patch_portal_js(repo)
     save(build_path, build.rstrip() + "\n" + BUILD_MARKER + "\n")
     print("Workshop OS 12 Local Portal sign-in restored")
 

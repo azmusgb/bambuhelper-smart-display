@@ -43,6 +43,7 @@ No kiosk, display or third-party integration depended on it.
 - Every mutation needs real same-origin provenance: `Origin`, or `Referer` when `Origin` is absent. Opaque (`null`) or foreign origins are refused with 403. `X-BambuHelper-Client` is no longer trusted or even collected.
 - AP captive onboarding (`/`, `/save/wifi`, `/app.css`, `/app.js`) and the Recovery Safe Mode routes (`/recovery*`, `/ota/upload`, `/reset`) are exactly as v11.20 specifies.
 - The portal code is generated at boot, shown only on **System → Local Portal**, and never printed to Serial.
+- Login backoff bug fixed. It treated a zero deadline as "not blocked", but `deadlinePending(now, 0)` is true once `millis()` passes 2^31, about 24.8 days of uptime. From then on every new browser would have been rate-limited until the counter wrapped. That was harmless while 12.0.0 had no login, but would bite as soon as sign-in came back.
 - A route-table audit (`scripts/validate_os12_portal_signin.py`) fails the build if any route is registered without the `SECURE_*` wrappers and isn't on a reviewed public list.
 
 ## Not changed
