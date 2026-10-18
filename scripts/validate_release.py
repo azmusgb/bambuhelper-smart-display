@@ -105,8 +105,13 @@ def validate_main_state(main_state: object, readme_text: str) -> str:
         fail("mainState.status must be merged-unaccepted")
     if main_state.get("exactHeadCi") != "passed" or main_state.get("physicalAcceptance") != "pending":
         fail("merged-unaccepted mainState must have CI passed and physical acceptance pending")
-    if main_state.get("unattendedAcceptance") != "passed":
-        fail("merged-unaccepted mainState must record unattendedAcceptance=passed")
+    # "not-run" records an owner-approved merge of an installed, reviewed
+    # build whose unattended acceptance script was not run; it is never
+    # a pass and physicalAcceptance stays pending.
+    if main_state.get("unattendedAcceptance") not in ("passed", "not-run"):
+        fail("merged-unaccepted mainState must record unattendedAcceptance as passed or not-run")
+    if main_state.get("unattendedAcceptance") == "not-run" and main_state.get("physicalInstall") != "passed":
+        fail("a not-run unattended acceptance needs a recorded physical install")
     tested_commit = require_nonempty_string(main_state, "testedCandidateCommit", "mainState")
     if not SHA40.fullmatch(tested_commit):
         fail("mainState.testedCandidateCommit must be a 40-character lowercase SHA")

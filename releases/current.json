@@ -19,36 +19,31 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": {
-    "version": "12.1.4",
-    "branch": "feature/os12-more-cleanup",
-    "name": "Workshop OS 12.1.4 More Clean-up",
-    "purpose": "More/System overhaul clean-up: Tools and Custom are removed (Calm idle screen moved to Display; their ids open the More root), the 12.0 More/System renderers, touch branches, Network Expert editor and /hub/show handlers are deleted, and /hub/views lists exactly Home, Printer, Workshop and the 15 More pages (18 views, down from 43).",
-    "pullRequest": 170,
-    "status": "physical-acceptance-required",
-    "exactHeadCi": "required",
-    "physicalAcceptance": "required",
-    "supersedesSecurityDefectIn": "48ddd5819e578bc85a391d9607653e71ca5c6aa2"
-  },
+  "candidate": null,
   "mainState": {
-    "version": "12.0.0",
-    "commit": "48ddd5819e578bc85a391d9607653e71ca5c6aa2",
-    "name": "Workshop OS 12.0.0 Exact Main Physical-Acceptance Candidate",
-    "originatingBranch": "fix/os12-network-video-visible-state",
-    "originatingPullRequest": 140,
+    "version": "12.1.4",
+    "commit": "6c86a72cf8b79c0d5da187b02a533ea1e7e8703c",
+    "name": "Workshop OS 12.1.4 More Overhaul",
+    "originatingBranch": "feature/os12-more-cleanup",
+    "originatingPullRequest": 170,
+    "includedPullRequests": [
+      166,
+      167,
+      168,
+      169,
+      170
+    ],
     "status": "merged-unaccepted",
     "exactHeadCi": "passed",
-    "testedCandidateCommit": "48ddd5819e578bc85a391d9607653e71ca5c6aa2",
-    "testedFirmwareSha256": "79c007b801a3208ccdc199a95390a5bd430afeaeeb49d36ba2277ddf57922a23",
+    "testedCandidateCommit": "2e7e8c331f4333715980c05b8314b84bc9afb15f",
+    "testedFirmwareSha256": "0d5dbf68268b227d1816d84333d4974436a6a068ddceeadc1ccf2b46ee0cc1a3",
+    "mainFirmwareSha256": "0b4442140ae847c71f41c7918a018519a1a8f8eaaa8cff66d0b95e17c249b817",
+    "mainArtifact": "os12-ux-ws350-6c86a72cf8b79c0d5da187b02a533ea1e7e8703c",
     "physicalInstall": "passed",
-    "unattendedAcceptance": "passed",
+    "ownerReview": "passed",
+    "unattendedAcceptance": "not-run",
     "physicalAcceptance": "pending",
-    "recoveryCapture": "workshop-os12-ws350-preflash-20260924-152648",
-    "automaticEvidence": "workshop-os12-auto-acceptance-20260924-155204",
-    "note": "Exact CI candidate 48ddd5819e578bc85a391d9607653e71ca5c6aa2 was installed on the WS350, exact running source was verified, unattended whole-device acceptance, all 15 native 480x320 captures, media lifecycle checks, automatic cross-evidence validation, and exact-candidate full-image recovery round-trip passed. Network status fit and Video Viewer visible-state fixes are included. Manual LCD/touch/acoustic sensory checks remain pending; no accepted/stable promotion is claimed. The recovery exercise proves current-device full-image capture -> write at 0x0 -> reboot -> exact-source recovery, not historical-version rollback.",
-    "recoveryRoundtrip": "passed",
-    "recoveryEvidence": "workshop-os12-recovery-roundtrip-20260924-165917/evidence.json",
-    "recoveryFullImageSha256": "5c20946d478f86f2c0065fb9805c3d63f9a5145176306fcc5d8b1b9fd7b63d16"
+    "note": "Exact CI candidate 2e7e8c331f4333715980c05b8314b84bc9afb15f (PR #170 head) was installed on the WS350 and is running with candidatePending false; the owner reviewed it on the device and approved the merge. main 6c86a72 has a source tree identical to 2e7e8c3; its CI image differs only in the embedded source SHA and the image checksum. The unattended acceptance script, sensory physical acceptance and a full-image recovery round-trip have not been run for 12.1.x, so physical acceptance stays pending and nothing is promoted."
   },
   "validation": {
     "acceptedSource": {
@@ -81,10 +76,11 @@
     "mainState": {
       "exactHeadCi": "passed",
       "exactCandidateInstalled": "passed",
-      "unattendedWholeDeviceAcceptance": "passed",
-      "automaticEvidenceValidation": "passed",
+      "ownerReview": "passed",
+      "unattendedWholeDeviceAcceptance": "not-run",
+      "automaticEvidenceValidation": "not-run",
       "physicalAcceptance": "pending",
-      "recoveryRoundtrip": "passed"
+      "recoveryRoundtrip": "not-run"
     }
   }
 }
