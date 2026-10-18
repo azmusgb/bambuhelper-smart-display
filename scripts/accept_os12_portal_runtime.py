@@ -184,50 +184,20 @@ def runtime_identity(base_url: str) -> dict:
     return {"releaseVersion": payload.get("releaseVersion"), "runningSourceCommit": commit}
 
 
-# Read-only routes the owner's "Require access code: off" setting opens on
-# station Wi-Fi (open-readonly). Everything else must still need a session.
-OPEN_READONLY_ROUTES = ("/status?slot=0", "/hardware/health?slot=0", "/os12/update/status")
-# Session-only reads that never return credentials, so probing them is safe.
-SESSION_ONLY_ROUTES = ("/hub/frame.ppm", "/settings/export", "/debug", "/os12/media/status")
-
-
-def public_auth_mode(base_url: str) -> str:
-    resp = Client(base_url, anonymous=True).request("/api/portal-security", headers={"Accept": "application/json"})
-    # The policy endpoint is itself one of the routes open-readonly opens; in
-    # the default portal-code mode it needs a session.
-    if resp.status == 401:
-        return "portal-code"
-    check(resp.status == 200, f"signed-out GET /api/portal-security returned HTTP {resp.status}")
-    try:
-        mode = json.loads(resp.body).get("authMode")
-    except json.JSONDecodeError as exc:
-        raise AcceptanceError("portal security status is not valid JSON") from exc
-    check(mode in ("portal-code", "open-readonly"), f"unexpected authMode: {mode!r}")
-    return mode
-
-
-def assert_unauthenticated_contract(base_url: str) -> str:
-    """Prove the signed-out boundary for the device's auth mode and return the
-    mode. Never touches control or side-effect routes."""
-    mode = public_auth_mode(base_url)
+def assert_unauthenticated_contract(base_url: str) -> None:
+    """Prove the signed-out boundary. Never touches control or side-effect routes."""
     anon = Client(base_url, follow_redirects=False, anonymous=True)
 
-    if mode == "portal-code":
-        root = anon.request("/")
-        location = root.headers.get("Location") if root.headers else None
-        check(root.status == 303 and location == "/login",
-              f"signed-out GET / returned HTTP {root.status} Location={location!r}, expected 303 -> /login")
+    root = anon.request("/")
+    location = root.headers.get("Location") if root.headers else None
+    check(root.status == 303 and location == "/login",
+          f"signed-out GET / returned HTTP {root.status} Location={location!r}, expected 303 -> /login")
 
     login = anon.request("/login")
     check(login.status == 200 and "name='code'" in login.body, "custom /login page with a code field is missing")
 
-    expected_read = 401 if mode == "portal-code" else 200
-    for path in OPEN_READONLY_ROUTES:
+    for path in ("/status?slot=0", "/hardware/health?slot=0", "/os12/update/status"):
         resp = anon.request(path, headers={"Accept": "application/json"})
-        check(resp.status == expected_read,
-              f"signed-out GET {path} returned HTTP {resp.status}, expected {expected_read} in {mode} mode")
-    for path in SESSION_ONLY_ROUTES:
-        resp = anon.request(path)
         check(resp.status == 401, f"signed-out GET {path} returned HTTP {resp.status}, expected 401")
 
     legacy = anon.request("/api/portal-security", method="POST", form={"required": "1"},
@@ -244,7 +214,6 @@ def assert_unauthenticated_contract(base_url: str) -> str:
     cross = anon.request("/api/portal-security", method="POST", form={"required": "1"},
                          headers={"Origin": "http://invalid.example"})
     check(cross.status == 403, f"cross-origin mutation returned HTTP {cross.status}, expected 403")
-    return mode
 
 
 def establish_portal_session(client: Client, *, fresh_code: bool = False) -> str:
@@ -280,13 +249,9 @@ def run(args: argparse.Namespace) -> int:
         print("Signed out; shared session cleared")
         return 0
 
-    mode = assert_unauthenticated_contract(base)
-    if mode == "portal-code":
-        print("PASS  signed-out GET / redirects to the custom /login page")
-        print("PASS  signed-out GET /status, /hardware/health and /os12/update/status answer 401")
-    else:
-        print("PASS  open-readonly: only /status, /hardware/health and /os12/update/status are public")
-    print("PASS  signed-out capture, settings export, debug and media answer 401")
+    assert_unauthenticated_contract(base)
+    print("PASS  signed-out GET / redirects to the custom /login page")
+    print("PASS  signed-out GET /status, /hardware/health and /os12/update/status answer 401")
     print("PASS  signed-out mutations are refused, including with X-BambuHelper-Client: 1")
     print("PASS  cross-origin mutation is rejected")
     if args.probe_only:

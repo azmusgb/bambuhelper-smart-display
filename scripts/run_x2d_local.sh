@@ -90,6 +90,8 @@ python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
 
 PIO_BIN="${PIO_BIN:-$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")}"
 [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable' >&2; exit 1; }
+# Install library deps first: a build that also installs them can fail silently.
+(cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 >/dev/null)
 (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
 FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
 PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"
