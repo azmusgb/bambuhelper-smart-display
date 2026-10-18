@@ -22,7 +22,7 @@ import time
 from accept_os12_portal_runtime import (
     AcceptanceError,
     Client,
-    assert_code_free_portal,
+    establish_portal_session,
     check,
 )
 
@@ -40,7 +40,7 @@ def api(
     method: str = "GET",
     form: dict[str, str] | None = None,
 ) -> dict:
-    headers = {"X-BambuHelper-Client": "1", "Accept": "application/json"}
+    headers = {"Accept": "application/json"}
     response = client.request(path, method=method, form=form, headers=headers, timeout=15.0)
     check(
         response.status in (200, 202, 409),
@@ -437,8 +437,8 @@ def run(args: argparse.Namespace) -> int:
           "--base-url must start with http:// or https://")
     print(f"Target: {base_url}")
     client = Client(base_url)
-    assert_code_free_portal(client)
-    print("PASS  code-free local portal contract")
+    establish_portal_session(client)
+    print("PASS  signed-in local portal contract")
 
     initial = status(client)
     print(

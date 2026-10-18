@@ -14,6 +14,7 @@ on:
       - 'scripts/finalize_os12_evidence_bundle.py'
       - 'scripts/verify_os12_evidence_bundle.py'
       - 'scripts/test_os12_evidence_bundle.py'
+      - 'scripts/test_os12_portal_session_client.py'
       - 'scripts/flash_os12_ci_candidate_macos.sh'
       - 'scripts/install_accept_os12_candidate_macos.sh'
       - 'scripts/prepare_os12_device_candidate.py'
@@ -36,6 +37,7 @@ on:
       - 'scripts/finalize_os12_evidence_bundle.py'
       - 'scripts/verify_os12_evidence_bundle.py'
       - 'scripts/test_os12_evidence_bundle.py'
+      - 'scripts/test_os12_portal_session_client.py'
       - 'scripts/flash_os12_ci_candidate_macos.sh'
       - 'scripts/install_accept_os12_candidate_macos.sh'
       - 'scripts/prepare_os12_device_candidate.py'
@@ -68,7 +70,7 @@ jobs:
 
       - name: Validate Python tooling syntax
         run: |
-          python3 -m py_compile             scripts/accept_os12_code_free_portal_runtime.py             scripts/accept_os12_device_ui_physical.py             scripts/accept_os12_media_physical.py             scripts/accept_os12_media_runtime.py             scripts/accept_os12_portal_runtime.py             scripts/accept_os12_unattended.py             scripts/accept_os12_update_runtime.py             scripts/capture_os12_views_unattended.py             scripts/prepare_os12_device_candidate.py             scripts/validate_os12_automatic_candidate.py             scripts/finalize_os12_evidence_bundle.py             scripts/verify_os12_evidence_bundle.py             scripts/test_os12_evidence_bundle.py             scripts/validate_os12_automation_collection.py             scripts/validate_os12_candidate_publisher.py             scripts/validate_os12_merge_gate.py             scripts/validate_os12_physical_acceptance.py             scripts/validate_os12_recovery_roundtrip.py
+          python3 -m py_compile             scripts/accept_os12_device_ui_physical.py             scripts/accept_os12_media_physical.py             scripts/accept_os12_media_runtime.py             scripts/accept_os12_portal_runtime.py             scripts/accept_os12_unattended.py             scripts/accept_os12_update_runtime.py             scripts/capture_os12_views_unattended.py             scripts/prepare_os12_device_candidate.py             scripts/validate_os12_automatic_candidate.py             scripts/finalize_os12_evidence_bundle.py             scripts/verify_os12_evidence_bundle.py             scripts/test_os12_evidence_bundle.py             scripts/test_os12_portal_session_client.py             scripts/validate_os12_automation_collection.py             scripts/validate_os12_candidate_publisher.py             scripts/validate_os12_merge_gate.py             scripts/validate_os12_physical_acceptance.py             scripts/validate_os12_recovery_roundtrip.py
 
       - name: Validate shell tooling syntax
         run: |
@@ -105,3 +107,6 @@ jobs:
 
       - name: Validate recovery round-trip contract
         run: python3 scripts/validate_os12_recovery_roundtrip.py
+
+      - name: Exercise signed-in acceptance client against a fake device
+        run: python3 scripts/test_os12_portal_session_client.py

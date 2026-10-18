@@ -28,9 +28,9 @@ def main() -> int:
         for needle in (
             "--expect-source-sha",
             "exactly 40 lowercase hex characters",
-            "assert_code_free_portal",
+            "establish_portal_session",
             '"portalMode"',
-            '"local-code-free"',
+            'evidence["portalMode"]',
             'identity["runningSourceCommit"]',
             "args.expect_source_sha",
         ):
@@ -39,6 +39,8 @@ def main() -> int:
             'portalMode"] = "temporary-open-lan"',
             'portalMode"]="temporary-open-lan"',
             "DEV OPEN",
+            '"local-code-free"',
+            "X-BambuHelper-Client",
         ):
             forbid(text, stale, label)
 
@@ -54,7 +56,7 @@ def main() -> int:
     )
 
     print(
-        "PASS: physical acceptance is fail-closed on the code-free same-origin portal contract and pinned to the exact running source SHA"
+        "PASS: physical acceptance is fail-closed on the signed-in same-origin portal contract and pinned to the exact running source SHA"
     )
     return 0
 

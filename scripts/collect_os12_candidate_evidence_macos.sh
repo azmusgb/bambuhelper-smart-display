@@ -56,8 +56,19 @@ fi
 
 COLLECTOR_SHA="$(git rev-parse HEAD)"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/os12-evidence-artifact.XXXXXX")"
-cleanup(){ rm -rf "$WORK_DIR"; }
+cleanup(){
+  if [[ -s "$WORK_DIR/portal-session.cookies" ]]; then
+    python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --sign-out >/dev/null 2>&1 || true
+  fi
+  rm -rf "$WORK_DIR"
+}
 trap cleanup EXIT
+
+# One Local Portal sign-in per run. The portal code is typed once at a hidden
+# prompt (never echoed, never a process argument, never stored); only the
+# resulting session cookie is kept, owner-only, inside the private work dir and
+# revoked on exit.
+export WORKSHOP_OS_COOKIE_JAR="$WORK_DIR/portal-session.cookies"
 unzip -q "$ARTIFACT_ZIP" -d "$WORK_DIR"
 
 for f in candidate.json SHA256SUMS.txt firmware.bin partitions.bin; do
@@ -104,7 +115,8 @@ print(source, firmware, partition)
 PY
 )
 
-RUNNING_SHA="$(curl -fsS --max-time 10 "$BASE_URL/os12/update/status" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("runningSourceCommit",""))')"
+# Running identity comes from the public recovery probe (no session needed).
+RUNNING_SHA="$(curl -fsS --max-time 10 "$BASE_URL/recovery/status" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("runningSourceCommit",""))')"
 if [[ "$RUNNING_SHA" != "$SOURCE_SHA" ]]; then
   echo "STOP: running device source does not match candidate artifact." >&2
   echo "Running:   $RUNNING_SHA" >&2
@@ -160,6 +172,9 @@ echo "Partition SHA-256: $PARTITION_SHA"
 echo "Collector source:  $COLLECTOR_SHA"
 echo "Running source:    $RUNNING_SHA"
 echo "Device mutation:   NO"
+
+echo "=== Local Portal sign-in (code from System -> Local Portal) ==="
+python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --sign-in
 
 python3 scripts/accept_os12_unattended.py \
   --base-url "$BASE_URL" \

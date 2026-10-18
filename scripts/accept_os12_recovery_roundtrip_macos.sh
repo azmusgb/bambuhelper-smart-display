@@ -126,11 +126,13 @@ PY
 runtime_source() {
   PYTHONPATH="$ROOT/scripts" python3 - "$BASE_URL" <<'PY'
 import sys
-from accept_os12_media_physical import update_identity
-from accept_os12_portal_runtime import Client, assert_code_free_portal
-client = Client(sys.argv[1].rstrip("/"))
-assert_code_free_portal(client)
-print(update_identity(client)["runningSourceCommit"])
+from accept_os12_portal_runtime import assert_unauthenticated_contract, runtime_identity
+# Identity comes from the public recovery probe, so the reboot inside this
+# round-trip never needs the rotated portal code. The signed-out boundary is
+# re-proven on every probe.
+base = sys.argv[1].rstrip("/")
+assert_unauthenticated_contract(base)
+print(runtime_identity(base)["runningSourceCommit"])
 PY
 }
 

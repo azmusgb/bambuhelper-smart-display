@@ -119,6 +119,9 @@ The current contract is:
 - logout revokes only the presenting session;
 - reboot invalidates RAM sessions and rotates the portal code;
 - same-origin protection remains required for authenticated browser mutations;
+- same-origin means real `Origin` (or `Referer` when `Origin` is absent) for the device host; no client-supplied marker header (such as the retired `X-BambuHelper-Client`) is accepted as proof of origin;
+- unauthenticated API/status/control/capture requests answer 401 JSON; unauthenticated page navigations redirect to `/login`;
+- the owner setting **Require access code** defaults on; turning it off opens only an explicit read-only status allowlist on station Wi-Fi, never controls, credentials, capture, settings or Recovery (see `docs/portal-signin-restore-12-0-1.md`);
 - setup/recovery authorization boundaries remain distinct.
 
 The login UI exposes explicit Ready, Invalid, Rate-limited, and Submitting states with semantic headings, UTF-8/lang metadata, associated help/errors, alert/live regions, focus treatment, reduced-motion/forced-colors behavior, and pointer-gated hover polish. `autocomplete="one-time-code"` is not used because the code is read from the WS350 rather than sent by SMS/email.
