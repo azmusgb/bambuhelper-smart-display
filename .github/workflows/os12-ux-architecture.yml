@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OS12_RELEASE_VERSION: '12.1.2'
+      OS12_RELEASE_VERSION: '12.1.3'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5

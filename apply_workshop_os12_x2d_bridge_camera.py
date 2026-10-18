@@ -8,6 +8,10 @@ a dedicated FreeRTOS worker (never in the foreground media poll), exposes a sing
 authenticated start route, and wires the existing on-device Video row to the
 fixed X2D source. Arbitrary media URLs are never accepted.
 
+Since Workshop OS 12.1.3 the on-device entry is Sound & Alerts > Video test,
+and frames are drawn inside that page's video area (between its header and
+control row) so the header and tab bar stay on screen.
+
 Starting the viewer from the authenticated web route also moves the physical
 display to the video viewer, whatever page or screen it was showing.
 """
@@ -111,43 +115,18 @@ HEADER_ENUM_REPLACEMENT = "  enum class VideoSource : uint8_t { None = 0, Demo, 
 HEADER_METHOD_ANCHOR = "  void renderLatestCameraFrame(uint32_t nowMs);\n"
 HEADER_METHOD_ADDITION = "  void renderX2dBridgeFrame(uint32_t nowMs);\n"
 
-SMART_HUB_MEDIA_HINT_ANCHOR = '"Tap row to open motion test"'
-SMART_HUB_MEDIA_HINT_REPLACEMENT = '"Tap row to open X2D camera"'
-SMART_HUB_DEMO_START_ANCHOR = 'if(!media.playMjpeg("demo-video",millis()))g_ui12SettingsView=10;'
-SMART_HUB_X2D_START_REPLACEMENT = 'if(!media.playMjpeg("x2d-bridge",millis()))g_ui12SettingsView=10;'
-SMART_HUB_IDLE_HINT_ANCHOR = '"Start the built-in motion test from Media."'
-SMART_HUB_IDLE_HINT_REPLACEMENT = '"Tap X2D Camera in Media to start."'
-SMART_HUB_ACTIVE_HINT_ANCHOR = '"Built-in motion diagnostic"'
+SMART_HUB_MEDIA_HINT_ANCHOR = 'strlcpy(v.value, "Motion check", sizeof(v.value));'
+SMART_HUB_MEDIA_HINT_REPLACEMENT = 'strlcpy(v.value, "X2D camera", sizeof(v.value));'
+SMART_HUB_DEMO_START_ANCHOR = 'if(!media.playMjpeg("demo-video",millis()))g_wsVideoStartFailed=true;'
+SMART_HUB_X2D_START_REPLACEMENT = 'if(!media.playMjpeg("x2d-bridge",millis()))g_wsVideoStartFailed=true;'
+SMART_HUB_IDLE_HINT_ANCHOR = '"Go back and open Video test again to retry."'
+SMART_HUB_IDLE_HINT_REPLACEMENT = '"Check Wi-Fi and the Mac bridge, then try again."'
+SMART_HUB_ACTIVE_HINT_ANCHOR = '"Moving shapes check the screen refresh."'
 # Drawn once under the camera viewport; the first decoded frame covers it.
 SMART_HUB_ACTIVE_HINT_REPLACEMENT = '"Waiting for X2D camera frames"'
-SMART_HUB_COMPOSITOR_ANCHOR = """  lgfx::LovyanGFX* panel = tft_ptr;
-  const bool buffered = hubEnsureFrame();
-  if (buffered) {
-    panel = g_hubPanelCanvas;
-    tft_ptr = g_hubFrame;
-    g_hubFrameDirty = false;
-  }
-"""
-SMART_HUB_COMPOSITOR_REPLACEMENT = """  lgfx::LovyanGFX* panel = tft_ptr;
-
-  // Video playback already renders directly into the root framebuffer.
-  // Do not composite the stale full-screen Smart Hub sprite over it.
-  const bool directVideoViewer =
-      screen == SCREEN_HUB_MORE && g_ui12SettingsView == 12;
-
-  const bool buffered = !directVideoViewer && hubEnsureFrame();
-
-  if (directVideoViewer) {
-    // Force a complete buffered redraw after leaving the video viewer.
-    g_hubFramePrimed = false;
-  }
-
-  if (buffered) {
-    panel = g_hubPanelCanvas;
-    tft_ptr = g_hubFrame;
-    g_hubFrameDirty = false;
-  }
-"""
+# The canonical build (apply_workshop_os12_more_overhaul.py) already keeps the
+# full-screen sprite off a running video; the overlay only requires it.
+SMART_HUB_COMPOSITOR_ANCHOR = "const bool buffered = !directVideoViewer && hubEnsureFrame();"
 
 ASYNC_MARKER = "static TaskHandle_t gX2dFetchTask = nullptr;"
 
@@ -331,11 +310,17 @@ STOP_ADDITION = (
 
 RENDER_X2D = r'''
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
-static void x2dViewportOrigin(int16_t* x, int16_t* y) {
-  const int16_t controlBarH = 50;
-  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
-  *x = (tft.width() - kBridgeCameraWidth) / 2;
-  *y = (viewportH - kBridgeCameraHeight) / 2;
+// Fit the bridge's 480x270 frame inside the Video test page's video area.
+static float x2dViewportOrigin(int16_t* x, int16_t* y) {
+  int16_t ax = 0, ay = 0, aw = 0, ah = 0;
+  ws350VideoArea(ax, ay, aw, ah);
+  float scale = static_cast<float>(aw) / kBridgeCameraWidth;
+  const float heightScale = static_cast<float>(ah) / kBridgeCameraHeight;
+  if (heightScale < scale) scale = heightScale;
+  if (scale > 1.0f) scale = 1.0f;
+  *x = static_cast<int16_t>(ax + (aw - static_cast<int16_t>(kBridgeCameraWidth * scale)) / 2);
+  *y = static_cast<int16_t>(ay + (ah - static_cast<int16_t>(kBridgeCameraHeight * scale)) / 2);
+  return scale;
 }
 #endif
 
@@ -347,8 +332,8 @@ bool x2dRedrawLastFrame() {
   if (!gX2dDisplayFrame || gX2dDisplayBytes < 4U) return false;
   int16_t x = 0;
   int16_t y = 0;
-  x2dViewportOrigin(&x, &y);
-  return tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(gX2dDisplayBytes), x, y);
+  const float scale = x2dViewportOrigin(&x, &y);
+  return tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(gX2dDisplayBytes), x, y, 0, 0, 0, 0, scale, scale);
 #else
   return false;
 #endif
@@ -388,10 +373,11 @@ void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
   gX2dDisplayBytes = frameBytes;
   int16_t x = 0;
   int16_t y = 0;
-  x2dViewportOrigin(&x, &y);
-  // The bridge produces the exact 480x270 viewport, so no black clear: a panel
-  // flush between clear and decode would expose a visible black frame.
-  tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(frameBytes), x, y);
+  const float scale = x2dViewportOrigin(&x, &y);
+  // Same size and place every frame, so no black clear here (a panel flush
+  // between clear and decode would show a black frame). The Video test page
+  // clears the area once when the session starts.
+  tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(frameBytes), x, y, 0, 0, 0, 0, scale, scale);
 
   markFrameDirty();
   videoLastFrameId_ = frameSequence;
@@ -464,12 +450,8 @@ def patch_smart_hub(text: str) -> str:
         SMART_HUB_ACTIVE_HINT_REPLACEMENT,
         "Video viewer active hint",
     )
-    text = replace_once(
-        text,
-        SMART_HUB_COMPOSITOR_ANCHOR,
-        SMART_HUB_COMPOSITOR_REPLACEMENT,
-        "Video viewer compositor ownership",
-    )
+    if text.count(SMART_HUB_COMPOSITOR_ANCHOR) != 1:
+        raise PatchError("Video viewer compositor ownership: canonical direct-video drawing missing")
     return text
 
 
@@ -542,7 +524,7 @@ def apply(repo: Path, bridge_url: str) -> None:
     hub = smart_hub.read_text(encoding="utf-8")
     if ("HTTPClient" in cpp or "kX2dBridgeSource" in cpp or "X2dBridge" in header
             or "handleWorkshopMediaVideoStartX2dBridge" in web_text
-            or SMART_HUB_X2D_START_REPLACEMENT in hub or "directVideoViewer" in hub):
+            or SMART_HUB_X2D_START_REPLACEMENT in hub):
         raise PatchError("X2D bridge overlay already applied or reconstructed source is not canonical")
 
     # Stage every file in memory and write only after all anchors validate, so
@@ -560,7 +542,7 @@ def apply(repo: Path, bridge_url: str) -> None:
 
     print(f"Experimental Workshop OS 12 X2D bridge overlay enabled at {bridge_url}")
     print("Bridge HTTP acquisition runs on a dedicated FreeRTOS worker; the foreground poll only decodes published JPEGs")
-    print("On-device launch enabled: Media > Video opens the fixed X2D bridge source")
+    print("On-device launch enabled: Sound & Alerts > Video test opens the fixed X2D bridge source")
 
 
 def main() -> int:

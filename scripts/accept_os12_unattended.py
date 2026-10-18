@@ -38,17 +38,19 @@ REQUIRED_VIEWS = (
     "printer",
     "workshop",
     "more",
-    "settings-display",
-    "settings-sounds",
-    "settings-network",
     "settings-printer-power",
     "hardware-auto-off",
+    "settings-network",
     "system-date-time",
+    "settings-display",
+    "display-clock",
+    "display-gauges",
+    "settings-sounds",
+    "display-alerts",
+    "hardware-led",
+    "media-video",
     "system-update",
     "system-diagnostics",
-    "media",
-    "media-lab",
-    "media-video",
 )
 
 MANUAL_RESIDUALS = (
@@ -398,14 +400,14 @@ def run(args: argparse.Namespace) -> int:
         )
         print(f"PASS  native view hash diversity: {len(hashes)}/{len(REQUIRED_VIEWS)}")
         video_full_diff = pixel_difference_ratio(
-            view_frames["media-lab"], view_frames["media-video"]
+            view_frames["settings-sounds"], view_frames["media-video"]
         )
         video_content_diff = pixel_difference_ratio_region(
-            view_frames["media-lab"], view_frames["media-video"],
+            view_frames["settings-sounds"], view_frames["media-video"],
             0, 0, 480, 240,
         )
         video_isolated = video_content_diff >= 0.02
-        evidence["viewIsolation"]["mediaLabVsMediaVideo"] = {
+        evidence["viewIsolation"]["soundsVsVideoTest"] = {
             "fullFrameDifferenceRatio": round(video_full_diff, 8),
             "contentDifferenceRatio": round(video_content_diff, 8),
             "contentRegion": {"x": 0, "y": 0, "width": 480, "height": 240},
@@ -414,10 +416,10 @@ def run(args: argparse.Namespace) -> int:
         }
         check(
             video_isolated,
-            "media-video content region is too similar to media-lab; stale Recorder content suspected",
+            "media-video content region is too similar to settings-sounds; stale Recorder content suspected",
         )
         print(
-            "PASS  Video Viewer is visually isolated from Recorder "
+            "PASS  Video test is visually isolated from Sound & Alerts (Recorder) "
             f"contentDiff={video_content_diff:.5f}"
         )
 
@@ -462,7 +464,7 @@ def run(args: argparse.Namespace) -> int:
         evidence["media"]["microphoneSamples"] = mic_samples
         print("PASS  microphone ADC/sample path returned valid measurements")
 
-        show(client, "media-lab")
+        show(client, "settings-sounds")
         record_start = api(client, "/os12/media/record/start", method="POST")
         validate_status(record_start)
         check(

@@ -113,9 +113,9 @@ def native_view_catalog(client: Client) -> list[dict]:
 
 def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
     wanted = {
-        "media": ("media", "media"),
-        "lab": ("media-lab", "recorder"),
-        "video": ("media-video", "video viewer"),
+        "media": ("settings-sounds", "sound & alerts"),
+        "lab": ("settings-sounds", "sound & alerts"),
+        "video": ("media-video", "video test"),
     }
     check(view in wanted, f"unknown native media acceptance view: {view}")
     preferred_id, preferred_label = wanted[view]
@@ -125,7 +125,7 @@ def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
         view_id = str(item.get("id", "")).strip()
         label = str(item.get("label", "")).strip()
         if view_id.lower() == preferred_id or label.lower() == preferred_label:
-            fallback = {"media": "Media", "lab": "Recorder", "video": "Video Viewer"}[view]
+            fallback = {"media": "Sound & Alerts", "lab": "Sound & Alerts", "video": "Video test"}[view]
             return view_id, label or fallback
 
     available = ", ".join(

@@ -24,13 +24,19 @@ TEST = ROOT / "tests/workshop_os12_more_layout_smoke.cpp"
 REMOVED_VIEW_IDS = (
     "system", "system-network", "system-time-locale", "system-network-address",
     "system-network-review", "hardware-power", "hardware-cooldown",
+    "media", "media-lab", "display-quick", "display-schedule", "display-behavior", "display-visual",
+    "display-signals", "display-theme", "display-gauge-colors", "display-gauge-scales",
+    "display-gauge-behavior", "display-glow", "display-layout", "display-extras",
+    "hardware-sound", "hardware-finish", "hardware-error",
 )
 
 # Renderers the More pages replaced.
 REPLACED_RENDERERS = (
     "drawUi13Network", "drawUi13PrinterPower", "drawUi13PowerOptions", "drawUi13AutoOffConfirm",
     "drawUi12PortalAccess", "drawUi13DateTime", "drawUi13SoftwareUpdate", "drawUi13UpdateConfirm",
-    "drawUi13Diagnostics", "drawNetworkEssentials",
+    "drawUi13Diagnostics", "drawNetworkEssentials", "drawUi13Display", "drawUi13AfterPrint", "drawUi13Sound",
+    "drawOs12Media", "drawOs12VideoViewer", "drawOs12Recorder", "drawUi13PrinterAlerts", "drawUi13AlertSignals",
+    "drawDisplayExperience", "drawAudioSettings",
 )
 
 
@@ -84,7 +90,7 @@ def layout_rows(layout: str) -> dict[str, list[tuple[str, str]]]:
 def live_page_rows(layout: str, fragment: str) -> list[tuple[str, str, str]]:
     """(page, row id, kind) for every row of every page the fragment draws."""
     start = fragment.find("static bool wsPageLive(wsm::PageId id)")
-    pending = set(re.findall(r"case wsm::PageId::(\w+):", fragment[start:fragment.find("return false;", start)]))
+    pending = set(re.findall(r"case wsm::PageId::(\w+):", fragment[start:fragment.find("\n}\n", start)]))
     tables = layout_rows(layout)
     rows = []
     for page, table in re.findall(r"\{PageId::(\w+), PageId::\w+, \d, PageLayout::\w+, \"[^\"]*\", \"[^\"]*\", \"[^\"]*\", WS_ROWS\((\w+)\)\}", layout):
@@ -141,9 +147,24 @@ def validate(repo: Path) -> str:
     need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"), "wsm::hitTest(", "touch uses the shared hit test")
 
     # Old geometry and parent hacks are gone from the new code.
+    # (The guarded rotation preview keeps its 12.0 hold-to-commit geometry.)
+    rotation = block(fragment, "static bool wsRotationPreviewTouch(int16_t x, int16_t y, bool longPress)")
+    pages_only = fragment.replace(rotation, "")
     for needle in ("hubUi13BackRect", "hubUi12SystemBackRect", "hubUi13ActionRect", "gOs12PortalParent",
-                   "gOs12SettingsParent", "hubRc2HitRef"):
-        forbid(fragment, needle, "12.0 geometry in the More pages")
+                   "gOs12SettingsParent", "hubRc2HitRef", "hubUi13RowRect", "hubMoreRect"):
+        forbid(pages_only, needle, "12.0 geometry in the More pages")
+    need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"),
+         "if (g_rotationPreviewMode) return wsRotationPreviewTouch(x, y, longPress);", "rotation preview is modal")
+
+    # Video test: the backend draws inside the page's video area, and the
+    # full-screen sprite is never pushed over a running video.
+    backend = read(repo / "src/ws350_media_backend.cpp")
+    need(backend, "workshop::ui::more::videoRect(", "video drawn inside the Video test area")
+    forbid(backend, "controlBarH", "video drawn over the page chrome")
+    draw_hub = block(hub, "void smartHubDraw(ScreenState screen, bool forceRedraw)")
+    need(draw_hub, "screen == SCREEN_HUB_MORE && wsVideoDirect();", "direct video drawing")
+    need(draw_hub, "const bool buffered = !directVideoViewer && hubEnsureFrame();", "no sprite over running video")
+    need(block(hub, "static void wsMoreDraw(bool full)"), "uiBottomNav(3, nullptr);", "video page tab bar")
     for name in REPLACED_RENDERERS:
         forbid(hub, f"static void {name}(", "replaced renderer still present")
     # No hard-coded channel labels; the channel is read from the update service.

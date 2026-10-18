@@ -18,9 +18,8 @@ import sys
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_VIEWS = (
-    "home","printer","workshop","more","settings-display","settings-sounds",
-    "settings-network","settings-printer-power","hardware-auto-off","system-date-time",
-    "system-update","system-diagnostics","media","media-lab","media-video",
+    "home","printer","workshop","more","settings-printer-power","hardware-auto-off","settings-network","system-date-time","settings-display",
+    "display-clock","display-gauges","settings-sounds","display-alerts","hardware-led","media-video","system-update","system-diagnostics",
 )
 MANUAL_RESIDUALS = (
     "physical LCD panel appearance/readability",
@@ -107,7 +106,7 @@ def main() -> int:
     require(isinstance(views,dict), "unattended evidence missing views")
     require(set(REQUIRED_VIEWS).issubset(views.keys()),
             "unattended evidence missing required native views")
-    isolation=(unattended.get("viewIsolation") or {}).get("mediaLabVsMediaVideo")
+    isolation=(unattended.get("viewIsolation") or {}).get("soundsVsVideoTest")
     require(isinstance(isolation,dict), "unattended evidence missing Video Viewer isolation check")
     require(isolation.get("passed") is True, "Video Viewer isolation check did not pass")
     content_diff=isolation.get("contentDifferenceRatio")
@@ -173,7 +172,7 @@ def main() -> int:
         })
 
     comparisons=capture.get("comparisons") or {}
-    video_compare=comparisons.get("mediaLabVsMediaVideo")
+    video_compare=comparisons.get("soundsVsVideoTest")
     require(isinstance(video_compare,dict) and video_compare.get("passed") is True,
             "capture manifest missing passing Media Lab vs Video Viewer isolation")
     capture_content_diff=video_compare.get("contentDifferenceRatio")

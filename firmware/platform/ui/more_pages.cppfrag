@@ -17,21 +17,9 @@ static WsDialog g_wsDialog = WsDialog::None;
 static char g_wsToast[72] = {0};
 static unsigned long g_wsToastUntilMs = 0;
 
-// Pages this build draws with the new layout. The rest still open their
-// 12.0 screens until they move over.
+// Pages this build draws with the new layout (all of them since 12.1.3).
 static bool wsPageLive(wsm::PageId id) {
-  switch (id) {
-    case wsm::PageId::Display:
-    case wsm::PageId::ClockSchedule:
-    case wsm::PageId::Gauges:
-    case wsm::PageId::SoundAlerts:
-    case wsm::PageId::Alerts:
-    case wsm::PageId::StatusLight:
-    case wsm::PageId::VideoTest:
-      return false;
-    default:
-      return true;
-  }
+  return id < wsm::PageId::Count;
 }
 
 static wsm::Screen wsScreen() { return wsm::makeScreen(tft.width(), tft.height()); }
@@ -61,38 +49,68 @@ static void wsClearLegacy() {
   g_audioSettingsPage = 0;
 }
 
-static void wsOpenLegacy(wsm::PageId id) {
-  wsClearLegacy();
-  g_wsPage = wsm::PageId::Root;
-  g_wsScroll = 0;
-  g_wsDialog = WsDialog::None;
-  if (id == wsm::PageId::Display) g_ui12SettingsView = 1;
-  else if (id == wsm::PageId::SoundAlerts) g_ui12SettingsView = 2;
-  if (getScreenState() != SCREEN_HUB_MORE) setPage(SCREEN_HUB_MORE);
-  g_dirty = true;
+// ---------------------------------------------------------------------------
+// Video test: the media backend draws frames straight to the panel inside
+// wsm::videoRect, so while a video session runs the page chrome is drawn
+// around it directly instead of through the full-screen frame buffer.
+// ---------------------------------------------------------------------------
+static bool g_wsVideoChromeDrawn = false;
+static bool g_wsVideoAreaCleared = false;
+static bool g_wsVideoStartFailed = false;
+
+static bool wsVideoSessionActive() {
+  const workshop::media::SessionState s = workshopMediaSnapshot().runtime.session;
+  return s == workshop::media::SessionState::PlayingVideo || s == workshop::media::SessionState::Paused;
+}
+
+static void wsVideoStart() {
+  workshop::media::MediaService& media = workshopMediaService();
+  g_wsVideoChromeDrawn = false;
+  g_wsVideoAreaCleared = false;
+  g_wsVideoStartFailed = false;
+  if (media.snapshot().runtime.session != workshop::media::SessionState::Idle) return;
+  if (!media.snapshot().capabilities.videoDecoderAvailable) { g_wsVideoStartFailed = true; return; }
+  if(!media.playMjpeg("demo-video",millis()))g_wsVideoStartFailed=true;
+}
+
+static void wsVideoStop() {
+  // Hand the display back to the frame buffer before stopping, so no idle
+  // video frame is committed in between.
+  g_wsVideoChromeDrawn = false;
+  g_hubFramePrimed = false;
+  if (workshopMediaSnapshot().runtime.session != workshop::media::SessionState::Idle) workshopMediaService().stop(millis());
+}
+
+// Set while smartHubCapturePrepare composes a capture into the sprite.
+static bool g_wsCaptureCompose = false;
+
+// True while the Video test page shows a running video (see smartHubDraw).
+static bool wsVideoDirect() {
+  return !g_wsCaptureCompose && getScreenState() == SCREEN_HUB_MORE && !g_toolsView && g_wsPage == wsm::PageId::VideoTest &&
+         g_wsDialog == WsDialog::None && wsVideoSessionActive();
+}
+
+static void wsLeavePage(wsm::PageId next) {
+  if (g_wsPage == wsm::PageId::VideoTest && next != wsm::PageId::VideoTest) wsVideoStop();
 }
 
 static void wsOpen(wsm::PageId id) {
-  if (!wsPageLive(id)) { wsOpenLegacy(id); return; }
+  if (!wsPageLive(id)) id = wsm::PageId::Root;
+  wsLeavePage(id);
   wsClearLegacy();
   g_wsPage = id;
   g_wsScroll = 0;
   g_wsDialog = WsDialog::None;
   g_wsToast[0] = 0;
   if (getScreenState() != SCREEN_HUB_MORE) setPage(SCREEN_HUB_MORE);
+  if (id == wsm::PageId::VideoTest) wsVideoStart();
   g_dirty = true;
 }
 
-// True while a 12.0 screen still owns More/System (pages not moved yet, and
-// the hidden capture-only pages).
+// True while a 12.0 screen still owns More (only the hidden, capture-only
+// Tools page).
 static bool wsLegacyActive(ScreenState cur) {
-  if (cur == SCREEN_HUB_SYSTEM) return g_audioSettingsView;
-  if (cur != SCREEN_HUB_MORE) return false;
-  if (g_displayExperienceView || g_toolsView) return true;
-  switch (g_ui12SettingsView) {
-    case 1: case 2: case 5: case 6: case 7: case 10: case 11: case 12: return true;
-    default: return false;
-  }
+  return cur == SCREEN_HUB_MORE && g_toolsView;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +122,7 @@ struct WsRowView {
   const char* button;   // Action / Action2 A
   const char* buttonB;  // Action2 B
   const char* reason;   // why the row is disabled; shown in the value slot
+  const char* reasonB;  // why Action2's second button is disabled
   uint16_t valueColor;
   bool on;
   bool enabled;
@@ -115,6 +134,7 @@ static void wsView(WsRowView& v) {
   v.button = nullptr;
   v.buttonB = nullptr;
   v.reason = nullptr;
+  v.reasonB = nullptr;
   v.valueColor = OS12V_MUTED;
   v.on = false;
   v.enabled = true;
@@ -198,6 +218,52 @@ static int8_t wsStepClamp(int value, int delta, int lo, int hi) {
   if (value > hi) value = hi;
   return (int8_t)value;
 }
+
+// "FACTORY" -> "Factory" for labels shared with the older all-caps screens.
+static void wsTitleCase(char* out, size_t len, const char* caps) {
+  strlcpy(out, caps ? caps : "", len);
+  bool start = true;
+  for (char* c = out; *c; ++c) {
+    if (*c >= 'A' && *c <= 'Z' && !start) *c = (char)(*c - 'A' + 'a');
+    start = (*c == ' ' || *c == '-');
+  }
+}
+
+static void wsHourText(char* out, size_t len, uint8_t hour) {
+  hour = (uint8_t)(hour % 24U);
+  if (netSettings.use24h) { snprintf(out, len, "%02u:00", (unsigned)hour); return; }
+  const unsigned h12 = hour % 12U ? hour % 12U : 12U;
+  snprintf(out, len, "%u %s", h12, hour < 12U ? "AM" : "PM");
+}
+
+static void wsPercentText(char* out, size_t len, uint8_t level, const char* zeroText) {
+  if (level == 0 && zeroText) { strlcpy(out, zeroText, len); return; }
+  snprintf(out, len, "%u%%", (unsigned)hubLevelPct(level));
+}
+
+static void wsSecondsText(char* out, size_t len, uint16_t seconds, const char* zeroText) {
+  if (seconds == 0 && zeroText) strlcpy(out, zeroText, len);
+  else if (seconds >= 60U && seconds % 60U == 0U) snprintf(out, len, "%u min", (unsigned)(seconds / 60U));
+  else snprintf(out, len, "%u s", (unsigned)seconds);
+}
+
+// Step through a preset list without wrapping; values off the list snap to
+// the nearest preset first.
+static uint16_t wsStepList(uint16_t current, const uint16_t* values, uint8_t count, int dir) {
+  uint8_t best = 0;
+  for (uint8_t i = 1; i < count; ++i)
+    if (abs((int)values[i] - (int)current) < abs((int)values[best] - (int)current)) best = i;
+  if (values[best] == current || dir == 0) return values[wsStepClamp(best, dir, 0, count - 1)];
+  // Off-list: the first step lands on the nearest preset in that direction.
+  if (dir > 0) { for (uint8_t i = 0; i < count; ++i) if (values[i] > current) return values[i]; return values[count - 1]; }
+  for (int i = count - 1; i >= 0; --i) if (values[i] < current) return values[i];
+  return values[0];
+}
+
+static const uint16_t kWsLevels[] = {0, 64, 128, 192, 255};
+static const uint16_t kWsMainLevels[] = {64, 128, 192, 255};
+
+static void wsColorText(char* out, size_t len, uint16_t color) { wsTitleCase(out, len, hubExpertColorName(color)); }
 
 static void wsRowView(wsm::RowId id, WsRowView& v) {
   wsView(v);
@@ -415,6 +481,319 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       wsUptimeText(v.value, sizeof(v.value));
       v.valueColor = OS12V_TEXT;
       break;
+    // ---- Display ----
+    case R::Brightness:
+      wsPercentText(v.value, sizeof(v.value), brightness, nullptr);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::StandbyBrightness:
+      wsPercentText(v.value, sizeof(v.value), dpSettings.screensaverBrightness, "Screen off");
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::ClockScheduleNav:
+      strlcpy(v.value, dpSettings.nightModeEnabled ? "Night mode on" : "Night mode off", sizeof(v.value));
+      break;
+    case R::GaugesNav: {
+      char theme[24];
+      wsTitleCase(theme, sizeof(theme), hubThemePresetLabel());
+      snprintf(v.value, sizeof(v.value), "%s colours", theme);
+      break;
+    }
+    case R::AfterPrint: {
+      static const char* kModes[] = {"Stay on", "Show clock", "Screen off"};
+      strlcpy(v.value, kModes[hubAfterPrintMode() % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::FinishTimeout:
+      if (dpSettings.keepDisplayOn) { v.enabled = false; v.reason = "After a print is Stay on"; break; }
+      if (dpSettings.finishDisplayMins == 0) strlcpy(v.value, "Immediately", sizeof(v.value));
+      else snprintf(v.value, sizeof(v.value), "%u min", (unsigned)dpSettings.finishDisplayMins);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::DoorAck: v.on = dpSettings.doorAckEnabled; break;
+    case R::KeepPrintScreen: v.on = dpSettings.keepPrintScreen; break;
+    case R::FinishTime: v.on = dpSettings.finishShowTime; break;
+    case R::TimeReadout: {
+      static const char* kModes[] = {"Finish time", "Time left", "Both"};
+      strlcpy(v.value, kModes[dispSettings.timeDisplayMode % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::AnimatedBar: v.on = dispSettings.animatedBar; break;
+    case R::SmallLabels: v.on = dispSettings.smallLabels; break;
+    case R::FanReadout:
+      strlcpy(v.value, dispSettings.fanMatchPrinter ? "Like printer" : "Exact %", sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::StatusReadout: v.on = !dispSettings.hideStatusReadout; break;
+    case R::Theme:
+      wsTitleCase(v.value, sizeof(v.value), hubThemePresetLabel());
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::AmbientHome: v.on = g_ambientEnabled; break;
+    case R::Rotation:
+      snprintf(v.value, sizeof(v.value), "%s", tft.width() > tft.height() ? "Landscape" : "Portrait");
+      v.button = "Change";
+      break;
+    // ---- Clock & schedule ----
+    case R::NightMode: v.on = dpSettings.nightModeEnabled; break;
+    case R::NightBrightness:
+      wsPercentText(v.value, sizeof(v.value), dpSettings.nightBrightness, "Screen off");
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::NightStart:
+      wsHourText(v.value, sizeof(v.value), dpSettings.nightStartHour);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::NightEnd:
+      wsHourText(v.value, sizeof(v.value), dpSettings.nightEndHour);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::PongClock: v.on = dispSettings.pongClock; break;
+    case R::ClockTimeSize:
+    case R::ClockDateSize: {
+      static const char* kSizes[] = {"Auto", "Normal", "Medium", "Large"};
+      strlcpy(v.value, kSizes[(id == R::ClockTimeSize ? dispSettings.clockTimeSize : dispSettings.clockDateSize) % 4U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::ClockShowDate: v.on = !dispSettings.hideClockDate; break;
+    case R::ClockInfo: v.on = dispSettings.showClockInfo; break;
+    case R::ClockTimeColor:
+      wsColorText(v.value, sizeof(v.value), dispSettings.clockTimeColor);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::ClockDateColor:
+      wsColorText(v.value, sizeof(v.value), dispSettings.clockDateColor);
+      v.valueColor = OS12V_TEXT;
+      break;
+    // ---- Gauges ----
+    case R::GaugeSelect:
+      wsTitleCase(v.value, sizeof(v.value), hubGaugeName(g_displayGaugeColorIndex));
+      v.valueColor = OS12V_ACCENT;
+      break;
+    case R::GaugeArc:
+      wsColorText(v.value, sizeof(v.value), hubSelectedGaugeColors()->arc);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::GaugeLabel:
+      wsColorText(v.value, sizeof(v.value), hubSelectedGaugeColors()->label);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::GaugeValue:
+      wsColorText(v.value, sizeof(v.value), hubSelectedGaugeColors()->value);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::NozzleScale: snprintf(v.value, sizeof(v.value), "%u C", (unsigned)dispSettings.nozzleScaleMax); v.valueColor = OS12V_TEXT; break;
+    case R::BedScale: snprintf(v.value, sizeof(v.value), "%u C", (unsigned)dispSettings.bedScaleMax); v.valueColor = OS12V_TEXT; break;
+    case R::ChamberScale: snprintf(v.value, sizeof(v.value), "%u C", (unsigned)dispSettings.chamberScaleMax); v.valueColor = OS12V_TEXT; break;
+    case R::PowerScale: snprintf(v.value, sizeof(v.value), "%u W", (unsigned)dispSettings.powerScaleW); v.valueColor = OS12V_TEXT; break;
+    case R::Smoothing: {
+      static const char* kModes[] = {"Off", "Slow", "Normal", "Fast"};
+      strlcpy(v.value, kModes[dispSettings.gaugeSmoothing % 4U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::WarnAt:
+      if (dispSettings.warnThresholdPct == 0) strlcpy(v.value, "Off", sizeof(v.value));
+      else snprintf(v.value, sizeof(v.value), "%u%% of scale", (unsigned)dispSettings.warnThresholdPct);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::WarnColor:
+      if (dispSettings.warnThresholdPct == 0) { v.enabled = false; v.reason = "Warning is off"; break; }
+      wsColorText(v.value, sizeof(v.value), dispSettings.warnColor);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::GaugeDefaults:
+      strlcpy(v.value, "Normal smoothing, no warning", sizeof(v.value));
+      v.button = "Reset";
+      break;
+    case R::Ams8Slot: v.on = dispSettings.landscape8Slots; break;
+    case R::Ams9Slot: v.on = dispSettings.portrait9Slots; break;
+    case R::SplitView: v.on = rotState.splitEnabled; break;
+    case R::SplitForce:
+      if (!rotState.splitEnabled) { v.enabled = false; v.reason = "Split view is off"; break; }
+      v.on = rotState.splitForce;
+      break;
+    case R::AmsTrayTypes: v.on = dispSettings.amsTrayTypes; break;
+    // ---- Sound & Alerts ----
+    case R::EventSounds: v.on = buzzerSettings.enabled; break;
+    case R::TouchSounds: v.on = buzzerSettings.buttonClick; break;
+    case R::Volume: {
+      const workshop::media::Snapshot& m = workshopMediaSnapshot();
+      if (!m.capabilities.speakerAvailable) { v.enabled = false; v.reason = "No speaker found"; break; }
+      snprintf(v.value, sizeof(v.value), "%u%%", (unsigned)m.runtime.volumePercent);
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::AlertsNav:
+#if HAS_HMS_UI
+      strlcpy(v.value, dispSettings.hmsEnabled ? "On" : "Off", sizeof(v.value));
+#else
+      v.enabled = false; v.reason = "Not available on this device";
+#endif
+      break;
+    case R::StatusLightNav:
+      strlcpy(v.value, ledSettings.enabled ? "On" : "Off", sizeof(v.value));
+      break;
+    case R::QuietStart:
+      if (buzzerSettings.quietStartHour == 0) strlcpy(v.value, "Off", sizeof(v.value));
+      else wsHourText(v.value, sizeof(v.value), buzzerSettings.quietStartHour);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::QuietEnd:
+      if (buzzerSettings.quietStartHour == 0) { v.enabled = false; v.reason = "Quiet hours are off"; break; }
+      wsHourText(v.value, sizeof(v.value), buzzerSettings.quietEndHour);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::SpeakerTest: {
+      const workshop::media::Snapshot& m = workshopMediaSnapshot();
+      v.button = "Play";
+      if (!m.capabilities.speakerAvailable) { v.enabled = false; v.reason = "No speaker found"; break; }
+      if (m.runtime.session == workshop::media::SessionState::PlayingAudio) { strlcpy(v.value, "Playing...", sizeof(v.value)); v.valueColor = OS12V_GREEN; }
+      break;
+    }
+    case R::MicTest: {
+      const workshop::media::Snapshot& m = workshopMediaSnapshot();
+      v.button = "Test";
+      if (!m.capabilities.microphoneAvailable) { v.enabled = false; v.reason = "No microphone found"; break; }
+      if (m.runtime.microphoneLevelPercent > 0) {
+        snprintf(v.value, sizeof(v.value), "Level %u%%", (unsigned)m.runtime.microphoneLevelPercent);
+        v.valueColor = OS12V_GREEN;
+      }
+      break;
+    }
+    case R::Recorder: {
+      const workshop::media::Snapshot& m = workshopMediaSnapshot();
+      const bool recording = m.runtime.session == workshop::media::SessionState::Recording;
+      const bool playing = m.runtime.session == workshop::media::SessionState::PlayingRecording;
+      v.button = recording ? "Stop" : "Record";
+      v.buttonB = playing ? "Stop" : "Play";
+      if (!m.capabilities.microphoneAvailable || !m.capabilities.psramAvailable) { v.enabled = false; v.reason = "No microphone found"; }
+      if (!m.runtime.recordingAvailable && !playing) { v.enabledB = false; v.reasonB = "Record a clip first"; }
+      if (recording) { strlcpy(v.value, "Recording...", sizeof(v.value)); v.valueColor = OS12V_AMBER; }
+      else if (playing) { strlcpy(v.value, "Playing...", sizeof(v.value)); v.valueColor = OS12V_GREEN; }
+      else if (m.runtime.recordingAvailable) strlcpy(v.value, "Clip ready", sizeof(v.value));
+      else if (v.enabled) strlcpy(v.value, "Up to 5 s", sizeof(v.value));
+      break;
+    }
+    case R::VideoTestNav:
+      if (!workshopMediaSnapshot().capabilities.videoDecoderAvailable) { v.enabled = false; v.reason = "Not available on this device"; break; }
+      strlcpy(v.value, "Motion check", sizeof(v.value));
+      break;
+    // ---- Printer alerts ----
+#if HAS_HMS_UI
+    case R::HmsEnabled: v.on = dispSettings.hmsEnabled; break;
+    case R::HmsSeverity:
+      if (!dispSettings.hmsEnabled) { v.enabled = false; v.reason = "Printer errors are off"; break; }
+      strlcpy(v.value, dispSettings.hmsSeverityAll ? "All" : "Important only", sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::HmsPresent: {
+      if (!dispSettings.hmsEnabled) { v.enabled = false; v.reason = "Printer errors are off"; break; }
+      static const char* kModes[] = {"Badge only", "Briefly", "Until dismissed"};
+      strlcpy(v.value, kModes[dispSettings.hmsAutoPresent % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::HmsLookup:
+      if (!dispSettings.hmsEnabled) { v.enabled = false; v.reason = "Printer errors are off"; break; }
+      v.on = dispSettings.hmsLookupOnline;
+      break;
+    case R::AlertGlow:
+    case R::AlertSound:
+    case R::AlertLight:
+    case R::AlertWake: {
+      if (!dispSettings.hmsEnabled) { v.enabled = false; v.reason = "Printer errors are off"; break; }
+      const uint8_t bit = id == R::AlertGlow ? 0x01U : (id == R::AlertSound ? 0x02U : (id == R::AlertLight ? 0x04U : 0x08U));
+      v.on = (dispSettings.hmsAlertMask & bit) != 0;
+      break;
+    }
+#else
+    case R::HmsEnabled:
+    case R::HmsSeverity:
+    case R::HmsPresent:
+    case R::HmsLookup:
+    case R::AlertGlow:
+    case R::AlertSound:
+    case R::AlertLight:
+    case R::AlertWake:
+      v.enabled = false; v.reason = "Not available on this device";
+      break;
+#endif
+    case R::GlowMode: {
+      static const char* kModes[] = {"Off", "One colour", "Rainbow"};
+      strlcpy(v.value, kModes[dispSettings.glowMode % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::GlowStyle: {
+      if (dispSettings.glowMode == 0) { v.enabled = false; v.reason = "Edge glow is off"; break; }
+      static const char* kStyles[] = {"Sweep", "Pulse", "Storm"};
+      strlcpy(v.value, kStyles[dispSettings.glowStyle % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::GlowDuration: {
+      if (dispSettings.glowMode == 0) { v.enabled = false; v.reason = "Edge glow is off"; break; }
+      static const char* kDurations[] = {"Short burst", "Until dismissed", "Reminder"};
+      strlcpy(v.value, kDurations[dispSettings.glowDuration % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::GlowColor:
+      if (dispSettings.glowMode != 1) { v.enabled = false; v.reason = "Only for one-colour glow"; break; }
+      wsColorText(v.value, sizeof(v.value), dispSettings.glowColor);
+      v.valueColor = OS12V_TEXT;
+      break;
+    // ---- Status light ----
+    case R::LedEnabled: v.on = ledSettings.enabled; break;
+    case R::LedBrightness:
+      if (!ledSettings.enabled) { v.enabled = false; v.reason = "Status light is off"; break; }
+      wsPercentText(v.value, sizeof(v.value), ledSettings.brightness, "Off");
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::LedWhilePrinting:
+      if (!ledSettings.enabled) { v.enabled = false; v.reason = "Status light is off"; break; }
+      v.on = ledSettings.autoOnWhilePrinting;
+      break;
+    case R::LedPauseBreath:
+      if (!ledSettings.enabled) { v.enabled = false; v.reason = "Status light is off"; break; }
+      v.on = ledSettings.pauseBreathing;
+      break;
+    case R::LedFinishEffect: {
+      static const char* kModes[] = {"Off", "Breathing", "Heartbeat"};
+      strlcpy(v.value, kModes[ledSettings.finishMode % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::LedFinishTime:
+      if (ledSettings.finishMode == 0) { v.enabled = false; v.reason = "Finish effect is off"; break; }
+      wsSecondsText(v.value, sizeof(v.value), ledSettings.finishSeconds, nullptr);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::LedFinishPeak:
+      if (ledSettings.finishMode == 0) { v.enabled = false; v.reason = "Finish effect is off"; break; }
+      wsPercentText(v.value, sizeof(v.value), ledSettings.finishBrightness, "Off");
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::LedErrorStrobe: v.on = ledSettings.errorStrobe; break;
+    case R::LedErrorTime:
+      if (!ledSettings.errorStrobe) { v.enabled = false; v.reason = "Error strobe is off"; break; }
+      wsSecondsText(v.value, sizeof(v.value), ledSettings.errorStrobeSeconds, "Until cleared");
+      v.valueColor = OS12V_TEXT;
+      break;
+    // ---- Video test ----
+    case R::VideoPause: {
+      const workshop::media::Snapshot& m = workshopMediaSnapshot();
+      const bool paused = m.runtime.session == workshop::media::SessionState::Paused;
+      v.button = paused ? "Resume" : "Pause";
+      if (paused) strlcpy(v.value, "Paused", sizeof(v.value));
+      else if (wsVideoSessionActive()) { strlcpy(v.value, "Playing", sizeof(v.value)); v.valueColor = OS12V_GREEN; }
+      else { v.enabled = false; v.reason = g_wsVideoStartFailed ? "Video could not start" : "Not playing"; }
+      break;
+    }
     default:
       break;
   }
@@ -523,6 +902,255 @@ static void wsRowTap(wsm::RowId id, wsm::Part part) {
     }
     case R::UpdateChannel: g_wsDialog = WsDialog::Channel; wsClick(); break;
     case R::HealthNav: wsOpen(wsm::PageId::DeviceHealth); wsClick(); break;
+    // ---- Display ----
+    case R::Brightness:
+      brightness = (uint8_t)wsStepList(brightness, kWsMainLevels, 4, dir);
+      hubPersistDisplay(true);
+      break;
+    case R::StandbyBrightness:
+      dpSettings.screensaverBrightness = (uint8_t)wsStepList(dpSettings.screensaverBrightness, kWsLevels, 5, dir);
+      hubPersistDisplay(false);
+      break;
+    case R::AfterPrint: hubCycleAfterPrint(dir < 0); hubPersistDisplay(false); break;
+    case R::FinishTimeout:
+      dpSettings.finishDisplayMins = hubStepFinishDelay(dpSettings.finishDisplayMins, dir < 0);
+      hubPersistDisplay(false);
+      break;
+    case R::DoorAck: dpSettings.doorAckEnabled = !dpSettings.doorAckEnabled; hubPersistDisplay(false); break;
+    case R::KeepPrintScreen: dpSettings.keepPrintScreen = !dpSettings.keepPrintScreen; hubPersistDisplay(false); break;
+    case R::FinishTime: dpSettings.finishShowTime = !dpSettings.finishShowTime; hubPersistDisplay(false); break;
+    case R::TimeReadout:
+      dispSettings.timeDisplayMode = (uint8_t)((dispSettings.timeDisplayMode + (dir < 0 ? 2U : 1U)) % 3U);
+      hubPersistDisplay(false);
+      break;
+    case R::AnimatedBar: dispSettings.animatedBar = !dispSettings.animatedBar; hubPersistDisplay(false); break;
+    case R::SmallLabels: dispSettings.smallLabels = !dispSettings.smallLabels; hubPersistDisplay(false); break;
+    case R::FanReadout: dispSettings.fanMatchPrinter = !dispSettings.fanMatchPrinter; hubPersistDisplay(false); break;
+    case R::StatusReadout: dispSettings.hideStatusReadout = !dispSettings.hideStatusReadout; hubPersistDisplay(false); break;
+    case R::Theme: hubCycleTheme(dir < 0); hubPersistDisplayExpert(); break;
+    case R::AmbientHome: g_ambientEnabled = !g_ambientEnabled; prefsSave(); wsClick(); break;
+    case R::Rotation: hubRc2OpenRotationPreview(); break;
+    // ---- Clock & schedule ----
+    case R::NightMode: dpSettings.nightModeEnabled = !dpSettings.nightModeEnabled; hubPersistDisplay(true); break;
+    case R::NightBrightness:
+      dpSettings.nightBrightness = (uint8_t)wsStepList(dpSettings.nightBrightness, kWsLevels, 5, dir);
+      hubPersistDisplay(true);
+      break;
+    case R::NightStart: dpSettings.nightStartHour = hubStepHour(dpSettings.nightStartHour, dir < 0); hubPersistDisplay(true); break;
+    case R::NightEnd: dpSettings.nightEndHour = hubStepHour(dpSettings.nightEndHour, dir < 0); hubPersistDisplay(true); break;
+    case R::PongClock: dispSettings.pongClock = !dispSettings.pongClock; hubPersistDisplay(false); break;
+    case R::ClockTimeSize:
+      dispSettings.clockTimeSize = (uint8_t)((dispSettings.clockTimeSize + (dir < 0 ? 3U : 1U)) % 4U);
+      hubPersistDisplay(false);
+      break;
+    case R::ClockDateSize:
+      dispSettings.clockDateSize = (uint8_t)((dispSettings.clockDateSize + (dir < 0 ? 3U : 1U)) % 4U);
+      hubPersistDisplay(false);
+      break;
+    case R::ClockShowDate: dispSettings.hideClockDate = !dispSettings.hideClockDate; hubPersistDisplay(false); break;
+    case R::ClockInfo: dispSettings.showClockInfo = !dispSettings.showClockInfo; hubPersistDisplayExpert(); break;
+    case R::ClockTimeColor: dispSettings.clockTimeColor = hubCycleExpertColor(dispSettings.clockTimeColor, dir < 0); hubPersistDisplayExpert(); break;
+    case R::ClockDateColor: dispSettings.clockDateColor = hubCycleExpertColor(dispSettings.clockDateColor, dir < 0); hubPersistDisplayExpert(); break;
+    // ---- Gauges ----
+    case R::GaugeSelect:
+      g_displayGaugeColorIndex = (uint8_t)((g_displayGaugeColorIndex + (dir < 0 ? 11U : 1U)) % 12U);
+      wsClick();
+      break;
+    case R::GaugeArc: hubSelectedGaugeColors()->arc = hubCycleExpertColor(hubSelectedGaugeColors()->arc, dir < 0); hubPersistDisplayExpert(); break;
+    case R::GaugeLabel: hubSelectedGaugeColors()->label = hubCycleExpertColor(hubSelectedGaugeColors()->label, dir < 0); hubPersistDisplayExpert(); break;
+    case R::GaugeValue: hubSelectedGaugeColors()->value = hubCycleExpertColor(hubSelectedGaugeColors()->value, dir < 0); hubPersistDisplayExpert(); break;
+    case R::NozzleScale: {
+      static const uint16_t kScale[] = {100, 150, 200, 250, 300, 350, 400};
+      dispSettings.nozzleScaleMax = wsStepList(dispSettings.nozzleScaleMax, kScale, 7, dir);
+      hubPersistDisplayExpert();
+      break;
+    }
+    case R::BedScale: {
+      static const uint16_t kScale[] = {40, 60, 80, 100, 120, 150};
+      dispSettings.bedScaleMax = wsStepList(dispSettings.bedScaleMax, kScale, 6, dir);
+      hubPersistDisplayExpert();
+      break;
+    }
+    case R::ChamberScale: {
+      static const uint16_t kScale[] = {30, 40, 50, 60, 80, 100, 120};
+      dispSettings.chamberScaleMax = wsStepList(dispSettings.chamberScaleMax, kScale, 7, dir);
+      hubPersistDisplayExpert();
+      break;
+    }
+    case R::PowerScale: {
+      static const uint16_t kScale[] = {100, 250, 500, 750, 1000, 1500, 2000, 3000, 5000};
+      dispSettings.powerScaleW = wsStepList(dispSettings.powerScaleW, kScale, 9, dir);
+      hubPersistDisplayExpert();
+      break;
+    }
+    case R::Smoothing:
+      dispSettings.gaugeSmoothing = (uint8_t)wsStepClamp(dispSettings.gaugeSmoothing % 4U, dir, 0, 3);
+      hubPersistDisplayExpert();
+      break;
+    case R::WarnAt: {
+      static const uint16_t kWarn[] = {0, 50, 60, 70, 80, 90, 100};
+      dispSettings.warnThresholdPct = (uint8_t)wsStepList(dispSettings.warnThresholdPct, kWarn, 7, dir);
+      hubPersistDisplayExpert();
+      break;
+    }
+    case R::WarnColor: dispSettings.warnColor = hubCycleExpertColor(dispSettings.warnColor, dir < 0); hubPersistDisplayExpert(); break;
+    case R::GaugeDefaults:
+      dispSettings.gaugeSmoothing = 2;
+      dispSettings.warnThresholdPct = 0;
+      dispSettings.warnColor = CLR_RED;
+      hubPersistDisplayExpert();
+      wsToast("Gauge defaults restored");
+      break;
+    case R::Ams8Slot: dispSettings.landscape8Slots = !dispSettings.landscape8Slots; hubPersistDisplayExpert(); break;
+    case R::Ams9Slot: dispSettings.portrait9Slots = !dispSettings.portrait9Slots; hubPersistDisplayExpert(); break;
+    case R::SplitView: rotState.splitEnabled = !rotState.splitEnabled; hubPersistDisplayExpert(); break;
+    case R::SplitForce: rotState.splitForce = !rotState.splitForce; hubPersistDisplayExpert(); break;
+    case R::AmsTrayTypes: dispSettings.amsTrayTypes = !dispSettings.amsTrayTypes; hubPersistDisplayExpert(); break;
+    // ---- Sound & Alerts ----
+    case R::EventSounds:
+      buzzerSettings.enabled = !buzzerSettings.enabled;
+      saveBuzzerSettings();
+      initBuzzer();
+      wsClick();
+      break;
+    case R::TouchSounds:
+      buzzerSettings.buttonClick = !buzzerSettings.buttonClick;
+      saveBuzzerSettings();
+      wsClick();
+      break;
+    case R::Volume: {
+      workshop::media::MediaService& media = workshopMediaService();
+      const int value = wsStepClamp(((int)media.snapshot().runtime.volumePercent + 5) / 10 * 10, dir * 10, 0, 100);
+      if (media.setVolume((uint8_t)value)) { buzzerSettings.volume = (uint8_t)value; saveBuzzerSettings(); }
+      wsClick();
+      break;
+    }
+    case R::QuietStart:
+      buzzerSettings.quietStartHour = (uint8_t)wsStepClamp(buzzerSettings.quietStartHour, dir, 0, 23);
+      saveBuzzerSettings();
+      wsClick();
+      break;
+    case R::QuietEnd:
+      buzzerSettings.quietEndHour = hubStepHour(buzzerSettings.quietEndHour, dir < 0);
+      saveBuzzerSettings();
+      wsClick();
+      break;
+    case R::SpeakerTest: {
+      workshop::media::MediaService& media = workshopMediaService();
+      if (media.snapshot().runtime.session != workshop::media::SessionState::Idle) { wsToast("Wait for the current sound"); break; }
+      media.testSpeaker(millis());
+      g_dirty = true;
+      break;
+    }
+    case R::MicTest: {
+      workshop::media::MediaService& media = workshopMediaService();
+      if (media.snapshot().runtime.session != workshop::media::SessionState::Idle) { wsToast("Wait for the current sound"); break; }
+      media.sampleMicrophone(millis());
+      g_dirty = true;
+      break;
+    }
+    case R::Recorder: {
+      workshop::media::MediaService& media = workshopMediaService();
+      const workshop::media::SessionState s = media.snapshot().runtime.session;
+      if (part == wsm::Part::ActionA) {
+        if (s == workshop::media::SessionState::Recording) media.stopRecording(millis());
+        else if (s == workshop::media::SessionState::Idle) media.startRecording(5000U, millis());
+        else wsToast("Wait for the current sound");
+      } else {
+        if (s == workshop::media::SessionState::PlayingRecording) media.stop(millis());
+        else if (s == workshop::media::SessionState::Idle) media.playRecording(millis());
+        else wsToast("Wait for the current sound");
+      }
+      g_dirty = true;
+      break;
+    }
+    // ---- Printer alerts ----
+#if HAS_HMS_UI
+    case R::HmsEnabled: dispSettings.hmsEnabled = !dispSettings.hmsEnabled; hubPersistDisplay(false); break;
+    case R::HmsSeverity: dispSettings.hmsSeverityAll = !dispSettings.hmsSeverityAll; hubPersistDisplay(false); break;
+    case R::HmsPresent:
+      dispSettings.hmsAutoPresent = (uint8_t)((dispSettings.hmsAutoPresent + (dir < 0 ? 2U : 1U)) % 3U);
+      hubPersistDisplay(false);
+      break;
+    case R::HmsLookup: dispSettings.hmsLookupOnline = !dispSettings.hmsLookupOnline; hubPersistDisplay(false); break;
+    case R::AlertGlow: dispSettings.hmsAlertMask ^= 0x01U; hubPersistDisplay(false); break;
+    case R::AlertSound: dispSettings.hmsAlertMask ^= 0x02U; hubPersistDisplay(false); break;
+    case R::AlertLight: dispSettings.hmsAlertMask ^= 0x04U; hubPersistDisplay(false); break;
+    case R::AlertWake: dispSettings.hmsAlertMask ^= 0x08U; hubPersistDisplay(false); break;
+#endif
+    case R::GlowMode:
+      dispSettings.glowMode = (uint8_t)wsStepClamp(dispSettings.glowMode % 3U, dir, 0, 2);
+      hubPersistDisplayExpert();
+      break;
+    case R::GlowStyle:
+      dispSettings.glowStyle = (uint8_t)((dispSettings.glowStyle + (dir < 0 ? 2U : 1U)) % 3U);
+      hubPersistDisplayExpert();
+      break;
+    case R::GlowDuration:
+      dispSettings.glowDuration = (uint8_t)((dispSettings.glowDuration + (dir < 0 ? 2U : 1U)) % 3U);
+      hubPersistDisplayExpert();
+      break;
+    case R::GlowColor: dispSettings.glowColor = hubCycleExpertColor(dispSettings.glowColor, dir < 0); hubPersistDisplayExpert(); break;
+    // ---- Status light ----
+    case R::LedEnabled:
+      ledSettings.enabled = !ledSettings.enabled;
+      hubPersistLed(ledSettings.enabled ? "Status light on" : "Status light off", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedBrightness:
+      ledSettings.brightness = (uint8_t)wsStepList(ledSettings.brightness, kWsLevels, 5, dir);
+      hubPersistLed("Status light brightness updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedWhilePrinting:
+      ledSettings.autoOnWhilePrinting = !ledSettings.autoOnWhilePrinting;
+      hubPersistLed("Status light updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedPauseBreath:
+      ledSettings.pauseBreathing = !ledSettings.pauseBreathing;
+      hubPersistLed("Status light updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedFinishEffect:
+      ledSettings.finishMode = (uint8_t)wsStepClamp(ledSettings.finishMode % 3U, dir, 0, 2);
+      hubPersistLed("Finish effect updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedFinishTime: {
+      static const uint16_t kSeconds[] = {5, 15, 30, 60, 120, 300, 600};
+      ledSettings.finishSeconds = wsStepList(ledSettings.finishSeconds, kSeconds, 7, dir);
+      hubPersistLed("Finish effect updated", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    case R::LedFinishPeak:
+      ledSettings.finishBrightness = (uint8_t)wsStepList(ledSettings.finishBrightness, kWsLevels, 5, dir);
+      hubPersistLed("Finish effect updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedErrorStrobe:
+      ledSettings.errorStrobe = !ledSettings.errorStrobe;
+      hubPersistLed("Error strobe updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::LedErrorTime: {
+      static const uint16_t kSeconds[] = {0, 5, 10, 30, 60, 120, 300, 600};
+      ledSettings.errorStrobeSeconds = wsStepList(ledSettings.errorStrobeSeconds, kSeconds, 8, dir);
+      hubPersistLed("Error strobe updated", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    // ---- Video test ----
+    case R::VideoPause: {
+      workshop::media::MediaService& media = workshopMediaService();
+      const workshop::media::SessionState s = media.snapshot().runtime.session;
+      if (s == workshop::media::SessionState::PlayingVideo) media.pauseVideo(true, millis());
+      else if (s == workshop::media::SessionState::Paused) media.pauseVideo(false, millis());
+      g_wsVideoChromeDrawn = false;
+      g_dirty = true;
+      break;
+    }
     default:
       break;
   }
@@ -870,11 +1498,48 @@ static void wsDrawScrollbar(const wsm::Screen& s, const wsm::PageSpec& p) {
   tft.fillRect(s.w - 4, y, 2, thumb, OS12V_MUTED);
 }
 
+// Video area when no video is running (and in framebuffer captures).
+static void wsDrawVideoIdle(const wsm::Screen& s) {
+  const wsm::Rect v = wsm::videoRect(s, wsm::PageId::VideoTest);
+  tft.fillRect(v.x, v.y, v.w, v.h, TFT_BLACK);
+  const bool running = wsVideoSessionActive();
+  uiDrawFit(running ? "Video playing" : (g_wsVideoStartFailed ? "Video could not start" : "Video is not running"),
+            v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
+  uiDrawFit(running ? "Moving shapes check the screen refresh." : "Go back and open Video test again to retry.",
+            v.x + v.w / 2, v.y + v.h / 2 + 14, v.w - 32, FONT_SMALL, MC_DATUM, OS12V_MUTED, TFT_BLACK);
+}
+
+static void wsDrawVideoControls(const wsm::Screen& s, const wsm::PageSpec& p) {
+  for (uint8_t r = 0; r < p.rowCount; ++r) {
+    const wsm::Rect row = wsm::rowRect(s, p.id, 0, r);
+    if (!row.empty()) wsDrawRow(s, p.rows[r], row);
+  }
+}
+
 static void wsMoreDraw(bool full) {
-  (void)full;
+  if (g_rotationPreviewMode) { hubRc2DrawRotationPreview(); return; }
   const wsm::Screen s = wsScreen();
   if (!wsPageLive(g_wsPage)) g_wsPage = wsm::PageId::Root;
   const wsm::PageSpec& p = wsm::page(g_wsPage);
+  if (wsVideoDirect()) {
+    // The backend owns the video area; draw only the chrome around it, and
+    // only when it changes, straight to the panel (smartHubDraw skips the
+    // frame buffer while wsVideoDirect()).
+    if (!g_wsVideoChromeDrawn || g_dirty || full) {
+      const wsm::Rect v = wsm::videoRect(s, p.id);
+      if (!g_wsVideoAreaCleared) { tft.fillRect(v.x, v.y, v.w, v.h, TFT_BLACK); g_wsVideoAreaCleared = true; }
+      tft.fillRect(0, 0, s.w, v.y, OS12V_BG);
+      tft.fillRect(0, v.bottom(), s.w, s.h - v.bottom(), OS12V_BG);
+      wsDrawHeader(s, p);
+      wsDrawVideoControls(s, p);
+      uiBottomNav(3, nullptr);
+      g_wsVideoChromeDrawn = true;
+      markFrameDirty();
+    }
+    g_dirty = false;
+    return;
+  }
+  g_wsVideoChromeDrawn = false;
   g_wsScroll = wsm::clampScroll(s, p.id, g_wsScroll);
   tft.fillScreen(OS12V_BG);
   wsDrawHeader(s, p);
@@ -882,6 +1547,9 @@ static void wsMoreDraw(bool full) {
     wsDrawDialog(s);
   } else if (p.layout == wsm::PageLayout::Tiles) {
     wsDrawRoot(s);
+  } else if (p.layout == wsm::PageLayout::Video) {
+    wsDrawVideoIdle(s);
+    wsDrawVideoControls(s, p);
   } else {
     for (uint8_t r = 0; r < p.rowCount; ++r) {
       const wsm::Rect row = wsm::rowRect(s, p.id, g_wsScroll, r);
@@ -898,16 +1566,49 @@ static void wsMoreDraw(bool full) {
 // Touch
 // ---------------------------------------------------------------------------
 
+// Stops the video test if the More screen is no longer showing it.
+static void wsVideoGuard(ScreenState screen) {
+  if (g_wsPage == wsm::PageId::VideoTest && screen != SCREEN_HUB_MORE && wsVideoSessionActive()) wsVideoStop();
+}
+
 static void wsTab(uint8_t i) {
   g_wsDialog = WsDialog::None;
+  if (i < 3) { wsLeavePage(wsm::PageId::Root); g_wsPage = wsm::PageId::Root; g_wsScroll = 0; }
   if (i == 0) setPage(SCREEN_HUB_HOME);
   else if (i == 1) setPage(SCREEN_HUB_PRINTER);
   else if (i == 2) setPage(SCREEN_HUB_WORKSHOP);
   else wsOpen(wsm::PageId::Root);
 }
 
+// Guarded rotation preview (12.0 layout, kept as is: its hold-to-commit
+// button uses the shared hold-progress path in smartHubUpdateHoldProgress).
+static bool wsRotationPreviewTouch(int16_t x, int16_t y, bool longPress) {
+  if (hubRc2HitRef(x, y, 10, 196, 220, 52)) {
+    g_rotationPreviewValue = (uint8_t)((g_rotationPreviewValue + 3U) % 4U);
+    buzzerPlay(BUZZ_CLICK); g_dirty = true; return true;
+  }
+  if (hubRc2HitRef(x, y, 250, 196, 220, 52)) {
+    g_rotationPreviewValue = (uint8_t)((g_rotationPreviewValue + 1U) % 4U);
+    buzzerPlay(BUZZ_CLICK); g_dirty = true; return true;
+  }
+  if (hubRc2HitRef(x, y, 10, 258, 140, 52)) {
+    g_rotationPreviewMode = false; buzzerPlay(BUZZ_CLICK); g_dirty = true; return true;
+  }
+  if (hubRc2HitRef(x, y, 160, 258, 310, 52)) {
+    if (longPress) {
+      dispSettings.rotation = (uint8_t)(g_rotationPreviewValue & 3U);
+      g_rotationPreviewMode = false;
+      hubPersistDisplayExpert();
+    } else {
+      buzzerPlay(BUZZ_CLICK); g_dirty = true;
+    }
+    return true;
+  }
+  return true;
+}
+
 static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
-  (void)longPress;
+  if (g_rotationPreviewMode) return wsRotationPreviewTouch(x, y, longPress);
   const wsm::Screen s = wsScreen();
   const wsm::PageSpec& p = wsm::page(g_wsPage);
   const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y);
@@ -952,7 +1653,8 @@ static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
       const bool enabled = h.part == wsm::Part::ActionB ? v.enabledB : v.enabled;
       if (!enabled || spec.kind == wsm::RowKind::Info || spec.kind == wsm::RowKind::Code) {
         // Disabled controls and read-only rows say why instead of doing nothing.
-        if (v.reason) wsToast(v.reason);
+        const char* why = h.part == wsm::Part::ActionB ? v.reasonB : v.reason;
+        if (why) wsToast(why);
         return true;
       }
       wsRowTap(spec.id, h.part);
@@ -973,6 +1675,15 @@ static bool wsMoreShowPage(const char* name) {
     else if (!strcmp(name, "system-network") || !strcmp(name, "system-network-address") ||
              !strcmp(name, "system-network-review")) id = wsm::PageId::Network;
     else if (!strcmp(name, "hardware-power") || !strcmp(name, "hardware-cooldown")) id = wsm::PageId::PrinterPower;
+    else if (!strcmp(name, "display") || !strcmp(name, "display-quick") || !strcmp(name, "display-behavior") ||
+             !strcmp(name, "display-visual") || !strcmp(name, "display-theme") || !strcmp(name, "display-extras")) id = wsm::PageId::Display;
+    else if (!strcmp(name, "display-schedule")) id = wsm::PageId::ClockSchedule;
+    else if (!strcmp(name, "display-gauge-colors") || !strcmp(name, "display-gauge-scales") ||
+             !strcmp(name, "display-gauge-behavior") || !strcmp(name, "display-layout")) id = wsm::PageId::Gauges;
+    else if (!strcmp(name, "display-signals") || !strcmp(name, "display-glow") ||
+             !strcmp(name, "hardware-error")) id = wsm::PageId::Alerts;
+    else if (!strcmp(name, "hardware-finish")) id = wsm::PageId::StatusLight;
+    else if (!strcmp(name, "media") || !strcmp(name, "media-lab") || !strcmp(name, "hardware-sound")) id = wsm::PageId::SoundAlerts;
     else if (!strcmp(name, "system-time-locale")) id = wsm::PageId::TimeLocale;
     else return false;
   }
