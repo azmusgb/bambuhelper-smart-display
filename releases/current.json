@@ -24,7 +24,7 @@
     "branch": "feature/os12-more-pages",
     "name": "Workshop OS 12.1.2 New More Pages",
     "purpose": "More/System overhaul step 2: one header with Back top-left, the tab bar on every page, single-line 44 px rows, a new six-tile More root, and new Printer & Power (with Auto power-off), Network (with Time & locale), Local Portal and Updates & About (with Device health) pages. The System screen is retired. Display and Sound & Alerts still open their 12.0 screens until the next step.",
-    "pullRequest": null,
+    "pullRequest": 168,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required",
