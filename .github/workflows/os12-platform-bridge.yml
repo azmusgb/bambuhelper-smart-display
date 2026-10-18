@@ -84,6 +84,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: os12-platform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Reconstruct and compile OS12 device platform
@@ -93,11 +97,17 @@ jobs:
       OS12_RELEASE_VERSION: '12.0.0'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
 
       - name: Prepare pinned PlatformIO toolchain
         run: |
@@ -181,7 +191,7 @@ jobs:
           cat "$OUT/BUILD-INFO.txt"
 
       - name: Upload platform-regression evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: workshop-os12-platform-regression-evidence-${{ env.OS12_SOURCE_SHA }}
           path: /tmp/workshop-os12-platform-regression-evidence/

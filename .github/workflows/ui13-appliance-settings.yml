@@ -41,11 +41,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -66,6 +66,12 @@ jobs:
           bash -n scripts/run_rc10_local.sh
           bash -n scripts/run_ui12_local.sh
           bash -n scripts/run_ui13_local.sh
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
 
       - name: Prepare pinned PlatformIO toolchain
         shell: bash
@@ -106,7 +112,7 @@ jobs:
             sha256sum "$OTA" | awk '{print "ota_sha256=" $1}'
           } | tee ui13-gate-artifact/BUILD-REPORT.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: workshop-os-v11-28-ui13-appliance-settings-ci
           retention-days: 90
