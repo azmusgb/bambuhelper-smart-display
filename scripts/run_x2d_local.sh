@@ -14,6 +14,7 @@ BUILD="${BUILD:-/tmp/ws350-os12-x2d-build}"
 BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
 BRIDGE_URL="${X2D_BRIDGE_URL:-}"
 RECONSTRUCT=0
+IN_PLACE=0
 DO_BUILD=0
 FLASH=0
 CONFIRM_IDLE=0
@@ -27,6 +28,9 @@ Usage:
 Options:
   --reconstruct           Rebuild the canonical OS12 UX tree at $BASE first
                           (automatic when $BASE does not exist).
+  --in-place              Apply the overlays directly to $BASE instead of a copy,
+                          so the build is incremental. Only for throwaway trees
+                          whose canonical artifacts were already packaged (CI).
   --build                 Compile the ws_lcd_350 image in $BUILD.
   --flash                 USB-flash the built image (implies --build). Captures
                           partition table, NVS and otadata first and refuses on a
@@ -41,6 +45,7 @@ EOF
 while (( $# )); do
   case "$1" in
     --reconstruct) RECONSTRUCT=1 ;;
+    --in-place) IN_PLACE=1 ;;
     --build) DO_BUILD=1 ;;
     --flash) FLASH=1; DO_BUILD=1 ;;
     --confirm-printer-idle) CONFIRM_IDLE=1 ;;
@@ -63,11 +68,15 @@ if [[ "$RECONSTRUCT" -eq 1 || ! -d "$BASE/src" ]]; then
 fi
 
 echo "=== X2D overlay candidate ==="
-echo "BASE=$BASE"
-echo "BUILD=$BUILD"
-rm -rf "$BUILD"
-# Copy .pio too so the overlay build reuses the canonical object cache.
-cp -a "$BASE" "$BUILD"
+if [[ "$IN_PLACE" -eq 1 ]]; then
+  BUILD="$BASE"
+  echo "BUILD=$BUILD (in place; canonical tree is consumed)"
+else
+  echo "BASE=$BASE"
+  echo "BUILD=$BUILD"
+  rm -rf "$BUILD"
+  cp -a "$BASE" "$BUILD"
+fi
 
 python3 "$ROOT/apply_workshop_os12_x2d_bridge_camera.py" --repo "$BUILD" --bridge-url "$BRIDGE_URL" --apply
 python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply

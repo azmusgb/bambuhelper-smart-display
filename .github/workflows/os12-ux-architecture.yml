@@ -191,12 +191,13 @@ jobs:
         run: |
           set -euo pipefail
           # Proves the reconstruction-only X2D overlays still apply to the real
-          # tree and compile. Runs after the canonical candidate is uploaded and
-          # uses a separate build tree, so it cannot affect that artifact.
+          # tree and compile. The canonical candidate was already copied out and
+          # uploaded above, so the overlays go straight onto the build tree for
+          # an incremental build instead of a full rebuild of a copy.
           bash -n scripts/run_x2d_local.sh
-          BASE=/tmp/ws350-os12-ux-build BUILD=/tmp/ws350-os12-x2d-build \
+          BASE=/tmp/ws350-os12-ux-build \
             X2D_BRIDGE_URL=http://10.0.0.16:8091/x2d/frame.jpg \
-            bash scripts/run_x2d_local.sh --build
+            bash scripts/run_x2d_local.sh --in-place --build
 
       - name: Record non-promotion state
         if: always()
