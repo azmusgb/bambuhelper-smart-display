@@ -19,7 +19,7 @@ import time
 
 from accept_os12_media_physical import update_identity
 from accept_os12_media_runtime import api, status, validate_status
-from accept_os12_portal_runtime import AcceptanceError, Client, check
+from accept_os12_portal_runtime import AcceptanceError, Client, check, establish_portal_session
 from accept_os12_unattended import frame_bytes, parse_ppm, show
 from capture_x2d_full_ui import frame_metrics, png_bytes, wait_for_live_frame, ensure_idle
 
@@ -56,6 +56,7 @@ def retry_frame(client: Client, attempts: int = 3) -> bytes:
 def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
     client = Client(base_url)
+    establish_portal_session(client)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else Path.home() / "Downloads" / f"ws350-x2d-lifecycle-{stamp}"
     png_dir = out_dir / "png"

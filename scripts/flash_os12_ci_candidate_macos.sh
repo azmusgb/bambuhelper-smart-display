@@ -279,13 +279,24 @@ fi
 
 printf '\n=== Exact CI application OTA ===\n'
 OTA_RESPONSE="$BACKUP_DIR/ota-upload-response.txt"
+# 12.0.1+ firmware requires a Local Portal session for the manual OTA route.
+# Firmware that still runs the retired 12.0.0 code-free overlay does not.
+COOKIE_ARGS=()
+UPDATE_STATUS_HTTP="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$BASE_URL/os12/update/status" || true)"
+if [[ "$UPDATE_STATUS_HTTP" == "401" ]]; then
+  [[ -n "${WORKSHOP_OS_COOKIE_JAR:-}" ]] || WORKSHOP_OS_COOKIE_JAR="$BACKUP_DIR/.portal-session.cookies"
+  export WORKSHOP_OS_COOKIE_JAR
+  python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --sign-in
+  COOKIE_ARGS=(-b "$WORKSHOP_OS_COOKIE_JAR")
+fi
 HTTP_CODE="$(curl -sS --max-time 180 \
+  ${COOKIE_ARGS[@]+"${COOKIE_ARGS[@]}"} \
   -o "$OTA_RESPONSE" \
   -w '%{http_code}' \
   -H "Origin: $BASE_URL" \
   -H "Referer: $BASE_URL/recovery" \
   -H "X-SHA256: $EXPECT_FIRMWARE_SHA256" \
-  -F "file=@$CI_FIRMWARE;filename=Workshop-OS-12.0.0.bin;type=application/octet-stream" \
+  -F "file=@$CI_FIRMWARE;filename=Workshop-OS-candidate.bin;type=application/octet-stream" \
   "$BASE_URL/ota/upload" || true)"
 
 if [[ "$HTTP_CODE" != "200" && "$HTTP_CODE" != "202" ]]; then
@@ -313,6 +324,9 @@ done
   exit 29
 }
 
+if [[ -n "${WORKSHOP_OS_COOKIE_JAR:-}" && "$WORKSHOP_OS_COOKIE_JAR" == "$BACKUP_DIR/.portal-session.cookies" ]]; then
+  rm -f "$WORKSHOP_OS_COOKIE_JAR"
+fi
 python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --probe-only
 
 cat <<EOF

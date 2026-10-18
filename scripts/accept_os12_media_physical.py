@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 from accept_os12_portal_runtime import (
     AcceptanceError,
     Client,
-    assert_code_free_portal,
+    establish_portal_session,
     check,
 )
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -51,7 +51,7 @@ def observation(prompt: str) -> bool | None:
 def update_identity(client: Client) -> dict:
     response = client.request(
         "/os12/update/status",
-        headers={"X-BambuHelper-Client": "1", "Accept": "application/json"},
+        headers={"Accept": "application/json"},
         timeout=10.0,
     )
     check(response.status == 200,
@@ -96,7 +96,7 @@ def write_evidence(destination: Path, evidence: dict) -> None:
 def native_view_catalog(client: Client) -> list[dict]:
     response = client.request(
         "/hub/views",
-        headers={"X-BambuHelper-Client": "1", "Accept": "application/json"},
+        headers={"Accept": "application/json"},
         timeout=10.0,
     )
     check(response.status == 200,
@@ -148,7 +148,7 @@ def show_native_media_view(
         "/hub/show",
         method="POST",
         form={"page": view_id},
-        headers={"X-BambuHelper-Client": "1", "Accept": "application/json,text/plain,*/*"},
+        headers={"Accept": "application/json,text/plain,*/*"},
         timeout=10.0,
     )
     accepted = response.status == 200
@@ -311,9 +311,8 @@ def run(args: argparse.Namespace) -> int:
     navigation_log: list[dict] = evidence["navigationObservations"]
 
     try:
-        assert_code_free_portal(client)
-        evidence["portalMode"] = "local-code-free"
-        print("PASS  code-free local portal contract")
+        evidence["portalMode"] = establish_portal_session(client)
+        print("PASS  signed-in local portal contract")
 
         identity = update_identity(client)
         evidence["runtimeIdentity"] = identity

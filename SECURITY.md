@@ -8,6 +8,8 @@ Workshop OS is local-first firmware that can observe and issue commands to physi
 | --- | --- | --- |
 | Workshop OS v11.19.1 accepted source | Supported | Current accepted source baseline. |
 | Workshop OS v11.20 Portal Auth RC1 | Active security candidate | Portal/session and AP-boundary hardening are validated here and still require physical WS350 acceptance before promotion. |
+| Workshop OS 12.0.1 Portal Sign-in Restore | Active security candidate | Restores the portal-code session on the OS12 line after the 12.0.0 code-free overlay; see `docs/portal-signin-restore-12-0-1.md`. Requires physical WS350 acceptance. |
+| Workshop OS 12.0.0 (`48ddd58`, merged-unaccepted) | Known security defect | Code-free portal: anonymous LAN reads (including `/printer/access-code`) and mutations accepted with `X-BambuHelper-Client: 1`. Superseded by 12.0.1. |
 | Static installer v7.2 | Supported for the published download channel | Security-relevant installer/recovery defects should be assessed independently from source-line fixes. |
 | Static rollback v7.1 | Recovery-only | Retained only as the immediate rollback image. |
 | Historical RCs / archived manifests | Unsupported | Kept for provenance only. |
@@ -40,7 +42,7 @@ Please treat these as security-sensitive even when they look like functional bug
 For an authenticated Workshop OS source line:
 
 - normal LAN management routes require the boot-scoped portal-code session;
-- mutating requests retain same-origin protection in addition to authentication;
+- mutating requests retain same-origin protection in addition to authentication; same-origin is established only by the browser `Origin`/`Referer` headers, never by a client-supplied marker header;
 - logout and reboot invalidate prior portal sessions;
 - the rotating portal code is intentionally shown on the physical System screen for the owner but must not be printed to Serial/log output;
 - normal-LAN Recovery access is authenticated;
@@ -51,7 +53,7 @@ For an authenticated Workshop OS source line:
 - portal-code login may remain available on AP so the owner can establish authenticated access to protected surfaces when needed;
 - the portal credential must not be embedded in command-line arguments, shared captures, diagnostics, or support artifacts.
 
-The pinned upstream setup/fallback AP currently uses a known default Wi-Fi password. That is an onboarding transport control, **not** a substitute for Workshop OS authorization. Changes that reintroduce blanket `isAPMode()` authorization are security regressions.
+The pinned upstream setup/fallback AP currently uses a known default Wi-Fi password. That is an onboarding transport control, **not** a substitute for Workshop OS authorization. Changes that reintroduce blanket `isAPMode()` authorization are security regressions. So are overlays that make normal-LAN routes anonymous ("code-free") or that accept a request header the client chooses as proof of origin.
 
 ## Control-safety expectations
 

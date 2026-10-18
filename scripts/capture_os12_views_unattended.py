@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Capture every required Workshop OS 12 native view without operator prompts.
 
-The helper drives the local code-free portal, verifies exact running firmware
+The helper drives the signed-in local portal, verifies exact running firmware
 source identity, captures all required 480x320 framebuffer views, converts them
 to PNG, writes a manifest, and packages the result as a ZIP for review.
 
@@ -23,7 +23,7 @@ import time
 import zlib
 
 from accept_os12_media_physical import update_identity
-from accept_os12_portal_runtime import AcceptanceError, Client, assert_code_free_portal, check
+from accept_os12_portal_runtime import AcceptanceError, Client, establish_portal_session, check
 from accept_os12_unattended import (
     REQUIRED_VIEWS,
     analyze_frame,
@@ -102,7 +102,7 @@ def capture(args: argparse.Namespace) -> int:
           "--expect-source-sha must be exactly 40 lowercase hex characters")
 
     client = Client(base_url)
-    assert_code_free_portal(client)
+    establish_portal_session(client)
 
     identity = update_identity(client)
     running = identity["runningSourceCommit"]

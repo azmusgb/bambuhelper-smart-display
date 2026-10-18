@@ -26,7 +26,7 @@ python3 scripts/accept_os12_unattended.py \\
 By default, the runner resolves the exact expected source SHA from the `candidate` entry in `releases/device-update.json`, refuses to test a different running source, and requires no operator prompts. It automatically records:
 
 - exact running source identity before and after the run;
-- code-free local portal contract;
+- signed-in local portal contract (signed-out `/status` is 401; one hidden code prompt per run);
 - required native-view catalog coverage;
 - canonical `/hub/show` routing across the whole 480x320 UI set;
 - framebuffer dimensions, content sanity, hashes, and route diversity;
