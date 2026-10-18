@@ -31,17 +31,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         name: Checkout Workshop OS repository
 
       - name: Checkout pinned BambuHelper baseline
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: Keralots/BambuHelper
           ref: 8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4
           path: upstream
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -224,7 +224,7 @@ jobs:
             sha256sum firmware-gate-artifacts/*.bin
           } | tee firmware-gate-artifacts/validation-report.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: workshop-os-v11-22-display-expert-rc1
           retention-days: 14
