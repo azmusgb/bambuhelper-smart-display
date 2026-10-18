@@ -152,8 +152,9 @@ X2D start and persist until reboot; stop and pause only gate acquisition.
 
 The viewer polish overlay makes Back plain navigation, removes redundant panel
 refreshes, shows "Not started" on the Media row when an on-device start is
-refused (no Wi-Fi or no bridge URL), and makes `/hub/frame.ppm` capture the
-root framebuffer while the viewer is open.
+refused (no Wi-Fi or no bridge URL), and makes `/hub/frame.ppm` work while the
+viewer is open. The WS350 panel cannot be read back, so captures redraw the
+viewer chrome and the last decoded camera frame into an offscreen sprite.
 
 The supplied bridge URL must be:
 
