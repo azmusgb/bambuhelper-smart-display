@@ -9,6 +9,7 @@ Workshop OS is local-first firmware that can observe and issue commands to physi
 | Workshop OS v11.19.1 accepted source | Supported | Current accepted source baseline. |
 | Workshop OS v11.20 Portal Auth RC1 | Active security candidate | Portal/session and AP-boundary hardening are validated here and still require physical WS350 acceptance before promotion. |
 | Workshop OS 12.0.1 Portal Sign-in Restore | Active security candidate | Restores the portal-code session on the OS12 line after the 12.0.0 code-free overlay; see `docs/portal-signin-restore-12-0-1.md`. Requires physical WS350 acceptance. |
+| Workshop OS 12.1.0 Read-only Status Token | Stacked candidate | Adds one bearer-token, GET-only status route for Local AI (`docs/status-lite-token-12-1-0.md`). The token opens nothing else; touchscreen approval required. |
 | Workshop OS 12.0.0 (`48ddd58`, merged-unaccepted) | Known security defect | Code-free portal: anonymous LAN reads (including `/printer/access-code`) and mutations accepted with `X-BambuHelper-Client: 1`. Superseded by 12.0.1. |
 | Static installer v7.2 | Supported for the published download channel | Security-relevant installer/recovery defects should be assessed independently from source-line fixes. |
 | Static rollback v7.1 | Recovery-only | Retained only as the immediate rollback image. |
@@ -52,6 +53,7 @@ For an authenticated Workshop OS source line:
 - printer control, mapped printer power, settings export, debug and unrelated privileged surfaces must not become anonymously accessible merely because the device entered AP mode;
 - portal-code login may remain available on AP so the owner can establish authenticated access to protected surfaces when needed;
 - the portal credential must not be embedded in command-line arguments, shared captures, diagnostics, or support artifacts.
+- the read-only status token (`GET /api/status/lite` only) is device-issued after an on-screen Allow, stored only as a SHA-256 digest, shown once, and never accepted by any other route; it must not appear in logs, exports, captures or support artifacts.
 
 The pinned upstream setup/fallback AP currently uses a known default Wi-Fi password. That is an onboarding transport control, **not** a substitute for Workshop OS authorization. Changes that reintroduce blanket `isAPMode()` authorization are security regressions. So are overlays that make normal-LAN routes anonymous ("code-free") or that accept a request header the client chooses as proof of origin.
 
