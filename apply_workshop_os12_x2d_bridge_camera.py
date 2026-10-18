@@ -3,8 +3,13 @@
 
 The canonical Workshop OS 12 media backend deliberately remains transport-agnostic.
 This patch is applied only to a reconstructed firmware tree for physical testing.
-It installs one fixed private-LAN JPEG endpoint at build time and exposes a
-single authenticated start route. Arbitrary media URLs are never accepted.
+It installs one fixed private-LAN JPEG endpoint at build time, acquires frames on
+a dedicated FreeRTOS worker (never in the foreground media poll), exposes a single
+authenticated start route, and wires the existing on-device Video row to the
+fixed X2D source. Arbitrary media URLs are never accepted.
+
+Starting the viewer from the authenticated web route also moves the physical
+display to the video viewer, whatever page or screen it was showing.
 """
 from __future__ import annotations
 
@@ -27,6 +32,10 @@ static void handleWorkshopMediaVideoStartX2dBridge() {
   workshop::media::MediaService& media = workshopMediaService();
   // Fixed build-time bridge source only. No request URL/path is accepted.
   const bool started = media.playMjpeg("x2d-bridge", millis());
+  if (started) {
+    // Give the existing OS12 video viewer physical display ownership too.
+    smartHubShowPage("media-video");
+  }
   sendWorkshopMediaStatus(started ? 202 : 409);
 }
 
@@ -35,7 +44,10 @@ static void handleWorkshopMediaVideoStartX2dBridge() {
 ROUTE = '  SECURE_POST("/os12/media/video/start-x2d-bridge", handleWorkshopMediaVideoStartX2dBridge);\n'
 
 CPP_INCLUDE_ANCHOR = "#if defined(ESP32)\n#include <esp_heap_caps.h>\n#endif\n"
-CPP_INCLUDE_REPLACEMENT = "#if defined(ESP32)\n#include <HTTPClient.h>\n#include <WiFi.h>\n#include <esp_heap_caps.h>\n#endif\n"
+CPP_INCLUDE_REPLACEMENT = (
+    "#if defined(ESP32)\n#include <HTTPClient.h>\n#include <WiFi.h>\n#include <esp_heap_caps.h>\n"
+    "#include <freertos/FreeRTOS.h>\n#include <freertos/semphr.h>\n#include <freertos/task.h>\n#endif\n"
+)
 CPP_SOURCE_ANCHOR = 'static const char kPrinterCameraSource[] = "printer-camera";\n'
 CPP_SOURCE_ADDITION = 'static const char kX2dBridgeSource[] = "x2d-bridge";\n'
 CPP_CONSTANT_ANCHOR = "static const uint32_t kVideoFrameIntervalMs = 200U;  // 5 fps diagnostic ceiling; preserve touch/main-loop headroom.\n"
@@ -51,8 +63,12 @@ CPP_DIMENSION_ADDITION = (
 )
 CPP_BEGIN_MJPEG_ANCHOR = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
     if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
     cameraBegin();
-    if (!cameraActive()) return false;
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
     next = VideoSource::PrinterCamera;
   } else {
     return false;
@@ -60,12 +76,17 @@ CPP_BEGIN_MJPEG_ANCHOR = """  } else if (std::strcmp(source, kPrinterCameraSourc
 """
 CPP_BEGIN_MJPEG_REPLACEMENT = """  } else if (std::strcmp(source, kPrinterCameraSource) == 0) {
     if (!cameraCanStreamDisplayedPrinter()) return false;
+    cameraSetMediaOwned(true);
     cameraBegin();
-    if (!cameraActive()) return false;
+    if (!cameraActive()) {
+      cameraSetMediaOwned(false);
+      return false;
+    }
     next = VideoSource::PrinterCamera;
   } else if (std::strcmp(source, kX2dBridgeSource) == 0) {
 #if defined(ESP32)
     if (WORKSHOP_X2D_BRIDGE_URL[0] == '\\0' || WiFi.status() != WL_CONNECTED) return false;
+    if (!x2dBeginFetchSession()) return false;
     next = VideoSource::X2dBridge;
 #else
     return false;
@@ -90,94 +111,293 @@ HEADER_ENUM_REPLACEMENT = "  enum class VideoSource : uint8_t { None = 0, Demo, 
 HEADER_METHOD_ANCHOR = "  void renderLatestCameraFrame(uint32_t nowMs);\n"
 HEADER_METHOD_ADDITION = "  void renderX2dBridgeFrame(uint32_t nowMs);\n"
 
-RENDER_X2D = r'''
-void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
-#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
-  if (!videoRequested_ || videoPaused_ || videoSource_ != VideoSource::X2dBridge) return;
-  if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
-
-  // Set the deadline before network I/O so failures stay bounded to the same
-  // 5 fps ceiling rather than spinning the foreground media poll.
-  videoLastRenderAtMs_ = nowMs;
-  ++videoDiagnostics_.polls;
-
-  if (WORKSHOP_X2D_BRIDGE_URL[0] == '\0' || WiFi.status() != WL_CONNECTED) {
-    ++videoDiagnostics_.noFramePolls;
-    return;
+SMART_HUB_MEDIA_HINT_ANCHOR = '"Tap row to open motion test"'
+SMART_HUB_MEDIA_HINT_REPLACEMENT = '"Tap row to open X2D camera"'
+SMART_HUB_DEMO_START_ANCHOR = 'if(!media.playMjpeg("demo-video",millis()))g_ui12SettingsView=10;'
+SMART_HUB_X2D_START_REPLACEMENT = 'if(!media.playMjpeg("x2d-bridge",millis()))g_ui12SettingsView=10;'
+SMART_HUB_IDLE_HINT_ANCHOR = '"Start the built-in motion test from Media."'
+SMART_HUB_IDLE_HINT_REPLACEMENT = '"Tap X2D Camera in Media to start."'
+SMART_HUB_ACTIVE_HINT_ANCHOR = '"Built-in motion diagnostic"'
+# Drawn once under the camera viewport; the first decoded frame covers it.
+SMART_HUB_ACTIVE_HINT_REPLACEMENT = '"Waiting for X2D camera frames"'
+SMART_HUB_COMPOSITOR_ANCHOR = """  lgfx::LovyanGFX* panel = tft_ptr;
+  const bool buffered = hubEnsureFrame();
+  if (buffered) {
+    panel = g_hubPanelCanvas;
+    tft_ptr = g_hubFrame;
+    g_hubFrameDirty = false;
   }
+"""
+SMART_HUB_COMPOSITOR_REPLACEMENT = """  lgfx::LovyanGFX* panel = tft_ptr;
+
+  // Video playback already renders directly into the root framebuffer.
+  // Do not composite the stale full-screen Smart Hub sprite over it.
+  const bool directVideoViewer =
+      screen == SCREEN_HUB_MORE && g_ui12SettingsView == 12;
+
+  const bool buffered = !directVideoViewer && hubEnsureFrame();
+
+  if (directVideoViewer) {
+    // Force a complete buffered redraw after leaving the video viewer.
+    g_hubFramePrimed = false;
+  }
+
+  if (buffered) {
+    panel = g_hubPanelCanvas;
+    tft_ptr = g_hubFrame;
+    g_hubFrameDirty = false;
+  }
+"""
+
+ASYNC_MARKER = "static TaskHandle_t gX2dFetchTask = nullptr;"
+
+# Bridge HTTP acquisition runs on a dedicated FreeRTOS worker. Physical testing
+# showed that HTTPClient work inside workshopMediaPoll() starves the WS350's own
+# web/control plane once playback starts, so the foreground poll only claims and
+# decodes frames the worker has already published.
+ASYNC_BLOCK = r'''
+#if defined(ESP32)
+// The worker task and its three PSRAM frame buffers are created on the first
+// X2D start and intentionally persist for the rest of the boot; stop and pause
+// only gate acquisition.
+static const uint32_t kBridgeWorkerStackBytes = 8192U;
+static const TickType_t kBridgeWorkerIdleTicks = pdMS_TO_TICKS(25U);
+static const TickType_t kBridgeWorkerCycleTicks = pdMS_TO_TICKS(kVideoFrameIntervalMs);
+
+static TaskHandle_t gX2dFetchTask = nullptr;
+static SemaphoreHandle_t gX2dFrameMutex = nullptr;
+// Three buffers rotate by pointer swap so the mutex is only ever held for a
+// swap: the worker fills gX2dFetchBuffer and publishes it by swapping with
+// gX2dPublishedFrame; the renderer claims a published frame by swapping it
+// with gX2dDisplayFrame and decodes outside the lock.
+static uint8_t* gX2dFetchBuffer = nullptr;
+static uint8_t* gX2dPublishedFrame = nullptr;
+static uint8_t* gX2dDisplayFrame = nullptr;
+static size_t gX2dDisplayBytes = 0U;  // Foreground-owned; last decoded frame.
+static size_t gX2dPublishedBytes = 0U;
+static uint32_t gX2dPublishedSequence = 0U;
+// Written only while holding gX2dFrameMutex. The worker reads the enable flag
+// unlocked as an idle hint and re-validates both fields under the lock before
+// publishing, so a pause/stop/reopen can never surface an older session's frame.
+static volatile bool gX2dFetchEnabled = false;
+static volatile uint32_t gX2dFetchGeneration = 0U;
+
+static void x2dSetFetchEnabled(bool enabled, bool clearPublished) {
+  if (!gX2dFrameMutex) return;
+  xSemaphoreTake(gX2dFrameMutex, portMAX_DELAY);
+  ++gX2dFetchGeneration;
+  gX2dFetchEnabled = enabled;
+  if (clearPublished) gX2dPublishedBytes = 0U;
+  xSemaphoreGive(gX2dFrameMutex);
+}
+
+// Fetch one complete JPEG into dest. Returns its size, or 0 on any failure.
+static size_t x2dFetchOnce(uint8_t* dest) {
+  if (WORKSHOP_X2D_BRIDGE_URL[0] == '\0' || WiFi.status() != WL_CONNECTED) return 0U;
 
   HTTPClient http;
   http.setConnectTimeout(kBridgeConnectTimeoutMs);
   http.setTimeout(kBridgeReadTimeoutMs);
   http.setReuse(false);
-  if (!http.begin(WORKSHOP_X2D_BRIDGE_URL)) {
-    ++videoDiagnostics_.noFramePolls;
-    return;
-  }
+  if (!http.begin(WORKSHOP_X2D_BRIDGE_URL)) return 0U;
   http.addHeader("Cache-Control", "no-cache");
 
   const int status = http.GET();
   const int contentLength = http.getSize();
-  if (status != HTTP_CODE_OK || contentLength <= 4 ||
-      static_cast<size_t>(contentLength) > kBridgeMaxFrameBytes) {
-    http.end();
-    ++videoDiagnostics_.noFramePolls;
-    return;
-  }
-
-  uint8_t* frame = static_cast<uint8_t*>(
-      heap_caps_malloc(static_cast<size_t>(contentLength), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!frame) {
-    http.end();
-    ++videoDiagnostics_.noFramePolls;
-    return;
-  }
-
-  WiFiClient* stream = http.getStreamPtr();
-  size_t received = 0;
-  const uint32_t readStartedAt = millis();
-  while (received < static_cast<size_t>(contentLength) &&
-         millis() - readStartedAt < kBridgeReadTimeoutMs) {
-    const int available = stream->available();
-    if (available > 0) {
-      size_t request = static_cast<size_t>(available);
-      const size_t remaining = static_cast<size_t>(contentLength) - received;
-      if (request > remaining) request = remaining;
-      const int got = stream->read(frame + received, request);
-      if (got > 0) received += static_cast<size_t>(got);
-    } else if (!stream->connected()) {
-      break;
-    } else {
-      delay(1);
+  size_t received = 0U;
+  if (status == HTTP_CODE_OK && contentLength > 4 &&
+      static_cast<size_t>(contentLength) <= kBridgeMaxFrameBytes) {
+    const size_t expected = static_cast<size_t>(contentLength);
+    WiFiClient* stream = http.getStreamPtr();
+    const uint32_t readStartedAt = millis();
+    while (received < expected && millis() - readStartedAt < kBridgeReadTimeoutMs) {
+      const int available = stream->available();
+      if (available > 0) {
+        size_t request = static_cast<size_t>(available);
+        if (request > expected - received) request = expected - received;
+        const int got = stream->read(dest + received, request);
+        if (got > 0) received += static_cast<size_t>(got);
+      } else if (!stream->connected()) {
+        break;
+      } else {
+        vTaskDelay(pdMS_TO_TICKS(1U));
+      }
     }
-    yield();  // Cooperative handoff during bounded bridge reads.
+    if (received != expected) received = 0U;
   }
   http.end();
 
-  const bool jpegValid =
-      received == static_cast<size_t>(contentLength) && received >= 4U &&
-      frame[0] == 0xFFU && frame[1] == 0xD8U &&
-      frame[received - 2U] == 0xFFU && frame[received - 1U] == 0xD9U;
-  if (!jpegValid) {
-    heap_caps_free(frame);
+  if (received < 4U || dest[0] != 0xFFU || dest[1] != 0xD8U ||
+      dest[received - 2U] != 0xFFU || dest[received - 1U] != 0xD9U) {
+    return 0U;
+  }
+  return received;
+}
+
+static void x2dFetchWorker(void*) {
+  for (;;) {
+    if (!gX2dFetchEnabled) {
+      vTaskDelay(kBridgeWorkerIdleTicks);
+      continue;
+    }
+
+    const TickType_t cycleStart = xTaskGetTickCount();
+    const uint32_t generation = gX2dFetchGeneration;
+    const size_t received = x2dFetchOnce(gX2dFetchBuffer);
+    if (received > 0U) {
+      xSemaphoreTake(gX2dFrameMutex, portMAX_DELAY);
+      if (gX2dFetchEnabled && generation == gX2dFetchGeneration) {
+        uint8_t* const previous = gX2dPublishedFrame;
+        gX2dPublishedFrame = gX2dFetchBuffer;
+        gX2dFetchBuffer = previous;
+        gX2dPublishedBytes = received;
+        ++gX2dPublishedSequence;
+      }
+      xSemaphoreGive(gX2dFrameMutex);
+    }
+
+    // Hold acquisition at the existing 5 fps ceiling including HTTP latency.
+    const TickType_t elapsed = xTaskGetTickCount() - cycleStart;
+    vTaskDelay(elapsed < kBridgeWorkerCycleTicks ? kBridgeWorkerCycleTicks - elapsed : 1);
+  }
+}
+
+static bool x2dEnsureFetchWorker() {
+  if (!gX2dFrameMutex) {
+    gX2dFrameMutex = xSemaphoreCreateMutex();
+    if (!gX2dFrameMutex) return false;
+  }
+  uint8_t** const buffers[] = {&gX2dFetchBuffer, &gX2dPublishedFrame, &gX2dDisplayFrame};
+  for (uint8_t** buffer : buffers) {
+    if (!*buffer) {
+      *buffer = static_cast<uint8_t*>(
+          heap_caps_malloc(kBridgeMaxFrameBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+      if (!*buffer) return false;
+    }
+  }
+  if (!gX2dFetchTask) {
+    // Core 0, away from the Arduino loop task on core 1.
+    if (xTaskCreatePinnedToCore(x2dFetchWorker, "x2d-fetch", kBridgeWorkerStackBytes,
+                                nullptr, 1, &gX2dFetchTask, 0) != pdPASS) {
+      gX2dFetchTask = nullptr;
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool x2dBeginFetchSession() {
+  if (!x2dEnsureFetchWorker()) return false;
+  x2dSetFetchEnabled(true, true);
+  return true;
+}
+
+static void x2dStopFetchSession() {
+  x2dSetFetchEnabled(false, true);
+}
+#endif
+'''
+
+PAUSE_OLD = """bool Ws350MediaBackend::pauseVideo(bool paused) {
+  if (!videoRequested_) return false;
+  videoPaused_ = paused;
+  return true;
+}
+"""
+PAUSE_NEW = """bool Ws350MediaBackend::pauseVideo(bool paused) {
+  if (!videoRequested_) return false;
+  videoPaused_ = paused;
+#if defined(ESP32)
+  if (videoSource_ == VideoSource::X2dBridge) x2dSetFetchEnabled(!paused, true);
+#endif
+  return true;
+}
+"""
+
+# The camera-ownership overlay expands the legacy one-line PrinterCamera stop
+# into a block. Accept either form; exactly one must be present.
+STOP_ANCHORS = (
+    "  if (videoRequested_ && videoSource_ == VideoSource::PrinterCamera) {\n"
+    "    cameraStop();\n"
+    "    cameraSetMediaOwned(false);\n"
+    "  }\n",
+    "  if (videoRequested_ && videoSource_ == VideoSource::PrinterCamera) cameraStop();\n",
+)
+STOP_ADDITION = (
+    "#if defined(ESP32)\n"
+    "  if (videoRequested_ && videoSource_ == VideoSource::X2dBridge) x2dStopFetchSession();\n"
+    "#endif\n"
+)
+
+RENDER_X2D = r'''
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
+static void x2dViewportOrigin(int16_t* x, int16_t* y) {
+  const int16_t controlBarH = 50;
+  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
+  *x = (tft.width() - kBridgeCameraWidth) / 2;
+  *y = (viewportH - kBridgeCameraHeight) / 2;
+}
+#endif
+
+// Redraw the last decoded camera frame into the current tft target. The WS350
+// panel is not readable, so framebuffer evidence recomposes the viewer into an
+// offscreen sprite with this. Foreground-only, like the renderer.
+bool x2dRedrawLastFrame() {
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
+  if (!gX2dDisplayFrame || gX2dDisplayBytes < 4U) return false;
+  int16_t x = 0;
+  int16_t y = 0;
+  x2dViewportOrigin(&x, &y);
+  return tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(gX2dDisplayBytes), x, y);
+#else
+  return false;
+#endif
+}
+
+void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
+  if (!videoRequested_ || videoPaused_ || videoSource_ != VideoSource::X2dBridge) return;
+  if (videoLastRenderAtMs_ != 0 && nowMs - videoLastRenderAtMs_ < kVideoFrameIntervalMs) return;
+
+  videoLastRenderAtMs_ = nowMs;
+  ++videoDiagnostics_.polls;
+  if (!gX2dFrameMutex) {
+    ++videoDiagnostics_.noFramePolls;
+    return;
+  }
+
+  // Claim the newest published frame by pointer swap; never decode under the lock.
+  size_t frameBytes = 0U;
+  uint32_t frameSequence = 0U;
+  xSemaphoreTake(gX2dFrameMutex, portMAX_DELAY);
+  if (gX2dPublishedBytes >= 4U) {
+    uint8_t* const previous = gX2dDisplayFrame;
+    gX2dDisplayFrame = gX2dPublishedFrame;
+    gX2dPublishedFrame = previous;
+    frameBytes = gX2dPublishedBytes;
+    frameSequence = gX2dPublishedSequence;
+    gX2dPublishedBytes = 0U;
+  }
+  xSemaphoreGive(gX2dFrameMutex);
+  if (frameBytes == 0U) {
     ++videoDiagnostics_.noFramePolls;
     return;
   }
 
   ++videoDiagnostics_.frameObservations;
-  const int16_t controlBarH = 50;
-  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
-  const int16_t x = (tft.width() - kBridgeCameraWidth) / 2;
-  const int16_t y = (viewportH - kBridgeCameraHeight) / 2;
-  tft.fillRect(0, 0, tft.width(), viewportH, TFT_BLACK);
-  tft.drawJpg(frame, static_cast<uint32_t>(received), x, y);
-  heap_caps_free(frame);
+  gX2dDisplayBytes = frameBytes;
+  int16_t x = 0;
+  int16_t y = 0;
+  x2dViewportOrigin(&x, &y);
+  // The bridge produces the exact 480x270 viewport, so no black clear: a panel
+  // flush between clear and decode would expose a visible black frame.
+  tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(frameBytes), x, y);
 
   markFrameDirty();
-  ++videoLastFrameId_;
+  videoLastFrameId_ = frameSequence;
   ++videoDiagnostics_.framesRendered;
-  videoDiagnostics_.lastFrameId = videoLastFrameId_;
-  videoDiagnostics_.lastFrameBytes = static_cast<uint32_t>(received);
+  videoDiagnostics_.lastFrameId = frameSequence;
+  videoDiagnostics_.lastFrameBytes = static_cast<uint32_t>(frameBytes);
   videoDiagnostics_.lastFrameAtMs = nowMs;
 #else
   (void)nowMs;
@@ -219,11 +439,98 @@ def insert_after_once(text: str, anchor: str, addition: str, label: str) -> str:
     return text.replace(anchor, anchor + addition, 1)
 
 
+def patch_smart_hub(text: str) -> str:
+    text = replace_once(
+        text,
+        SMART_HUB_MEDIA_HINT_ANCHOR,
+        SMART_HUB_MEDIA_HINT_REPLACEMENT,
+        "Media X2D launch hint",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_DEMO_START_ANCHOR,
+        SMART_HUB_X2D_START_REPLACEMENT,
+        "Media X2D launch action",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_IDLE_HINT_ANCHOR,
+        SMART_HUB_IDLE_HINT_REPLACEMENT,
+        "Video viewer idle hint",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_ACTIVE_HINT_ANCHOR,
+        SMART_HUB_ACTIVE_HINT_REPLACEMENT,
+        "Video viewer active hint",
+    )
+    text = replace_once(
+        text,
+        SMART_HUB_COMPOSITOR_ANCHOR,
+        SMART_HUB_COMPOSITOR_REPLACEMENT,
+        "Video viewer compositor ownership",
+    )
+    return text
+
+
+def patch_backend(cpp: str, bridge_url: str) -> str:
+    cpp = replace_once(cpp, CPP_INCLUDE_ANCHOR, CPP_INCLUDE_REPLACEMENT, "ESP32 include block")
+    define = f'#define WORKSHOP_X2D_BRIDGE_URL "{bridge_url}"\n\n'
+    namespace_anchor = "namespace workshop {\nnamespace media {\n"
+    cpp = replace_once(cpp, namespace_anchor, define + namespace_anchor, "bridge URL define")
+    cpp = insert_after_once(cpp, CPP_SOURCE_ANCHOR, CPP_SOURCE_ADDITION, "X2D source constant")
+    cpp = insert_after_once(cpp, CPP_CONSTANT_ANCHOR, CPP_CONSTANT_ADDITION, "X2D bridge limits")
+    cpp = insert_after_once(
+        cpp, CPP_DIMENSION_ANCHOR, CPP_DIMENSION_ADDITION + ASYNC_BLOCK, "X2D viewport + fetch worker"
+    )
+    cpp = replace_once(cpp, CPP_BEGIN_MJPEG_ANCHOR, CPP_BEGIN_MJPEG_REPLACEMENT, "beginMjpeg X2D branch")
+    cpp = replace_once(cpp, PAUSE_OLD, PAUSE_NEW, "pauseVideo X2D worker gate")
+    cpp = replace_once(cpp, CPP_RENDER_INSERT_ANCHOR, "\n" + RENDER_X2D + CPP_RENDER_INSERT_ANCHOR, "X2D renderer insertion")
+    cpp = replace_once(cpp, CPP_POLL_ANCHOR, CPP_POLL_REPLACEMENT, "X2D poll branch")
+
+    matches = [anchor for anchor in STOP_ANCHORS if cpp.count(anchor) == 1]
+    if len(matches) != 1:
+        raise PatchError("stopMedia X2D worker stop: expected exactly one PrinterCamera stop form")
+    cpp = cpp.replace(matches[0], matches[0] + STOP_ADDITION, 1)
+
+    # The foreground renderer must never perform network I/O.
+    renderer = cpp[cpp.index("void Ws350MediaBackend::renderX2dBridgeFrame"):cpp.index(CPP_RENDER_INSERT_ANCHOR)]
+    for forbidden in ("HTTPClient", "http.GET", "getStreamPtr"):
+        if forbidden in renderer:
+            raise PatchError(f"foreground X2D renderer contains network I/O: {forbidden}")
+    return cpp
+
+
+def patch_web(web_text: str) -> str:
+    if "sendWorkshopMediaStatus" not in web_text or "/os12/media/video/start" not in web_text:
+        raise PatchError("authenticated OS12 media API must be installed before X2D bridge route")
+
+    # Anchor on the function name rather than brace/newline formatting so the
+    # overlay remains compatible with both reconstructed source formatting
+    # and compact test fixtures while still requiring one unique insertion point.
+    anchor = "static void handleWorkshopMediaVideoPause()"
+    if web_text.count(anchor) != 1:
+        raise PatchError("media video pause handler anchor missing/non-unique")
+    web_text = web_text.replace(anchor, HANDLER + anchor, 1)
+
+    route_anchor = '  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n'
+    if web_text.count(route_anchor) != 1:
+        raise PatchError("media video start route anchor missing/non-unique")
+    web_text = web_text.replace(route_anchor, route_anchor + ROUTE, 1)
+
+    if web_text.count("/os12/media/video/start-x2d-bridge") != 1:
+        raise PatchError("X2D bridge route missing/non-unique after patch")
+    if 'server.on("/os12/media/video/start-x2d-bridge"' in web_text:
+        raise PatchError("X2D bridge route must remain authenticated")
+    return web_text
+
+
 def apply(repo: Path, bridge_url: str) -> None:
     backend = repo / "src/ws350_media_backend.cpp"
     backend_h = repo / "include/ws350_media_backend.h"
     web = repo / "src/web_server.cpp"
-    for path in (backend, backend_h, web):
+    smart_hub = repo / "src/smart_hub.cpp"
+    for path in (backend, backend_h, web, smart_hub):
         if not path.is_file():
             raise PatchError(f"X2D bridge requires reconstructed OS12 source: missing {path}")
 
@@ -231,54 +538,29 @@ def apply(repo: Path, bridge_url: str) -> None:
     # in this reconstructed-source overlay for physical X2D/WS350 validation.
     cpp = backend.read_text(encoding="utf-8")
     header = backend_h.read_text(encoding="utf-8")
-    if "HTTPClient" in cpp or "kX2dBridgeSource" in cpp or "X2dBridge" in header:
-        raise PatchError("X2D bridge overlay already applied or reconstructed backend is not canonical")
+    web_text = web.read_text(encoding="utf-8")
+    hub = smart_hub.read_text(encoding="utf-8")
+    if ("HTTPClient" in cpp or "kX2dBridgeSource" in cpp or "X2dBridge" in header
+            or "handleWorkshopMediaVideoStartX2dBridge" in web_text
+            or SMART_HUB_X2D_START_REPLACEMENT in hub or "directVideoViewer" in hub):
+        raise PatchError("X2D bridge overlay already applied or reconstructed source is not canonical")
 
-    cpp = replace_once(cpp, CPP_INCLUDE_ANCHOR, CPP_INCLUDE_REPLACEMENT, "ESP32 include block")
-    define = f'#define WORKSHOP_X2D_BRIDGE_URL "{bridge_url}"\n\n'
-    namespace_anchor = "namespace workshop {\nnamespace media {\n"
-    cpp = replace_once(cpp, namespace_anchor, define + namespace_anchor, "bridge URL define")
-    cpp = insert_after_once(cpp, CPP_SOURCE_ANCHOR, CPP_SOURCE_ADDITION, "X2D source constant")
-    cpp = insert_after_once(cpp, CPP_CONSTANT_ANCHOR, CPP_CONSTANT_ADDITION, "X2D bridge limits")
-    cpp = insert_after_once(cpp, CPP_DIMENSION_ANCHOR, CPP_DIMENSION_ADDITION, "X2D viewport dimensions")
-    cpp = replace_once(cpp, CPP_BEGIN_MJPEG_ANCHOR, CPP_BEGIN_MJPEG_REPLACEMENT, "beginMjpeg X2D branch")
-    cpp = replace_once(cpp, CPP_RENDER_INSERT_ANCHOR, "\n" + RENDER_X2D + CPP_RENDER_INSERT_ANCHOR, "X2D renderer insertion")
-    cpp = replace_once(cpp, CPP_POLL_ANCHOR, CPP_POLL_REPLACEMENT, "X2D poll branch")
-
+    # Stage every file in memory and write only after all anchors validate, so
+    # a late mismatch cannot leave a half-patched physical candidate behind.
+    cpp = patch_backend(cpp, bridge_url)
     header = replace_once(header, HEADER_ENUM_ANCHOR, HEADER_ENUM_REPLACEMENT, "X2D video source enum")
     header = insert_after_once(header, HEADER_METHOD_ANCHOR, HEADER_METHOD_ADDITION, "X2D renderer declaration")
+    web_text = patch_web(web_text)
+    hub = patch_smart_hub(hub)
 
     backend.write_text(cpp, encoding="utf-8")
     backend_h.write_text(header, encoding="utf-8")
-
-    web_text = web.read_text(encoding="utf-8")
-    if "sendWorkshopMediaStatus" not in web_text or "/os12/media/video/start" not in web_text:
-        raise PatchError("authenticated OS12 media API must be installed before X2D bridge route")
-
-    if "handleWorkshopMediaVideoStartX2dBridge" not in web_text:
-        # Anchor on the function name rather than brace/newline formatting so the
-        # overlay remains compatible with both reconstructed source formatting
-        # and compact test fixtures while still requiring one unique insertion point.
-        anchor = "static void handleWorkshopMediaVideoPause()"
-        if web_text.count(anchor) != 1:
-            raise PatchError("media video pause handler anchor missing/non-unique")
-        web_text = web_text.replace(anchor, HANDLER + anchor, 1)
-
-    if "/os12/media/video/start-x2d-bridge" not in web_text:
-        route_anchor = '  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n'
-        if web_text.count(route_anchor) != 1:
-            raise PatchError("media video start route anchor missing/non-unique")
-        web_text = web_text.replace(route_anchor, route_anchor + ROUTE, 1)
-
-    if web_text.count("/os12/media/video/start-x2d-bridge") != 1:
-        raise PatchError("X2D bridge route missing/non-unique after patch")
-    if 'server.on("/os12/media/video/start-x2d-bridge"' in web_text:
-        raise PatchError("X2D bridge route must remain authenticated")
-    if 'media.playMjpeg("x2d-bridge", millis())' not in web_text:
-        raise PatchError("X2D bridge handler is not fixed to x2d-bridge source")
-
     web.write_text(web_text, encoding="utf-8")
+    smart_hub.write_text(hub, encoding="utf-8")
+
     print(f"Experimental Workshop OS 12 X2D bridge overlay enabled at {bridge_url}")
+    print("Bridge HTTP acquisition runs on a dedicated FreeRTOS worker; the foreground poll only decodes published JPEGs")
+    print("On-device launch enabled: Media > Video opens the fixed X2D bridge source")
 
 
 def main() -> int:

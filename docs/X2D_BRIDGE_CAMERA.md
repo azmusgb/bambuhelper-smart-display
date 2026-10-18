@@ -31,7 +31,10 @@ tools/x2d_camera_bridge.py
    v
 reconstructed WS350 image + experimental X2D overlay
    |
-   | JPEG in PSRAM
+   | FreeRTOS fetch worker (core 0) -> PSRAM triple buffer
+   v
+foreground media poll decodes newest frame
+   |
    v
 480x270 camera viewport + existing controls
 ```
@@ -109,24 +112,49 @@ Run the repository's normal OS12 reconstruction sequence, including the canonica
 
 Do **not** edit `firmware/platform/media/ws350_media_backend.*` to add the bridge.
 
-## 4. Apply the experimental X2D overlay
+## 4. Apply the experimental X2D overlays
 
-After canonical reconstruction:
+`scripts/run_x2d_local.sh` does steps 3-5 in one go. It copies the canonical
+tree to a separate build directory, so the canonical candidate is never touched:
+
+```bash
+X2D_BRIDGE_URL="http://${MAC_IP}:8091/x2d/frame.jpg" bash scripts/run_x2d_local.sh --build
+```
+
+Or apply the two overlays by hand, in this order, after canonical reconstruction:
 
 ```bash
 python3 apply_workshop_os12_x2d_bridge_camera.py \
   --repo /path/to/reconstructed/BambuHelper \
   --bridge-url "http://${MAC_IP}:8091/x2d/frame.jpg" \
   --apply
+python3 apply_workshop_os12_x2d_viewer_polish.py --repo /path/to/reconstructed/BambuHelper --apply
 ```
 
-The overlay modifies only the reconstructed copy. It:
+Each overlay validates every anchor before writing anything, so a mismatch
+leaves the tree untouched. The bridge overlay modifies only the reconstructed copy. It:
 
 - adds the fixed `x2d-bridge` media source to that reconstructed image,
-- adds bounded HTTP/JPEG acquisition there,
-- allocates the frame in PSRAM,
+- acquires frames on a dedicated FreeRTOS worker pinned to core 0, so HTTP
+  latency never blocks touch, the web server or MQTT on the Arduino loop,
+- rotates three PSRAM frame buffers by pointer swap; the frame mutex is held
+  only for swaps, and the foreground poll decodes outside the lock,
+- tags each request with a session generation so a frame fetched before a
+  pause/stop/reopen is never shown,
 - validates JPEG SOI/EOI markers and the 384 KiB limit,
-- adds authenticated `POST /os12/media/video/start-x2d-bridge`.
+- adds authenticated `POST /os12/media/video/start-x2d-bridge`, which also moves
+  the physical display to the video viewer,
+- points the on-device Media > Video row at the X2D source (replacing the
+  built-in motion test there).
+
+The worker task and its three 384 KiB PSRAM buffers are created on the first
+X2D start and persist until reboot; stop and pause only gate acquisition.
+
+The viewer polish overlay makes Back plain navigation, removes redundant panel
+refreshes, shows "Not started" on the Media row when an on-device start is
+refused (no Wi-Fi or no bridge URL), and makes `/hub/frame.ppm` work while the
+viewer is open. The WS350 panel cannot be read back, so captures redraw the
+viewer chrome and the last decoded camera frame into an offscreen sprite.
 
 The supplied bridge URL must be:
 
@@ -140,7 +168,18 @@ The firmware does not accept a camera URL from an HTTP request.
 
 ## 5. Build and flash the WS350
 
-Use the repository's normal `ws_lcd_350` build/flash flow. Keep USB attached for power, flashing, and serial diagnostics.
+```bash
+X2D_BRIDGE_URL="http://${MAC_IP}:8091/x2d/frame.jpg" \
+  bash scripts/run_x2d_local.sh --flash --confirm-printer-idle
+```
+
+Before uploading, the script checks the printer state through the WS350 portal,
+saves the partition table, NVS and otadata, and stops if the partition layout
+differs. NVS is not erased. Keep USB attached for power, flashing, and serial
+diagnostics.
+
+CI (`os12-ux-architecture.yml`) compiles this overlay candidate on every
+relevant PR but does not package it.
 
 An already-published firmware image will not contain this experimental overlay or its private bridge endpoint.
 
@@ -162,7 +201,7 @@ The X2D start route is fixed-source only and accepts no arbitrary URL/path argum
 
 The experimental overlay is deliberately conservative:
 
-- maximum polling cadence: 5 fps,
+- maximum acquisition cadence: 5 fps, including HTTP latency,
 - JPEG maximum: 384 KiB,
 - PSRAM frame allocation,
 - expected frame dimensions: 480x270,
@@ -171,7 +210,7 @@ The experimental overlay is deliberately conservative:
 - no public Internet dependency,
 - current implementation requires `Content-Length`.
 
-Malformed, oversized, unavailable, or incomplete frames are rejected and counted as no-frame polls.
+Malformed, oversized, unavailable, or incomplete frames are rejected by the worker; the renderer counts polls with no new frame as no-frame polls.
 
 ## Physical acceptance
 
@@ -189,7 +228,18 @@ Do not promote this overlay into the canonical media architecture until the real
 10. Normal printer MQTT/control functions remain usable while viewing.
 11. No Bambu credential, UID, access code, raw camera URI, or sensitive session data appears in serial logs or exported diagnostics.
 
-If touch materially stalls during bridge failure or recovery, this overlay is not acceptable. The next design must move frame acquisition out of the foreground media poll into a dedicated asynchronous transport/service boundary.
+If touch materially stalls during bridge failure or recovery, this overlay is not acceptable.
+
+## Framebuffer evidence
+
+With the device on the LAN, these runners collect screenshots from `/hub/frame.ppm` unattended (set `WORKSHOP_OS_URL` if the device is not at `10.0.0.124`):
+
+```bash
+python3 scripts/capture_x2d_lifecycle_recover.py   # camera lifecycle only, retries logged
+python3 scripts/capture_x2d_full_ui.py              # every catalog view + camera lifecycle
+```
+
+Framebuffer captures show what was sent to the LCD. They cannot prove the panel never showed a sub-frame flicker.
 
 ## Security and privacy
 

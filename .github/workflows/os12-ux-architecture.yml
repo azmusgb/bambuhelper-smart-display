@@ -18,6 +18,8 @@ on:
       - 'scripts/ensure-platformio.sh'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/run_os12_ux_local.sh'
+      - 'scripts/run_x2d_local.sh'
+      - 'scripts/smart_home_patch_utils.py'
       - 'scripts/validate_os12_*.py'
       - 'scripts/validate_os12_inventory_service.py'
       - 'scripts/validate_os12_ux_architecture.py'
@@ -47,6 +49,8 @@ on:
       - 'scripts/ensure-platformio.sh'
       - 'scripts/run_os12_platform_local.sh'
       - 'scripts/run_os12_ux_local.sh'
+      - 'scripts/run_x2d_local.sh'
+      - 'scripts/smart_home_patch_utils.py'
       - 'scripts/validate_os12_*.py'
       - 'scripts/validate_os12_inventory_service.py'
       - 'scripts/validate_os12_ux_architecture.py'
@@ -192,6 +196,18 @@ jobs:
           path: /tmp/os12-ux-ws350-candidate/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Compile experimental X2D overlay candidate (not packaged)
+        run: |
+          set -euo pipefail
+          # Proves the reconstruction-only X2D overlays still apply to the real
+          # tree and compile. The canonical candidate was already copied out and
+          # uploaded above, so the overlays go straight onto the build tree for
+          # an incremental build instead of a full rebuild of a copy.
+          bash -n scripts/run_x2d_local.sh
+          BASE=/tmp/ws350-os12-ux-build \
+            X2D_BRIDGE_URL=http://10.0.0.16:8091/x2d/frame.jpg \
+            bash scripts/run_x2d_local.sh --in-place --build
 
       - name: Record non-promotion state
         if: always()
