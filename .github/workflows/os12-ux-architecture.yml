@@ -35,6 +35,7 @@ on:
       - 'scripts/validate_os12_post_capture_ui_hardening.py'
       - 'scripts/validate_os12_workshop_surface_runtime.py'
       - 'scripts/validate_os12_portal_signin.py'
+      - 'scripts/validate_os12_status_lite.py'
       - '.github/workflows/os12-ux-architecture.yml'
   pull_request:
     branches: [main]
@@ -66,6 +67,7 @@ on:
       - 'scripts/validate_os12_post_capture_ui_hardening.py'
       - 'scripts/validate_os12_workshop_surface_runtime.py'
       - 'scripts/validate_os12_portal_signin.py'
+      - 'scripts/validate_os12_status_lite.py'
       - '.github/workflows/os12-ux-architecture.yml'
 
 permissions:
@@ -81,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OS12_RELEASE_VERSION: '12.0.1'
+      OS12_RELEASE_VERSION: '12.1.0'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -106,6 +108,7 @@ jobs:
             apply_workshop_os12_workshop_surface_runtime.py \
             apply_workshop_os12_physical_polish.py \
             apply_workshop_os12_portal_signin_restore.py \
+            apply_workshop_os12_status_lite.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
             scripts/validate_os12_ux_physical_fit.py \
@@ -115,6 +118,8 @@ jobs:
             scripts/validate_os12_workshop_surface_runtime.py \
             scripts/validate_os12_physical_polish.py \
             scripts/validate_os12_portal_signin.py \
+            scripts/validate_os12_status_lite.py \
+            scripts/accept_os12_status_lite_runtime.py \
             scripts/accept_os12_portal_runtime.py \
             scripts/accept_os12_media_runtime.py \
             scripts/accept_os12_media_physical.py \
