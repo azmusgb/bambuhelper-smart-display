@@ -24,7 +24,7 @@
     "branch": "feature/status-lite-token-main",
     "name": "Workshop OS 12.1.0 Read-only Status Token",
     "purpose": "Brings #162 (read-only status token for Local AI: one GET /api/status/lite route with its own bearer token, approved by a tap on Allow on the touchscreen) onto main on top of the 12.0.2 touch hotfix. #162 had been merged into the security/portal-signin-restore branch after #161 merged, so it never reached main. 12.0.1 and 12.0.2 physical acceptance is covered by this candidate's acceptance.",
-    "pullRequest": null,
+    "pullRequest": 166,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required",
