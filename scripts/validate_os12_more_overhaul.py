@@ -27,7 +27,7 @@ REMOVED_VIEW_IDS = (
     "media", "media-lab", "display-quick", "display-schedule", "display-behavior", "display-visual",
     "display-signals", "display-theme", "display-gauge-colors", "display-gauge-scales",
     "display-gauge-behavior", "display-glow", "display-layout", "display-extras",
-    "hardware-sound", "hardware-finish", "hardware-error",
+    "hardware-sound", "hardware-finish", "hardware-error", "tools", "custom",
 )
 
 # Renderers the More pages replaced.
@@ -36,7 +36,8 @@ REPLACED_RENDERERS = (
     "drawUi12PortalAccess", "drawUi13DateTime", "drawUi13SoftwareUpdate", "drawUi13UpdateConfirm",
     "drawUi13Diagnostics", "drawNetworkEssentials", "drawUi13Display", "drawUi13AfterPrint", "drawUi13Sound",
     "drawOs12Media", "drawOs12VideoViewer", "drawOs12Recorder", "drawUi13PrinterAlerts", "drawUi13AlertSignals",
-    "drawDisplayExperience", "drawAudioSettings",
+    "drawDisplayExperience", "drawAudioSettings", "drawTools", "drawCustom", "drawUi12Experience",
+    "drawUi12PrinterConnection", "drawUi12SoftwareUpdate", "drawWidgetCard",
 )
 
 
@@ -203,6 +204,15 @@ def validate(repo: Path) -> str:
     for view_id in REMOVED_VIEW_IDS:
         forbid(catalog, f'"id":"{view_id}"', "removed view id in /hub/views")
     need(catalog, '"id":"more"', "More root view")
+    # Home, Printer, Workshop and the 15 More pages; nothing else.
+    view_ids = re.findall(r'\{"id":"([a-z0-9-]+)"', catalog)
+    page_views = re.findall(r'PageLayout::\w+, "[^"]*", "[^"]*", "([a-z0-9-]+)"', layout)
+    if view_ids != ["home", "printer", "workshop"] + page_views:
+        raise ValidationError(f"/hub/views must list Home, Printer, Workshop and the More pages in order: {view_ids}")
+    show = block(hub, "bool smartHubShowPage(const char* pageName)")
+    need(show, "return wsMoreShowPage(pageName);", "/hub/show routes every More page through the page table")
+    for needle in ("g_toolsView=true", "g_displayExperienceView=true", "g_audioSettingsView=true", "g_networkSettingsView=true"):
+        forbid(hub, needle, "12.0 page state set anywhere")
     need(catalog, '{"version":3,', "catalog v3 (12.1 Local Portal redaction geometry)")
     need(read(ROOT / "scripts/capture-ws350-views.zsh"), "redaction = (8, 89, 472, 133)", "capture redaction of the access-code row")
     return run_host_test()

@@ -105,6 +105,39 @@ python3 scripts/accept_os12_device_ui_physical.py \
 
 Walk every required root/child view and record clipping, hierarchy, touch-target, navigation, responsiveness, and reboot/watchdog observations. On Workshop, explicitly prove that the visible **Refresh** and **Local Portal / Set Up Inventory** controls respond as labeled and that tapping the read-only evidence rows does not trigger hidden legacy actions. Sensitive views are not retained as framebuffer evidence.
 
+### More pages (Workshop OS 12.1.4 and later)
+
+The More tab holds 15 pages, at most two levels deep. The page table and every touch rectangle live in `firmware/platform/ui/more_layout.hpp`. The host test `tests/workshop_os12_more_layout_smoke.cpp` covers both orientations.
+
+| `/hub/views` id | Page | Opens from |
+|---|---|---|
+| `more` | More (six tiles) | More tab |
+| `settings-printer-power` | Printer & Power | More |
+| `hardware-auto-off` | Auto power-off | Printer & Power |
+| `settings-network` | Network | More |
+| `system-date-time` | Time & locale | Network |
+| `settings-display` | Display | More |
+| `display-clock` | Clock & schedule | Display |
+| `display-gauges` | Gauges | Display |
+| `settings-sounds` | Sound & Alerts | More |
+| `display-alerts` | Printer alerts | Sound & Alerts |
+| `hardware-led` | Status light | Sound & Alerts |
+| `media-video` | Video test | Sound & Alerts |
+| `system-portal` | Local Portal (**sensitive**: the access code) | More |
+| `system-update` | Updates & About | More |
+| `system-diagnostics` | Device health | Updates & About |
+
+With Home, Printer and Workshop, the catalog lists 18 views (catalog version 3). Removed ids are still accepted by `/hub/show` and open the page that replaced them: `system`, `tools`, `custom`, `media`, `media-lab`, the merged `display-*` ids, the other `hardware-*` ids, and the Network Expert ids. `scripts/capture-ws350-views.zsh` redacts the access-code row, (8, 89)–(472, 133), on catalog v3.
+
+Every More page must show:
+- the same header, with Back at top-left going to the parent page;
+- the tab bar, drawn and live (the More tab always opens the More root);
+- single-line rows at least 44 px tall;
+- stepper values centred between "−" and "+";
+- disabled controls that state the reason.
+
+In the physical walk, tap the centre and the edges of Back, a tab, and each kind of control on each page.
+
 ## 8. Device-native update / recovery
 
 Run a non-installing candidate-channel check:
