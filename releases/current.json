@@ -24,7 +24,7 @@
     "branch": "feature/os12-more-layout",
     "name": "Workshop OS 12.1.1 More Layout and Triple Reset",
     "purpose": "First step of the More/System overhaul: the shared page table and touch geometry for the new More area (host-tested in both orientations, no visible change yet), and a fix so a triple reset enters Recovery Safe Mode again (the rapid-reset count moved from RTC memory to NVS). 12.0.x and 12.1.0 physical acceptance is covered by this candidate's acceptance.",
-    "pullRequest": null,
+    "pullRequest": 167,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required",
