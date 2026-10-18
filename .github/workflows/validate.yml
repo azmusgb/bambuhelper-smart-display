@@ -80,6 +80,10 @@ jobs:
           /tmp/workshop-os12-tests/portal-access-smoke
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic             tests/workshop_os12_status_lite_smoke.cpp             -o /tmp/workshop-os12-tests/status-lite-smoke
           /tmp/workshop-os12-tests/status-lite-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_more_layout_smoke.cpp -o /tmp/workshop-os12-tests/more-layout-smoke
+          /tmp/workshop-os12-tests/more-layout-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_rapid_reset_smoke.cpp -o /tmp/workshop-os12-tests/rapid-reset-smoke
+          /tmp/workshop-os12-tests/rapid-reset-smoke
 
       - name: Check repository hygiene
         shell: bash

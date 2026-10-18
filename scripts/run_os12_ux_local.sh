@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.1.0}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.1.1}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -85,6 +85,15 @@ python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-ro
 python3 "$ROOT/scripts/validate_os12_portal_signin.py" --repo "$BUILD" --source-root "$ROOT" \
   --extra-public-route "HTTP_GET:/api/status/lite"
 python3 -m py_compile "$ROOT/scripts/accept_os12_status_lite_runtime.py"
+
+# 12.1.1: the triple-reset entry to Recovery Safe Mode counts in NVS; RTC
+# memory is re-initialised on every non-deep-sleep reset and never got past 1.
+python3 "$ROOT/apply_workshop_os12_rapid_reset.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_rapid_reset.py" --repo "$BUILD"
+
+# 12.1.x More/System overhaul. Owning patch for the More area; keep it last.
+python3 "$ROOT/apply_workshop_os12_more_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
