@@ -71,6 +71,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: os12-ux-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Reconstruct and compile OS12 control plane
@@ -80,9 +84,9 @@ jobs:
       OS12_RELEASE_VERSION: '12.0.0'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -125,6 +129,12 @@ jobs:
           bash -n scripts/flash_os12_ci_candidate_macos.sh
           bash -n scripts/install_accept_os12_candidate_macos.sh
           bash -n scripts/accept_os12_installed_candidate_macos.sh
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
 
       - name: Prepare pinned PlatformIO toolchain
         run: |
@@ -180,7 +190,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload exact WS350 candidate evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: os12-ux-ws350-${{ env.OS12_SOURCE_SHA }}
           path: /tmp/os12-ux-ws350-candidate/
