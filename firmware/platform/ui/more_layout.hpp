@@ -150,7 +150,7 @@ enum class RowId : uint8_t {
   // Updates & About
   Version, UpdateAction, UpdateChannel, DateTimeNow, HealthNav,
   // Device health
-  HealthTouch, HealthRecovery, HealthWifi, HealthPrinter, HealthUptime, HealthMemory,
+  HealthTouch, HealthRecovery, HealthPrinter, HealthUptime,
   Count
 };
 
@@ -194,7 +194,6 @@ static const RowSpec kAutoOffRows[] = {
 
 static const RowSpec kNetworkRows[] = {
   {RowId::WifiStatus, RowKind::Info, "Wi-Fi", PageId::Root},
-  {RowId::WifiSignal, RowKind::Info, "Signal", PageId::Root},
   {RowId::AddressMode, RowKind::Info, "Address", PageId::Root},
   {RowId::MdnsEnabled, RowKind::Toggle, "Name on network", PageId::Root},
   {RowId::ShowIpAtBoot, RowKind::Toggle, "Show address at start", PageId::Root},
@@ -325,10 +324,9 @@ static const RowSpec kUpdatesAboutRows[] = {
 static const RowSpec kDeviceHealthRows[] = {
   {RowId::HealthTouch, RowKind::Info, "Touch", PageId::Root},
   {RowId::HealthRecovery, RowKind::Info, "Recovery", PageId::Root},
-  {RowId::HealthWifi, RowKind::Info, "Wi-Fi", PageId::Root},
+  {RowId::WifiSignal, RowKind::Info, "Wi-Fi signal", PageId::Root},
   {RowId::HealthPrinter, RowKind::Info, "Printer link", PageId::Root},
   {RowId::HealthUptime, RowKind::Info, "Uptime", PageId::Root},
-  {RowId::HealthMemory, RowKind::Info, "Free memory", PageId::Root},
 };
 
 // Tile order on the More root.

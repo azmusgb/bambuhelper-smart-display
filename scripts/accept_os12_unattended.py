@@ -42,7 +42,7 @@ REQUIRED_VIEWS = (
     "settings-sounds",
     "settings-network",
     "settings-printer-power",
-    "system",
+    "hardware-auto-off",
     "system-date-time",
     "system-update",
     "system-diagnostics",

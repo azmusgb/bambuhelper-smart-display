@@ -11,11 +11,27 @@ from __future__ import annotations
 import argparse
 import subprocess
 import tempfile
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT = ROOT / "firmware/platform/ui/more_layout.hpp"
+PAGES = ROOT / "firmware/platform/ui/more_pages.cppfrag"
 TEST = ROOT / "tests/workshop_os12_more_layout_smoke.cpp"
+
+# Catalog ids of pages that no longer exist. /hub/show may still accept some
+# of them as aliases, but captures must not list them.
+REMOVED_VIEW_IDS = (
+    "system", "system-network", "system-time-locale", "system-network-address",
+    "system-network-review", "hardware-power", "hardware-cooldown",
+)
+
+# Renderers the More pages replaced.
+REPLACED_RENDERERS = (
+    "drawUi13Network", "drawUi13PrinterPower", "drawUi13PowerOptions", "drawUi13AutoOffConfirm",
+    "drawUi12PortalAccess", "drawUi13DateTime", "drawUi13SoftwareUpdate", "drawUi13UpdateConfirm",
+    "drawUi13Diagnostics", "drawNetworkEssentials",
+)
 
 
 class ValidationError(RuntimeError):
@@ -38,6 +54,49 @@ def forbid(text: str, needle: str, label: str) -> None:
         raise ValidationError(f"forbidden {label}: {needle}")
 
 
+def block(text: str, signature: str) -> str:
+    """Body of the function defined (not just declared) at `signature`."""
+    start = text.find(signature)
+    while start >= 0 and text[start + len(signature):].lstrip().startswith(";"):
+        start = text.find(signature, start + 1)
+    if start < 0:
+        raise ValidationError(f"missing function: {signature}")
+    brace = text.find("{", start + len(signature))
+    depth = 0
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise ValidationError(f"unterminated function: {signature}")
+
+
+def layout_rows(layout: str) -> dict[str, list[tuple[str, str]]]:
+    """Row (id, kind) lists per row-table name, e.g. kNetworkRows."""
+    tables: dict[str, list[tuple[str, str]]] = {}
+    for name, body in re.findall(r"static const RowSpec (k\w+Rows)\[\] = \{(.*?)\n\};", layout, re.S):
+        tables[name] = re.findall(r"\{RowId::(\w+), RowKind::(\w+),", body)
+    return tables
+
+
+def live_page_rows(layout: str, fragment: str) -> list[tuple[str, str, str]]:
+    """(page, row id, kind) for every row of every page the fragment draws."""
+    start = fragment.find("static bool wsPageLive(wsm::PageId id)")
+    pending = set(re.findall(r"case wsm::PageId::(\w+):", fragment[start:fragment.find("return false;", start)]))
+    tables = layout_rows(layout)
+    rows = []
+    for page, table in re.findall(r"\{PageId::(\w+), PageId::\w+, \d, PageLayout::\w+, \"[^\"]*\", \"[^\"]*\", \"[^\"]*\", WS_ROWS\((\w+)\)\}", layout):
+        if page in pending:
+            continue
+        for row, kind in tables[table]:
+            rows.append((page, row, kind))
+    if not rows:
+        raise ValidationError("could not read live page rows")
+    return rows
+
+
 def run_host_test() -> str:
     with tempfile.TemporaryDirectory(prefix="os12-more-layout-") as td:
         binary = Path(td) / "more-layout-smoke"
@@ -56,6 +115,75 @@ def validate(repo: Path) -> str:
     if installed != read(LAYOUT):
         raise ValidationError("installed include/workshop_more_layout.hpp differs from firmware/platform/ui/more_layout.hpp")
     need(hub, '#include "workshop_more_layout.hpp"', "layout include")
+    layout = read(LAYOUT)
+    fragment = read(PAGES)
+    web = read(repo / "src/web_server.cpp")
+
+    # The More pages are inserted whole and own drawing and touch.
+    need(hub, fragment.strip().splitlines()[-1], "More pages fragment")
+    more = block(hub, "static void drawMore(bool full)")
+    system = block(hub, "static void drawSystem(bool full)")
+    need(more, "wsMoreDraw(full);", "drawMore hands moved pages to the More pages")
+    need(system, "wsMoreDraw(full);", "drawSystem hands System to the More pages")
+    touch = block(hub, "bool smartHubHandleTouch(uint16_t rawX, uint16_t rawY, bool longPress)")
+    handoff = touch.find("return wsMoreTouch(x,y,longPress);")
+    if handoff < 0 or handoff > touch.find("hubNavRect(i).contains(x,y)"):
+        raise ValidationError("More pages must take their touch before the 12.0 tab-bar hit test")
+    nav = block(hub, "static HubRect hubNavRect(uint8_t i)")
+    need(nav, "workshop::ui::more::tabRect(", "tab bar rectangles come from the shared layout")
+
+    # Tab bar drawn on every More page and hit-tested first on every page.
+    draw = block(hub, "static void wsMoreDraw(bool full)")
+    need(draw, "uiBottomNav(3, nullptr);", "tab bar drawn on every More page")
+    if "if" in draw[draw.find("wsDrawScrollbar(s, p);"):draw.find("uiBottomNav(3, nullptr);")].split("}")[-1]:
+        raise ValidationError("the tab bar must be drawn unconditionally")
+    need(layout, "// The tab bar is drawn on every page, so it is always live.", "tab bar hit first")
+    need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"), "wsm::hitTest(", "touch uses the shared hit test")
+
+    # Old geometry and parent hacks are gone from the new code.
+    for needle in ("hubUi13BackRect", "hubUi12SystemBackRect", "hubUi13ActionRect", "gOs12PortalParent",
+                   "gOs12SettingsParent", "hubRc2HitRef"):
+        forbid(fragment, needle, "12.0 geometry in the More pages")
+    for name in REPLACED_RENDERERS:
+        forbid(hub, f"static void {name}(", "replaced renderer still present")
+    # No hard-coded channel labels; the channel is read from the update service.
+    # (The header colour helper still recognises the word; it is never drawn.)
+    for match in re.finditer(r'"CANDIDATE"', hub):
+        if not hub[max(0, match.start() - 13):match.start()].endswith("strstr(state,"):
+            raise ValidationError("hard-coded CANDIDATE label drawn on screen")
+    forbid(hub, "Candidate channel", "hard-coded candidate channel text")
+    need(fragment, "u.channel == workshop::platform::UpdateChannel::Candidate", "real update channel")
+    # The only way to change the channel is the visible row, through a dialog.
+    forbid(hub, "workshopUpdateSetChannel(next)", "invisible channel flip")
+    if fragment.count("workshopUpdateSetChannel(") != 1 or "WsDialog::Channel" not in block(hub, "static void wsDialogConfirm()"):
+        raise ValidationError("the update channel must change only after the confirmation dialog")
+
+    # Every row of every page drawn by this build has a value case, and every
+    # control has an action. (A view set in touch but never drawn is how the
+    # 12.0 install dialog went missing.)
+    view = block(hub, "static void wsRowView(wsm::RowId id, WsRowView& v)")
+    tap = block(hub, "static void wsRowTap(wsm::RowId id, wsm::Part part)")
+    for page, row, kind in live_page_rows(layout, fragment):
+        if f"case R::{row}:" not in view:
+            raise ValidationError(f"{page}/{row}: no value case in wsRowView")
+        if kind in ("Toggle", "Stepper", "Action", "Action2") and f"case R::{row}:" not in tap:
+            raise ValidationError(f"{page}/{row}: {kind} row has no action in wsRowTap")
+
+    # Disabled controls say why: a disabled row always carries a reason.
+    for line in view.splitlines():
+        if "v.enabled = false;" in line and "v.reason" not in line:
+            raise ValidationError(f"disabled row without a reason: {line.strip()}")
+
+    # Local Portal still shows the access code, and its capture is sensitive.
+    need(view, "securityPortalCode()", "Local Portal access code")
+    forbid(fragment, "securitySetPortalCodeRequired", "touch control that turns off the access code")
+    catalog = web[web.find('static const char kCatalog[] = R"json('):web.find(')json";')]
+    need(catalog, '{"id":"system-portal","label":"Local Portal","group":"More","sensitive":"portal-code"}', "sensitive Local Portal view")
+    for view_id in REMOVED_VIEW_IDS:
+        forbid(catalog, f'"id":"{view_id}"', "removed view id in /hub/views")
+    need(catalog, '"id":"more"', "More root view")
+    need(catalog, '{"version":3,', "catalog v3 (12.1 Local Portal redaction geometry)")
+    need(read(ROOT / "scripts/capture-ws350-views.zsh"), "redaction = (8, 89, 472, 133)", "capture redaction of the access-code row")
     return run_host_test()
 
 

@@ -145,9 +145,15 @@ if sensitivity:
         raise SystemExit(f'Refusing unexpected portal-code view contract: v{catalog_version} / {view_id}')
     if (w, h) != (480, 320):
         raise SystemExit(f'Refusing unverified UI12 portal redaction geometry: {w}x{h}')
-    # UI12 Local Portal card: preserve heading, IP and lifecycle copy while
-    # covering the complete access-code text line.
-    redaction = (236, 146, 472, 192)
+    if catalog_version >= 3:
+        # Workshop OS 12.1 Local Portal page: cover the whole "Access code"
+        # row (second 44 px row, below the 44 px header). Pinned by
+        # tests/workshop_os12_more_layout_smoke.cpp.
+        redaction = (8, 89, 472, 133)
+    else:
+        # UI12 Local Portal card: preserve heading, IP and lifecycle copy while
+        # covering the complete access-code text line.
+        redaction = (236, 146, 472, 192)
 elif catalog_version == 1 and view_id == 'system':
     if (w, h) != (480, 320):
         raise SystemExit(f'Refusing unverified legacy System redaction geometry: {w}x{h}')
@@ -194,7 +200,7 @@ import json, sys
 with open(sys.argv[1], encoding='utf-8') as f:
     data = json.load(f)
 version = int(data.get('version', 1))
-if version not in (1, 2):
+if version not in (1, 2, 3):
     raise SystemExit(f'Unsupported capture catalog version: {version}')
 views = data.get('views')
 if not isinstance(views, list) or not views:
