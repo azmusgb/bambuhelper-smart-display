@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.0.2}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.1.0}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -79,6 +79,13 @@ python3 -m py_compile "$ROOT/scripts/accept_os12_portal_runtime.py"
 python3 "$ROOT/apply_workshop_os12_touch_hotfix.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_touch_hotfix.py" --repo "$BUILD"
 
+# Candidate 12.1.0: one read-only, token-checked status route for Local AI.
+python3 "$ROOT/apply_workshop_os12_status_lite.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-root "$ROOT"
+python3 "$ROOT/scripts/validate_os12_portal_signin.py" --repo "$BUILD" --source-root "$ROOT" \
+  --extra-public-route "HTTP_GET:/api/status/lite"
+python3 -m py_compile "$ROOT/scripts/accept_os12_status_lite_runtime.py"
+
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
   [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable after isolated setup' >&2; exit 1; }
@@ -100,6 +107,7 @@ echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overh
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
 echo "Portal security: boot-scoped portal-code session required for normal LAN routes; the code is shown on System -> Local Portal."
 echo "Mutation security: a valid session plus real Origin/Referer same-origin provenance; no client marker header is trusted."
+echo "Status token: GET /api/status/lite only, bearer token approved on the touchscreen, digest-only storage, no control access."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
 echo "Home/Workshop: consume the same profile-scoped Filament Inventory projection; Unknown/Undetermined is preserved when authoritative evidence is absent."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."
