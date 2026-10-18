@@ -2,7 +2,9 @@
 """WS350 More/System overhaul (Workshop OS 12.1.x).
 
 Owning patch for the More area. It runs last in the recipe, after
-apply_workshop_os12_status_lite.py, and owns whole functions rather than
+apply_workshop_os12_status_lite.py and apply_workshop_os12_code_token.py
+(the More pages read both consent prompts and the Local Portal page shows
+whether the sign-in code key is set up), and owns whole functions rather than
 editing lines inside them, so earlier layers cannot silently undo it.
 
 - ``firmware/platform/ui/more_layout.hpp`` (page table and geometry) is
@@ -515,6 +517,8 @@ def apply(repo: Path, source_root: Path) -> None:
     build = load(build_path)
     if "#define WORKSHOP_OS_STATUS_LITE_TOKEN 1" not in build:
         raise PatchError("the More overhaul runs after apply_workshop_os12_status_lite.py")
+    if "#define WORKSHOP_OS_CODE_TOKEN 1" not in build:
+        raise PatchError("the More overhaul runs after apply_workshop_os12_code_token.py")
     if BUILD_MARKER in build:
         raise PatchError("the More overhaul is already applied")
     install_layout(repo, source_root)

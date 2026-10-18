@@ -123,7 +123,7 @@ The More tab holds 15 pages, at most two levels deep. The page table and every t
 | `display-alerts` | Printer alerts | Sound & Alerts |
 | `hardware-led` | Status light | Sound & Alerts |
 | `media-video` | Video test | Sound & Alerts |
-| `system-portal` | Local Portal (**sensitive**: the access code) | More |
+| `system-portal` | Local Portal (**sensitive**: the access code; rows Address, Access code, Require access code, Name, Local AI code access) | More |
 | `system-update` | Updates & About | More |
 | `system-diagnostics` | Device health | Updates & About |
 

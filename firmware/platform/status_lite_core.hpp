@@ -44,9 +44,18 @@ inline bool tokenAlphabetChar(char c) {
     return false;
 }
 
-// Encodes 16 random bytes as "wsl_" + 26 base32 characters (5 bits each).
-inline void encodeToken(const std::uint8_t random[kTokenRandomBytes], char out[kTokenTextLength + 1]) {
-    std::memcpy(out, kTokenPrefix, kTokenPrefixLength);
+// Every device-issued token has a 4-character prefix naming its scope
+// ("wsl_" here; the sign-in code key uses "wsc_"), so one scope's token is
+// never well-formed for another scope.
+inline bool tokenPrefixValid(const char* prefix) {
+    return prefix != nullptr && std::strlen(prefix) == kTokenPrefixLength;
+}
+
+// Encodes 16 random bytes as "wsl_" (or `prefix`) + 26 base32 characters (5 bits each).
+inline void encodeToken(const std::uint8_t random[kTokenRandomBytes], char out[kTokenTextLength + 1],
+                        const char* prefix = kTokenPrefix) {
+    if (!tokenPrefixValid(prefix)) prefix = kTokenPrefix;
+    std::memcpy(out, prefix, kTokenPrefixLength);
     std::uint32_t buffer = 0;
     unsigned bits = 0;
     std::size_t byteIndex = 0;
@@ -64,9 +73,9 @@ inline void encodeToken(const std::uint8_t random[kTokenRandomBytes], char out[k
     out[kTokenTextLength] = '\0';
 }
 
-inline bool wellFormedToken(const char* token) {
-    if (token == nullptr || std::strlen(token) != kTokenTextLength) return false;
-    if (std::strncmp(token, kTokenPrefix, kTokenPrefixLength) != 0) return false;
+inline bool wellFormedToken(const char* token, const char* prefix = kTokenPrefix) {
+    if (token == nullptr || !tokenPrefixValid(prefix) || std::strlen(token) != kTokenTextLength) return false;
+    if (std::strncmp(token, prefix, kTokenPrefixLength) != 0) return false;
     for (std::size_t i = kTokenPrefixLength; i < kTokenTextLength; ++i) {
         if (!tokenAlphabetChar(token[i])) return false;
     }
@@ -76,7 +85,7 @@ inline bool wellFormedToken(const char* token) {
 // Strict "Authorization: Bearer <token>" parsing. The scheme is
 // case-insensitive; exactly the token follows, optionally surrounded by spaces.
 // Anything else (Basic, query strings, cookies, extra words) is rejected.
-inline bool parseBearer(const char* header, char out[kTokenTextLength + 1]) {
+inline bool parseBearer(const char* header, char out[kTokenTextLength + 1], const char* prefix = kTokenPrefix) {
     if (header == nullptr) return false;
     while (*header == ' ' || *header == '\t') ++header;
     static const char kScheme[] = "bearer";
@@ -99,7 +108,7 @@ inline bool parseBearer(const char* header, char out[kTokenTextLength + 1]) {
     if (len != kTokenTextLength) return false;
     std::memcpy(out, header, len);
     out[len] = '\0';
-    return wellFormedToken(out);
+    return wellFormedToken(out, prefix);
 }
 
 inline bool digestEqual(const std::uint8_t a[kDigestBytes], const std::uint8_t b[kDigestBytes]) {
@@ -227,6 +236,9 @@ public:
     static constexpr std::uint32_t kPromptMs = 60000;
     static constexpr std::uint32_t kClaimMs = 60000;
 
+    // `prefix` is the scope of the tokens this flow hands over.
+    explicit ApprovalFlow(const char* prefix = kTokenPrefix) : prefix_(tokenPrefixValid(prefix) ? prefix : kTokenPrefix) {}
+
     void start(std::uint32_t requestId, std::uint32_t now) {
         wipe();
         phase_ = ApprovalPhase::Pending;
@@ -254,7 +266,7 @@ public:
     // Called by the touchscreen Allow handler after the new token's digest has
     // been persisted. Holds the plaintext only until claimed or expired.
     bool approve(const char* token, std::uint32_t now) {
-        if (phase(now) != ApprovalPhase::Pending || !wellFormedToken(token)) return false;
+        if (phase(now) != ApprovalPhase::Pending || !wellFormedToken(token, prefix_)) return false;
         std::memcpy(token_, token, kTokenTextLength + 1);
         phase_ = ApprovalPhase::Approved;
         deadlineMs_ = now + kClaimMs;
@@ -291,6 +303,7 @@ private:
         requestId_ = 0;
     }
 
+    const char* prefix_;
     ApprovalPhase phase_{ApprovalPhase::Idle};
     std::uint32_t requestId_{0};
     std::uint32_t deadlineMs_{0};

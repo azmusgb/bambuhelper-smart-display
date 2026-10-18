@@ -19,7 +19,16 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": null,
+  "candidate": {
+    "version": "12.2.0",
+    "branch": "feature/code-token-portal-code",
+    "name": "Workshop OS 12.2.0 Sign-in Code Key",
+    "purpose": "A second device-issued key, separate from the read-only status token, whose only route is GET /api/portal-code: it returns the current Local Portal sign-in code and a per-boot id so Local AI can show the code. Created after Allow on the touchscreen, stored as SHA-256 only, rate-limited and tied to the sign-in lock-out. Whoever holds the key can sign in. On top of 12.1.4 (main).",
+    "pullRequest": 172,
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required"
+  },
   "mainState": {
     "version": "12.1.4",
     "commit": "6c86a72cf8b79c0d5da187b02a533ea1e7e8703c",
@@ -65,6 +74,7 @@
       "portalSignInContracts": "required",
       "touchRoutingContracts": "required",
       "statusTokenContracts": "required",
+      "codeTokenContracts": "required",
       "rapidResetContracts": "required",
       "morePagesContracts": "required",
       "physicalAcceptance": "required"

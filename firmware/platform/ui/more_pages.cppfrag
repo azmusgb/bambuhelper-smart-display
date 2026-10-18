@@ -86,9 +86,9 @@ static bool g_wsCaptureCompose = false;
 
 // True while the Video test page shows a running video (see smartHubDraw).
 static bool wsVideoDirect() {
-  // (The status-token consent prompt takes the whole screen; it must not be
+  // (The Local AI consent prompts take the whole screen; they must not be
   // drawn over by video frames.)
-  return !g_wsCaptureCompose && !workshopStatusTokenPromptVisible() &&
+  return !g_wsCaptureCompose && !workshopStatusTokenPromptVisible() && !workshopCodeTokenPromptVisible() &&
          getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::VideoTest &&
          g_wsDialog == WsDialog::None && wsVideoSessionActive();
 }
@@ -398,6 +398,7 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       }
       v.value[o] = 0;
       v.valueColor = workshopPlatformWifiOnline() ? OS12V_TEXT : OS12V_MUTED;
+      v.reason = "The code changes when the display restarts";
       break;
     }
     case R::PortalSignIn: {
@@ -411,8 +412,14 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       if (netSettings.mdnsEnabled) snprintf(v.value, sizeof(v.value), "%s.local", netSettings.hostname);
       else { strlcpy(v.value, "Off", sizeof(v.value)); v.reason = "Turn on Network > Name on network"; }
       break;
-    case R::PortalNote:
+    case R::PortalCodeKey: {
+      // Whether Local AI holds a sign-in code key. Never the key itself.
+      const bool on = workshopCodeTokenConfigured();
+      strlcpy(v.value, on ? "Set up" : "Not set up", sizeof(v.value));
+      v.valueColor = on ? OS12V_GREEN : OS12V_MUTED;
+      v.reason = on ? "Revoke it in the web portal, under More" : "Create it in the web portal, under More";
       break;
+    }
     // ---- Updates & About ----
     case R::Version:
       snprintf(v.value, sizeof(v.value), "Workshop OS %s", WORKSHOP_OS_RELEASE_VERSION);
@@ -1564,11 +1571,11 @@ static void wsMoreDraw(bool full) {
 // Touch
 // ---------------------------------------------------------------------------
 
-// Stops the video test if the More screen is no longer showing it, or if the
-// status-token consent prompt needs the whole screen.
+// Stops the video test if the More screen is no longer showing it, or if a
+// Local AI consent prompt needs the whole screen.
 static void wsVideoGuard(ScreenState screen) {
   if (g_wsPage != wsm::PageId::VideoTest || !wsVideoSessionActive()) return;
-  if (screen != SCREEN_HUB_MORE || workshopStatusTokenPromptVisible()) wsVideoStop();
+  if (screen != SCREEN_HUB_MORE || workshopStatusTokenPromptVisible() || workshopCodeTokenPromptVisible()) wsVideoStop();
 }
 
 static void wsTab(uint8_t i) {
