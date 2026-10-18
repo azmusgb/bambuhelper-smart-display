@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.1.4}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.2.0}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -91,9 +91,22 @@ python3 -m py_compile "$ROOT/scripts/accept_os12_status_lite_runtime.py"
 python3 "$ROOT/apply_workshop_os12_rapid_reset.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_rapid_reset.py" --repo "$BUILD"
 
+# 12.2.0: a second device-issued key, scoped to GET /api/portal-code only, so
+# Local AI can show the Local Portal sign-in code. Before the More overhaul,
+# which draws its touchscreen row and reads its prompt.
+python3 "$ROOT/apply_workshop_os12_code_token.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_code_token.py" --repo "$BUILD" --source-root "$ROOT"
+python3 "$ROOT/scripts/validate_os12_portal_signin.py" --repo "$BUILD" --source-root "$ROOT" \
+  --extra-public-route "HTTP_GET:/api/status/lite" \
+  --extra-public-route "HTTP_GET:/api/portal-code"
+python3 -m py_compile "$ROOT/scripts/accept_os12_code_token_runtime.py"
+
 # 12.1.x More/System overhaul. Owning patch for the More area; keep it last.
 python3 "$ROOT/apply_workshop_os12_more_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
+# The finished tree: both Local AI keys still have exactly their own route.
+python3 "$ROOT/scripts/validate_os12_code_token.py" --repo "$BUILD" --source-root "$ROOT" --final
+python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-root "$ROOT"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
@@ -117,6 +130,7 @@ echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding remov
 echo "Portal security: boot-scoped portal-code session required for normal LAN routes; the code is shown on System -> Local Portal."
 echo "Mutation security: a valid session plus real Origin/Referer same-origin provenance; no client marker header is trusted."
 echo "Status token: GET /api/status/lite only, bearer token approved on the touchscreen, digest-only storage, no control access."
+echo "Sign-in code key: GET /api/portal-code only, separate wsc_ key approved on the touchscreen, digest-only storage, wrong keys count toward the sign-in lock-out."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
 echo "Home/Workshop: consume the same profile-scoped Filament Inventory projection; Unknown/Undetermined is preserved when authoritative evidence is absent."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."

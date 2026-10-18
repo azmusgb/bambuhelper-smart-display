@@ -146,7 +146,7 @@ enum class RowId : uint8_t {
   // Video test
   VideoPause,
   // Local Portal
-  PortalAddress, PortalName, PortalCode, PortalSignIn, PortalNote,
+  PortalAddress, PortalName, PortalCode, PortalSignIn, PortalCodeKey,
   // Updates & About
   Version, UpdateAction, UpdateChannel, DateTimeNow, HealthNav,
   // Device health
@@ -310,7 +310,7 @@ static const RowSpec kLocalPortalRows[] = {
   {RowId::PortalCode, RowKind::Code, "Access code", PageId::Root},
   {RowId::PortalSignIn, RowKind::Info, "Require access code", PageId::Root},
   {RowId::PortalName, RowKind::Info, "Name", PageId::Root},
-  {RowId::PortalNote, RowKind::Info, "The code changes when the display restarts.", PageId::Root},
+  {RowId::PortalCodeKey, RowKind::Info, "Local AI code access", PageId::Root},
 };
 
 static const RowSpec kUpdatesAboutRows[] = {

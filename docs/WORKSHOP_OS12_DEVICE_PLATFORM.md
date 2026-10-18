@@ -124,6 +124,7 @@ The current contract is:
 - the owner setting **Require access code** defaults on; turning it off opens only an explicit read-only status allowlist on station Wi-Fi, never controls, credentials, capture, settings or Recovery (see `docs/portal-signin-restore-12-0-1.md`);
 - setup/recovery authorization boundaries remain distinct.
 - one read-only integration route, `GET /api/status/lite`, is authorized by its own device-issued bearer token (approved on the touchscreen, digest-only storage, rate-limited, station Wi-Fi only) and never by the portal session; the token opens no other route (see `docs/status-lite-token-12-1-0.md`).
+- a second, separate integration key (`wsc_…`) authorizes only `GET /api/portal-code`, which returns the current sign-in code and a per-boot id to Local AI; same approval, digest-only storage and rate limit, plus the sign-in lock-out (see `docs/code-token-12-2-0.md`).
 
 The login UI exposes explicit Ready, Invalid, Rate-limited, and Submitting states with semantic headings, UTF-8/lang metadata, associated help/errors, alert/live regions, focus treatment, reduced-motion/forced-colors behavior, and pointer-gated hover polish. `autocomplete="one-time-code"` is not used because the code is read from the WS350 rather than sent by SMS/email.
 
