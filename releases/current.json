@@ -19,7 +19,17 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": null,
+  "candidate": {
+    "version": "12.0.1",
+    "branch": "security/portal-signin-restore",
+    "name": "Workshop OS 12.0.1 Portal Sign-in Restore",
+    "purpose": "Security candidate: retire the 12.0.0 code-free portal overlay and restore the boot-scoped portal-code session for normal-LAN routes, with real Origin/Referer same-origin protection for every mutation (no X-BambuHelper-Client shortcut). See docs/portal-signin-restore-12-0-1.md.",
+    "pullRequest": 161,
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required",
+    "supersedesSecurityDefectIn": "48ddd5819e578bc85a391d9607653e71ca5c6aa2"
+  },
   "mainState": {
     "version": "12.0.0",
     "commit": "48ddd5819e578bc85a391d9607653e71ca5c6aa2",
@@ -54,11 +64,11 @@
       "physicalAcceptance": "passed"
     },
     "candidate": {
-      "exactHeadCi": "none-open-candidate",
-      "ws350Build": "none-open-candidate",
-      "shared320x480Regression": "none-open-candidate",
-      "productFinish": "none-open-candidate",
-      "physicalAcceptance": "none-open-candidate"
+      "exactHeadCi": "required",
+      "ws350Build": "required",
+      "shared320x480Regression": "required",
+      "portalSignInContracts": "required",
+      "physicalAcceptance": "required"
     },
     "staticDownload": {
       "version": "11.19.1",
