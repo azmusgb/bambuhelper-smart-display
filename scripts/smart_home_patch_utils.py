@@ -90,3 +90,56 @@ def get_braced_block(text: str, start: str, label: str) -> tuple[int, int, str]:
 class PatchError(RuntimeError):
     """Raised when a patch anchor is missing or matches more than once."""
     pass
+
+
+def _cpp_body_end(text: str, brace: int, label: str) -> int:
+    """Return the index just past the brace matching text[brace].
+
+    Skips braces inside string/char literals and // or /* */ comments.
+    """
+    depth = 0
+    i = brace
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c in ("'", '"'):
+            i += 1
+            while i < n and text[i] != c:
+                i += 2 if text[i] == "\\" else 1
+        elif text.startswith("//", i):
+            nl = text.find("\n", i)
+            i = n if nl < 0 else nl
+        elif text.startswith("/*", i):
+            close = text.find("*/", i + 2)
+            if close < 0:
+                break
+            i = close + 1
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    raise PatchError(f"{label}: closing brace missing")
+
+
+def replace_cpp_function(text: str, signature: str, replacement: str, label: str) -> str:
+    """Replace the whole C++ function starting at a unique signature.
+
+    The trailing newline after the closing brace is consumed so a replacement
+    ending in "}\\n" keeps the original spacing. Raises PatchError.
+    """
+    count = text.count(signature)
+    if count != 1:
+        raise PatchError(f"{label}: expected one function signature, found {count}")
+    start = text.find(signature)
+    brace = text.find("{", start + len(signature))
+    if brace < 0:
+        raise PatchError(f"{label}: opening brace missing")
+    end = _cpp_body_end(text, brace, label)
+    if text.startswith("\r\n", end):
+        end += 2
+    elif text.startswith("\n", end):
+        end += 1
+    return text[:start] + replacement + text[end:]

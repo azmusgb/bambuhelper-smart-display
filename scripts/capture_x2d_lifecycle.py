@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -19,8 +20,22 @@ import time
 from accept_os12_media_physical import update_identity
 from accept_os12_media_runtime import api, status, validate_status
 from accept_os12_portal_runtime import AcceptanceError, Client, check
-from accept_os12_unattended import frame_bytes, show
+from accept_os12_unattended import frame_bytes, parse_ppm, show
 from capture_x2d_full_ui import frame_metrics, png_bytes, wait_for_live_frame, ensure_idle
+
+
+def is_transport_error(exc: BaseException) -> bool:
+    """True when exc is, or was raised from, a socket/HTTP transport failure.
+
+    The portal client wraps urllib failures in AcceptanceError, so inspect the
+    cause chain rather than matching message text.
+    """
+    seen: BaseException | None = exc
+    while seen is not None:
+        if isinstance(seen, (OSError, TimeoutError)):
+            return True
+        seen = seen.__cause__
+    return isinstance(exc, AcceptanceError) and "HTTP 503" in str(exc)
 
 
 def retry_frame(client: Client, attempts: int = 3) -> bytes:
@@ -28,7 +43,9 @@ def retry_frame(client: Client, attempts: int = 3) -> bytes:
     for attempt in range(1, attempts + 1):
         try:
             return frame_bytes(client)
-        except (TimeoutError, OSError) as exc:
+        except Exception as exc:
+            if not is_transport_error(exc):
+                raise
             last = exc
             if attempt == attempts:
                 break
@@ -69,7 +86,6 @@ def run(args: argparse.Namespace) -> int:
         ppm.write_bytes(body)
         # parse through metrics first so malformed captures fail closed.
         metrics = frame_metrics(body)
-        from accept_os12_unattended import parse_ppm
         width, height, rgb = parse_ppm(body)
         png.write_bytes(png_bytes(width, height, rgb))
         item = {
@@ -216,7 +232,7 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://10.0.0.124")
+    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
     parser.add_argument("--output-dir")
     parser.add_argument("--live-samples", type=int, default=8)
     parser.add_argument("--cycles", type=int, default=3)

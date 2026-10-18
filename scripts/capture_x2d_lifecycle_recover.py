@@ -20,7 +20,6 @@ from accept_os12_portal_runtime import AcceptanceError
 _ORIGINAL_API = runtime.api
 _ORIGINAL_IDENTITY = lifecycle.update_identity
 _ORIGINAL_SHOW = lifecycle.show
-_ORIGINAL_FRAME_BYTES = lifecycle.frame_bytes
 
 _EXPECTED_MUTATIONS: dict[str, tuple[set[str], int]] = {
     "/os12/media/video/start-x2d-bridge": ({"PlayingVideo"}, 202),
@@ -33,23 +32,7 @@ _transport_recoveries: list[str] = []
 _read_recoveries: list[str] = []
 
 
-def _is_transportish(exc: BaseException) -> bool:
-    if isinstance(exc, (OSError, TimeoutError)):
-        return True
-    if isinstance(exc, AcceptanceError):
-        text = str(exc).lower()
-        return any(
-            token in text
-            for token in (
-                "connection reset",
-                "timed out",
-                "timeout",
-                "temporarily unavailable",
-                "framebuffer capture request failed",
-                "http error 503",
-            )
-        )
-    return False
+_is_transportish = lifecycle.is_transport_error
 
 
 def _retry_read(label: str, fn, attempts: int = 5):
@@ -88,8 +71,10 @@ def resilient_show(client, view_id: str) -> None:
     return _retry_read(f"POST /hub/show page={view_id}", lambda: _ORIGINAL_SHOW(client, view_id), attempts=3)
 
 
-def resilient_frame_bytes(client) -> bytes:
-    return _retry_read("GET /hub/frame.ppm", lambda: _ORIGINAL_FRAME_BYTES(client), attempts=4)
+def resilient_retry_frame(client, attempts: int = 4) -> bytes:
+    # Replaces lifecycle.retry_frame (not frame_bytes) so captures are retried
+    # at exactly one layer, with every recovery logged.
+    return _retry_read("GET /hub/frame.ppm", lambda: lifecycle.frame_bytes(client), attempts=attempts)
 
 
 def _raw_status(client) -> dict:
@@ -171,7 +156,7 @@ def main() -> int:
     lifecycle.status = resilient_status
     lifecycle.update_identity = resilient_identity
     lifecycle.show = resilient_show
-    lifecycle.frame_bytes = resilient_frame_bytes
+    lifecycle.retry_frame = resilient_retry_frame
 
     code = lifecycle.main()
 

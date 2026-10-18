@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import hashlib
 import html
 import json
+import os
 from pathlib import Path
 import shutil
 import statistics
@@ -278,7 +279,7 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://10.0.0.124")
+    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
     parser.add_argument("--output-dir")
     parser.add_argument("--live-samples", type=int, default=12)
     parser.add_argument("--cycles", type=int, default=3)
