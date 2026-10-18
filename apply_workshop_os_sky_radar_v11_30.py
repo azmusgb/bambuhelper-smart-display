@@ -276,6 +276,18 @@ void drawSkyRadar() {
         "smartHubAdvance SCREEN_SKY_RADAR case",
     )
 
+
+    # Fix pre-existing crash: kNetworkPages has 4 entries but the loop
+    # was reading past the array, causing a LoadProhibited crash on any
+    # unmatched page name (all 7 hardware-* screens).
+    smart_hub_fix = (repo / "src" / "smart_hub.cpp").read_text(encoding="utf-8")
+    old_loop = "for(uint8_t i=0;i<HUB_NETWORK_PAGE_COUNT;i++) {"
+    new_loop = "for(uint8_t i=0;i<sizeof(kNetworkPages)/sizeof(kNetworkPages[0]);i++) {"
+    if old_loop in smart_hub_fix:
+        smart_hub_fix = smart_hub_fix.replace(old_loop, new_loop, 1)
+        (repo / "src" / "smart_hub.cpp").write_text(smart_hub_fix, encoding="utf-8")
+        print("Fixed kNetworkPages loop bound (audio-screen crash)")
+
     display_ui_path.write_text(display_ui_content, encoding="utf-8")
     smart_hub_path.write_text(smart_hub_content, encoding="utf-8")
     print("Patch applied successfully.")

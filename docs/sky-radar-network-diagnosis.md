@@ -60,3 +60,15 @@ fragmented heap. Do not retry without deeper investigation.
 
 3. Cache location in settings - fetch once, persist, skip on later
    boots. Even a broken fetch only needs to work once.
+
+## Attempt #2: readString() (also failed)
+
+Replaced fetchUserLocation() with a version using client.readString()
+and 5000ms timeout. Compile failed in ~9 seconds with no error: lines
+captured. Also attempted adding the sky-radar mapping directly to
+smartHubShowPage — that too failed to compile, and the earlier attempt
+to route it via /hub/views mapping hit "Unknown or available Smart
+Display page".
+
+Next session: try Alternative #3 (cache location in NV/Preferences).
+No runtime network dependency, no compile risk, one-time fetch at boot.
