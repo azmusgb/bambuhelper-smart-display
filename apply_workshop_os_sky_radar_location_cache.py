@@ -1,44 +1,23 @@
 #!/usr/bin/env python3
+"""Add persistent location caching to Sky Radar's fetchUserLocation()."""
+from __future__ import annotations
+
+import argparse
 import sys
-import os
+from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from scripts.smart_home_patch_utils import PatchError, fail, replace_once, replace_braced_block
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scripts.smart_home_patch_utils import PatchError, replace_braced_block
 
-def main():
-    repo_root = sys.argv[1] if len(sys.argv) > 1 else "upstream"
-    smart_hub_path = os.path.join(repo_root, "src", "smart_hub.cpp")
 
-    if not os.path.exists(smart_hub_path):
-        fail(f"smart_hub.cpp not found at {smart_hub_path}")
+INCLUDE = "#include <Preferences.h>\n"
 
-    with open(smart_hub_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Idempotency check
-    if "g_radarPrefs" in content and "g_radarPrefs.getFloat(\"lat\", 0.0f)" in content:
-        print("apply_workshop_os_sky_radar_location_cache.py: already applied, skipping.")
-        return
-
-    # The prompt instructs:
-    # "The patch must inject into <repo>/src/smart_hub.cpp:
-    #  A Preferences object named g_radarPrefs opened under namespace 'radar'.
-    #  Replace the existing fetchUserLocation() with a version that:
-    #  - First checks g_radarPrefs.getFloat('lat', 0.0f) and 'lon'. If both nonzero, sets g_user_lat, g_user_lon, g_location_fetched = true and returns immediately — no network call.
-    #  - Only if cache is empty, does the existing WiFiClient fetch with client.setTimeout(5000) and client.readString() (whole body, then find first { and parse JSON from there).
-    #  - On success, calls g_radarPrefs.putFloat('lat', g_user_lat) and putFloat('lon', g_user_lon) to persist.
-    #  - Idempotent — re-running prints already applied, skipping."
-
-    # If fetchUserLocation() does not exist yet in upstream smart_hub.cpp (because sky radar isn't applied yet, or the user patch is standalone), 
-    # wait! Let's check how fetchUserLocation is expected to be patched or if fetchUserLocation exists in sky radar.
-    # Wait, sky radar adds fetchUserLocation(). But this patch script is standalone or follows sky radar.
-    # Let's check if fetchUserLocation exists or if we should add it if missing, or replace it if present.
-    old_fetch_signature = "void fetchUserLocation() {"
-    
-    new_fetch_code = """Preferences g_radarPrefs;
+NEW_FN = '''static Preferences g_radarPrefs;
 
 void fetchUserLocation() {
     if (g_location_fetched) return;
+    Serial.println("[radar] fetch started");
+
     g_radarPrefs.begin("radar", false);
     float cached_lat = g_radarPrefs.getFloat("lat", 0.0f);
     float cached_lon = g_radarPrefs.getFloat("lon", 0.0f);
@@ -46,48 +25,107 @@ void fetchUserLocation() {
         g_user_lat = cached_lat;
         g_user_lon = cached_lon;
         g_location_fetched = true;
+        g_radar_no_signal = false;
         g_radarPrefs.end();
+        Serial.print("[radar] location from cache ");
+        Serial.print(g_user_lat, 4);
+        Serial.print(",");
+        Serial.println(g_user_lon, 4);
+        return;
+    }
+    g_radarPrefs.end();
+
+    Serial.println("[radar] connecting ip-api.com:80");
+    WiFiClient client;
+    client.setTimeout(5000);
+    if (!client.connect("ip-api.com", 80)) {
+        Serial.println("[radar] ip-api.com connect FAILED");
+        g_last_radar_fetch = millis();
+        return;
+    }
+    Serial.println("[radar] ip-api.com connected");
+    client.print("GET /json HTTP/1.1\\r\\nHost: ip-api.com\\r\\nConnection: close\\r\\n\\r\\n");
+    String body = client.readString();
+    client.stop();
+
+    Serial.print("[radar] body len=");
+    Serial.println(body.length());
+
+    int brace = body.indexOf('{');
+    if (brace < 0) {
+        Serial.println("[radar] no JSON in body");
+        g_last_radar_fetch = millis();
+        return;
+    }
+    body = body.substring(brace);
+
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, body);
+    if (error) {
+        Serial.print("[radar] json parse failed: ");
+        Serial.println(error.c_str());
+        g_last_radar_fetch = millis();
         return;
     }
 
-    WiFiClient client;
-    client.setTimeout(5000);
-    if (client.connect("ip-api.com", 80)) {
-        client.print("GET /json HTTP/1.1\\r\\nHost: ip-api.com\\r\\nConnection: close\\r\\n\\r\\n");
-        String body = client.readString();
-        client.stop();
-
-        int brace = body.indexOf('{');
-        if (brace >= 0) {
-            body = body.substring(brace);
-            DynamicJsonDocument doc(1024);
-            deserializeJson(doc, body);
-            g_user_lat = doc["lat"] | 0.0f;
-            g_user_lon = doc["lon"] | 0.0f;
-            if (g_user_lat != 0.0f && g_user_lon != 0.0f) {
-                g_location_fetched = true;
-                g_radarPrefs.putFloat("lat", g_user_lat);
-                g_radarPrefs.putFloat("lon", g_user_lon);
-            }
-        }
+    g_user_lat = doc["lat"] | 0.0f;
+    g_user_lon = doc["lon"] | 0.0f;
+    if (g_user_lat != 0.0f && g_user_lon != 0.0f) {
+        g_location_fetched = true;
+        g_radar_no_signal = false;
+        g_radarPrefs.begin("radar", false);
+        g_radarPrefs.putFloat("lat", g_user_lat);
+        g_radarPrefs.putFloat("lon", g_user_lon);
+        g_radarPrefs.end();
+        Serial.print("[radar] location OK ");
+        Serial.print(g_user_lat, 4);
+        Serial.print(",");
+        Serial.println(g_user_lon, 4);
+    } else {
+        Serial.println("[radar] location returned 0,0");
+        g_last_radar_fetch = millis();
     }
-    g_radarPrefs.end();
-}"""
+}
+'''
 
-    if old_fetch_signature in content:
-        content = replace_braced_block(content, old_fetch_signature, new_fetch_code[len(old_fetch_signature):], "fetchUserLocation cache replacement")
-    else:
-        # If fetchUserLocation doesn't exist yet, inject it before smartHubInit or at the end of file / near top
-        anchor = "void smartHubInit() {\n  if (g_initialized) return;"
-        if anchor in content:
-            content = replace_once(content, anchor, new_fetch_code + "\n\n" + anchor, "fetchUserLocation injection")
-        else:
-            fail("Could not find fetchUserLocation or smartHubInit in smart_hub.cpp")
 
-    with open(smart_hub_path, "w", encoding="utf-8") as f:
-        f.write(content)
+def apply(repo: Path) -> None:
+    hub = repo / "src" / "smart_hub.cpp"
+    if not hub.is_file():
+        raise PatchError(f"smart_hub.cpp not found at {hub}")
+    src = hub.read_text(encoding="utf-8")
 
-    print("Successfully applied persistent location caching to Sky Radar in smart_hub.cpp")
+    if "g_radarPrefs" in src and "location from cache" in src:
+        print("already applied, skipping.")
+        return
+
+    anchor = "void fetchUserLocation() {"
+    if anchor not in src:
+        raise PatchError("fetchUserLocation not found — apply the Sky Radar patch first")
+
+    src = replace_braced_block(src, anchor, NEW_FN.rstrip("\n"), "fetchUserLocation cache")
+    if INCLUDE not in src:
+        first_include = src.find("#include")
+        if first_include < 0:
+            raise PatchError("smart_hub.cpp has no #include to anchor Preferences.h")
+        src = src[:first_include] + INCLUDE + src[first_include:]
+    hub.write_text(src, encoding="utf-8")
+    print("Applied persistent location caching to Sky Radar")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--apply", action="store_true")
+    args = parser.parse_args()
+    if not args.apply:
+        raise SystemExit("refusing to modify source without --apply")
+    try:
+        apply(Path(args.repo).resolve())
+    except PatchError as exc:
+        raise SystemExit(str(exc)) from exc
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
