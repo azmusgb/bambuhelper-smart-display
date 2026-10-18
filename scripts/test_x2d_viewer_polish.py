@@ -27,45 +27,19 @@ polish = load_module(
 
 SMART_HUB_FIXTURE = f'''static bool g_dirty=false;
 static bool g_hubFramePrimed=false;
-static int g_ui12SettingsView=10;
-
-static void drawOs12Media() {{
-  const auto& m=workshopMediaSnapshot();
-  const bool videoPlaying=false;
-  {polish.MEDIA_ROW_OLD}
-}}
-
-static bool gOs12VideoViewerPrimed=false;
-
-static void drawOs12VideoViewer() {{
-{polish.VIEWER_STATE_OLD}
-  if(!videoActive) {{
-    uiDrawFit("Video Viewer",OS12V_INSET,14,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_TEXT,TFT_BLACK);
-    uiDrawFit("No active video session",OS12V_INSET,48,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_MUTED,TFT_BLACK);
-{polish.IDLE_DEV_NOTE}    hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);
-    return;
-  }}
-  if(!gOs12VideoViewerPrimed) {{
-    uiDrawFit("Video Viewer",OS12V_INSET,9,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_TEXT,TFT_BLACK);
-    uiDrawFit("Stop & Back returns to Media",OS12V_INSET,50,tft.width()-OS12V_INSET*2,FONT_SMALL,TL_DATUM,OS12V_MUTED,TFT_BLACK);
-    gOs12VideoViewerPrimed=true;
-  }}
-  hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);
-{polish.VIEWER_ACTION_OLD}}}
-static bool touch() {{
+static bool g_wsVideoStartFailed=false;
+static void wsVideoStart() {{
   workshop::media::MediaService& media=workshopMediaService();
-  const workshop::media::SessionState state=media.snapshot().runtime.session;
-{polish.BACK_OLD}
   {polish.LAUNCH_OLD}
-  return false;
 }}
 static void route() {{
   const bool directVideoViewer = true;
 }}
 bool smartHubCapturePrepare(uint16_t* width, uint16_t* height) {{
   if (!g_cfg.enabled) return false;
+  g_wsCaptureCompose = true;
   smartHubDraw(getScreenState(), true);
-  if (!g_hubFrame || !g_hubFrame->getBuffer()) return false;
+{polish.CAPTURE_OLD}  if (!g_hubFrame || !g_hubFrame->getBuffer()) return false;
   if (width) *width = (uint16_t)g_hubFrame->width();
   if (height) *height = (uint16_t)g_hubFrame->height();
   return true;
@@ -76,93 +50,90 @@ bool smartHubCaptureRgbRow(uint16_t y, uint8_t* out, size_t outLen) {{
 }}
 '''
 
+LAYOUT_FIXTURE = f'''static const RowSpec kSoundAlertsRows[] = {{
+  {polish.ROW_LABEL_OLD},
+}};
+static const PageSpec kPages[] = {{
+  {{PageId::VideoTest, PageId::SoundAlerts, 2, {polish.PAGE_TITLE_OLD} "Sound", "media-video", WS_ROWS(kVideoRows)}},
+}};
+'''
+
+
 class ViewerPolishTests(unittest.TestCase):
     def make_repo(self) -> tuple[tempfile.TemporaryDirectory, Path]:
         td = tempfile.TemporaryDirectory()
         root = Path(td.name)
-        src = root / "src"
-        src.mkdir()
-        (src / "smart_hub.cpp").write_text(SMART_HUB_FIXTURE, encoding="utf-8")
+        (root / "src").mkdir()
+        (root / "include").mkdir()
+        (root / "src/smart_hub.cpp").write_text(SMART_HUB_FIXTURE, encoding="utf-8")
+        (root / "include/workshop_more_layout.hpp").write_text(LAYOUT_FIXTURE, encoding="utf-8")
         return td, root
 
-    def test_polish_installs_proven_viewer_and_capture_fixes(self) -> None:
+    def read(self, root: Path) -> dict[str, str]:
+        return {
+            "hub": (root / "src/smart_hub.cpp").read_text(encoding="utf-8"),
+            "layout": (root / "include/workshop_more_layout.hpp").read_text(encoding="utf-8"),
+        }
+
+    def test_names_the_video_page_x2d_camera(self) -> None:
         td, root = self.make_repo()
         with td:
             polish.apply(root)
-            hub = (root / "src/smart_hub.cpp").read_text(encoding="utf-8")
+            layout = self.read(root)["layout"]
+            self.assertIn('"X2D camera", PageId::VideoTest', layout)
+            self.assertIn('PageLayout::Video, "X2D camera",', layout)
+            self.assertNotIn('"Video test"', layout)
 
-            self.assertIn('"X2D Camera"', hub)
-            self.assertIn("const bool controlsChanged", hub)
-            self.assertNotIn('"Stop & Back"', hub)
-            self.assertNotIn("Stop & Back returns", hub)
-            self.assertIn(polish.NEW_BACK_HINT, hub)
-            self.assertNotIn("Video Viewer", hub)
-            self.assertIn(polish.IDLE_STATUS_NEW, hub)
-            self.assertNotIn("never reuses Recorder", hub)
-            self.assertGreaterEqual(hub.count('"Back",C10_ACCENT,true,false'), 2)
-            self.assertIn("Transfer display ownership back to Media", hub)
-
-    def test_refused_launch_is_visible_on_media_row(self) -> None:
+    def test_refused_launch_is_audible(self) -> None:
         td, root = self.make_repo()
         with td:
             polish.apply(root)
-            hub = (root / "src/smart_hub.cpp").read_text(encoding="utf-8")
+            hub = self.read(root)["hub"]
             self.assertNotIn(polish.LAUNCH_OLD, hub)
             self.assertIn(polish.LAUNCH_NEW, hub)
             self.assertIn("buzzerPlay(BUZZ_ERROR)", hub)
-            # Declared before the Media renderer that reads it.
-            self.assertLess(hub.index("static bool gOs12X2dLaunchFailed=false;"), hub.index("static void drawOs12Media()"))
-            self.assertIn('"Check Wi-Fi and the Mac bridge"', hub)
 
-    def test_capture_recomposes_viewer_offscreen(self) -> None:
+    def test_capture_redraws_camera_frame_offscreen(self) -> None:
         td, root = self.make_repo()
         with td:
             polish.apply(root)
-            hub = (root / "src/smart_hub.cpp").read_text(encoding="utf-8")
+            hub = self.read(root)["hub"]
             prepare = hub[hub.index("bool smartHubCapturePrepare"):hub.index("bool smartHubCaptureRgbRow")]
             self.assertEqual(hub.count(polish.CAPTURE_MARKER), 1)
-            self.assertIn("screen == SCREEN_HUB_MORE && g_ui12SettingsView == 12", prepare)
-            # Viewer chrome and the last camera frame go to g_hubFrame, never the panel,
-            # and every piece of borrowed state is restored.
-            self.assertLess(prepare.index("tft_ptr = g_hubFrame;"), prepare.index("drawOs12VideoViewer();"))
+            # The camera frame goes to g_hubFrame, never the panel, and the
+            # panel pointer is restored.
+            self.assertLess(prepare.index("tft_ptr = g_hubFrame;"), prepare.index("workshop::media::x2dRedrawLastFrame();"))
             self.assertLess(prepare.index("workshop::media::x2dRedrawLastFrame();"), prepare.index("tft_ptr = panel;"))
-            for restored in ("gOs12VideoViewerPrimed = primed;", "g_dirty = dirty;"):
-                self.assertIn(restored, prepare)
-            self.assertIn("bool x2dRedrawLastFrame();", hub)
+            self.assertIn("g_wsPage == workshop::ui::more::PageId::VideoTest", prepare)
+            self.assertLess(hub.index("bool x2dRedrawLastFrame();"), hub.index("bool smartHubCapturePrepare"))
             # The canonical g_hubFrame row reader is kept.
             self.assertIn("if (!out || !g_hubFrame || !g_hubFrame->getBuffer()) return false;", hub)
 
-    def test_polish_is_idempotent_for_partially_patched_physical_candidate(self) -> None:
+    def test_polish_is_idempotent(self) -> None:
         td, root = self.make_repo()
         with td:
             polish.apply(root)
-            first = {
-                p.name: p.read_text(encoding="utf-8")
-                for p in (root / "src").iterdir()
-            }
+            first = self.read(root)
             polish.apply(root)
-            second = {
-                p.name: p.read_text(encoding="utf-8")
-                for p in (root / "src").iterdir()
-            }
-            self.assertEqual(first, second)
+            self.assertEqual(first, self.read(root))
 
     def test_polish_failure_is_transactional(self) -> None:
         td, root = self.make_repo()
         with td:
             hub = root / "src/smart_hub.cpp"
-            hub.write_text(hub.read_text(encoding="utf-8").replace(polish.BACK_OLD, ""), encoding="utf-8")
-            before = {
-                p.name: p.read_text(encoding="utf-8")
-                for p in (root / "src").iterdir()
-            }
+            hub.write_text(hub.read_text(encoding="utf-8").replace(polish.CAPTURE_OLD, ""), encoding="utf-8")
+            before = self.read(root)
             with self.assertRaises(Exception):
                 polish.apply(root)
-            after = {
-                p.name: p.read_text(encoding="utf-8")
-                for p in (root / "src").iterdir()
-            }
-            self.assertEqual(before, after)
+            self.assertEqual(before, self.read(root))
+
+    def test_requires_bridge_overlay_first(self) -> None:
+        td, root = self.make_repo()
+        with td:
+            hub = root / "src/smart_hub.cpp"
+            hub.write_text(hub.read_text(encoding="utf-8").replace('"x2d-bridge"', '"demo-video"'), encoding="utf-8")
+            with self.assertRaises(Exception):
+                polish.apply(root)
 
 
 if __name__ == "__main__":

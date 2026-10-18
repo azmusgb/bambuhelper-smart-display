@@ -187,9 +187,9 @@ def run(args: argparse.Namespace) -> int:
 
         print("\nX2D CAMERA LIFECYCLE")
         ensure_idle(client)
-        try: show(client, "media")
+        try: show(client, "settings-sounds")
         except AcceptanceError: pass
-        report["x2d"]["mediaReady"] = save(frame_bytes(client), "x2d-media-ready", "Media before X2D start")
+        report["x2d"]["mediaReady"] = save(frame_bytes(client), "x2d-media-ready", "Sound & Alerts before X2D start")
         started = api(client, "/os12/media/video/start-x2d-bridge", method="POST"); validate_status(started)
         check(started.get("_http_status") == 202 and started.get("session") == "PlayingVideo", f"X2D start refused: HTTP {started.get('_http_status')} error={started.get('error')}")
         live_ready = wait_for_live_frame(client, args.live_start_timeout)
@@ -237,7 +237,7 @@ def run(args: argparse.Namespace) -> int:
 
         stopped = api(client, "/os12/media/stop", method="POST"); validate_status(stopped)
         check(stopped.get("_http_status") == 200 and stopped.get("session") == "Idle", "X2D stop failed")
-        try: show(client, "media")
+        try: show(client, "settings-sounds")
         except AcceptanceError: pass
         for i, delay in enumerate((0.0, 0.08, 0.16, 0.32, 0.64, 1.0), 1):
             if delay: time.sleep(delay)
@@ -252,7 +252,7 @@ def run(args: argparse.Namespace) -> int:
             live = wait_for_live_frame(client, args.live_start_timeout)
             live_item = save(frame_bytes(client), f"x2d-cycle-{cycle:02d}-live", f"reopen cycle {cycle} live")
             stop = api(client, "/os12/media/stop", method="POST"); validate_status(stop); check(stop.get("_http_status") == 200 and stop.get("session") == "Idle", f"cycle {cycle}: stop failed")
-            try: show(client, "media")
+            try: show(client, "settings-sounds")
             except AcceptanceError: pass
             idle_item = save(frame_bytes(client), f"x2d-cycle-{cycle:02d}-media", f"reopen cycle {cycle} returned to Media")
             report["x2d"]["reopenCycles"].append({"cycle": cycle, "live": live_item, "media": idle_item, "lastRenderedFrame": live.get("videoFramesRendered")}); print(f"PASS  cycle {cycle}: live -> stop -> Media")

@@ -190,23 +190,23 @@ def capture(args: argparse.Namespace) -> int:
             "settle": settle,
         })
         print(
-            f"PASS  {index:02d}/15  {view_id:24s}  sha256={frame_sha[:12]}... "
+            f"PASS  {index:02d}/{len(REQUIRED_VIEWS)}  {view_id:24s}  sha256={frame_sha[:12]}... "
             f"settled={settle['attempts']} attempts diff={settle['finalDifferenceRatio']:.6f}"
         )
         time.sleep(0.08)
 
     video_full_diff = pixel_difference_ratio(
-        captured_frames["media-lab"], captured_frames["media-video"]
+        captured_frames["settings-sounds"], captured_frames["media-video"]
     )
     video_content_diff = pixel_difference_ratio_region(
-        captured_frames["media-lab"], captured_frames["media-video"],
+        captured_frames["settings-sounds"], captured_frames["media-video"],
         0, 0, 480, 240,
     )
     check(
         video_content_diff >= VIDEO_VIEW_ISOLATION_MIN,
-        "media-video content region is too similar to media-lab; stale Recorder content suspected",
+        "media-video content region is too similar to settings-sounds; stale Recorder content suspected",
     )
-    manifest["comparisons"]["mediaLabVsMediaVideo"] = {
+    manifest["comparisons"]["soundsVsVideoTest"] = {
         "fullFrameDifferenceRatio": round(video_full_diff, 8),
         "contentRegion": {"x": 0, "y": 0, "width": 480, "height": 240},
         "contentDifferenceRatio": round(video_content_diff, 8),

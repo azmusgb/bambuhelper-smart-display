@@ -263,7 +263,7 @@ class PatchIntegrationTests(unittest.TestCase):
             )
             self.assertNotIn('server.on("/os12/media/video/start-x2d-bridge"', web_text)
             self.assertIn(patch.SMART_HUB_X2D_START_REPLACEMENT, smart_hub_text)
-            self.assertIn('"Tap row to open X2D camera"', smart_hub_text)
+            self.assertIn(patch.SMART_HUB_MEDIA_HINT_REPLACEMENT, smart_hub_text)
             self.assertIn(patch.SMART_HUB_ACTIVE_HINT_REPLACEMENT, smart_hub_text)
             self.assertIn("directVideoViewer", smart_hub_text)
             self.assertIn("const bool buffered = !directVideoViewer && hubEnsureFrame();", smart_hub_text)
