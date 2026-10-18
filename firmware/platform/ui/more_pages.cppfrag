@@ -1,0 +1,982 @@
+// ---------------------------------------------------------------------------
+// Workshop OS 12.1 More area (WS350).
+//
+// Inserted into smart_hub.cpp's anonymous namespace by
+// apply_workshop_os12_more_overhaul.py. Every More page is drawn and
+// hit-tested from workshop_more_layout.hpp: one header with Back top-left, the
+// tab bar on every page, single-line 44 px rows, and one rectangle function
+// per control for both drawing and touch.
+// ---------------------------------------------------------------------------
+namespace wsm = workshop::ui::more;
+
+enum class WsDialog : uint8_t { None = 0, AutoOffEnable, Install, Channel };
+
+static wsm::PageId g_wsPage = wsm::PageId::Root;
+static uint8_t g_wsScroll = 0;
+static WsDialog g_wsDialog = WsDialog::None;
+static char g_wsToast[72] = {0};
+static unsigned long g_wsToastUntilMs = 0;
+
+// Pages this build draws with the new layout. The rest still open their
+// 12.0 screens until they move over.
+static bool wsPageLive(wsm::PageId id) {
+  switch (id) {
+    case wsm::PageId::Display:
+    case wsm::PageId::ClockSchedule:
+    case wsm::PageId::Gauges:
+    case wsm::PageId::SoundAlerts:
+    case wsm::PageId::Alerts:
+    case wsm::PageId::StatusLight:
+    case wsm::PageId::VideoTest:
+      return false;
+    default:
+      return true;
+  }
+}
+
+static wsm::Screen wsScreen() { return wsm::makeScreen(tft.width(), tft.height()); }
+static HubRect wsHub(const wsm::Rect& r) { return hr(r.x, r.y, r.w, r.h); }
+
+static void wsToast(const char* text) {
+  strlcpy(g_wsToast, text ? text : "", sizeof(g_wsToast));
+  g_wsToastUntilMs = millis() + 2600UL;
+  g_dirty = true;
+}
+
+static bool wsToastActive() {
+  if (!g_wsToast[0]) return false;
+  if ((long)(millis() - g_wsToastUntilMs) >= 0) { g_wsToast[0] = 0; return false; }
+  return true;
+}
+
+// Leave any 12.0 screen state behind so the new page owns the display.
+static void wsClearLegacy() {
+  g_ui12SettingsView = 0;
+  g_ui12SystemView = 0;
+  g_toolsView = false;
+  g_displayExperienceView = false;
+  g_displayExperiencePage = 0;
+  g_networkSettingsView = false;
+  g_audioSettingsView = false;
+  g_audioSettingsPage = 0;
+}
+
+static void wsOpenLegacy(wsm::PageId id) {
+  wsClearLegacy();
+  g_wsPage = wsm::PageId::Root;
+  g_wsScroll = 0;
+  g_wsDialog = WsDialog::None;
+  if (id == wsm::PageId::Display) g_ui12SettingsView = 1;
+  else if (id == wsm::PageId::SoundAlerts) g_ui12SettingsView = 2;
+  if (getScreenState() != SCREEN_HUB_MORE) setPage(SCREEN_HUB_MORE);
+  g_dirty = true;
+}
+
+static void wsOpen(wsm::PageId id) {
+  if (!wsPageLive(id)) { wsOpenLegacy(id); return; }
+  wsClearLegacy();
+  g_wsPage = id;
+  g_wsScroll = 0;
+  g_wsDialog = WsDialog::None;
+  g_wsToast[0] = 0;
+  if (getScreenState() != SCREEN_HUB_MORE) setPage(SCREEN_HUB_MORE);
+  g_dirty = true;
+}
+
+// True while a 12.0 screen still owns More/System (pages not moved yet, and
+// the hidden capture-only pages).
+static bool wsLegacyActive(ScreenState cur) {
+  if (cur == SCREEN_HUB_SYSTEM) return g_audioSettingsView;
+  if (cur != SCREEN_HUB_MORE) return false;
+  if (g_displayExperienceView || g_toolsView) return true;
+  switch (g_ui12SettingsView) {
+    case 1: case 2: case 5: case 6: case 7: case 10: case 11: case 12: return true;
+    default: return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Live values
+// ---------------------------------------------------------------------------
+
+struct WsRowView {
+  char value[64];
+  const char* button;   // Action / Action2 A
+  const char* buttonB;  // Action2 B
+  const char* reason;   // why the row is disabled; shown in the value slot
+  uint16_t valueColor;
+  bool on;
+  bool enabled;
+  bool enabledB;
+};
+
+static void wsView(WsRowView& v) {
+  v.value[0] = 0;
+  v.button = nullptr;
+  v.buttonB = nullptr;
+  v.reason = nullptr;
+  v.valueColor = OS12V_MUTED;
+  v.on = false;
+  v.enabled = true;
+  v.enabledB = true;
+}
+
+static uint8_t wsSlot() { return rotState.displayIndex < MAX_PRINTERS ? rotState.displayIndex : 0; }
+static bool wsPrinterConfigured() { return workshopPlatformState().configuredPrinterCount > 0; }
+static bool wsPrinterOnline() { return wsPrinterConfigured() && workshopPlatformPrinterOnline(wsSlot()); }
+
+struct WsPlug {
+  uint8_t index;
+  bool mapped;
+  bool hasAddress;
+  bool on;  // plug control enabled in settings
+};
+
+static WsPlug wsPlug() {
+  WsPlug p;
+  p.index = hubPowerConfigPlug();
+  p.mapped = p.index != 0xFF;
+  p.hasAddress = p.mapped && tasmotaSettings[p.index].ip[0] != 0;
+  p.on = p.hasAddress && tasmotaSettings[p.index].enabled;
+  return p;
+}
+
+static const char* wsPlugReason(const WsPlug& p) {
+  if (!p.mapped) return "No smart plug for this printer";
+  if (!p.hasAddress) return "Set up in Local Portal";
+  if (!p.on) return "Smart plug is off";
+  return nullptr;
+}
+
+static void wsIpText(char* out, size_t len) {
+  if (!workshopPlatformWifiOnline()) { strlcpy(out, "", len); return; }
+  const IPAddress ip = WiFi.localIP();
+  snprintf(out, len, "%u.%u.%u.%u", (unsigned)ip[0], (unsigned)ip[1], (unsigned)ip[2], (unsigned)ip[3]);
+}
+
+// "(UTC-05:00) Eastern Time (New York, Toronto)" -> "Eastern Time".
+static void wsZoneName(char* out, size_t len) {
+  const char* full = hubTimezoneLabel();
+  if (!full) full = "";
+  const char* start = full;
+  if (start[0] == '(') {
+    const char* close = strchr(start, ')');
+    if (close) { start = close + 1; while (*start == ' ') ++start; }
+  }
+  strlcpy(out, start[0] ? start : full, len);
+  char* paren = strstr(out, " (");
+  if (paren && paren != out) *paren = 0;
+}
+
+static void wsUptimeText(char* out, size_t len) {
+  const uint32_t mins = millis() / 60000UL;
+  if (mins >= 1440UL) snprintf(out, len, "%lu d %lu h", (unsigned long)(mins / 1440UL), (unsigned long)((mins % 1440UL) / 60UL));
+  else if (mins >= 60UL) snprintf(out, len, "%lu h %lu min", (unsigned long)(mins / 60UL), (unsigned long)(mins % 60UL));
+  else snprintf(out, len, "%lu min", (unsigned long)mins);
+}
+
+static void wsDateTimeText(char* out, size_t len) {
+  const time_t now = time(nullptr);
+  if (now < 1700000000) { strlcpy(out, "Not set yet (needs Wi-Fi)", len); return; }
+  struct tm t;
+  localtime_r(&now, &t);
+  char date[24], clock[16];
+  static const char* kFormats[] = {"%d.%m.%Y", "%d-%m-%Y", "%m/%d/%Y", "%Y-%m-%d", "%d %b %Y", "%b %d, %Y"};
+  strftime(date, sizeof(date), kFormats[netSettings.dateFormat % 6U], &t);
+  strftime(clock, sizeof(clock), netSettings.use24h ? "%H:%M" : "%I:%M %p", &t);
+  const char* c = (!netSettings.use24h && clock[0] == '0') ? clock + 1 : clock;
+  snprintf(out, len, "%s  %s", date, c);
+}
+
+static bool wsUpdateInstallable(const workshop::platform::UpdateState& u) {
+  return u.phase == workshop::platform::UpdatePhase::Available && u.updateAvailable;
+}
+
+static int8_t wsStepClamp(int value, int delta, int lo, int hi) {
+  value += delta;
+  if (value < lo) value = lo;
+  if (value > hi) value = hi;
+  return (int8_t)value;
+}
+
+static void wsRowView(wsm::RowId id, WsRowView& v) {
+  wsView(v);
+  using R = wsm::RowId;
+  const WsPlug plug = wsPlug();
+  switch (id) {
+    // ---- Printer & Power ----
+    case R::PrinterStatus: {
+      if (!wsPrinterConfigured()) { v.reason = "Add a printer in Local Portal"; strlcpy(v.value, "Not set up", sizeof(v.value)); break; }
+      const PrinterSlot& p = displayedPrinter();
+      const bool online = wsPrinterOnline();
+      snprintf(v.value, sizeof(v.value), "%s · %s", p.config.name[0] ? p.config.name : "Printer", online ? "Online" : "Offline");
+      v.valueColor = online ? OS12V_GREEN : OS12V_AMBER;
+      break;
+    }
+    case R::PlugEnabled: {
+      if (!plug.hasAddress) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      v.on = plug.on;
+      if (plug.on) {
+        TasmotaPlugStatsView pv;
+        tasmotaGetStats(plug.index, &pv);
+        strlcpy(v.value, pv.online ? "Online" : "Not responding", sizeof(v.value));
+        v.valueColor = pv.online ? OS12V_GREEN : OS12V_AMBER;
+      }
+      break;
+    }
+    case R::AutoOffNav:
+      if (!plug.hasAddress) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      if (tasmotaSettings[plug.index].autoOffEnabled)
+        snprintf(v.value, sizeof(v.value), "On · %u min", (unsigned)tasmotaSettings[plug.index].autoOffDelayMin);
+      else strlcpy(v.value, "Off", sizeof(v.value));
+      break;
+    case R::CooldownAlert:
+      v.on = buzzerSettings.bedCooldownAlert;
+      break;
+    case R::CooldownTemp:
+      snprintf(v.value, sizeof(v.value), "%u C", (unsigned)buzzerSettings.bedCooldownThresholdC);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::PlugPoll:
+      if (!plug.on) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      snprintf(v.value, sizeof(v.value), "%u s", (unsigned)tasmotaSettings[plug.index].pollInterval);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::PlugReadout: {
+      if (!plug.on) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      static const char* kModes[] = {"Alternate", "Power", "Layer"};
+      strlcpy(v.value, kModes[tasmotaSettings[plug.index].displayMode % 3U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    case R::ButtonPower:
+      if (!plug.hasAddress) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      v.on = dispSettings.buttonPowerControl;
+      break;
+    // ---- Auto power-off ----
+    case R::AutoOffEnabled:
+      if (!plug.on) { v.enabled = false; v.reason = plug.hasAddress ? "Turn on the smart plug first" : wsPlugReason(plug); break; }
+      v.on = tasmotaSettings[plug.index].autoOffEnabled;
+      break;
+    case R::AutoOffDelay:
+      if (!plug.hasAddress) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      snprintf(v.value, sizeof(v.value), "%u min", (unsigned)tasmotaSettings[plug.index].autoOffDelayMin);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::AutoOffDoor:
+      if (!plug.hasAddress) { v.enabled = false; v.reason = wsPlugReason(plug); break; }
+      v.on = tasmotaSettings[plug.index].autoOffCancelOnDoor;
+      break;
+    // ---- Network ----
+    case R::WifiStatus: {
+      if (!workshopPlatformWifiOnline()) { strlcpy(v.value, "Offline", sizeof(v.value)); v.valueColor = OS12V_AMBER; break; }
+      char ip[20];
+      wsIpText(ip, sizeof(ip));
+      snprintf(v.value, sizeof(v.value), "Connected · %s", ip);
+      v.valueColor = OS12V_GREEN;
+      break;
+    }
+    case R::WifiSignal: {
+      if (!workshopPlatformWifiOnline()) { strlcpy(v.value, "No signal", sizeof(v.value)); break; }
+      const int rssi = WiFi.RSSI();
+      const char* q = rssi >= -55 ? "Excellent" : (rssi >= -67 ? "Good" : (rssi >= -75 ? "Fair" : "Weak"));
+      snprintf(v.value, sizeof(v.value), "%s (%d dBm)", q, rssi);
+      v.valueColor = rssi >= -67 ? OS12V_GREEN : OS12V_AMBER;
+      break;
+    }
+    case R::AddressMode:
+      strlcpy(v.value, netSettings.useDHCP ? "Automatic (DHCP)" : "Fixed address", sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      v.reason = "Change the address in Local Portal";
+      break;
+    case R::MdnsEnabled:
+      v.on = netSettings.mdnsEnabled;
+      if (v.on) snprintf(v.value, sizeof(v.value), "%s.local", netSettings.hostname);
+      break;
+    case R::ShowIpAtBoot:
+      v.on = netSettings.showIPAtStartup;
+      break;
+    case R::TimeLocaleNav:
+      wsZoneName(v.value, sizeof(v.value));
+      break;
+    // ---- Time & locale ----
+    case R::TimeZone:
+      wsZoneName(v.value, sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::Clock24h:
+      v.on = netSettings.use24h;
+      break;
+    case R::DateFormat: {
+      static const char* kFormats[] = {"DD.MM.YYYY", "DD-MM-YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD Mon YYYY", "Mon DD, YYYY"};
+      strlcpy(v.value, kFormats[netSettings.dateFormat % 6U], sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    }
+    // ---- Local Portal ----
+    case R::PortalAddress: {
+      if (!workshopPlatformWifiOnline()) { strlcpy(v.value, "Needs Wi-Fi", sizeof(v.value)); v.valueColor = OS12V_AMBER; v.reason = "Connect Wi-Fi first"; break; }
+      char ip[20];
+      wsIpText(ip, sizeof(ip));
+      snprintf(v.value, sizeof(v.value), "http://%s", ip);
+      v.valueColor = OS12V_ACCENT;
+      break;
+    }
+    case R::PortalCode: {
+      const char* code = securityPortalCode();
+      if (!code || !code[0]) { strlcpy(v.value, "No code needed in this version", sizeof(v.value)); break; }
+      // Group as "ABCDE FGHJK" for reading across the room.
+      const size_t n = strlen(code), half = (n + 1) / 2;
+      size_t o = 0;
+      for (size_t i = 0; i < n && o + 2 < sizeof(v.value); ++i) {
+        if (i == half && n > 6) v.value[o++] = ' ';
+        v.value[o++] = code[i];
+      }
+      v.value[o] = 0;
+      v.valueColor = workshopPlatformWifiOnline() ? OS12V_TEXT : OS12V_MUTED;
+      break;
+    }
+    case R::PortalSignIn: {
+      const bool required = securityPortalCodeRequired() && securityPortalCode()[0];
+      strlcpy(v.value, required ? "On" : "Off", sizeof(v.value));
+      v.valueColor = required ? OS12V_GREEN : OS12V_AMBER;
+      v.reason = "Change this from a signed-in browser";
+      break;
+    }
+    case R::PortalName:
+      if (netSettings.mdnsEnabled) snprintf(v.value, sizeof(v.value), "%s.local", netSettings.hostname);
+      else { strlcpy(v.value, "Off", sizeof(v.value)); v.reason = "Turn on Network > Name on network"; }
+      break;
+    case R::PortalNote:
+      break;
+    // ---- Updates & About ----
+    case R::Version:
+      snprintf(v.value, sizeof(v.value), "Workshop OS %s", WORKSHOP_OS_RELEASE_VERSION);
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::UpdateAction: {
+      const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
+      using P = workshop::platform::UpdatePhase;
+      v.button = wsUpdateInstallable(u) ? "Install" : "Check now";
+      if (u.busy) {
+        v.enabled = false; v.reason = "Wait for the update to finish";
+        if (u.phase == P::Checking) strlcpy(v.value, "Checking...", sizeof(v.value));
+        else snprintf(v.value, sizeof(v.value), "Installing %u%%", (unsigned)u.progressPercent);
+        v.valueColor = OS12V_BLUE;
+      } else if (wsUpdateInstallable(u)) {
+        snprintf(v.value, sizeof(v.value), "%s available", u.availableVersion[0] ? u.availableVersion : "Update");
+        v.valueColor = OS12V_GREEN;
+      } else if (u.phase == P::Failed) {
+        strlcpy(v.value, "Last check failed", sizeof(v.value));
+        v.valueColor = OS12V_AMBER;
+      } else if (u.phase == P::RebootRequired || u.phase == P::Staged) {
+        strlcpy(v.value, "Restarting...", sizeof(v.value));
+      } else if (u.manifestFreshness == workshop::platform::Freshness::Fresh) {
+        strlcpy(v.value, "Up to date", sizeof(v.value));
+        v.valueColor = OS12V_GREEN;
+      } else {
+        strlcpy(v.value, "Not checked yet", sizeof(v.value));
+      }
+      if (!u.busy && !workshopPlatformWifiOnline()) { v.enabled = false; v.reason = "Needs Wi-Fi"; }
+      if (!u.busy && !u.otaSupported && u.phase != P::Unknown) { v.enabled = false; v.reason = "Not available on this device"; }
+      break;
+    }
+    case R::UpdateChannel: {
+      const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
+      v.on = u.channel == workshop::platform::UpdateChannel::Candidate;
+      strlcpy(v.value, v.on ? "On" : "Off (stable)", sizeof(v.value));
+      if (u.busy) { v.enabled = false; v.reason = "Wait for the update to finish"; }
+      break;
+    }
+    case R::DateTimeNow:
+      wsDateTimeText(v.value, sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    case R::HealthNav: {
+      const bool ok = hubTouchHealthy() && recoveryWebReady();
+      strlcpy(v.value, ok ? "OK" : "Needs attention", sizeof(v.value));
+      v.valueColor = ok ? OS12V_GREEN : OS12V_AMBER;
+      break;
+    }
+    // ---- Device health ----
+    case R::HealthTouch:
+      strlcpy(v.value, hubTouchHealthy() ? "OK" : "Not responding", sizeof(v.value));
+      v.valueColor = hubTouchHealthy() ? OS12V_GREEN : OS12V_AMBER;
+      break;
+    case R::HealthRecovery:
+      strlcpy(v.value, recoverySafeModeActive() ? "Safe Mode" : (recoveryWebReady() ? "Ready" : "Starting"), sizeof(v.value));
+      v.valueColor = recoveryWebReady() ? OS12V_GREEN : OS12V_AMBER;
+      break;
+    case R::HealthPrinter:
+      if (!wsPrinterConfigured()) strlcpy(v.value, "Not set up", sizeof(v.value));
+      else { strlcpy(v.value, wsPrinterOnline() ? "Connected" : "Offline", sizeof(v.value)); v.valueColor = wsPrinterOnline() ? OS12V_GREEN : OS12V_AMBER; }
+      break;
+    case R::HealthUptime:
+      wsUptimeText(v.value, sizeof(v.value));
+      v.valueColor = OS12V_TEXT;
+      break;
+    default:
+      break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
+static void wsClick() { buzzerPlay(BUZZ_CLICK); g_dirty = true; }
+
+static void wsRowTap(wsm::RowId id, wsm::Part part) {
+  using R = wsm::RowId;
+  const WsPlug plug = wsPlug();
+  const int dir = part == wsm::Part::Minus ? -1 : 1;
+  switch (id) {
+    case R::PlugEnabled: {
+      TasmotaSettings& ps = tasmotaSettings[plug.index];
+      ps.enabled = !ps.enabled;
+      hubPersistPower(ps.enabled ? "Smart plug on" : "Smart plug off", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    case R::AutoOffNav: wsOpen(wsm::PageId::AutoOff); wsClick(); break;
+    case R::CooldownAlert:
+      buzzerSettings.bedCooldownAlert = !buzzerSettings.bedCooldownAlert;
+      saveBuzzerSettings();
+      wsClick();
+      break;
+    case R::CooldownTemp:
+      buzzerSettings.bedCooldownThresholdC = (uint8_t)wsStepClamp(((int)buzzerSettings.bedCooldownThresholdC + 2) / 5 * 5, dir * 5, 20, 80);
+      saveBuzzerSettings();
+      wsClick();
+      break;
+    case R::PlugPoll: {
+      TasmotaSettings& ps = tasmotaSettings[plug.index];
+      ps.pollInterval = (uint8_t)wsStepClamp(((int)ps.pollInterval + 5) / 10 * 10, dir * 10, 10, 60);
+      hubPersistPower("Plug check interval updated", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    case R::PlugReadout: {
+      TasmotaSettings& ps = tasmotaSettings[plug.index];
+      ps.displayMode = (uint8_t)((ps.displayMode + (dir < 0 ? 2U : 1U)) % 3U);
+      hubPersistPower("Plug readout updated", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    case R::ButtonPower:
+      dispSettings.buttonPowerControl = !dispSettings.buttonPowerControl;
+      hubPersistPower("Button power control updated", C10_ACCENT);
+      wsClick();
+      break;
+    case R::AutoOffEnabled: {
+      TasmotaSettings& ps = tasmotaSettings[plug.index];
+      if (ps.autoOffEnabled) { ps.autoOffEnabled = false; hubPersistPower("Printer auto-off disabled", C10_MUTED); }
+      else g_wsDialog = WsDialog::AutoOffEnable;  // turning it on asks first
+      wsClick();
+      break;
+    }
+    case R::AutoOffDelay: {
+      TasmotaSettings& ps = tasmotaSettings[plug.index];
+      static const uint8_t kVals[] = {1, 5, 10, 15, 30, 60, 120, 240};
+      uint8_t best = 0;
+      for (uint8_t i = 0; i < 8; ++i) if (abs((int)kVals[i] - (int)ps.autoOffDelayMin) < abs((int)kVals[best] - (int)ps.autoOffDelayMin)) best = i;
+      ps.autoOffDelayMin = kVals[wsStepClamp(best, dir, 0, 7)];
+      hubPersistPower("Auto-off delay updated", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    case R::AutoOffDoor: {
+      TasmotaSettings& ps = tasmotaSettings[plug.index];
+      ps.autoOffCancelOnDoor = !ps.autoOffCancelOnDoor;
+      hubPersistPower("Door setting updated", C10_ACCENT);
+      wsClick();
+      break;
+    }
+    case R::MdnsEnabled:
+      netSettings.mdnsEnabled = !netSettings.mdnsEnabled;
+      saveSettings();
+      wsClick();
+      break;
+    case R::ShowIpAtBoot:
+      netSettings.showIPAtStartup = !netSettings.showIPAtStartup;
+      saveSettings();
+      wsClick();
+      break;
+    case R::TimeLocaleNav: wsOpen(wsm::PageId::TimeLocale); wsClick(); break;
+    case R::TimeZone: hubStepTimezone(dir < 0); break;
+    case R::Clock24h:
+      netSettings.use24h = !netSettings.use24h;
+      saveSettings();
+      wsClick();
+      break;
+    case R::DateFormat:
+      netSettings.dateFormat = (uint8_t)((netSettings.dateFormat + (dir < 0 ? 5U : 1U)) % 6U);
+      saveSettings();
+      wsClick();
+      break;
+    case R::UpdateAction: {
+      const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
+      if (wsUpdateInstallable(u)) g_wsDialog = WsDialog::Install;
+      else workshopUpdateRequestCheck();
+      wsClick();
+      break;
+    }
+    case R::UpdateChannel: g_wsDialog = WsDialog::Channel; wsClick(); break;
+    case R::HealthNav: wsOpen(wsm::PageId::DeviceHealth); wsClick(); break;
+    default:
+      break;
+  }
+}
+
+static void wsDialogConfirm() {
+  const WsDialog d = g_wsDialog;
+  g_wsDialog = WsDialog::None;
+  if (d == WsDialog::AutoOffEnable) {
+    const WsPlug plug = wsPlug();
+    if (plug.on) { tasmotaSettings[plug.index].autoOffEnabled = true; hubPersistPower("Printer auto-off enabled", C10_GREEN); }
+    else wsToast("Turn on the smart plug first");
+  } else if (d == WsDialog::Install) {
+    if (!workshopUpdateRequestInstall()) wsToast(workshopPlatformUpdateState().statusMessage[0] ? workshopPlatformUpdateState().statusMessage : "Install could not start");
+  } else if (d == WsDialog::Channel) {
+    const bool test = workshopPlatformUpdateState().channel == workshop::platform::UpdateChannel::Candidate;
+    if (!workshopUpdateSetChannel(test ? workshop::platform::UpdateChannel::Stable : workshop::platform::UpdateChannel::Candidate))
+      wsToast("Wait for the update to finish");
+  }
+  wsClick();
+}
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+
+static const char* wsHeaderChip(wsm::PageId id) {
+  using P = wsm::PageId;
+  switch (id) {
+    case P::PrinterPower: return !wsPrinterConfigured() ? "Off" : (wsPrinterOnline() ? "Online" : "Offline");
+    case P::Network: return workshopPlatformWifiOnline() ? "Online" : "Offline";
+    case P::LocalPortal: return workshopPlatformWifiOnline() ? "Ready" : "Offline";
+    case P::DeviceHealth: return (hubTouchHealthy() && recoveryWebReady()) ? "Ready" : "Needs attention";
+    default: return nullptr;
+  }
+}
+
+static uint16_t wsChipColor(const char* chip) {
+  if (!chip) return OS12V_MUTED;
+  if (!strcmp(chip, "Online") || !strcmp(chip, "Ready")) return OS12V_GREEN;
+  if (!strcmp(chip, "Offline") || !strcmp(chip, "Needs attention")) return OS12V_AMBER;
+  return OS12V_MUTED;
+}
+
+// Word-wraps `text` into at most `maxLines` lines of `w` px; the last line is
+// shortened with "..." if it still does not fit.
+static void wsDrawWrapped(const char* text, int16_t x, int16_t y, int16_t w, int16_t lineH, uint8_t maxLines,
+                          FontID font, uint16_t fg, uint16_t bg) {
+  if (!text) return;
+  setFont(tft, font);
+  char line[96];
+  const char* p = text;
+  for (uint8_t n = 0; n < maxLines && *p; ++n) {
+    while (*p == ' ') ++p;
+    size_t best = 0, i = 0;
+    for (;;) {
+      while (p[i] && p[i] != ' ') ++i;
+      if (i >= sizeof(line)) break;
+      memcpy(line, p, i);
+      line[i] = 0;
+      if (best && tft.textWidth(line) > w) break;
+      best = i;
+      if (!p[i]) break;
+      ++i;
+    }
+    if (n + 1 == maxLines) best = strlen(p);
+    if (best >= sizeof(line)) best = sizeof(line) - 1;
+    memcpy(line, p, best);
+    line[best] = 0;
+    uiDrawFit(line, x, (int16_t)(y + n * lineH), w, font, TL_DATUM, fg, bg);
+    p += best;
+  }
+}
+
+static FontID wsFitFont(const char* text, int16_t w, FontID preferred, FontID fallback) {
+  setFont(tft, preferred);
+  return tft.textWidth(text) <= w ? preferred : fallback;
+}
+
+static void wsDrawChevronLeft(int16_t cx, int16_t cy, uint16_t c) {
+  tft.drawLine(cx + 3, cy - 6, cx - 3, cy, c);
+  tft.drawLine(cx - 3, cy, cx + 3, cy + 6, c);
+  tft.drawLine(cx + 4, cy - 6, cx - 2, cy, c);
+  tft.drawLine(cx - 2, cy, cx + 4, cy + 6, c);
+}
+
+static void wsDrawChevronRight(int16_t cx, int16_t cy, uint16_t c) {
+  tft.drawLine(cx - 3, cy - 5, cx + 2, cy, c);
+  tft.drawLine(cx + 2, cy, cx - 3, cy + 5, c);
+}
+
+static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
+  const bool scrolls = wsm::pageScrolls(s, p.id);
+  tft.fillRect(0, 0, s.w, wsm::kHeaderH, OS12V_BG);
+  if (p.level > 0) {
+    const wsm::Rect back = wsm::backRect(s);
+    wsDrawChevronLeft(back.x + 16, back.y + back.h / 2, OS12V_ACCENT);
+    uiDrawFit(p.backLabel, back.x + 26, back.y + back.h / 2, back.w - 30, FONT_BODY, ML_DATUM, OS12V_ACCENT, OS12V_BG);
+    tft.drawFastVLine(back.right(), 10, wsm::kHeaderH - 20, OS12V_LINE);
+  } else {
+    tft.fillRoundRect(OS12V_INSET, 12, 4, 20, 2, OS12V_ACCENT);
+  }
+  const wsm::Rect title = wsm::titleRect(s, p.level == 0, scrolls);
+  const int16_t titleX = p.level == 0 ? title.x + 10 : title.x + 6;
+  if (wsToastActive()) {
+    uiDrawFit(g_wsToast, titleX, title.y + title.h / 2, title.right() - titleX, FONT_SMALL, ML_DATUM, OS12V_AMBER, OS12V_BG);
+  } else {
+    uiDrawFit(p.title, titleX, title.y + title.h / 2, title.right() - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
+  }
+  if (scrolls) {
+    const uint8_t maxS = wsm::maxScroll(s, p.id);
+    const wsm::Rect up = wsm::scrollUpRect(s), down = wsm::scrollDownRect(s);
+    const bool canUp = g_wsScroll > 0, canDown = g_wsScroll < maxS;
+    for (uint8_t i = 0; i < 2; ++i) {
+      const wsm::Rect r = i == 0 ? up : down;
+      const bool live = i == 0 ? canUp : canDown;
+      tft.fillRoundRect(r.x + 3, r.y + 5, r.w - 6, r.h - 10, 9, live ? OS12V_SURFACE2 : OS12V_SURFACE);
+      tft.drawRoundRect(r.x + 3, r.y + 5, r.w - 6, r.h - 10, 9, live ? OS12V_LINE : OS12V_SURFACE);
+      const int16_t cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      const uint16_t c = live ? OS12V_ACCENT : OS12V_LINE;
+      if (i == 0) tft.fillTriangle(cx - 7, cy + 4, cx + 7, cy + 4, cx, cy - 5, c);
+      else tft.fillTriangle(cx - 7, cy - 4, cx + 7, cy - 4, cx, cy + 5, c);
+    }
+  } else if (!wsToastActive()) {
+    const char* chip = wsHeaderChip(p.id);
+    if (chip) {
+      const wsm::Rect c = wsm::chipRect(s);
+      const uint16_t color = wsChipColor(chip);
+      tft.fillRoundRect(c.x, c.y, c.w, c.h, 13, OS12V_SURFACE);
+      tft.drawRoundRect(c.x, c.y, c.w, c.h, 13, OS12V_LINE);
+      tft.fillCircle(c.x + 12, c.y + c.h / 2, 4, color);
+      uiDrawFit(chip, c.x + 22, c.y + c.h / 2, c.w - 28, FONT_SMALL, ML_DATUM, color, OS12V_SURFACE);
+    }
+  }
+  tft.drawFastHLine(OS12V_INSET, wsm::kHeaderH - 1, s.w - OS12V_INSET * 2, OS12V_LINE);
+}
+
+static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bool primary) {
+  const uint16_t bg = !enabled ? OS12V_SURFACE : (primary ? OS12V_ACCENT : OS12V_SURFACE2);
+  const uint16_t fg = !enabled ? OS12V_MUTED : (primary ? OS12V_BG : OS12V_TEXT);
+  tft.fillRoundRect(r.x, r.y, r.w, r.h, 10, bg);
+  tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, enabled ? (primary ? OS12V_ACCENT : OS12V_LINE) : OS12V_LINE);
+  uiDrawFit(label, r.x + r.w / 2, r.y + r.h / 2, r.w - 12, FONT_SMALL, MC_DATUM, fg, bg);
+}
+
+static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row) {
+  WsRowView v;
+  wsRowView(spec.id, v);
+  const wsm::Rect surface = wsm::rowSurface(row);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  const int16_t mid = row.y + row.h / 2;
+  const wsm::Rect label = wsm::labelRect(s, row, spec.kind);
+  const wsm::Rect valueSlot = wsm::valueRect(s, row, spec.kind);
+  const char* value = v.enabled ? v.value : (v.reason ? v.reason : v.value);
+  const bool infoOnly = spec.kind == wsm::RowKind::Info && !value[0];
+  int16_t labelW = label.w;
+  if (value[0] && spec.kind != wsm::RowKind::Stepper && spec.kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
+    labelW = valueSlot.x - 8 - label.x;
+  uiDrawFit(spec.label, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
+            (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
+  const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_AMBER;
+
+  switch (spec.kind) {
+    case wsm::RowKind::Info:
+    case wsm::RowKind::Nav:
+      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      if (spec.kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
+      break;
+    case wsm::RowKind::Code:
+      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w,
+                strlen(value) <= 13 ? wsFitFont(value, valueSlot.w, FONT_LARGE, FONT_BODY) : FONT_SMALL,
+                MR_DATUM, valueColor, OS12V_SURFACE);
+      break;
+    case wsm::RowKind::Toggle: {
+      const wsm::Rect sw = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Whole);
+      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      const bool on = v.enabled && v.on;
+      tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_SURFACE2);
+      tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_LINE);
+      const int16_t d = sw.h - 8;
+      const int16_t cx = on ? sw.right() - 4 - d / 2 : sw.x + 4 + d / 2;
+      tft.fillCircle(cx, sw.y + sw.h / 2, d / 2, on ? OS12V_BG : (v.enabled ? OS12V_MUTED : OS12V_LINE));
+      break;
+    }
+    case wsm::RowKind::Stepper: {
+      const wsm::Rect minus = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Minus);
+      const wsm::Rect plus = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Plus);
+      for (uint8_t i = 0; i < 2; ++i) {
+        const wsm::Rect b = i == 0 ? minus : plus;
+        tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, v.enabled ? OS12V_SURFACE2 : OS12V_SURFACE);
+        tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_LINE);
+        const int16_t cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+        const uint16_t c = v.enabled ? OS12V_ACCENT : OS12V_LINE;
+        tft.fillRect(cx - 7, cy - 1, 15, 3, c);
+        if (i == 1) tft.fillRect(cx - 1, cy - 7, 3, 15, c);
+      }
+      const wsm::Rect valueRect = wsm::stepperValueRect(s, row);
+      uiDrawFit(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, FONT_SMALL, MC_DATUM, valueColor, OS12V_SURFACE);
+      break;
+    }
+    case wsm::RowKind::Action: {
+      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false);
+      break;
+    }
+    case wsm::RowKind::Action2: {
+      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false);
+      wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false);
+      break;
+    }
+  }
+}
+
+static void wsTileStatus(wsm::PageId id, char* out, size_t len, uint16_t& color) {
+  using P = wsm::PageId;
+  color = OS12V_MUTED;
+  char ip[20];
+  switch (id) {
+    case P::PrinterPower:
+      if (!wsPrinterConfigured()) { strlcpy(out, "Not set up", len); break; }
+      snprintf(out, len, "%s · %s", displayedPrinter().config.name[0] ? displayedPrinter().config.name : "Printer", wsPrinterOnline() ? "Online" : "Offline");
+      color = wsPrinterOnline() ? OS12V_GREEN : OS12V_AMBER;
+      break;
+    case P::Network:
+      if (!workshopPlatformWifiOnline()) { strlcpy(out, "Offline", len); color = OS12V_AMBER; break; }
+      wsIpText(ip, sizeof(ip));
+      snprintf(out, len, "Wi-Fi · %s", ip);
+      color = OS12V_GREEN;
+      break;
+    case P::Display:
+      snprintf(out, len, "Brightness %u%%", (unsigned)hubLevelPct(brightness));
+      break;
+    case P::SoundAlerts:
+#if HAS_HMS_UI
+      snprintf(out, len, "Sounds %s · Alerts %s", buzzerSettings.enabled ? "on" : "off", dispSettings.hmsEnabled ? "on" : "off");
+#else
+      snprintf(out, len, "Sounds %s", buzzerSettings.enabled ? "on" : "off");
+#endif
+      break;
+    case P::LocalPortal:
+      if (!workshopPlatformWifiOnline()) { strlcpy(out, "Needs Wi-Fi", len); color = OS12V_AMBER; break; }
+      wsIpText(ip, sizeof(ip));
+      snprintf(out, len, "Open %s · code inside", ip);
+      color = OS12V_ACCENT;
+      break;
+    case P::UpdatesAbout: {
+      const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
+      snprintf(out, len, "Workshop OS %s%s", WORKSHOP_OS_RELEASE_VERSION, wsUpdateInstallable(u) ? " · update ready" : "");
+      if (wsUpdateInstallable(u)) color = OS12V_GREEN;
+      break;
+    }
+    default:
+      out[0] = 0;
+      break;
+  }
+}
+
+static void wsDrawTileIcon(const HubRect& badge, wsm::PageId id, uint16_t c) {
+  if (id == wsm::PageId::LocalPortal) {
+    const int16_t cx = badge.x + badge.w / 2, cy = badge.y + badge.h / 2;
+    tft.drawRoundRect(cx - 7, cy - 2, 14, 10, 2, c);
+    tft.drawCircle(cx, cy - 4, 4, c);
+    tft.fillRect(cx - 3, cy - 4, 7, 2, OS12V_SURFACE2);
+    tft.fillCircle(cx, cy + 3, 1, c);
+    return;
+  }
+  hubOs12NavIcon(badge, wsm::page(id).title, c);
+}
+
+static uint16_t wsTileColor(wsm::PageId id) {
+  switch (id) {
+    case wsm::PageId::PrinterPower: return OS12V_GREEN;
+    case wsm::PageId::Display: return OS12V_ACCENT;
+    case wsm::PageId::LocalPortal: return OS12V_AMBER;
+    default: return OS12V_BLUE;
+  }
+}
+
+static void wsDrawRoot(const wsm::Screen& s) {
+  for (uint8_t i = 0; i < wsm::kRootTileCount; ++i) {
+    const wsm::PageId id = wsm::kRootTiles[i];
+    const wsm::Rect t = wsm::tileRect(s, i);
+    tft.fillRoundRect(t.x, t.y, t.w, t.h, 12, OS12V_SURFACE);
+    tft.drawRoundRect(t.x, t.y, t.w, t.h, 12, OS12V_LINE);
+    const uint16_t c = wsTileColor(id);
+    const HubRect badge = hr(t.x + 10, t.y + (t.h - 32) / 2, 32, 32);
+    tft.fillRoundRect(badge.x, badge.y, badge.w, badge.h, 8, OS12V_SURFACE2);
+    tft.drawRoundRect(badge.x, badge.y, badge.w, badge.h, 8, c);
+    wsDrawTileIcon(badge, id, c);
+    char status[64];
+    uint16_t statusColor = OS12V_MUTED;
+    wsTileStatus(id, status, sizeof(status), statusColor);
+    const int16_t textX = t.x + 52, textW = t.w - 52 - 26;
+    uiDrawFit(wsm::page(id).title, textX, t.y + t.h / 2 - 2, textW, FONT_BODY, BL_DATUM, OS12V_TEXT, OS12V_SURFACE);
+    uiDrawFit(status, textX, t.y + t.h / 2 + 4, textW, FONT_SMALL, TL_DATUM, statusColor, OS12V_SURFACE);
+    wsDrawChevronRight(t.right() - 14, t.y + t.h / 2, OS12V_MUTED);
+  }
+}
+
+static void wsDrawDialog(const wsm::Screen& s) {
+  const wsm::Rect card = wsm::dialogCard(s);
+  hubV1125Card(wsHub(card), OS12V_AMBER, true);
+  char title[64], line1[96], line2[96];
+  const char* confirm = "OK";
+  line2[0] = 0;
+  if (g_wsDialog == WsDialog::AutoOffEnable) {
+    const WsPlug plug = wsPlug();
+    strlcpy(title, "Turn on auto power-off?", sizeof(title));
+    snprintf(line1, sizeof(line1), "After a print finishes, the smart plug turns the printer off after %u min.",
+             plug.mapped ? (unsigned)tasmotaSettings[plug.index].autoOffDelayMin : 0U);
+    strlcpy(line2, "Only the plug mapped to this printer is switched.", sizeof(line2));
+    confirm = "Turn on";
+  } else if (g_wsDialog == WsDialog::Install) {
+    const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
+    snprintf(title, sizeof(title), "Install %s?", u.availableVersion[0] ? u.availableVersion : "the update");
+    strlcpy(line1, "Downloads and checks the update, installs it, then restarts.", sizeof(line1));
+    strlcpy(line2, "Keep the display plugged in until it restarts.", sizeof(line2));
+    confirm = "Install";
+  } else {
+    const bool test = workshopPlatformUpdateState().channel == workshop::platform::UpdateChannel::Candidate;
+    strlcpy(title, test ? "Go back to stable builds?" : "Get test builds?", sizeof(title));
+    strlcpy(line1, test ? "Updates will come from stable releases only." : "Test builds get changes first and may have problems.", sizeof(line1));
+    strlcpy(line2, "You can switch back at any time.", sizeof(line2));
+    confirm = test ? "Use stable" : "Use test builds";
+  }
+  const int16_t x = card.x + 16, w = card.w - 32;
+  uiDrawFit(title, x, card.y + 14, w, FONT_BODY, TL_DATUM, OS12V_TEXT, OS12V_SURFACE2);
+  wsDrawWrapped(line1, x, card.y + 48, w, 22, 3, FONT_SMALL, OS12V_MUTED, OS12V_SURFACE2);
+  wsDrawWrapped(line2, x, card.y + 48 + 22 * 3 + 6, w, 22, 2, FONT_SMALL, OS12V_MUTED, OS12V_SURFACE2);
+  hubV1125Action(wsHub(wsm::dialogCancelRect(s)), "Cancel", OS12V_ACCENT, true, false);
+  hubV1125Action(wsHub(wsm::dialogConfirmRect(s)), confirm, OS12V_AMBER, true, false);
+}
+
+static void wsDrawScrollbar(const wsm::Screen& s, const wsm::PageSpec& p) {
+  const uint8_t maxS = wsm::maxScroll(s, p.id);
+  if (!maxS) return;
+  const wsm::Rect first = wsm::slotRect(s, 0);
+  const wsm::Rect last = wsm::slotRect(s, (uint8_t)(wsm::visibleRows(s) - 1));
+  const int16_t top = first.y + 4, h = last.bottom() - 4 - top;
+  const int16_t thumb = (int16_t)(h * wsm::visibleRows(s) / p.rowCount);
+  const int16_t y = (int16_t)(top + (h - thumb) * g_wsScroll / maxS);
+  tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
+  tft.fillRect(s.w - 4, y, 2, thumb, OS12V_MUTED);
+}
+
+static void wsMoreDraw(bool full) {
+  (void)full;
+  const wsm::Screen s = wsScreen();
+  if (!wsPageLive(g_wsPage)) g_wsPage = wsm::PageId::Root;
+  const wsm::PageSpec& p = wsm::page(g_wsPage);
+  g_wsScroll = wsm::clampScroll(s, p.id, g_wsScroll);
+  tft.fillScreen(OS12V_BG);
+  wsDrawHeader(s, p);
+  if (g_wsDialog != WsDialog::None) {
+    wsDrawDialog(s);
+  } else if (p.layout == wsm::PageLayout::Tiles) {
+    wsDrawRoot(s);
+  } else {
+    for (uint8_t r = 0; r < p.rowCount; ++r) {
+      const wsm::Rect row = wsm::rowRect(s, p.id, g_wsScroll, r);
+      if (!row.empty()) wsDrawRow(s, p.rows[r], row);
+    }
+    wsDrawScrollbar(s, p);
+  }
+  uiBottomNav(3, nullptr);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+// ---------------------------------------------------------------------------
+// Touch
+// ---------------------------------------------------------------------------
+
+static void wsTab(uint8_t i) {
+  g_wsDialog = WsDialog::None;
+  if (i == 0) setPage(SCREEN_HUB_HOME);
+  else if (i == 1) setPage(SCREEN_HUB_PRINTER);
+  else if (i == 2) setPage(SCREEN_HUB_WORKSHOP);
+  else wsOpen(wsm::PageId::Root);
+}
+
+static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
+  (void)longPress;
+  const wsm::Screen s = wsScreen();
+  const wsm::PageSpec& p = wsm::page(g_wsPage);
+  const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y);
+  switch (h.kind) {
+    case wsm::HitKind::Tab:
+      wsTab(h.index);
+      return true;
+    case wsm::HitKind::Back:
+      if (g_wsDialog != WsDialog::None) g_wsDialog = WsDialog::None;
+      else wsOpen(p.parent);
+      wsClick();
+      return true;
+    case wsm::HitKind::ScrollUp:
+      if (g_wsScroll > 0) { g_wsScroll = wsm::clampScroll(s, p.id, (int)g_wsScroll - wsm::scrollStep(s)); wsClick(); }
+      return true;
+    case wsm::HitKind::ScrollDown:
+      if (g_wsScroll < wsm::maxScroll(s, p.id)) { g_wsScroll = wsm::clampScroll(s, p.id, (int)g_wsScroll + wsm::scrollStep(s)); wsClick(); }
+      return true;
+    case wsm::HitKind::Tile:
+      wsOpen(wsm::kRootTiles[h.index]);
+      wsClick();
+      return true;
+    case wsm::HitKind::DialogCancel:
+      g_wsDialog = WsDialog::None;
+      wsClick();
+      return true;
+    case wsm::HitKind::DialogConfirm:
+      wsDialogConfirm();
+      return true;
+    case wsm::HitKind::Row: {
+      const wsm::RowSpec& spec = p.rows[h.index];
+      if (spec.kind == wsm::RowKind::Nav && wsPageLive(spec.target)) {
+        WsRowView v;
+        wsRowView(spec.id, v);
+        if (!v.enabled) { wsToast(v.reason ? v.reason : "Not available"); return true; }
+        wsOpen(spec.target);
+        wsClick();
+        return true;
+      }
+      WsRowView v;
+      wsRowView(spec.id, v);
+      const bool enabled = h.part == wsm::Part::ActionB ? v.enabledB : v.enabled;
+      if (!enabled || spec.kind == wsm::RowKind::Info || spec.kind == wsm::RowKind::Code) {
+        // Disabled controls and read-only rows say why instead of doing nothing.
+        if (v.reason) wsToast(v.reason);
+        return true;
+      }
+      wsRowTap(spec.id, h.part);
+      return true;
+    }
+    case wsm::HitKind::None:
+    default:
+      return true;
+  }
+}
+
+static bool wsMoreShowPage(const char* name) {
+  wsm::PageId id = wsm::PageId::Root;
+  if (!wsm::pageFromViewId(name, id)) {
+    // Earlier ids for pages that moved.
+    if (!strcmp(name, "system") || !strcmp(name, "settings-update")) id = wsm::PageId::UpdatesAbout;
+    else if (!strcmp(name, "settings-printer") || !strcmp(name, "settings-experience")) id = wsm::PageId::PrinterPower;
+    else if (!strcmp(name, "system-network") || !strcmp(name, "system-network-address") ||
+             !strcmp(name, "system-network-review")) id = wsm::PageId::Network;
+    else if (!strcmp(name, "hardware-power") || !strcmp(name, "hardware-cooldown")) id = wsm::PageId::PrinterPower;
+    else if (!strcmp(name, "system-time-locale")) id = wsm::PageId::TimeLocale;
+    else return false;
+  }
+  if (!wsPageLive(id)) return false;
+  wsOpen(id);
+  return true;
+}

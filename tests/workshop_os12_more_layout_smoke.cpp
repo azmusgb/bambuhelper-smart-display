@@ -127,6 +127,16 @@ void checkTree(const char* o) {
   int codeRows = 0;
   for (uint8_t r = 0; r < portal.rowCount; ++r) if (portal.rows[r].kind == RowKind::Code) ++codeRows;
   check(codeRows == 1, "Local Portal shows the access code", o, codeRows);
+  // scripts/capture-ws350-views.zsh redacts (8, 89)-(472, 133) on catalog v3:
+  // the access-code row must be exactly there in 480x320 and never scroll.
+  const Screen land = makeScreen(480, 320);
+  check(maxScroll(land, PageId::LocalPortal) == 0, "Local Portal does not scroll", o);
+  for (uint8_t r = 0; r < portal.rowCount; ++r) {
+    if (portal.rows[r].kind != RowKind::Code) continue;
+    const Rect code = rowRect(land, PageId::LocalPortal, 0, r);
+    check(code.x == 8 && code.y == 89 && code.right() == 472 && code.bottom() == 133,
+          "access-code row matches the capture redaction", o, code.y, code.bottom());
+  }
 }
 
 void checkRow(Screen s, PageId id, uint8_t scroll, uint8_t r, const Rect& row, const char* o, int& controls) {
