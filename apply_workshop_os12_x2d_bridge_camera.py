@@ -116,7 +116,7 @@ SMART_HUB_MEDIA_HINT_REPLACEMENT = '"Tap row to open X2D camera"'
 SMART_HUB_DEMO_START_ANCHOR = 'if(!media.playMjpeg("demo-video",millis()))g_ui12SettingsView=10;'
 SMART_HUB_X2D_START_REPLACEMENT = 'if(!media.playMjpeg("x2d-bridge",millis()))g_ui12SettingsView=10;'
 SMART_HUB_IDLE_HINT_ANCHOR = '"Start the built-in motion test from Media."'
-SMART_HUB_IDLE_HINT_REPLACEMENT = '"Start a video source from Media."'
+SMART_HUB_IDLE_HINT_REPLACEMENT = '"Tap X2D Camera in Media to start."'
 SMART_HUB_ACTIVE_HINT_ANCHOR = '"Built-in motion diagnostic"'
 # Drawn once under the camera viewport; the first decoded frame covers it.
 SMART_HUB_ACTIVE_HINT_REPLACEMENT = '"Waiting for X2D camera frames"'

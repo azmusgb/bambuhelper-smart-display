@@ -40,7 +40,9 @@ static bool gOs12VideoViewerPrimed=false;
 static void drawOs12VideoViewer() {{
 {polish.VIEWER_STATE_OLD}
   if(!videoActive) {{
-    hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);
+    uiDrawFit("Video Viewer",OS12V_INSET,14,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_TEXT,TFT_BLACK);
+    uiDrawFit("No active video session",OS12V_INSET,48,tft.width()-OS12V_INSET*2,FONT_BODY,TL_DATUM,OS12V_MUTED,TFT_BLACK);
+{polish.IDLE_DEV_NOTE}    hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);
     return;
   }}
   if(!gOs12VideoViewerPrimed) {{
@@ -94,6 +96,9 @@ class ViewerPolishTests(unittest.TestCase):
             self.assertNotIn('"Stop & Back"', hub)
             self.assertNotIn("Stop & Back returns", hub)
             self.assertIn(polish.NEW_BACK_HINT, hub)
+            self.assertNotIn("Video Viewer", hub)
+            self.assertIn(polish.IDLE_STATUS_NEW, hub)
+            self.assertNotIn("never reuses Recorder", hub)
             self.assertGreaterEqual(hub.count('"Back",C10_ACCENT,true,false'), 2)
             self.assertIn("Transfer display ownership back to Media", hub)
 

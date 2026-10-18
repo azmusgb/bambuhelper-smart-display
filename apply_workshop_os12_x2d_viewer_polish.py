@@ -57,6 +57,12 @@ BACK_NEW = """        if(hubUi13BackRect().contains(x,y)){\n          // Transfe
 
 OLD_TITLE = 'uiDrawFit("Video Viewer",OS12V_INSET,9,'
 NEW_TITLE = 'uiDrawFit("X2D Camera",OS12V_INSET,9,'
+IDLE_TITLE_OLD = 'uiDrawFit("Video Viewer",OS12V_INSET,14,'
+IDLE_TITLE_NEW = 'uiDrawFit("X2D Camera",OS12V_INSET,14,'
+IDLE_STATUS_OLD = '"No active video session"'
+IDLE_STATUS_NEW = '"Camera is not running"'
+# Internal design note that leaked into the on-device idle screen.
+IDLE_DEV_NOTE = '    uiDrawFit("This surface never reuses Recorder content.",OS12V_INSET,98,tft.width()-OS12V_INSET*2,FONT_SMALL,TL_DATUM,OS12V_MUTED,TFT_BLACK);\n'
 OLD_BACK_HINT = '"Stop & Back returns to Media"'
 NEW_BACK_HINT = '"Back returns to Media"'
 OLD_BACK = 'hubV1125Action(hubUi13BackRect(),"Stop & Back",C10_RED,true,true);'
@@ -132,6 +138,9 @@ def patch_smart_hub(hub: str) -> str:
     hub = replace_once_or_verified(hub, VIEWER_STATE_OLD, VIEWER_STATE_NEW, "const bool controlsChanged", "viewer refresh state")
     hub = replace_all_or_verified(hub, OLD_TITLE, NEW_TITLE, (1,), "active viewer title")
     hub = replace_all_or_verified(hub, OLD_BACK_HINT, NEW_BACK_HINT, (1,), "active viewer Back hint")
+    hub = replace_all_or_verified(hub, IDLE_TITLE_OLD, IDLE_TITLE_NEW, (1,), "idle viewer title")
+    hub = replace_all_or_verified(hub, IDLE_STATUS_OLD, IDLE_STATUS_NEW, (1,), "idle viewer status")
+    hub = hub.replace(IDLE_DEV_NOTE, "")
     # The reconstructed UI renders Stop & Back in both the inactive and active
     # viewer branches. Both are ordinary navigation and both must be neutral.
     hub = replace_all_or_verified(hub, OLD_BACK, NEW_BACK, (1, 2), "viewer Back action")
