@@ -1,7 +1,6 @@
 // Host test for firmware/platform/recovery/rapid_reset_policy.hpp.
 //
-//   g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
-//     tests/workshop_os12_rapid_reset_smoke.cpp -o rapid-reset-smoke
+//   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_rapid_reset_smoke.cpp -o rapid-reset-smoke
 
 #include "../firmware/platform/recovery/rapid_reset_policy.hpp"
 

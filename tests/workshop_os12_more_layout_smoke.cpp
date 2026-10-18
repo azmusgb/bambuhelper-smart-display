@@ -6,8 +6,7 @@
 // that every target is at least 44 x 44, that Back is the same everywhere,
 // and that the page tree is at most two levels deep and fully reachable.
 //
-//   g++ -std=c++11 -Wall -Wextra -Werror -pedantic \
-//     tests/workshop_os12_more_layout_smoke.cpp -o /tmp/more-layout-smoke
+//   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_more_layout_smoke.cpp -o /tmp/more-layout-smoke
 
 #include "../firmware/platform/ui/more_layout.hpp"
 
