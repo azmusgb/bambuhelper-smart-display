@@ -108,13 +108,27 @@ fi
 [[ "$FLASH" -eq 1 ]] || exit 0
 
 printf '\n=== Printer-idle gate ===\n'
-if STATE_JSON="$(curl -fsS --max-time 4 -H 'X-BambuHelper-Client: 1' "$BASE_URL/status" 2>/dev/null)"; then
+# 12.0.1+ needs a Local Portal session to read printer state. Reuse an owner-only
+# cookie jar from `accept_os12_portal_runtime.py --sign-in` when provided; a
+# signed-out device stops the flash instead of silently skipping the check.
+PORTAL_COOKIE_ARGS=()
+if [[ -n "${WORKSHOP_OS_COOKIE_JAR:-}" && -s "$WORKSHOP_OS_COOKIE_JAR" ]]; then
+  PORTAL_COOKIE_ARGS=(-b "$WORKSHOP_OS_COOKIE_JAR")
+fi
+STATUS_HTTP="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 ${PORTAL_COOKIE_ARGS[@]+"${PORTAL_COOKIE_ARGS[@]}"} "$BASE_URL/status" 2>/dev/null || true)"
+if [[ "$STATUS_HTTP" == "401" ]]; then
+  echo "STOP: the WS350 requires Local Portal sign-in to report printer state." >&2
+  echo "      WORKSHOP_OS_COOKIE_JAR=<private file> python3 scripts/accept_os12_portal_runtime.py --sign-in" >&2
+  echo "      then rerun with the same WORKSHOP_OS_COOKIE_JAR. No device access was attempted." >&2
+  exit 23
+fi
+if STATE_JSON="$(curl -fsS --max-time 4 ${PORTAL_COOKIE_ARGS[@]+"${PORTAL_COOKIE_ARGS[@]}"} "$BASE_URL/status" 2>/dev/null)"; then
   STATE="$(printf '%s' "$STATE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state",""))')"
   echo "Printer state reported by the WS350: ${STATE:-unknown}"
   case "$STATE" in
     IDLE|FINISH|FAILED) ;;
     *)
-      POWER="$(curl -fsS --max-time 4 -H 'X-BambuHelper-Client: 1' "$BASE_URL/printer/power/status" 2>/dev/null \
+      POWER="$(curl -fsS --max-time 4 ${PORTAL_COOKIE_ARGS[@]+"${PORTAL_COOKIE_ARGS[@]}"} "$BASE_URL/printer/power/status" 2>/dev/null \
         | python3 -c 'import json,sys; print("controlled" if json.load(sys.stdin).get("available") else "none")' 2>/dev/null || echo unknown)"
       if [[ "$ALLOW_ACTIVE_PRINT" -eq 1 && "$POWER" == "none" ]]; then
         echo "WARN: printer is $STATE; flashing anyway (--allow-active-print, no printer power control on this WS350)."
@@ -152,7 +166,7 @@ printf '\n=== USB upload (development candidate) ===\n'
 
 printf '\n=== Portal reachability ===\n'
 for _ in $(seq 1 30); do
-  if curl -fsS --max-time 3 -H 'X-BambuHelper-Client: 1' "$BASE_URL/os12/update/status" 2>/dev/null; then
+  if curl -fsS --max-time 3 "$BASE_URL/recovery/status" 2>/dev/null; then
     echo
     exit 0
   fi

@@ -220,7 +220,7 @@ while IFS=$'\t' read -r IDX ID LABEL GROUP SENSITIVE CATALOG_VERSION; do
   echo "[$NUM] $GROUP / $LABEL"
 
   SHOW_HTTP="$({ curl -sS --retry 4 --retry-delay 1 --retry-all-errors --connect-timeout 5 --max-time 25 -b "$COOKIE" \
-    -H 'X-BambuHelper-Client: 1' \
+    -H "Origin: $BASE" \
     -X POST \
     --data-urlencode "page=$ID" \
     -o "$OUT/.show-response" \
@@ -249,7 +249,7 @@ done < "$OUT/view-list.tsv"
 
 rm -f "$OUT/.show-response"
 
-curl -sS -b "$COOKIE" -H 'X-BambuHelper-Client: 1' -X POST \
+curl -sS -b "$COOKIE" -H "Origin: $BASE" -X POST \
   --data-urlencode 'page=home' "$BASE/hub/show" >/dev/null || true
 
 rm -f "$OUT/view-list.tsv"

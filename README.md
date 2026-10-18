@@ -12,7 +12,7 @@ Workshop OS deliberately keeps accepted source, merged-but-unaccepted source, st
 | --- | --- | --- |
 | accepted source baseline | **Workshop OS v11.22 Display Expert RC1** | Last physically accepted source baseline; remains authoritative for accepted/stable state. |
 | `main` | **Workshop OS 12.0.0 Exact Main Physical-Acceptance Candidate — merged, physical acceptance pending** | `main` at `48ddd5819e578bc85a391d9607653e71ca5c6aa2` produced the exact CI artifact installed on the WS350. Exact runtime identity, unattended whole-device acceptance, all 15 native 480×320 captures, media lifecycle checks, and automatic evidence validation passed; sensory physical acceptance and an exact-candidate full-image recovery round-trip remain pending. |
-| active candidate | **None** | There is no open firmware source candidate PR; PR #136 only records current acceptance evidence and release metadata. |
+| active candidate | **Workshop OS 12.0.1 Portal Sign-in Restore** | Security candidate PR #161: restores the Local Portal portal-code session that the 12.0.0 code-free overlay removed. Exact-head CI and physical WS350 acceptance required; see `docs/portal-signin-restore-12-0-1.md`. |
 | tested OS12 candidate | **48ddd5819e578bc85a391d9607653e71ca5c6aa2** | Exact CI firmware source installed on the WS350; exact runtime identity, unattended whole-device acceptance, 15-view capture, and automatic evidence validation passed. |
 | main source commit | **48ddd5819e578bc85a391d9607653e71ca5c6aa2** | Exact merged `main` source used by the installed physical-acceptance candidate. |
 | static installer | **Workshop OS v11.19.1 Physical Fit RC2** | Conservative downloadable Full + OTA channel; intentionally not promoted by the source merge. |
@@ -84,7 +84,7 @@ Workshop OS must not invent physical or inventory facts.
 - Stop and other destructive actions retain deliberate guards and visible feedback.
 - Automatic printer power-off requires explicit enable confirmation and a valid mapped smart plug.
 - The rotating Local Portal access code is shown only in the deliberate Local Portal view, not on normal System status screens.
-- Session validation and same-origin mutation protection remain authoritative.
+- Session validation and same-origin mutation protection remain authoritative. Same-origin is proven only by the browser `Origin`/`Referer` headers; no client-chosen marker header counts. (12.0.0 `main` ships a code-free portal; 12.0.1 restores sign-in.)
 
 ## Update and recovery model
 

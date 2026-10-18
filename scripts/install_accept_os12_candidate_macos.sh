@@ -54,8 +54,19 @@ cd "$ROOT"
 [[ -d .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/os12-candidate.XXXXXX")"
-cleanup(){ rm -rf "$WORK_DIR"; }
+cleanup(){
+  if [[ -s "$WORK_DIR/portal-session.cookies" ]]; then
+    python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --sign-out >/dev/null 2>&1 || true
+  fi
+  rm -rf "$WORK_DIR"
+}
 trap cleanup EXIT
+
+# One Local Portal sign-in per run. The portal code is typed once at a hidden
+# prompt (never echoed, never a process argument, never stored); only the
+# resulting session cookie is kept, owner-only, inside the private work dir and
+# revoked on exit.
+export WORKSHOP_OS_COOKIE_JAR="$WORK_DIR/portal-session.cookies"
 
 unzip -q "$ARTIFACT_ZIP" -d "$WORK_DIR"
 for f in candidate.json SHA256SUMS.txt firmware.bin partitions.bin; do
@@ -108,7 +119,8 @@ bash scripts/flash_os12_ci_candidate_macos.sh \
 
 echo
 echo "=== Exact post-install source check ==="
-RUNNING_SHA="$(curl -fsS --max-time 10 "$BASE_URL/os12/update/status" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("runningSourceCommit",""))')"
+# Running identity comes from the public recovery probe (no session needed).
+RUNNING_SHA="$(curl -fsS --max-time 10 "$BASE_URL/recovery/status" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("runningSourceCommit",""))')"
 if [[ "$RUNNING_SHA" != "$SOURCE_SHA" ]]; then
   echo "FAIL: installed runtime source mismatch: $RUNNING_SHA != $SOURCE_SHA" >&2
   exit 30
@@ -150,6 +162,10 @@ payload={
 }
 pathlib.Path(out).write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8")
 PY
+
+echo
+echo "=== Local Portal sign-in (code from System -> Local Portal) ==="
+python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --sign-in
 
 echo
 echo "=== Unattended whole-device acceptance ==="

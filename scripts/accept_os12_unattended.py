@@ -29,7 +29,7 @@ import urllib.request
 
 from accept_os12_media_physical import update_identity
 from accept_os12_media_runtime import api, status, validate_status, wait_for_session
-from accept_os12_portal_runtime import AcceptanceError, Client, assert_code_free_portal, check
+from accept_os12_portal_runtime import AcceptanceError, Client, establish_portal_session, check
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 
@@ -98,7 +98,7 @@ def load_expected_source(manifest: Path, channel: str) -> tuple[str, dict]:
 def request_json(client: Client, path: str, *, timeout: float = 10.0) -> dict:
     response = client.request(
         path,
-        headers={"X-BambuHelper-Client": "1", "Accept": "application/json"},
+        headers={"Accept": "application/json"},
         timeout=timeout,
     )
     check(response.status == 200, f"GET {path} returned HTTP {response.status}")
@@ -123,7 +123,6 @@ def show(client: Client, view_id: str) -> None:
         method="POST",
         form={"page": view_id},
         headers={
-            "X-BambuHelper-Client": "1",
             "Accept": "application/json,text/plain,*/*",
         },
         timeout=10.0,
@@ -139,7 +138,6 @@ def frame_bytes(client: Client) -> bytes:
         method="GET",
         headers={
             "User-Agent": "WorkshopOS-Unattended-Acceptance/1",
-            "X-BambuHelper-Client": "1",
             "Accept": "image/x-portable-pixmap",
         },
     )
@@ -330,9 +328,8 @@ def run(args: argparse.Namespace) -> int:
     client = Client(base_url)
 
     try:
-        assert_code_free_portal(client)
-        evidence["portalMode"] = "local-code-free"
-        print("PASS  code-free local portal contract")
+        evidence["portalMode"] = establish_portal_session(client)
+        print("PASS  signed-in local portal contract")
 
         identity_start = update_identity(client)
         evidence["runtimeIdentityStart"] = identity_start

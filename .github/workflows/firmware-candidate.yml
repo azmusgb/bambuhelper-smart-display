@@ -16,6 +16,9 @@ on:
       - 'scripts/validate_portal_auth_v11_20.py'
       - 'scripts/validate_display_expert_v11_22.py'
       - 'scripts/validate_settings_parity.py'
+      # merge-gate requires this gate when the capture helper changes; the
+      # gate packages the helper, so it must also be triggered by it.
+      - 'scripts/capture-ws350-views.zsh'
   workflow_dispatch:
 
 permissions:

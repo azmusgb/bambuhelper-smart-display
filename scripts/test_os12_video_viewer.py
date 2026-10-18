@@ -22,7 +22,7 @@ def main() -> int:
         "/hub/show",
         method="POST",
         form={"page": "media-video"},
-        headers={"X-BambuHelper-Client": "1", "Accept": "application/json,text/plain,*/*"},
+        headers={"Accept": "application/json,text/plain,*/*"},
         timeout=10.0,
     )
     check(show.status == 200, f"Camera Viewer navigation returned HTTP {show.status}")

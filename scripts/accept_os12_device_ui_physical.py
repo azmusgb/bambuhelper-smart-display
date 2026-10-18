@@ -25,7 +25,7 @@ from accept_os12_media_physical import (
     check,
     update_identity,
 )
-from accept_os12_portal_runtime import assert_code_free_portal
+from accept_os12_portal_runtime import establish_portal_session
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 
@@ -56,7 +56,7 @@ def observation(prompt: str) -> bool | None:
         print("Please answer y, n, or u.")
 
 def catalog(client: Client)->list[dict]:
-    r=client.request("/hub/views",headers={"X-BambuHelper-Client":"1","Accept":"application/json"},timeout=10.0)
+    r=client.request("/hub/views",headers={"Accept":"application/json"},timeout=10.0)
     check(r.status==200,f"GET /hub/views returned HTTP {r.status}")
     try: payload=json.loads(r.body)
     except json.JSONDecodeError as exc: raise AcceptanceError("native view catalog did not return JSON") from exc
@@ -65,7 +65,7 @@ def catalog(client: Client)->list[dict]:
     return views
 
 def show(client: Client, view_id: str)->None:
-    r=client.request("/hub/show",method="POST",form={"page":view_id},headers={"X-BambuHelper-Client":"1","Accept":"application/json,text/plain,*/*"},timeout=10.0)
+    r=client.request("/hub/show",method="POST",form={"page":view_id},headers={"Accept":"application/json,text/plain,*/*"},timeout=10.0)
     check(r.status==200,f"/hub/show refused {view_id}: HTTP {r.status}")
     time.sleep(0.30)
 
@@ -73,7 +73,6 @@ def frame_probe(client: Client)->dict:
     url=urljoin(client.base_url+"/","hub/frame.ppm")
     req=urllib.request.Request(url,method="GET",headers={
         "User-Agent":"WorkshopOS-Device-UI-Acceptance/1",
-        "X-BambuHelper-Client":"1",
         "Accept":"image/x-portable-pixmap",
     })
     try:
@@ -134,9 +133,8 @@ def main()->int:
     }
     client=Client(base)
     try:
-        assert_code_free_portal(client)
-        evidence["portalMode"]="local-code-free"
-        print("PASS  code-free local portal contract")
+        evidence["portalMode"] = establish_portal_session(client)
+        print("PASS  signed-in local portal contract")
 
         identity=update_identity(client);evidence["runtimeIdentity"]=identity
         check(

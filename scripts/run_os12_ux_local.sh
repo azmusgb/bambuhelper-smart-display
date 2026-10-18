@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.0.0}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.0.1}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -39,8 +39,8 @@ python3 "$ROOT/scripts/validate_os12_product_surface.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_product_surface_complete.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_physical_acceptance_refinement.py" --repo "$BUILD"
 
-# Validate the hardened control plane first, then apply the intentional final
-# production policy: no user-facing device code on the trusted local LAN.
+# Validate the hardened control plane; the portal sign-in restore below is the
+# final security layer.
 python3 "$ROOT/scripts/validate_os12_portal_login.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_portal_control_plane.py" \
   --repo "$BUILD" \
@@ -66,9 +66,12 @@ python3 "$ROOT/scripts/validate_os12_workshop_surface_runtime.py" --repo "$BUILD
 python3 "$ROOT/apply_workshop_os12_physical_polish.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_physical_polish.py" --repo "$BUILD"
 
-python3 "$ROOT/apply_workshop_os12_code_free_portal.py" --repo "$BUILD" --apply
-python3 "$ROOT/scripts/validate_os12_code_free_portal.py" --repo "$BUILD"
-python3 -m py_compile "$ROOT/scripts/accept_os12_code_free_portal_runtime.py"
+# Security candidate 12.0.1: the 12.0.0 code-free overlay is retired. Restore
+# the documented boot-scoped portal-code session for normal LAN routes, with
+# real same-origin provenance for every mutation (docs/portal-auth-v11-20.md).
+python3 "$ROOT/apply_workshop_os12_portal_signin_restore.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_portal_signin.py" --repo "$BUILD" --source-root "$ROOT"
+python3 -m py_compile "$ROOT/scripts/accept_os12_portal_runtime.py"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
@@ -76,7 +79,7 @@ if [[ "${1:-}" == "--build" ]]; then
   echo "PlatformIO: $PIO_BIN"
   "$PIO_BIN" --version
 
-  echo "=== Build WS350 OS12 code-free local-portal candidate ==="
+  echo "=== Build WS350 OS12 signed-in local-portal candidate ==="
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 image missing' >&2; exit 1; }
 
@@ -89,8 +92,8 @@ echo "=== OS12 portal control-plane reconstruction complete ==="
 echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
 echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overhaul, post-capture hardening, Workshop runtime repair, and focused physical product-polish pass applied across shell, hierarchy, cards, rows, controls, media and system surfaces."
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
-echo "Portal security: device code disabled by product policy; local portal opens directly on the trusted LAN."
-echo "Mutation security: same-origin enforcement remains mandatory; no user-entered device code or portal session is required."
+echo "Portal security: boot-scoped portal-code session required for normal LAN routes; the code is shown on System -> Local Portal."
+echo "Mutation security: a valid session plus real Origin/Referer same-origin provenance; no client marker header is trusted."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
 echo "Home/Workshop: consume the same profile-scoped Filament Inventory projection; Unknown/Undetermined is preserved when authoritative evidence is absent."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."

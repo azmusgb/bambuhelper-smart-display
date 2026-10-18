@@ -21,7 +21,7 @@ import time
 from accept_os12_portal_runtime import (
     AcceptanceError,
     Client,
-    assert_code_free_portal,
+    establish_portal_session,
     check,
 )
 
@@ -31,7 +31,7 @@ TERMINAL_CHECK_PHASES = {"Idle", "Available", "Failed"}
 
 
 def api(client: Client, path: str, *, method: str = "GET", form: dict[str, str] | None = None) -> dict:
-    headers = {"X-BambuHelper-Client": "1", "Accept": "application/json"}
+    headers = {"Accept": "application/json"}
     response = client.request(path, method=method, form=form, headers=headers, timeout=15.0)
     check(response.status in (200, 202), f"{method} {path} returned HTTP {response.status}: {response.body[:200]}")
     try:
@@ -78,7 +78,7 @@ def poll_check(client: Client, timeout: float) -> dict:
 
 def portal_reachable(base_url: str) -> bool:
     try:
-        response = Client(base_url).request("/", timeout=3.0)
+        response = Client(base_url, anonymous=True).request("/login", timeout=3.0)
     except AcceptanceError:
         return False
     return response.status == 200
@@ -121,10 +121,10 @@ def wait_for_portal(base_url: str, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if portal_reachable(base_url):
-            print("PASS  WS350 code-free portal reachable after reboot")
+            print("PASS  WS350 Local Portal sign-in page reachable after reboot")
             return
         time.sleep(2.0)
-    raise AcceptanceError("WS350 did not return to the code-free portal after reboot")
+    raise AcceptanceError("WS350 did not return to the Local Portal after reboot")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -139,8 +139,8 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"Target: {base_url}")
     client = Client(base_url)
-    assert_code_free_portal(client)
-    print("PASS  code-free local portal contract")
+    establish_portal_session(client)
+    print("PASS  signed-in local portal contract")
 
     channel_payload = api(
         client,
@@ -191,8 +191,9 @@ def run(args: argparse.Namespace) -> int:
     poll_install_until_reboot(client, base_url, args.install_timeout)
     wait_for_portal(base_url, args.reboot_timeout)
 
+    # Reboot invalidated the session and rotated the portal code.
     post = Client(base_url)
-    assert_code_free_portal(post)
+    establish_portal_session(post, fresh_code=True)
     final_status = api(post, "/os12/update/status")
     validate_status(final_status)
     check(final_status["runningVersion"] == args.expect_version,
