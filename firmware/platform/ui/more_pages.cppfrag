@@ -86,7 +86,7 @@ static bool g_wsCaptureCompose = false;
 
 // True while the Video test page shows a running video (see smartHubDraw).
 static bool wsVideoDirect() {
-  return !g_wsCaptureCompose && getScreenState() == SCREEN_HUB_MORE && !g_toolsView && g_wsPage == wsm::PageId::VideoTest &&
+  return !g_wsCaptureCompose && getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::VideoTest &&
          g_wsDialog == WsDialog::None && wsVideoSessionActive();
 }
 
@@ -107,11 +107,6 @@ static void wsOpen(wsm::PageId id) {
   g_dirty = true;
 }
 
-// True while a 12.0 screen still owns More (only the hidden, capture-only
-// Tools page).
-static bool wsLegacyActive(ScreenState cur) {
-  return cur == SCREEN_HUB_MORE && g_toolsView;
-}
 
 // ---------------------------------------------------------------------------
 // Live values
@@ -1684,6 +1679,7 @@ static bool wsMoreShowPage(const char* name) {
              !strcmp(name, "hardware-error")) id = wsm::PageId::Alerts;
     else if (!strcmp(name, "hardware-finish")) id = wsm::PageId::StatusLight;
     else if (!strcmp(name, "media") || !strcmp(name, "media-lab") || !strcmp(name, "hardware-sound")) id = wsm::PageId::SoundAlerts;
+    else if (!strcmp(name, "tools") || !strcmp(name, "custom")) id = wsm::PageId::Root;
     else if (!strcmp(name, "system-time-locale")) id = wsm::PageId::TimeLocale;
     else return false;
   }

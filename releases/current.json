@@ -20,11 +20,11 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.1.3",
-    "branch": "feature/os12-more-display-sound",
-    "name": "Workshop OS 12.1.3 Display and Sound Pages",
-    "purpose": "More/System overhaul step 3: Display (with Clock & schedule and Gauges) and Sound & Alerts (with Printer alerts, Status light and Video test) move to the shared header, tab bar and rows, replacing the 14 Display / Display Expert pages, the 7 Hardware pages, Media and Recorder. Every More page now uses the new layout.",
-    "pullRequest": 169,
+    "version": "12.1.4",
+    "branch": "feature/os12-more-cleanup",
+    "name": "Workshop OS 12.1.4 More Clean-up",
+    "purpose": "More/System overhaul clean-up: Tools and Custom are removed (Calm idle screen moved to Display; their ids open the More root), the 12.0 More/System renderers, touch branches, Network Expert editor and /hub/show handlers are deleted, and /hub/views lists exactly Home, Printer, Workshop and the 15 More pages (18 views, down from 43).",
+    "pullRequest": null,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required",
