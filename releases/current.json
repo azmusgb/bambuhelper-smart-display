@@ -20,11 +20,11 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.0.1",
-    "branch": "security/portal-signin-restore",
-    "name": "Workshop OS 12.0.1 Portal Sign-in Restore",
-    "purpose": "Security candidate: retire the 12.0.0 code-free portal overlay and restore the boot-scoped portal-code session for normal-LAN routes, with real Origin/Referer same-origin protection for every mutation (no X-BambuHelper-Client shortcut). See docs/portal-signin-restore-12-0-1.md.",
-    "pullRequest": 161,
+    "version": "12.0.2",
+    "branch": "fix/os12-touch-hotfix",
+    "name": "Workshop OS 12.0.2 Touch Hotfix",
+    "purpose": "Touch hotfix on top of the 12.0.1 portal sign-in restore: the hidden tab bar no longer steals the More/System sub-pages' bottom buttons in landscape, the stepper minus touch zone matches the drawn button, Software Update's action button says Check for update / Install, and the install confirmation is drawn again. 12.0.1 physical acceptance is still pending and is covered by this candidate's acceptance.",
+    "pullRequest": 165,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required",
@@ -68,6 +68,7 @@
       "ws350Build": "required",
       "shared320x480Regression": "required",
       "portalSignInContracts": "required",
+      "touchRoutingContracts": "required",
       "physicalAcceptance": "required"
     },
     "staticDownload": {
