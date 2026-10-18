@@ -31,7 +31,7 @@ import zlib
 
 from accept_os12_media_physical import update_identity
 from accept_os12_media_runtime import api, status, validate_status, wait_for_session
-from accept_os12_portal_runtime import AcceptanceError, Client, assert_code_free_portal, check
+from accept_os12_portal_runtime import AcceptanceError, Client, establish_portal_session, check
 from accept_os12_unattended import catalog, frame_bytes, parse_ppm, pixel_difference_ratio, show
 
 WIDTH = 480
@@ -141,7 +141,7 @@ def write_contact_sheet(out_dir: Path, captures: list[dict]) -> None:
 def run(args: argparse.Namespace) -> int:
     base_url = args.base_url.rstrip("/")
     client = Client(base_url)
-    assert_code_free_portal(client)
+    establish_portal_session(client)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else Path.home() / "Downloads" / f"ws350-x2d-full-ui-{stamp}"
     ppm_dir, png_dir, state_dir = out_dir / "ppm", out_dir / "png", out_dir / "state"
