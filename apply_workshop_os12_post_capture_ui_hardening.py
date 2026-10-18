@@ -95,11 +95,18 @@ static void hubOs12EvidenceRow(const HubRect& r,const char* title,const char* va
   const int16_t dotReserve=(vc!=OS12V_MUTED)?28:8;
   const int16_t textW=r.w-inset*2-dotReserve;
   const bool compact=r.h<64;
-  const FontID valueFont=compact?FONT_SMALL:FONT_BODY;
-  const int16_t valueY=r.y+(compact?22:25);
-  const int16_t detailBottom=r.y+r.h-(compact?5:7);
-  uiDrawFit(title,r.x+inset,r.y+6,textW,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
-  uiDrawFit(value,r.x+inset,valueY,textW,valueFont,TL_DATUM,vc,OS12V_SURFACE);
+  const int16_t detailBottom=r.y+r.h-(compact?8:7);
+  if(compact){
+    // A 54 px row cannot stack three small-font lines without the value
+    // colliding with the detail, so the value shares the title line,
+    // right-aligned before the status dot.
+    const int16_t valueW=textW*2/5;
+    uiDrawFit(title,r.x+inset,r.y+6,textW-valueW-6,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+    uiDrawFit(value,r.x+inset+textW,r.y+6,valueW,FONT_SMALL,TR_DATUM,vc,OS12V_SURFACE);
+  }else{
+    uiDrawFit(title,r.x+inset,r.y+6,textW,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE);
+    uiDrawFit(value,r.x+inset,r.y+25,textW,FONT_BODY,TL_DATUM,vc,OS12V_SURFACE);
+  }
   uiDrawFit(detail,r.x+inset,detailBottom,textW,FONT_SMALL,BL_DATUM,OS12V_MUTED,OS12V_SURFACE);
 
   if(vc!=OS12V_MUTED)tft.fillCircle(r.x+r.w-17,r.y+17,4,vc);

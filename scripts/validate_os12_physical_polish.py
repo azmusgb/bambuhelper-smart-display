@@ -110,7 +110,7 @@ def main() -> int:
         "workshopInventorySnapshot()",
         'drawHeader("Home",nullptr,0)',
         "const bool active=printing||paused;",
-        'HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,active?78:64);',
+        'HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,78);',
         '"Ready for your next print"',
         '"Set up a printer"',
         '"More  >  System  >  Printer & Power"',

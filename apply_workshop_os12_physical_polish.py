@@ -297,7 +297,9 @@ static void drawHome(bool full) {
     hubMarkFrameDirty();g_dirty=false;return;
   }
 
-  HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,active?78:64);
+  // One hero geometry for every state: the idle headline and detail overlapped
+  // in a 64 px card, and a fixed size avoids a layout jump when a print starts.
+  HubRect hero=hr(OS12V_INSET,46,W-OS12V_INSET*2,78);
   hubV1125Card(hero,stateColor,true);
   uiDrawFit(p&&p->config.name[0]?p->config.name:"Printer",hero.x+14,hero.y+10,hero.w-128,FONT_SMALL,TL_DATUM,OS12V_MUTED,OS12V_SURFACE2);
   uiDrawFit(state,hero.x+hero.w-14,hero.y+10,104,FONT_SMALL,TR_DATUM,
@@ -357,8 +359,8 @@ static void drawHome(bool full) {
     invColor=hubOs12WorkshopReadinessColor(inventoryState.readiness);
   }
 
-  const int16_t lowerY=active?130:116;
-  const int16_t lowerH=active?120:134;
+  const int16_t lowerY=130;
+  const int16_t lowerH=120;
   const int16_t gap=8;
   const int16_t cardW=(W-OS12V_INSET*2-gap)/2;
   HubRect printerCard=hr(OS12V_INSET,lowerY,cardW,lowerH);
