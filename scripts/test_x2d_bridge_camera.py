@@ -178,6 +178,9 @@ class AsyncWorkerTests(unittest.TestCase):
         for forbidden in ("HTTPClient", "http.GET", "getStreamPtr", "fillRect"):
             self.assertNotIn(forbidden, renderer)
         self.assertIn("tft.drawJpg(gX2dDisplayFrame", renderer)
+        self.assertIn("gX2dDisplayBytes = frameBytes;", renderer)
+        # Evidence capture redraws the last frame offscreen; defined on every board.
+        self.assertIn("bool x2dRedrawLastFrame() {", text)
         # The decode happens after the lock is released.
         self.assertLess(renderer.index("xSemaphoreGive"), renderer.index("tft.drawJpg"))
 

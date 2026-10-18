@@ -74,12 +74,6 @@ bool smartHubCaptureRgbRow(uint16_t y, uint8_t* out, size_t outLen) {{
 }}
 '''
 
-DISPLAY_FIXTURE = '''static FakeSprite _frame_sprite;
-void flushFrame() {}
-// Pass-through hook for any future board-level rotation constraints. All four
-'''
-
-
 class ViewerPolishTests(unittest.TestCase):
     def make_repo(self) -> tuple[tempfile.TemporaryDirectory, Path]:
         td = tempfile.TemporaryDirectory()
@@ -87,7 +81,6 @@ class ViewerPolishTests(unittest.TestCase):
         src = root / "src"
         src.mkdir()
         (src / "smart_hub.cpp").write_text(SMART_HUB_FIXTURE, encoding="utf-8")
-        (src / "display_ui.cpp").write_text(DISPLAY_FIXTURE, encoding="utf-8")
         return td, root
 
     def test_polish_installs_proven_viewer_and_capture_fixes(self) -> None:
@@ -95,7 +88,6 @@ class ViewerPolishTests(unittest.TestCase):
         with td:
             polish.apply(root)
             hub = (root / "src/smart_hub.cpp").read_text(encoding="utf-8")
-            display = (root / "src/display_ui.cpp").read_text(encoding="utf-8")
 
             self.assertIn('"X2D Camera"', hub)
             self.assertIn("const bool controlsChanged", hub)
@@ -104,8 +96,6 @@ class ViewerPolishTests(unittest.TestCase):
             self.assertIn(polish.NEW_BACK_HINT, hub)
             self.assertGreaterEqual(hub.count('"Back",C10_ACCENT,true,false'), 2)
             self.assertIn("Transfer display ownership back to Media", hub)
-            self.assertIn("bool displayCapturePrepare", display)
-            self.assertIn("_frame_sprite.readPixel", display)
 
     def test_refused_launch_is_visible_on_media_row(self) -> None:
         td, root = self.make_repo()
@@ -119,18 +109,23 @@ class ViewerPolishTests(unittest.TestCase):
             self.assertLess(hub.index("static bool gOs12X2dLaunchFailed=false;"), hub.index("static void drawOs12Media()"))
             self.assertIn('"Check Wi-Fi and the Mac bridge"', hub)
 
-    def test_capture_uses_hub_sprite_except_for_video_viewer(self) -> None:
+    def test_capture_recomposes_viewer_offscreen(self) -> None:
         td, root = self.make_repo()
         with td:
             polish.apply(root)
             hub = (root / "src/smart_hub.cpp").read_text(encoding="utf-8")
+            prepare = hub[hub.index("bool smartHubCapturePrepare"):hub.index("bool smartHubCaptureRgbRow")]
             self.assertEqual(hub.count(polish.CAPTURE_MARKER), 1)
-            self.assertIn("screen == SCREEN_HUB_MORE && g_ui12SettingsView == 12", hub)
-            self.assertIn("return displayCapturePrepare(width, height);", hub)
-            self.assertIn("g_hubFrameW <= 0 || g_hubFrameH <= 0", hub)
-            self.assertIn("return displayCaptureRgbRow(y, out, outLen);", hub)
-            self.assertIn("g_hubFrame->readPixel", hub)
-            self.assertLess(hub.index("extern bool displayCapturePrepare"), hub.index("bool smartHubCapturePrepare"))
+            self.assertIn("screen == SCREEN_HUB_MORE && g_ui12SettingsView == 12", prepare)
+            # Viewer chrome and the last camera frame go to g_hubFrame, never the panel,
+            # and every piece of borrowed state is restored.
+            self.assertLess(prepare.index("tft_ptr = g_hubFrame;"), prepare.index("drawOs12VideoViewer();"))
+            self.assertLess(prepare.index("workshop::media::x2dRedrawLastFrame();"), prepare.index("tft_ptr = panel;"))
+            for restored in ("gOs12VideoViewerPrimed = primed;", "g_dirty = dirty;"):
+                self.assertIn(restored, prepare)
+            self.assertIn("bool x2dRedrawLastFrame();", hub)
+            # The canonical g_hubFrame row reader is kept.
+            self.assertIn("if (!out || !g_hubFrame || !g_hubFrame->getBuffer()) return false;", hub)
 
     def test_polish_is_idempotent_for_partially_patched_physical_candidate(self) -> None:
         td, root = self.make_repo()
@@ -150,8 +145,8 @@ class ViewerPolishTests(unittest.TestCase):
     def test_polish_failure_is_transactional(self) -> None:
         td, root = self.make_repo()
         with td:
-            display = root / "src/display_ui.cpp"
-            display.write_text("static FakeSprite _frame_sprite;\n", encoding="utf-8")
+            hub = root / "src/smart_hub.cpp"
+            hub.write_text(hub.read_text(encoding="utf-8").replace(polish.BACK_OLD, ""), encoding="utf-8")
             before = {
                 p.name: p.read_text(encoding="utf-8")
                 for p in (root / "src").iterdir()

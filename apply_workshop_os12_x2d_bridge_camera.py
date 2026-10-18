@@ -173,6 +173,7 @@ static SemaphoreHandle_t gX2dFrameMutex = nullptr;
 static uint8_t* gX2dFetchBuffer = nullptr;
 static uint8_t* gX2dPublishedFrame = nullptr;
 static uint8_t* gX2dDisplayFrame = nullptr;
+static size_t gX2dDisplayBytes = 0U;  // Foreground-owned; last decoded frame.
 static size_t gX2dPublishedBytes = 0U;
 static uint32_t gX2dPublishedSequence = 0U;
 // Written only while holding gX2dFrameMutex. The worker reads the enable flag
@@ -329,6 +330,30 @@ STOP_ADDITION = (
 )
 
 RENDER_X2D = r'''
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
+static void x2dViewportOrigin(int16_t* x, int16_t* y) {
+  const int16_t controlBarH = 50;
+  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
+  *x = (tft.width() - kBridgeCameraWidth) / 2;
+  *y = (viewportH - kBridgeCameraHeight) / 2;
+}
+#endif
+
+// Redraw the last decoded camera frame into the current tft target. The WS350
+// panel is not readable, so framebuffer evidence recomposes the viewer into an
+// offscreen sprite with this. Foreground-only, like the renderer.
+bool x2dRedrawLastFrame() {
+#if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
+  if (!gX2dDisplayFrame || gX2dDisplayBytes < 4U) return false;
+  int16_t x = 0;
+  int16_t y = 0;
+  x2dViewportOrigin(&x, &y);
+  return tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(gX2dDisplayBytes), x, y);
+#else
+  return false;
+#endif
+}
+
 void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
   if (!videoRequested_ || videoPaused_ || videoSource_ != VideoSource::X2dBridge) return;
@@ -360,10 +385,10 @@ void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
   }
 
   ++videoDiagnostics_.frameObservations;
-  const int16_t controlBarH = 50;
-  const int16_t viewportH = tft.height() > controlBarH ? tft.height() - controlBarH : tft.height();
-  const int16_t x = (tft.width() - kBridgeCameraWidth) / 2;
-  const int16_t y = (viewportH - kBridgeCameraHeight) / 2;
+  gX2dDisplayBytes = frameBytes;
+  int16_t x = 0;
+  int16_t y = 0;
+  x2dViewportOrigin(&x, &y);
   // The bridge produces the exact 480x270 viewport, so no black clear: a panel
   // flush between clear and decode would expose a visible black frame.
   tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(frameBytes), x, y);

@@ -83,6 +83,12 @@ test -s "$FIRMWARE" || { echo 'FAIL: WS350 X2D image missing' >&2; exit 1; }
 echo "X2D firmware: $FIRMWARE"
 echo "X2D firmware SHA-256: $(shasum -a 256 "$FIRMWARE" | awk '{print $1}')"
 
+if [[ "$FLASH" -ne 1 ]]; then
+  # smart_hub.cpp is shared by every board; prove the overlays keep it compiling.
+  echo "=== Cross-board compile regression ==="
+  (cd "$BUILD" && "$PIO_BIN" run -e jc3248w535)
+fi
+
 [[ "$FLASH" -eq 1 ]] || exit 0
 
 printf '\n=== Printer-idle gate ===\n'
