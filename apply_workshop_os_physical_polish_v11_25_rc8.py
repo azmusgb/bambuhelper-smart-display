@@ -236,6 +236,10 @@ def patch(repo: Path) -> None:
     hub=replace_block(hub,"static HubRect hubSystemActionRect(uint8_t i)",SYSTEM_ACTION_RECT,"system action geometry")
     hub=replace_block(hub,"static HubRect hubSystemNetworkCardRect()",SYSTEM_NETWORK_RECT,"system network geometry")
     hub=once(hub,"static const uint8_t HUB_NETWORK_PAGE_COUNT = 4;","static const uint8_t HUB_NETWORK_PAGE_COUNT = 7;","network page count")
+    # kNetworkPages still names only the first four pages. Bound the page-name
+    # lookup by the array, not the wizard page count, or unmatched names (every
+    # hardware-* page) strcmp past the end and crash with LoadProhibited.
+    hub=once(hub,"for(uint8_t i=0;i<HUB_NETWORK_PAGE_COUNT;i++) {\n    if(strcmp(pageName,kNetworkPages[i])==0) {","for(uint8_t i=0;i<(uint8_t)(sizeof(kNetworkPages)/sizeof(kNetworkPages[0]));i++) {\n    if(strcmp(pageName,kNetworkPages[i])==0) {","network page-name lookup bound")
     start='if(g_networkSettingsView){\n      if(!g_networkEditLoaded)hubLoadNetworkEdit();\n      const uint8_t page=(uint8_t)(g_networkSettingsPage%HUB_NETWORK_PAGE_COUNT);'
     end='if(hubSystemAudioSettingsEntryRect().contains(x,y))'
     hub=replace_between(hub,start,end,NETWORK_TOUCH,"network touch wizard")
