@@ -18,6 +18,7 @@ IN_PLACE=0
 DO_BUILD=0
 FLASH=0
 CONFIRM_IDLE=0
+ALLOW_ACTIVE_PRINT=0
 
 usage() {
   cat <<'EOF'
@@ -37,6 +38,9 @@ Options:
                           partition-layout mismatch. NVS is not erased.
   --confirm-printer-idle  Required with --flash. The live printer state is also
                           checked through the device portal when reachable.
+  --allow-active-print    Flash even while a print runs. Honoured only when the
+                          WS350 reports no printer power control, so its reboot
+                          cannot cut printer power; the print itself is unaffected.
 
 Environment: BASE, BUILD, X2D_BRIDGE_URL, WORKSHOP_OS_URL, PIO_BIN.
 EOF
@@ -49,6 +53,7 @@ while (( $# )); do
     --build) DO_BUILD=1 ;;
     --flash) FLASH=1; DO_BUILD=1 ;;
     --confirm-printer-idle) CONFIRM_IDLE=1 ;;
+    --allow-active-print) ALLOW_ACTIVE_PRINT=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
@@ -106,7 +111,16 @@ if STATE_JSON="$(curl -fsS --max-time 4 -H 'X-BambuHelper-Client: 1' "$BASE_URL/
   echo "Printer state reported by the WS350: ${STATE:-unknown}"
   case "$STATE" in
     IDLE|FINISH|FAILED) ;;
-    *) echo "STOP: printer is not idle (state=${STATE:-unknown}). No device access was attempted." >&2; exit 22 ;;
+    *)
+      POWER="$(curl -fsS --max-time 4 -H 'X-BambuHelper-Client: 1' "$BASE_URL/printer/power/status" 2>/dev/null \
+        | python3 -c 'import json,sys; print("controlled" if json.load(sys.stdin).get("available") else "none")' 2>/dev/null || echo unknown)"
+      if [[ "$ALLOW_ACTIVE_PRINT" -eq 1 && "$POWER" == "none" ]]; then
+        echo "WARN: printer is $STATE; flashing anyway (--allow-active-print, no printer power control on this WS350)."
+      else
+        echo "STOP: printer is not idle (state=${STATE:-unknown}, power control=$POWER). No device access was attempted." >&2
+        exit 22
+      fi
+      ;;
   esac
 else
   echo "WARN: $BASE_URL/status unreachable; relying on --confirm-printer-idle."
