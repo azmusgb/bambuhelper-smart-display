@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.0.1}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.0.2}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -72,6 +72,12 @@ python3 "$ROOT/scripts/validate_os12_physical_polish.py" --repo "$BUILD"
 python3 "$ROOT/apply_workshop_os12_portal_signin_restore.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_portal_signin.py" --repo "$BUILD" --source-root "$ROOT"
 python3 -m py_compile "$ROOT/scripts/accept_os12_portal_runtime.py"
+
+# Touch hotfix 12.0.2: the hidden tab bar no longer steals the sub-pages' bottom
+# buttons, the stepper "-" touch zone matches the drawn button, and Software
+# Update's action button says what it does.
+python3 "$ROOT/apply_workshop_os12_touch_hotfix.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_touch_hotfix.py" --repo "$BUILD"
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
