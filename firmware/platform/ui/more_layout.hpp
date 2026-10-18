@@ -525,6 +525,11 @@ inline Rect labelRect(Screen s, const Rect& row, RowKind kind) {
   return makeRect(row.x + 12, row.y, right - row.x - 12, row.h);
 }
 
+// Whether a row draws its value text at all. An empty value draws nothing:
+// the firmware's text fitter turns "" into an em dash, which the WS350 font
+// has no glyph for, so 12.2.0 showed a stray "|" left of every toggle switch.
+inline bool drawsValueText(const char* value) { return value != nullptr && value[0] != '\0'; }
+
 // Value slot for Info / Nav / Code / Toggle rows (right-aligned text).
 inline Rect valueRect(Screen s, const Rect& row, RowKind kind) {
   const int labelShare = s.landscape() ? 200 : 116;
