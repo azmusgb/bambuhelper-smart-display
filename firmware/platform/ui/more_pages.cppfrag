@@ -86,7 +86,10 @@ static bool g_wsCaptureCompose = false;
 
 // True while the Video test page shows a running video (see smartHubDraw).
 static bool wsVideoDirect() {
-  return !g_wsCaptureCompose && getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::VideoTest &&
+  // (The status-token consent prompt takes the whole screen; it must not be
+  // drawn over by video frames.)
+  return !g_wsCaptureCompose && !workshopStatusTokenPromptVisible() &&
+         getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::VideoTest &&
          g_wsDialog == WsDialog::None && wsVideoSessionActive();
 }
 
@@ -1561,9 +1564,11 @@ static void wsMoreDraw(bool full) {
 // Touch
 // ---------------------------------------------------------------------------
 
-// Stops the video test if the More screen is no longer showing it.
+// Stops the video test if the More screen is no longer showing it, or if the
+// status-token consent prompt needs the whole screen.
 static void wsVideoGuard(ScreenState screen) {
-  if (g_wsPage == wsm::PageId::VideoTest && screen != SCREEN_HUB_MORE && wsVideoSessionActive()) wsVideoStop();
+  if (g_wsPage != wsm::PageId::VideoTest || !wsVideoSessionActive()) return;
+  if (screen != SCREEN_HUB_MORE || workshopStatusTokenPromptVisible()) wsVideoStop();
 }
 
 static void wsTab(uint8_t i) {
