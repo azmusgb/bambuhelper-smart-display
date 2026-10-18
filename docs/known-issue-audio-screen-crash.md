@@ -1,36 +1,34 @@
-# Known Issue: hardware-* screens crash on draw
+# Resolved: hardware-* screens crashed on show
 
 ## Symptom
-Any of the hardware-* views triggers a Guru Meditation LoadProhibited
-and reboots the device:
+Showing any hardware-* view (hardware-sound, hardware-cooldown, hardware-led,
+hardware-finish, hardware-error, hardware-power, hardware-auto-off) through
+`/hub/show` triggered a Guru Meditation LoadProhibited and rebooted the device.
+Unattended capture aborted at the first hardware-* view.
 
-- hardware-sound
-- hardware-cooldown
-- hardware-led
-- hardware-finish
-- hardware-error
-- hardware-power
-- hardware-auto-off
+## Root cause
+The crash was not in `drawAudioSettings()`. A backtrace decoded against the
+matching `firmware.elf` puts it in `smartHubShowPage()`, in a ROM `strcmp`
+called from the network page-name lookup:
 
-All seven go through drawAudioSettings() in smart_hub.cpp.
-
-## Crash signature
+```text
 Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
 EXCVADDR: 0x0f0a0501
-Backtrace: 0x42039609 0x42048b87 0x4206bb92 0x4206bc9d
-           0x4206bd7a 0x4206bf19 0x4205bd42 0x4202c9e1 0x42073009
+0x4203a9b1: smartHubShowPage(char const*) at src/smart_hub.cpp:3881
+0x42049e3b: initWebServer()::{lambda()#38} at src/web_server.cpp:3748
+```
 
-EXCVADDR 0x0f0a0501 is packed bytes, not a real pointer. Something
-is dereferencing corrupted data inside drawAudioSettings() or one of
-its helpers.
+`apply_smart_home_network_locale_layout_v11_23.py` added a four-entry
+`kNetworkPages` array and looped `i < HUB_NETWORK_PAGE_COUNT`.
+`apply_workshop_os_physical_polish_v11_25_rc8.py` later raised
+`HUB_NETWORK_PAGE_COUNT` to 7 for the network wizard. Any page name that missed
+the first four entries then compared against `kNetworkPages[4..6]`, which are
+past the end of the array. The hardware-* names are checked after this loop, so
+all seven crashed.
 
-## Impact
-- Physical device: not reachable without crashing
-- Capture automation: aborts at screen 37/38
-
-## Next steps
-1. Decode backtrace with addr2line:
-   xtensa-esp32s3-elf-addr2line -pfiaC -e firmware.elf <addresses>
-2. Read drawAudioSettings() (smart_hub.cpp ~line 2221)
-3. Check buzzerSettings / ES8311 codec state initialization
-4. Likely missing null guard on a codec object, or uninitialized struct field
+## Fix
+rc8 now bounds the lookup by `sizeof(kNetworkPages)/sizeof(kNetworkPages[0])`
+where it changes the page count. The earlier attempt in
+`apply_workshop_os_sky_radar_v11_30.py` was removed: that overlay is not in the
+OS12 build chain, and its fixed text was overwritten by a later write in the
+same script.
