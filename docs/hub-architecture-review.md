@@ -1,4 +1,4 @@
-# Review: hub-architecture.md
+# Review: hub-architecture.md (earlier draft — all findings and the geometry note are addressed in the current version)
 
 ## Verdict
 The reframe is correct and the doc is executable. Two blocking gaps:

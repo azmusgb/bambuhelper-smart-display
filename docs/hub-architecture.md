@@ -37,7 +37,7 @@ Rule: any tile showing Unavailable or Unknown must offer an action, not just a s
 | Tile | Empty-state behavior |
 |---|---|
 | Now | Always populated from local time; weather shows dash if no network |
-| Home | "Set up first device" opens System -> Devices |
+| Smart Home | "Set up first device" opens System -> Devices |
 | Workshop | "No equipment configured" shortcut to add |
 | Printer | "Add first printer" opens Printer setup |
 | Apps | Never empty; shows built-in apps |
@@ -46,19 +46,19 @@ Rule: any tile showing Unavailable or Unknown must offer an action, not just a s
 ## The six Home tiles
 
 1. **Now** — local time + date primary; weather or next timer secondary
-2. **Home (Smart Home)** — plugs, lights, sensors, temperature
+2. **Smart Home** — plugs, lights, sensors, temperature
 3. **Workshop** — equipment, bench state, filament, workshop timers
 4. **Printer** — existing printer experience, unchanged
 5. **Apps** — standalone utilities (see below)
 6. **System** — network, display, audio, LEDs, diagnostics, updates
 
-App = ScreenState entry + /hub/views catalog entry + draw function in smartHubDraw(). No lifecycle, no manifest, no sandbox.
+App = ScreenState enum value (display_ui.cpp) + /hub/views catalog entry + draw function in smartHubDraw(). No lifecycle, no manifest, no sandbox.
 
 Initial apps: Sky Radar, Weather, Timers, World Clock, Notes.
 
 ## Navigation
 
-Root nav: Home - Apps - Workshop - Printer
+Root nav: Home - Apps - Printer - System
 
 Printer keeps a permanent nav slot. Workshop is reachable via its Home tile until it has enough content to justify promotion.
 
@@ -72,7 +72,7 @@ Printer keeps a permanent nav slot. Workshop is reachable via its Home tile unti
 | Network pages (4) | System -> Network |
 | Updates/diagnostics | System -> Maintenance |
 | Local Portal, recovery, admin | System |
-| Custom dashboard | Home -> Home tile |
+| Custom dashboard | Home -> Smart Home tile |
 
 Display + Hardware collapse into 3 System sub-pages: Appearance, Hardware, Advanced. No features removed.
 
