@@ -14,6 +14,11 @@ builds on, and owns whole functions rather than editing lines inside them.
 - 12.3.0, Home: drawHome hands Home to the new page; Home's touch goes through
   the shared hit test, and the old invisible Home zones (hubHomeRect) are
   deleted.
+- 12.3.1, Printer: drawPrinter hands Status, AMS and Control to the new
+  page and Printer's touch goes through the shared hit test. Stop keeps its
+  hold guard (longPress, confirmation flag) and is sent only for a hold that
+  started on the Stop button and stayed on it; the hold progress is drawn
+  over the new button. The 12.0 Printer rectangles and widgets are deleted.
 """
 from __future__ import annotations
 
@@ -48,10 +53,44 @@ static void drawHome(bool full) {
 # The 12.0 Home zones did not match the cards they sat on.
 HOME_RECT_SIGNATURE = "static HubRect hubHomeRect(uint8_t i)"
 
+DRAW_PRINTER_SIGNATURE = "static void drawPrinter(bool full)"
+DRAW_PRINTER = """static void wtDrawPrinter(bool full);
+static void drawPrinter(bool full) {
+  wtDrawPrinter(full);
+}
+"""
+
+# 12.0 Printer geometry and widgets, replaced by the shared layout.
+REPLACED_PRINTER = (
+    "static HubRect hubPrinterActionRect(uint8_t i)",
+    "static HubRect hubV1125PrinterModeRect(uint8_t i)",
+    "static void hubV1125ModeTabs()",
+    "static void hubV1125TelemetryColumn(const HubRect& r,const BambuState& s)",
+    "static void hubV1125AmsSlot(const HubRect& r,const AmsTray* tr,bool active,uint8_t index)",
+)
+
+OLD_PRINTER_TOUCH_START = "  if(cur==SCREEN_HUB_PRINTER){\n    for(uint8_t i=0;i<3;i++)if(hubV1125PrinterModeRect(i).contains(x,y))"
+OLD_PRINTER_TOUCH_END = "  if(cur==SCREEN_HUB_WORKSHOP){"
+
+HOLD_PRINTER_OLD = """  }else if(getScreenState()==SCREEN_HUB_PRINTER && g_printerMode==HUB_PRINTER_CONTROL && isAnyPrinterConfigured() && hubPrinterActionRect(3).contains(x,y)){
+    BambuState& s=displayedPrinter().state;const bool paused=s.gcodeStateId==GCODE_PAUSE;
+    if(s.connected&&(s.printing||paused)){HubRect r=hubPrinterActionRect(3);kind=3;bx=r.x;by=r.y;bw=r.w;bh=r.h;label="Keep Holding";}else{lastKind=0;lastSegments=255;return;}
+  }else{"""
+HOLD_PRINTER_NEW = """  }else if(getScreenState()==SCREEN_HUB_PRINTER){
+    // Every sample of the press goes to the Stop tracker: Stop counts only
+    // for a hold that started on the Stop button and never left it.
+    wsm::Rect stop;
+    if(wtStopHoldTrack(x,y,stop)){kind=3;bx=stop.x;by=stop.y;bw=stop.w;bh=stop.h;label="Keep holding";}else{lastKind=0;lastSegments=255;return;}
+  }else{"""
+HOLD_DRAW_OLD = "  if(kind==3)hubV1125Action(hr(bx,by,bw,bh),label,W25_DANGER,true,true);else hubRc2ButtonRef(bx,by,bw,bh,label,UI_ORANGE,true);\n"
+HOLD_DRAW_NEW = ("  if(kind==3){wtDrawStopHold(wsm::makeRect(bx,by,bw,bh),segments);hubMarkFrameDirty();return;}\n"
+                 "  hubRc2ButtonRef(bx,by,bw,bh,label,UI_ORANGE,true);\n")
+
 MORE_HANDOFF = "  if(cur==SCREEN_HUB_MORE||cur==SCREEN_HUB_SYSTEM||cur==SCREEN_HUB_CUSTOM)return wsMoreTouch(x,y,longPress);\n"
 TABS_HANDOFF = (MORE_HANDOFF
                 + "  // Home, Printer and Workshop own their touch too (tab bar included).\n"
-                + "  if(cur==SCREEN_HUB_HOME)return wtHomeTouch(x,y);\n")
+                + "  if(cur==SCREEN_HUB_HOME)return wtHomeTouch(x,y);\n"
+                + "  if(cur==SCREEN_HUB_PRINTER)return wtPrinterTouch(x,y,longPress);\n")
 
 OLD_HOME_TOUCH = """  if(cur==SCREEN_HUB_HOME){
     if(g_ambientActive){g_ambientActive=false;g_dirty=true;return true;}
@@ -76,6 +115,15 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def remove_span(text: str, start: str, end: str, label: str) -> str:
+    """Delete from `start` up to (not including) `end`."""
+    if text.count(start) != 1 or text.count(end) != 1:
+        raise PatchError(f"{label}: anchors not unique ({text.count(start)}, {text.count(end)})")
+    a = text.index(start)
+    b = text.index(end, a)
+    return text[:a] + text[b:]
+
+
 def install_layout(repo: Path, source_root: Path) -> None:
     source = source_root / LAYOUT_SOURCE
     if not source.is_file():
@@ -94,6 +142,12 @@ def patch_smart_hub(repo: Path, source_root: Path) -> None:
     text = replace_once(text, OLD_INCLUDE, NEW_INCLUDE, "layout include")
     text = replace_cpp_function(text, DRAW_HOME_SIGNATURE, DRAW_HOME, "drawHome")
     text = replace_cpp_function(text, HOME_RECT_SIGNATURE, "", "old Home zones")
+    text = replace_cpp_function(text, DRAW_PRINTER_SIGNATURE, DRAW_PRINTER, "drawPrinter")
+    text = remove_span(text, OLD_PRINTER_TOUCH_START, OLD_PRINTER_TOUCH_END, "old Printer touch")
+    text = replace_once(text, HOLD_PRINTER_OLD, HOLD_PRINTER_NEW, "Stop hold tracking")
+    text = replace_once(text, HOLD_DRAW_OLD, HOLD_DRAW_NEW, "Stop hold progress")
+    for signature in REPLACED_PRINTER:
+        text = replace_cpp_function(text, signature, "", f"replaced {signature}")
     text = replace_once(text, NAMESPACE_END, "\n" + fragment.rstrip() + "\n" + NAMESPACE_END, "tab pages")
     text = replace_once(text, MORE_HANDOFF, TABS_HANDOFF, "tab touch hand-off")
     text = replace_once(text, OLD_HOME_TOUCH, "", "old Home touch")
@@ -110,7 +164,7 @@ def apply(repo: Path, source_root: Path) -> None:
     install_layout(repo, source_root)
     patch_smart_hub(repo, source_root)
     build_path.write_text(build.rstrip() + "\n" + BUILD_MARKER + "\n", encoding="utf-8")
-    print("Workshop OS 12.3 tabs installed: Home")
+    print("Workshop OS 12.3 tabs installed: Home, Printer")
 
 
 def main() -> int:
