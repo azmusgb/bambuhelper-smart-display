@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.2.0}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.0}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -102,8 +102,15 @@ python3 "$ROOT/scripts/validate_os12_portal_signin.py" --repo "$BUILD" --source-
 python3 -m py_compile "$ROOT/scripts/accept_os12_code_token_runtime.py"
 
 # 12.1.x More/System overhaul. Owning patch for the More area; keep it last.
+# 12.2.1: no stray "|" beside toggles, Local Portal tile fits, and an unsaved
+# date format defaults to MM/DD/YYYY (validated by validate_os12_more_overhaul.py).
 python3 "$ROOT/apply_workshop_os12_more_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
+# 12.3.x Home, Printer and Workshop tabs on the More design system. Owning
+# patch for the three tabs; runs after the More overhaul, whose layout and rows
+# it builds on.
+python3 "$ROOT/apply_workshop_os12_tabs_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_tabs_overhaul.py" --repo "$BUILD"
 # The finished tree: both Local AI keys still have exactly their own route.
 python3 "$ROOT/scripts/validate_os12_code_token.py" --repo "$BUILD" --source-root "$ROOT" --final
 python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-root "$ROOT"

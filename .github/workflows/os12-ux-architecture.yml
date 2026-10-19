@@ -41,7 +41,9 @@ on:
       - 'scripts/validate_os12_code_token.py'
       - 'scripts/validate_os12_rapid_reset.py'
       - 'scripts/validate_os12_more_overhaul.py'
+      - 'scripts/validate_os12_tabs_overhaul.py'
       - 'tests/workshop_os12_more_layout_smoke.cpp'
+      - 'tests/workshop_os12_tabs_layout_smoke.cpp'
       - 'tests/workshop_os12_rapid_reset_smoke.cpp'
       - 'tests/workshop_os12_code_token_smoke.cpp'
       - '.github/workflows/os12-ux-architecture.yml'
@@ -81,7 +83,9 @@ on:
       - 'scripts/validate_os12_code_token.py'
       - 'scripts/validate_os12_rapid_reset.py'
       - 'scripts/validate_os12_more_overhaul.py'
+      - 'scripts/validate_os12_tabs_overhaul.py'
       - 'tests/workshop_os12_more_layout_smoke.cpp'
+      - 'tests/workshop_os12_tabs_layout_smoke.cpp'
       - 'tests/workshop_os12_rapid_reset_smoke.cpp'
       - 'tests/workshop_os12_code_token_smoke.cpp'
       - '.github/workflows/os12-ux-architecture.yml'
@@ -99,7 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OS12_RELEASE_VERSION: '12.2.0'
+      OS12_RELEASE_VERSION: '12.3.0'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -129,6 +133,7 @@ jobs:
             apply_workshop_os12_code_token.py \
             apply_workshop_os12_rapid_reset.py \
             apply_workshop_os12_more_overhaul.py \
+            apply_workshop_os12_tabs_overhaul.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
             scripts/validate_os12_ux_physical_fit.py \
@@ -143,6 +148,7 @@ jobs:
             scripts/validate_os12_code_token.py \
             scripts/validate_os12_rapid_reset.py \
             scripts/validate_os12_more_overhaul.py \
+            scripts/validate_os12_tabs_overhaul.py \
             scripts/accept_os12_status_lite_runtime.py \
             scripts/accept_os12_code_token_runtime.py \
             scripts/accept_os12_portal_runtime.py \

@@ -20,11 +20,11 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.2.0",
-    "branch": "feature/code-token-portal-code",
-    "name": "Workshop OS 12.2.0 Sign-in Code Key",
-    "purpose": "A second device-issued key, separate from the read-only status token, whose only route is GET /api/portal-code: it returns the current Local Portal sign-in code and a per-boot id so Local AI can show the code. Created after Allow on the touchscreen, stored as SHA-256 only, rate-limited and tied to the sign-in lock-out. Whoever holds the key can sign in. On top of 12.1.4 (main).",
-    "pullRequest": 172,
+    "version": "12.3.0",
+    "branch": "feature/os12-tabs-home-12-3-0",
+    "name": "Workshop OS 12.3.0 Home Overhaul",
+    "purpose": "Home on the More design system: one header with a state chip, one big status card (file, percent, time left, done-at clock time, layer), a read-only temperature strip, and one row to Workshop (timer or filament). The invisible 12.0 Home tap zones are removed; only the card and the row react. Shared tab layout and host touch test for Home, Printer and Workshop. On top of 12.2.1 (PR #173).",
+    "pullRequest": 174,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"

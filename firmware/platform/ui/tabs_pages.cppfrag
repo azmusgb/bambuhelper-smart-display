@@ -1,0 +1,396 @@
+// ---------------------------------------------------------------------------
+// Workshop OS 12.3 Home, Printer and Workshop tabs (WS350).
+//
+// Inserted into smart_hub.cpp's anonymous namespace, after the More pages, by
+// apply_workshop_os12_tabs_overhaul.py. Same system as More: one 44 px header,
+// 44 px slots, the tab bar on every tab, and one rectangle function per control
+// (workshop_tabs_layout.hpp) for both drawing and touch. Nothing reacts to a
+// tap unless it is drawn as something to tap.
+// ---------------------------------------------------------------------------
+namespace wtl = workshop::ui::tabs;
+
+// ---------------------------------------------------------------------------
+// Printer state shared by the tabs
+// ---------------------------------------------------------------------------
+
+struct WtPrint {
+  const PrinterSlot* p;
+  const BambuState* s;
+  bool configured;
+  bool online;
+  bool printing;
+  bool paused;
+  bool active;     // printing or paused
+  bool finished;   // last print finished (idle)
+  bool failed;     // last print failed (idle)
+  uint8_t alerts;  // printer errors (HMS + print_error)
+  const char* chip;
+  uint16_t color;
+};
+
+static WtPrint wtPrint() {
+  WtPrint w;
+  memset(&w, 0, sizeof(w));
+  w.configured = workshopPlatformState().configuredPrinterCount > 0;
+  w.chip = "Not set up";
+  w.color = OS12V_MUTED;
+  if (!w.configured) return w;
+  const uint8_t slot = wsSlot();
+  w.p = &displayedPrinter();
+  w.s = &w.p->state;
+  w.online = workshopPlatformPrinterOnline(slot);
+  w.paused = workshopPlatformPrinterPaused(slot);
+  w.printing = workshopPlatformPrinterPrinting(slot);
+  w.active = w.printing || w.paused;
+  w.finished = !w.active && w.s->gcodeStateId == GCODE_FINISH;
+  w.failed = !w.active && w.s->gcodeStateId == GCODE_FAILED;
+  w.alerts = w.online ? uiHmsCount(*w.s) : 0;
+  if (!w.online) { w.chip = "Offline"; w.color = OS12V_AMBER; }
+  else if (w.alerts || w.failed) { w.chip = "Attention"; w.color = OS12V_RED; }
+  else if (w.paused) { w.chip = "Paused"; w.color = OS12V_AMBER; }
+  else if (w.printing) { w.chip = "Printing"; w.color = OS12V_ACCENT; }
+  else if (w.finished) { w.chip = "Finished"; w.color = OS12V_GREEN; }
+  else { w.chip = "Ready"; w.color = OS12V_GREEN; }
+  return w;
+}
+
+static const char* wtPrinterName(const WtPrint& w) {
+  return w.p && w.p->config.name[0] ? w.p->config.name : "Printer";
+}
+
+// "7h 56m" / "56 min"; empty for 0 (nothing is drawn for an empty value).
+static void wtDurationText(char* out, size_t len, uint16_t minutes) {
+  if (!minutes) { out[0] = 0; return; }
+  if (minutes >= 60U) snprintf(out, len, "%uh %02um", (unsigned)(minutes / 60U), (unsigned)(minutes % 60U));
+  else snprintf(out, len, "%u min", (unsigned)minutes);
+}
+
+// Local clock time of `at`, e.g. "6:42 PM", or "Tue 6:42 PM" when it is not
+// today. False until the clock has been set over Wi-Fi.
+static bool wtClockOf(char* out, size_t len, time_t at) {
+  const time_t now = time(nullptr);
+  if (now < 1700000000 || at < 1700000000) return false;
+  struct tm t, n;
+  localtime_r(&at, &t);
+  localtime_r(&now, &n);
+  char clock[12];
+  wtl::clockText(clock, sizeof(clock), t.tm_hour, t.tm_min, netSettings.use24h);
+  if (t.tm_yday != n.tm_yday || t.tm_year != n.tm_year) {
+    char day[8];
+    strftime(day, sizeof(day), "%a", &t);
+    snprintf(out, len, "%s %s", day, clock);
+  } else {
+    strlcpy(out, clock, len);
+  }
+  return true;
+}
+
+static bool wtClockIn(char* out, size_t len, uint32_t seconds) {
+  return wtClockOf(out, len, time(nullptr) + (time_t)seconds);
+}
+
+// Text on a card; an empty value draws nothing (see wsDrawRowValue).
+static void wtText(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color) {
+  if (!wsm::drawsValueText(text)) return;
+  uiDrawFit(text, x, y, w, font, datum, color, OS12V_SURFACE2);
+}
+
+// The first printer error in words.
+static void wtAlertText(const WtPrint& w, char* out, size_t len) {
+  out[0] = 0;
+  if (!w.s) return;
+#if HAS_HMS_UI
+  if (w.s->hmsCount) {
+    const char* text = hmsLookupText(w.s->hms[0].attr, w.s->hms[0].code);
+    strlcpy(out, text && text[0] ? text : "Printer reported an error", len);
+    return;
+  }
+  if (w.s->printError) {
+    const char* text = printErrorLookupText(w.s->printError);
+    strlcpy(out, text && text[0] ? text : "Print error", len);
+    return;
+  }
+#endif
+  if (w.failed) strlcpy(out, "The last print failed", len);
+}
+
+// Active nozzle temperature and its label ("Nozzle", or "Left nozzle" /
+// "Right nozzle" on dual-nozzle printers such as the X2D).
+static const char* wtNozzle(const BambuState& s, float& temp, float& target) {
+  if (s.dualNozzle && s.activeNozzle < 2) {
+    temp = s.nozzleTempN[s.activeNozzle];
+    target = s.nozzleTargetN[s.activeNozzle];
+    return s.activeNozzle == 1 ? "Left nozzle" : "Right nozzle";
+  }
+  temp = s.nozzleTemp;
+  target = s.nozzleTarget;
+  return "Nozzle";
+}
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+
+static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* chip, uint16_t chipColor,
+                         bool scrollButtons, uint8_t scroll, uint8_t maxScroll) {
+  tft.fillRect(0, 0, s.w, wsm::kHeaderH, OS12V_BG);
+  tft.fillRoundRect(OS12V_INSET, 12, 4, 20, 2, OS12V_ACCENT);
+  const wsm::Rect t = wtl::titleRect(s, scrollButtons);
+  const int16_t titleX = t.x + 10;
+  if (wsToastActive()) {
+    uiDrawFit(g_wsToast, titleX, t.y + t.h / 2, t.right() - titleX, FONT_SMALL, ML_DATUM, OS12V_AMBER, OS12V_BG);
+  } else {
+    const int16_t right = (chip && !scrollButtons) ? wsm::chipRect(s).x - 8 : t.right();
+    uiDrawFit(title, titleX, t.y + t.h / 2, right - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
+  }
+  if (scrollButtons) {
+    const wsm::Rect up = wsm::scrollUpRect(s), down = wsm::scrollDownRect(s);
+    for (uint8_t i = 0; i < 2; ++i) {
+      const wsm::Rect r = i == 0 ? up : down;
+      const bool live = i == 0 ? scroll > 0 : scroll < maxScroll;
+      tft.fillRoundRect(r.x + 3, r.y + 5, r.w - 6, r.h - 10, 9, live ? OS12V_SURFACE2 : OS12V_SURFACE);
+      tft.drawRoundRect(r.x + 3, r.y + 5, r.w - 6, r.h - 10, 9, live ? OS12V_LINE : OS12V_SURFACE);
+      const int16_t cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      const uint16_t c = live ? OS12V_ACCENT : OS12V_LINE;
+      if (i == 0) tft.fillTriangle(cx - 7, cy + 4, cx + 7, cy + 4, cx, cy - 5, c);
+      else tft.fillTriangle(cx - 7, cy - 4, cx + 7, cy - 4, cx, cy + 5, c);
+    }
+  } else if (chip && !wsToastActive()) {
+    const wsm::Rect c = wsm::chipRect(s);
+    tft.fillRoundRect(c.x, c.y, c.w, c.h, 13, OS12V_SURFACE);
+    tft.drawRoundRect(c.x, c.y, c.w, c.h, 13, OS12V_LINE);
+    tft.fillCircle(c.x + 12, c.y + c.h / 2, 4, chipColor);
+    uiDrawFit(chip, c.x + 22, c.y + c.h / 2, c.w - 28, FONT_SMALL, ML_DATUM, chipColor, OS12V_SURFACE);
+  }
+  tft.drawFastHLine(OS12V_INSET, wsm::kHeaderH - 1, s.w - OS12V_INSET * 2, OS12V_LINE);
+}
+
+static void wtDrawCardSurface(const wsm::Rect& r, uint16_t rail) {
+  const wsm::Rect c = wsm::rowSurface(r);
+  tft.fillRoundRect(c.x, c.y, c.w, c.h, 12, OS12V_SURFACE2);
+  tft.drawRoundRect(c.x, c.y, c.w, c.h, 12, OS12V_LINE);
+  tft.fillRoundRect(c.x, c.y + 10, 4, c.h - 20, 2, rail);
+}
+
+static void wtDrawProgress(int16_t x, int16_t y, int16_t w, uint8_t pct, uint16_t color) {
+  if (pct > 100) pct = 100;
+  tft.fillRoundRect(x, y, w, 10, 5, OS12V_SURFACE);
+  tft.drawRoundRect(x, y, w, 10, 5, OS12V_LINE);
+  const int16_t fw = (int16_t)((int32_t)w * pct / 100);
+  if (fw >= 10) tft.fillRoundRect(x, y, fw, 10, 5, color);
+  else if (fw > 0) tft.fillRect(x + 1, y + 2, fw, 6, color);
+}
+
+// Temperatures: one strip of three cells in landscape, three plain rows in
+// portrait. Read-only.
+static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPrint& w, bool targets) {
+  char values[3][24];
+  const char* labels[3] = {"Nozzle", "Bed", "Chamber"};
+  float now[3] = {0, 0, 0}, want[3] = {0, 0, 0};
+  const bool live = w.s && w.online;
+  if (live) {
+    labels[0] = wtNozzle(*w.s, now[0], want[0]);
+    now[1] = w.s->bedTemp; want[1] = w.s->bedTarget;
+    now[2] = w.s->chamberTemp;
+  }
+  for (uint8_t i = 0; i < 3; ++i) {
+    if (!live) strlcpy(values[i], "--", sizeof(values[i]));
+    else if (targets && want[i] > 1.0f && fabsf(want[i] - now[i]) >= 2.0f)
+      snprintf(values[i], sizeof(values[i]), "%.0f° / %.0f°", now[i], want[i]);
+    else snprintf(values[i], sizeof(values[i]), "%.0f°", now[i]);
+  }
+  if (s.landscape()) {
+    if (live && w.s->dualNozzle) labels[0] = w.s->activeNozzle == 1 ? "Nozzle L" : "Nozzle R";
+    const wsm::Rect surface = wsm::rowSurface(area);
+    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+    for (uint8_t i = 0; i < 3; ++i) {
+      const wsm::Rect c = wtl::tempCellRect(s, area, i);
+      if (i) tft.drawFastVLine(c.x, c.y + 10, c.h - 20, OS12V_LINE);
+      const int16_t mid = c.y + c.h / 2;
+      uiDrawFit(labels[i], c.x + 12, mid, 56, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_SURFACE);
+      uiDrawFit(values[i], c.right() - 10, mid, c.w - 76, FONT_BODY, MR_DATUM, live ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
+    }
+    return;
+  }
+  for (uint8_t i = 0; i < 3; ++i) {
+    WsRowView v;
+    wsView(v);
+    strlcpy(v.value, values[i], sizeof(v.value));
+    v.valueColor = live ? OS12V_TEXT : OS12V_MUTED;
+    wsDrawRowBody(s, wsm::RowKind::Info, labels[i], v, wtl::tempCellRect(s, area, i));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Home
+// ---------------------------------------------------------------------------
+
+// What the Home card shows; also the text a capture reviewer reads.
+static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
+  (void)s;
+  wtDrawCardSurface(r, w.color);
+  const int16_t x = r.x + 18, textW = r.w - 18 - 34;
+  const uint16_t bg = OS12V_SURFACE2;
+  wsDrawChevronRight(wtl::cardChevronX(r), r.y + r.h / 2, OS12V_MUTED);
+
+  if (!w.configured) {
+    uiDrawFit("No printer set up", x, r.y + 18, textW, FONT_LARGE, TL_DATUM, OS12V_TEXT, bg);
+    wsDrawWrapped("Add your printer in Local Portal. Tap here to see its address and sign-in code.",
+                  x, r.y + 58, textW, 22, 3, FONT_BODY, OS12V_MUTED, bg);
+    return;
+  }
+
+  uiDrawFit(wtPrinterName(w), x, r.y + 10, textW, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
+  const BambuState& st = *w.s;
+  if (w.active && w.online) {
+    const char* job = jobDisplayName(st);
+    uiDrawFit(job && job[0] ? job : "Print in progress", x, r.y + 27, textW, FONT_BODY, TL_DATUM, OS12V_TEXT, bg);
+    char pct[8], left[24], dur[16];
+    snprintf(pct, sizeof(pct), "%u%%", (unsigned)st.progress);
+    wtDurationText(dur, sizeof(dur), st.remainingMinutes);
+    if (dur[0]) snprintf(left, sizeof(left), "%s left", dur);
+    else left[0] = 0;
+    uiDrawFit(pct, x, r.y + 50, 110, FONT_XLARGE, TL_DATUM, w.paused ? OS12V_AMBER : OS12V_TEXT, bg);
+    wtText(w.paused ? "Paused" : left, x + textW, r.y + 52, textW - 120, FONT_LARGE, TR_DATUM,
+           w.paused ? OS12V_AMBER : OS12V_TEXT);
+    wtDrawProgress(x, r.y + 86, textW, st.progress, w.paused ? OS12V_AMBER : OS12V_ACCENT);
+    char done[24], line[64];
+    line[0] = 0;
+    if (!w.paused && st.remainingMinutes && wtClockIn(done, sizeof(done), (uint32_t)st.remainingMinutes * 60UL))
+      snprintf(line, sizeof(line), "Done %s", done);
+    if (st.totalLayers) {
+      char layer[32];
+      snprintf(layer, sizeof(layer), "Layer %u of %u", (unsigned)st.layerNum, (unsigned)st.totalLayers);
+      if (line[0]) strlcat(line, "  ·  ", sizeof(line));
+      strlcat(line, layer, sizeof(line));
+    }
+    uint16_t lineColor = OS12V_MUTED;
+    if (w.alerts) { wtAlertText(w, line, sizeof(line)); lineColor = OS12V_RED; }
+    wtText(line, x, r.y + 106, textW, FONT_BODY, TL_DATUM, lineColor);
+    return;
+  }
+
+  const char* headline = "Ready for the next print";
+  uint16_t headColor = OS12V_TEXT;
+  char detail[96];
+  detail[0] = 0;
+  if (!w.online) {
+    headline = "Printer offline";
+    headColor = OS12V_AMBER;
+    strlcpy(detail, "Check that the printer is on and on the same Wi-Fi as this display.", sizeof(detail));
+  } else if (w.alerts || w.failed) {
+    headline = w.failed && !w.alerts ? "Print failed" : "Needs attention";
+    headColor = OS12V_RED;
+    wtAlertText(w, detail, sizeof(detail));
+  } else if (w.finished) {
+    headline = "Print finished";
+    headColor = OS12V_GREEN;
+    const char* job = jobDisplayName(st);
+    char at[24];
+    if (wtClockOf(at, sizeof(at), (time_t)st.finishEpoch)) snprintf(detail, sizeof(detail), "%s · done at %s", job && job[0] ? job : "Last print", at);
+    else strlcpy(detail, job && job[0] ? job : "Take the print off the plate.", sizeof(detail));
+  } else {
+    strlcpy(detail, "Start a print from Bambu Studio or the printer.", sizeof(detail));
+  }
+  uiDrawFit(headline, x, r.y + 34, textW, FONT_LARGE, TL_DATUM, headColor, bg);
+  if (detail[0]) wsDrawWrapped(detail, x, r.y + 70, textW, 22, 2, FONT_BODY, OS12V_MUTED, bg);
+}
+
+// Home's bottom row: the workshop timer while it runs, otherwise the
+// filament inventory summary. Opens Workshop.
+static const char* wtHomeExtra(WsRowView& v) {
+  wsView(v);
+  if (g_workshopTimerDone) {
+    strlcpy(v.value, "Done", sizeof(v.value));
+    v.valueColor = OS12V_AMBER;
+    return "Timer";
+  }
+  if (workshopTimerActive()) {
+    const uint32_t sec = workshopTimerRemainingSeconds();
+    snprintf(v.value, sizeof(v.value), "%lu:%02lu left", (unsigned long)(sec / 60UL), (unsigned long)(sec % 60UL));
+    v.valueColor = OS12V_ACCENT;
+    return "Timer";
+  }
+  const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
+  using workshop::platform::Freshness;
+  if (!inv.credentialConfigured) {
+    strlcpy(v.value, "Not connected · set up in Workshop", sizeof(v.value));
+    v.valueColor = OS12V_AMBER;
+  } else if (inv.busy) {
+    strlcpy(v.value, "Refreshing", sizeof(v.value));
+  } else if (!inv.state.available) {
+    strlcpy(v.value, "Unavailable", sizeof(v.value));
+    v.valueColor = OS12V_AMBER;
+  } else if (inv.state.freshness == Freshness::Conflicting) {
+    strlcpy(v.value, "Needs review", sizeof(v.value));
+    v.valueColor = OS12V_RED;
+  } else if (inv.state.freshness != Freshness::Fresh) {
+    strlcpy(v.value, "Out of date", sizeof(v.value));
+    v.valueColor = OS12V_AMBER;
+  } else {
+    snprintf(v.value, sizeof(v.value), "%u spools · %u loaded · %s", (unsigned)inv.state.spoolCount,
+             (unsigned)inv.state.loadedCount, hubOs12WorkshopReadinessLabel(inv.state.readiness));
+    const uint16_t c = hubOs12WorkshopReadinessColor(inv.state.readiness);
+    v.valueColor = c == C10_GREEN ? OS12V_GREEN : (c == C10_RED ? OS12V_RED : (c == C10_ORANGE ? OS12V_AMBER : OS12V_TEXT));
+  }
+  return "Filament";
+}
+
+static void wtDrawHome(bool full) {
+  (void)full;
+  const WtPrint w = wtPrint();
+  if (g_ambientEnabled && g_ambientActive) { drawAmbientHome(w.p, w.s); return; }
+  const wsm::Screen s = wsScreen();
+  const wtl::ViewSpec& v = wtl::view(wtl::View::Home);
+  tft.fillScreen(OS12V_BG);
+  wtDrawHeader(s, v.title, w.chip, w.color, false, 0, 0);
+  for (uint8_t i = 0; i < v.itemCount; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
+    if (r.empty()) continue;
+    switch (v.items[i].id) {
+      case wtl::ItemId::HomeCard: wtDrawHomeCard(s, r, w); break;
+      case wtl::ItemId::HomeTemps: if (w.configured) wtDrawTemps(s, r, w, false); break;
+      case wtl::ItemId::HomeExtra: {
+        WsRowView row;
+        const char* label = wtHomeExtra(row);
+        wsDrawRowBody(s, wsm::RowKind::Nav, label, row, r);
+        break;
+      }
+      default: break;
+    }
+  }
+  uiBottomNav(0, nullptr);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+// ---------------------------------------------------------------------------
+// Touch
+// ---------------------------------------------------------------------------
+
+static void wtTab(uint8_t i) {
+  if (i == 0) setPage(SCREEN_HUB_HOME);
+  else if (i == 1) setPage(SCREEN_HUB_PRINTER);
+  else if (i == 2) setPage(SCREEN_HUB_WORKSHOP);
+  else wsOpen(wsm::PageId::Root);
+}
+
+static bool wtHomeTouch(int16_t x, int16_t y) {
+  // The calm idle screen is drawn without the tab bar: a tap only wakes it.
+  if (g_ambientActive) { g_ambientActive = false; g_dirty = true; return true; }
+  const wsm::Screen s = wsScreen();
+  const wtl::Hit h = wtl::hitTest(s, wtl::View::Home, 0, 0, x, y);
+  if (h.kind == wtl::HitKind::Tab) { wtTab(h.index); return true; }
+  if (h.kind != wtl::HitKind::Item) return true;
+  const wtl::ItemId id = wtl::view(wtl::View::Home).items[h.index].id;
+  if (id == wtl::ItemId::HomeCard) {
+    if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
+    else wsOpenFrom(wsm::PageId::LocalPortal, 0);
+    wsClick();
+  } else if (id == wtl::ItemId::HomeExtra) {
+    setPage(SCREEN_HUB_WORKSHOP);
+    wsClick();
+  }
+  return true;
+}
