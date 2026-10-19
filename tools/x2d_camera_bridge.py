@@ -279,6 +279,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
     # each ~25 ms fetch into ~340 ms (about 2.5 fps on the WS350).
     disable_nagle_algorithm = True
 
+    def log_request(self, code: object = "-", size: object = "-") -> None:
+        # The WS350 polls about 5 times a second; log only non-200 responses so
+        # a long-running (launchd) bridge log stays small.
+        if str(getattr(code, "value", code)) != "200":
+            super().log_request(code, size)
+
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("[bridge-http] " + (fmt % args) + "\n")
 

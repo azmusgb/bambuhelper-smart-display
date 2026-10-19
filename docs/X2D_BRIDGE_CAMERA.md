@@ -78,6 +78,21 @@ python3 tools/x2d_camera_bridge.py --fps 3 --width 480
 
 The process owns one Bambu camera session. Stop other manually launched `bambu_source` camera tests first.
 
+### Keep it running (launchd)
+
+To start the bridge at login and restart it whenever it exits, install a per-user launch agent:
+
+```bash
+bash tools/install_x2d_bridge_agent.sh              # install or update, then start
+bash tools/install_x2d_bridge_agent.sh -- --fps 3   # same, passing arguments to the bridge
+bash tools/install_x2d_bridge_agent.sh --status
+bash tools/install_x2d_bridge_agent.sh --uninstall
+```
+
+- The agent is `com.bambuhelper.x2d-camera-bridge`. It logs to `~/Library/Logs/x2d-camera-bridge.log`, which grows by roughly 2 MB a day from the tunnel's stats lines (successful frame requests are not logged).
+- It runs the bridge from this working copy, so checking out another branch changes the code it runs after the next restart.
+- Bambu Studio's live view still has to be open for frames. The bridge reconnects by itself when it reopens.
+
 ## 2. Validate the bridge
 
 ```bash
