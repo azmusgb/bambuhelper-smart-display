@@ -9,7 +9,8 @@ that already reads a token follows without per-rule edits:
 - Dark theme: LocalAI's palette verbatim (navy surfaces, #6cb6ff accent,
   good/attention/bad colours). Dark is the default; a saved choice still wins.
 - Light theme: LocalAI has none, so a light palette in the same navy/blue family,
-  every text pairing at WCAG AA or better.
+  every text pairing at WCAG AA or better, including accent and status colours
+  on their own 7-14% tints.
 - Type: the design-scale tokens take LocalAI's scale (11 badge, 13, 15, 17, 22, 28).
 - Radii: LocalAI's 8/12/16.
 - Font: LocalAI's Figtree (variable, latin, 20 KB, SIL OFL 1.1; see
@@ -37,11 +38,11 @@ FONT = _here / "assets" / "fonts" / "figtree-latin-wght-normal.woff2"
 SANS = 'Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif'
 
 LIGHT = {
-    "--accent": "#1b62bd", "--accent-soft": "rgba(27,98,189,.12)", "--accent-hover": "#164f9a",
+    "--accent": "#1b61bb", "--accent-soft": "rgba(27,97,187,.12)", "--accent-hover": "#164f9a",
     "--bg": "#f4f7fb", "--bg-elev": "#ffffff", "--bg-sub": "#eaf0f7", "--bg-input": "#ffffff",
     "--line": "#d3deea", "--line-soft": "#e3eaf3",
     "--text": "#0d1b2c", "--text-mid": "#33465f", "--text-dim": "#56677e",
-    "--danger": "#c23434", "--success": "#18794e", "--warn": "#8f5600", "--info": "#1b62bd",
+    "--danger": "#b43030", "--success": "#166f48", "--warn": "#8e5500", "--info": "#1b61bb",
     "--radius-s": "8px", "--radius": "12px", "--radius-l": "16px",
 }
 DARK = {  # LocalAI --ds-* values
@@ -52,7 +53,7 @@ DARK = {  # LocalAI --ds-* values
     "--danger": "#ff6b6b", "--success": "#3ed598", "--warn": "#ffb224", "--info": "#6cb6ff",
 }
 # Older layers that still read their own accent and radius tokens.
-EXTRA_LIGHT = {"--ui5-accent": "#1b62bd", "--ui5-radius": "12px", "--rc7-radius-sm": "8px", "--rc7-radius-md": "12px"}
+EXTRA_LIGHT = {"--ui5-accent": "#1b61bb", "--ui5-radius": "12px", "--rc7-radius-sm": "8px", "--rc7-radius-md": "12px"}
 EXTRA_DARK = {"--ui5-accent": "#6cb6ff"}
 TYPE = {"--fs-2xs": "11px", "--fs-xs": "11px", "--fs-sm": "13px", "--fs-md": "13px",
         "--fs-base": "15px", "--fs-lg": "17px", "--fs-xl": "22px", "--fs-2xl": "28px"}

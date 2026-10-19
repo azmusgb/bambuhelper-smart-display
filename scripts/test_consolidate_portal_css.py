@@ -163,7 +163,7 @@ class LocalAIThemeTests(unittest.TestCase):
         out = theme.theme_css(self.CSS, b"woff2-bytes")
         self.assertIn("--accent:#6cb6ff", out)          # LocalAI --ds-accent, dark
         self.assertIn("--bg:#0a111c", out)              # LocalAI --ds-bg
-        self.assertIn("--accent:#1b62bd", out)          # derived light accent
+        self.assertIn("--accent:#1b61bb", out)          # derived light accent
         self.assertIn("--fs-base:15px", out)            # LocalAI --ds-fs-2
         self.assertIn('--sans:Figtree,system-ui', out)
         self.assertIn("@font-face{font-family:Figtree;", out)
@@ -174,7 +174,7 @@ class LocalAIThemeTests(unittest.TestCase):
     def test_more_specific_light_override_follows_the_palette(self) -> None:
         css = self.CSS + '\nhtml[data-theme="light"]{--accent:#0d7068;--ui5-accent:#0d7068;--success:#1b7346}'
         out = theme.theme_css(css, b"x")
-        self.assertIn('html[data-theme="light"]{--accent:#1b62bd;--ui5-accent:#1b62bd;--success:#18794e}', out)
+        self.assertIn('html[data-theme="light"]{--accent:#1b61bb;--ui5-accent:#1b61bb;--success:#166f48}', out)
         self.assertNotIn("#0d7068", out)
 
     def test_missing_token_fails_loudly(self) -> None:
@@ -196,6 +196,12 @@ class LocalAIThemeTests(unittest.TestCase):
             for fg in ("--text", "--text-mid", "--text-dim", "--accent", "--danger", "--success", "--warn"):
                 for bg in ("--bg", "--bg-elev", "--bg-sub"):
                     self.assertGreaterEqual(ratio(palette[fg], palette[bg]), 4.5, f"{fg} on {bg}")
+        # Light accent and status colours also read on their own 7-14% tints (chips, callouts).
+        mix = lambda fg, bg, a: "#" + "".join(f"{round(int(fg[i:i + 2], 16) * a + int(bg[i:i + 2], 16) * (1 - a)):02x}" for i in (1, 3, 5))
+        for fg in ("--accent", "--success", "--danger", "--warn"):
+            for alpha in (0.07, 0.10, 0.14):
+                tint = mix(theme.LIGHT[fg], theme.LIGHT["--bg"], alpha)
+                self.assertGreaterEqual(ratio(theme.LIGHT[fg], tint), 4.5, f"{fg} on its {alpha:.0%} tint")
 
 
 
