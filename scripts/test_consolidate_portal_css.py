@@ -16,6 +16,10 @@ spec = importlib.util.spec_from_file_location("css_overlay", ROOT / "apply_works
 overlay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(overlay)
 
+scale_spec = importlib.util.spec_from_file_location("css_scale", ROOT / "apply_workshop_os12_portal_design_scale.py")
+scale = importlib.util.module_from_spec(scale_spec)
+scale_spec.loader.exec_module(scale)
+
 
 def run(css: str, corpus: str = "") -> str:
     out, _ = consolidate(css, corpus)
@@ -88,6 +92,46 @@ class A11yStageTests(unittest.TestCase):
     def test_missing_anchor_fails_loudly(self) -> None:
         with self.assertRaises(overlay.PatchError):
             overlay.apply_a11y_fixes(":root{--text-dim:#000000}")
+
+
+class DesignScaleTests(unittest.TestCase):
+    HEAD = "/* x, consolidated at build time by\n   y */\n"
+
+    def scaled(self, body: str) -> str:
+        out, _ = scale.apply_scale(self.HEAD + body)
+        return out
+
+    def test_font_sizes_become_tokens_rounding_half_pixels_up(self) -> None:
+        out = self.scaled(".a{font-size:12.5px}\n.b{font:700 15px ui-monospace}\n.c{font-size:27px}")
+        self.assertIn(".a{font-size:var(--fs-md)}", out)       # 12.5 -> 13
+        self.assertIn(".b{font:700 var(--fs-lg) ui-monospace}", out)  # 15 -> 16
+        self.assertIn(".c{font-size:var(--fs-2xl)}", out)      # 27 -> 28
+        self.assertIn(":root{--fs-2xs:10px;", out)
+
+    def test_miniature_keeps_scale_and_pills_stay_round(self) -> None:
+        out = self.scaled(".v98-ring span{font-size:7px;border-radius:3px}\n.p{border-radius:999px}\n.r{border-radius:9px}")
+        self.assertIn(".v98-ring span{font-size:7px;border-radius:3px}", out)
+        self.assertIn(".p{border-radius:999px}", out)
+        self.assertIn(".r{border-radius:8px}", out)
+
+    def test_breakpoints_snap_only_in_media_queries(self) -> None:
+        out = self.scaled("@media(max-width:980px){\n  .a{max-width:980px}\n}")
+        self.assertIn("@media(max-width:1050px){", out)
+        self.assertIn(".a{max-width:980px}", out)
+
+    def test_indistinguishable_colours_merge_onto_most_used(self) -> None:
+        out = self.scaled(".a{color:#10151a}\n.b{color:#10151a}\n.c{color:#0f141a}\n.d{color:#ff0000}")
+        self.assertEqual(out.count("#10151a"), 3)
+        self.assertNotIn("#0f141a", out)
+        self.assertIn("#ff0000", out)
+
+    def test_requires_consolidated_input(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "web").mkdir()
+            (Path(d) / "web/app.css").write_text(".a{color:red}")
+            with self.assertRaises(scale.PatchError):
+                scale.apply(Path(d))
 
 
 if __name__ == "__main__":
