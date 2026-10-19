@@ -108,6 +108,11 @@ python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
 python3 "$ROOT/scripts/validate_os12_code_token.py" --repo "$BUILD" --source-root "$ROOT" --final
 python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-root "$ROOT"
 
+# Portal stylesheet: drop what the 24 appended CSS layers already override and
+# fix muted-text contrast and sub-10px text. Must follow every overlay that
+# appends to web/app.css; it only rewrites that file.
+python3 "$ROOT/apply_workshop_os12_portal_css_consolidate.py" --repo "$BUILD" --apply
+
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
   [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable after isolated setup' >&2; exit 1; }
