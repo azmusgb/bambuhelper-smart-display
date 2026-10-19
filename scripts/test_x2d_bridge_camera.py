@@ -179,6 +179,9 @@ class AsyncWorkerTests(unittest.TestCase):
             self.assertNotIn(forbidden, renderer)
         self.assertIn("tft.drawJpg(gX2dDisplayFrame", renderer)
         self.assertIn("gX2dDisplayBytes = frameBytes;", renderer)
+        # The viewport fits the frame's real JPEG size, so the bridge may send viewer-sized frames.
+        self.assertIn("x2dViewportOrigin(gX2dDisplayFrame, frameBytes, &x, &y)", renderer)
+        self.assertIn("static bool x2dJpegSize(", text)
         # Evidence capture redraws the last frame offscreen; defined on every board.
         self.assertIn("bool x2dRedrawLastFrame() {", text)
         # The decode happens after the lock is released.

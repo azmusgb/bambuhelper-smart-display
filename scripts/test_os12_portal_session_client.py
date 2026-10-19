@@ -75,6 +75,10 @@ class FakeDevice(http.server.BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"releaseVersion": "12.0.1", "runningSourceCommit": SOURCE}))
         if path == "/login":
             return self._send(200, "<form id='login-form'><input name='code'></form>", "text/html")
+        if path == "/api/portal-code":
+            if self.headers.get("Authorization") == f"Bearer {CODE_KEY}":
+                return self._send(200, json.dumps({"bootId": "b1", "code": CODE}))
+            return self._send(401, "", "text/plain", {"WWW-Authenticate": "Bearer"})
         if self.code_free or self._session():
             if path == "/api/portal-security":
                 return self._send(200, json.dumps({"authMode": "portal-code", "mutationsRequireSession": True,
@@ -121,7 +125,12 @@ def expect_failure(fn, label: str) -> None:
     raise SystemExit(f"FAIL: {label} was not detected")
 
 
+CODE_KEY = "wsc_TESTKEY0000000000000000000"
+
+
 def main() -> int:
+    # Never consult a real key from the environment or the macOS Keychain.
+    portal.portal_code_key = lambda: ""
     server, base = serve()
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -162,6 +171,17 @@ def main() -> int:
             # Sign-out revokes.
             second.sign_out()
             assert not portal.Client(base).session_valid()
+
+            # With a sign-in code key, the helper fetches the code itself and never prompts.
+            portal.portal_code_key = lambda: CODE_KEY
+            portal.read_portal_code = lambda prompt="": (_ for _ in ()).throw(AssertionError("prompted despite key"))
+            keyed = portal.Client(base)
+            assert portal.establish_portal_session(keyed) == "session-required"
+            assert keyed.session_valid()
+            assert CODE_KEY not in Path(jar).read_text()
+            expect_failure(lambda: portal.portal_code_from_key(base, "wsc_WRONG"), "wrong sign-in code key")
+            keyed.sign_out()
+            portal.portal_code_key = lambda: ""
 
             # Wrong code is refused.
             bad = portal.Client(base, anonymous=True)

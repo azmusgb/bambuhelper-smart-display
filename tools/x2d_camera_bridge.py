@@ -219,6 +219,10 @@ class BridgeServer(ThreadingHTTPServer):
 
 class BridgeHandler(BaseHTTPRequestHandler):
     server: BridgeServer
+    # Headers and body go out as separate writes. With Nagle on, the body waits
+    # for the client's ACK of the headers, and the ESP32's delayed ACK turned
+    # each ~25 ms fetch into ~340 ms (about 2.5 fps on the WS350).
+    disable_nagle_algorithm = True
 
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("[bridge-http] " + (fmt % args) + "\n")
@@ -280,7 +284,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bind", default="0.0.0.0", help="HTTP bind address; default 0.0.0.0")
     parser.add_argument("--port", type=int, default=8091, help="HTTP port; default 8091")
     parser.add_argument("--fps", type=int, default=5, help="JPEG production rate, 1-10; default 5")
-    parser.add_argument("--width", type=int, default=480, help="JPEG width, even 160-480; default 480")
+    parser.add_argument("--width", type=int, default=320, help="JPEG width, even 160-480; default 320 (the WS350 viewer size)")
     parser.add_argument("--ffmpeg", default="ffmpeg", help="FFmpeg executable; default PATH ffmpeg")
     parser.add_argument("--camera-root", type=Path, default=DEFAULT_CAMERA_ROOT)
     parser.add_argument("--plugin-root", type=Path, default=DEFAULT_PLUGIN_ROOT)
