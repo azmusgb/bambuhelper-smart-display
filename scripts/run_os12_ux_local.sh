@@ -122,6 +122,8 @@ python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-ro
 # fix muted-text contrast and sub-10px text. Must follow every overlay that
 # appends to web/app.css; it only rewrites that file.
 python3 "$ROOT/apply_workshop_os12_portal_css_consolidate.py" --repo "$BUILD" --apply
+# Then one type/radius/breakpoint/colour scale: small, measured visual changes.
+python3 "$ROOT/apply_workshop_os12_portal_design_scale.py" --repo "$BUILD" --apply
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
@@ -130,6 +132,8 @@ if [[ "${1:-}" == "--build" ]]; then
   "$PIO_BIN" --version
 
   echo "=== Build WS350 OS12 signed-in local-portal candidate ==="
+  # Install library deps first: a build that also installs them can fail silently.
+  (cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 -e jc3248w535 >/dev/null)
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 image missing' >&2; exit 1; }
 
