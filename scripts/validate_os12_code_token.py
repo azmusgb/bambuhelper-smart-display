@@ -15,8 +15,9 @@ response serializer. This validator proves how the device wires them:
 * no other route accepts it: the portal policy never reads Authorization, the
   status route only accepts "wsl_" keys, and web_server.cpp reads no
   Authorization header itself;
-* the route refuses clients locked out of sign-in and counts every wrong key
-  as a failed sign-in, in that order around its own rate limit;
+* the route has its own lock-out, separate from the portal sign-in back-off
+  (12.3.8): only a well-formed "wsc_" key that does not match counts, and a
+  request with no key or a malformed one never does;
 * neither the code nor the key reaches Serial, settings export or diagnostics,
   and the prompt draws neither;
 * the prompt is modal, uses the More dialog geometry (nothing on the tab-bar
@@ -144,8 +145,15 @@ def main() -> int:
         forbid(sec, name, "sign-in code key in portal authorization")
     for _ in re.findall(r'header\("Authorization"\)', web):
         raise ValidationError("web_server.cpp reads Authorization itself")
+    # 12.3.8: the status module may ask exactly one thing of the code key
+    # module, whether its prompt is up (one question on the display at a
+    # time), and only from the create handler. Nothing else may appear.
+    lite_rest = lite_glue.replace('#if __has_include("workshop_code_token.h")\n#include "workshop_code_token.h"\n', "", 1)
+    lite_rest = lite_rest.replace("if (workshopCodeTokenPromptVisible()) {", "", 1)
+    if "workshopCodeTokenPromptVisible()" in block(lite_glue, "void workshopStatusLiteHandleRead(WebServer& server)"):
+        raise ValidationError("status read route consults the code key module")
     for name in ("CodeToken", "code_sha", "wsc_", "kCodeTokenPrefix"):
-        forbid(lite_glue, name, "sign-in code key accepted by the status route")
+        forbid(lite_rest, name, "sign-in code key accepted by the status route")
     need(block(lite_glue, "void workshopStatusLiteHandleRead(WebServer& server)"),
          "parseBearer(header.c_str(), presented)", "status route parses only wsl_ keys")
     need(lite_core, 'constexpr char kTokenPrefix[] = "wsl_";', "status token prefix")
@@ -163,34 +171,31 @@ def main() -> int:
     need(read_handler, "if (isAPMode())", "station-only code route")
     ordered(read_handler, [
         "if (isAPMode())",
-        "securityLoginRetryAfter(server)",
         "g_limiter.admit(client, now)",
         'server.header("Authorization")',
-        "parseCodeBearer(header.c_str(), presented)",
+        "presentedCodeKey(header.c_str(), presented)",
         "digestEqual(digest, g_digest)",
-        "g_limiter.noteFailure(client, now);",
-        "securityNoteLoginFailure(server);",
+        "if (keyFailureCounts(kind, valid)) g_limiter.noteFailure(client, now);",
         "sendJson(server, 401,",
         "g_limiter.noteSuccess(client, now);",
         "serializePortalCode(securityPortalCode(), bootId(), body, sizeof(body))",
         "sendJson(server, 200, body);",
-    ], "code route order (lock-out, rate limit, key check, failure counted, answer)")
+    ], "code route order (own rate limit, key check, only a wrong wsc_ key counted, answer)")
     failure = read_handler.split("if (!valid) {", 1)[1].split("return;", 1)[0]
-    need(failure, "securityNoteLoginFailure(server);", "wrong key counts toward the sign-in lock-out")
     need(failure, "WWW-Authenticate", "401 names the Bearer scheme")
-    need(read_handler, "sendRetry(server, lockedFor);", "lock-out answers 429")
+    # 12.3.8: the route has its own lock-out. A request with no key (which any
+    # web page can make the owner's browser send) or a malformed one never
+    # counts, and nothing here reads or adds to the portal sign-in back-off,
+    # so this route cannot lock the owner out of the sign-in page.
+    for shared in ("securityLoginRetryAfter", "securityNoteLoginFailure"):
+        forbid(glue, shared, "code route sharing the portal sign-in lock-out")
+    need(read_handler, "sendRetry(server, gate.retryAfterSeconds);", "own lock-out answers 429")
+    need(block(core, "inline bool keyFailureCounts("), "presented == PresentedKey::WellFormed && !matched",
+         "only a well-formed wsc_ key that does not match counts")
     forbid(read_handler, "server.arg(", "key accepted from query or form")
     need(block(glue, "void sendJson(WebServer& server, int code, const char* body)"),
          'server.sendHeader("Cache-Control", "no-store");', "no-store responses")
     need(block(glue, "void sendRetry(WebServer& server, uint32_t seconds)"), "Retry-After", "Retry-After on 429")
-
-    # Lock-out API in security_manager: thin wrappers over the login back-off.
-    need(sec_h, "uint32_t securityLoginRetryAfter(WebServer& server);", "lock-out query")
-    need(sec_h, "void securityNoteLoginFailure(WebServer& server);", "lock-out failure")
-    need(block(sec, "uint32_t securityLoginRetryAfter(WebServer& server)"), "return retryAfterSeconds(server);",
-         "lock-out query uses the login back-off")
-    need(block(sec, "void securityNoteLoginFailure(WebServer& server)"), "noteLoginFailure(server);",
-         "wrong key uses the login back-off")
 
     # Storage: digest only, own key.
     need(glue, 'constexpr char kDigestKey[] = "code_sha";', "own digest key")
@@ -289,7 +294,7 @@ def main() -> int:
              "video test stops for the prompt")
 
     print("PASS: sign-in code key is one Bearer-only GET route with its own wsc_ key, hash-only storage in "
-          "code_sha, touchscreen Allow required, wrong keys count toward the sign-in lock-out; no other route "
+          "code_sha, touchscreen Allow required, its own lock-out counting only wrong wsc_ keys; no other route "
           "accepts it" + (" (finished tree)" if args.final else ""))
     return 0
 

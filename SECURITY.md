@@ -6,11 +6,13 @@ Workshop OS is local-first firmware that can observe and issue commands to physi
 
 | Surface | Status | Security handling |
 | --- | --- | --- |
-| Workshop OS v11.19.1 accepted source | Supported | Current accepted source baseline. |
+| Workshop OS v11.22 Display Expert RC1 accepted source | Supported | Current accepted source baseline (`releases/current.json`). The static installer stays at v11.19.1. |
+| Workshop OS 12.3.7 on `main` (`fba92a7`, merged-unaccepted) | Supported for security fixes | 12.3.6 (`d24347a`, #194) plus Printer > Camera (#195, #196). The exact 12.3.6 PR #194 build (`5012332`, same tree as `d24347a`) was installed and its owner re-test passed; no exact 12.3.7 CI image has been installed. Physical acceptance pending. Has the sign-in lock-out and cross-site sign-in defects fixed in 12.3.8. |
+| Workshop OS 12.3.8 Review Fixes | Active security candidate | Same-origin `POST /login`, a separate lock-out on `GET /api/portal-code` that counts only a well-formed wrong `wsc_` key, and Local AI prompts that answer only an armed press. Requires physical WS350 acceptance. |
 | Workshop OS v11.20 Portal Auth RC1 | Active security candidate | Portal/session and AP-boundary hardening are validated here and still require physical WS350 acceptance before promotion. |
 | Workshop OS 12.0.1 Portal Sign-in Restore | Active security candidate | Restores the portal-code session on the OS12 line after the 12.0.0 code-free overlay; see `docs/portal-signin-restore-12-0-1.md`. Requires physical WS350 acceptance. |
 | Workshop OS 12.1.0 Read-only Status Token | Stacked candidate | Adds one bearer-token, GET-only status route for Local AI (`docs/status-lite-token-12-1-0.md`). The token opens nothing else; touchscreen approval required. |
-| Workshop OS 12.2.0 Sign-in Code Key | Stacked candidate | Adds a second, separate bearer key whose only route, `GET /api/portal-code`, returns the current sign-in code to Local AI (`docs/code-token-12-2-0.md`). Whoever holds the key can sign in; touchscreen approval required, wrong keys count toward the sign-in lock-out. |
+| Workshop OS 12.2.0 Sign-in Code Key | Stacked candidate | Adds a second, separate bearer key whose only route, `GET /api/portal-code`, returns the current sign-in code to Local AI (`docs/code-token-12-2-0.md`). Whoever holds the key can sign in; touchscreen approval required. Up to 12.3.7 every request without the right key, including one with no key at all, counted toward the sign-in lock-out; 12.3.8 gives the route its own lock-out. |
 | Workshop OS 12.0.0 (`48ddd58`, merged-unaccepted) | Known security defect | Code-free portal: anonymous LAN reads (including `/printer/access-code`) and mutations accepted with `X-BambuHelper-Client: 1`. Superseded by 12.0.1. |
 | Static installer v7.2 | Supported for the published download channel | Security-relevant installer/recovery defects should be assessed independently from source-line fixes. |
 | Static rollback v7.1 | Recovery-only | Retained only as the immediate rollback image. |
@@ -44,7 +46,9 @@ Please treat these as security-sensitive even when they look like functional bug
 For an authenticated Workshop OS source line:
 
 - normal LAN management routes require the boot-scoped portal-code session;
-- mutating requests retain same-origin protection in addition to authentication; same-origin is established only by the browser `Origin`/`Referer` headers, never by a client-supplied marker header;
+- every session-protected mutating route (`SECURE_POST`/`SECURE_UPLOAD`) and, from 12.3.8, `POST /login` require same-origin provenance; same-origin is established only by the browser `Origin`/`Referer` headers, never by a client-supplied marker header. The sign-in page is served with `Referrer-Policy: same-origin` so its own form carries its `Origin`. A refused cross-site sign-in is not a failed sign-in;
+- GET routes are not same-origin checked; they rely on the session cookie (`SameSite=Strict`) and on browsers not letting another site read the response. The two bearer-key routes (`GET /api/status/lite`, `GET /api/portal-code`) take no cookie and no origin check; they need the key in `Authorization`, which a cross-site page cannot send without a CORS preflight the device never answers;
+- the sign-in lock-out is per client address and counts only wrong codes submitted to `POST /login`; nothing on another route adds to it;
 - logout and reboot invalidate prior portal sessions;
 - the rotating portal code is intentionally shown on the physical System screen for the owner but must not be printed to Serial/log output;
 - normal-LAN Recovery access is authenticated;
@@ -55,7 +59,8 @@ For an authenticated Workshop OS source line:
 - portal-code login may remain available on AP so the owner can establish authenticated access to protected surfaces when needed;
 - the portal credential must not be embedded in command-line arguments, shared captures, diagnostics, or support artifacts.
 - the read-only status token (`GET /api/status/lite` only) is device-issued after an on-screen Allow, stored only as a SHA-256 digest, shown once, and never accepted by any other route; it must not appear in logs, exports, captures or support artifacts.
-- the sign-in code key (`GET /api/portal-code` only, `wsc_…`) follows the same rules with its own digest (`code_sha`). Because it discloses the sign-in code it is equivalent to a standing sign-in credential: it is refused while the client is locked out of sign-in, every wrong key counts as a failed sign-in, and neither the key nor the code may appear in Serial output, logs, exports, captures or support artifacts.
+- the sign-in code key (`GET /api/portal-code` only, `wsc_…`) follows the same rules with its own digest (`code_sha`). Because it discloses the sign-in code it is equivalent to a standing sign-in credential. Its route has its own per-client lock-out (12.3.8): only a well-formed `wsc_` key that does not match counts; a request with no key, a malformed key or a `wsl_` key never does, and the route neither reads nor adds to the sign-in lock-out, so no web page or LAN client can use it to lock the owner out of sign-in (a 130-bit key is not a way around the sign-in back-off). Neither the key nor the code may appear in Serial output, logs, exports, captures or support artifacts.
+- the touchscreen Allow for either Local AI key answers only a press that went down on Allow at least 500 ms after the prompt appeared and was released on it, and only one Local AI prompt can be up at a time (the other create answers 409).
 
 The pinned upstream setup/fallback AP currently uses a known default Wi-Fi password. That is an onboarding transport control, **not** a substitute for Workshop OS authorization. Changes that reintroduce blanket `isAPMode()` authorization are security regressions. So are overlays that make normal-LAN routes anonymous ("code-free") or that accept a request header the client chooses as proof of origin.
 

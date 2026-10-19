@@ -95,6 +95,10 @@ jobs:
           /tmp/workshop-os12-tests/frame-diff-smoke
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_recording_dsp_smoke.cpp -o /tmp/workshop-os12-tests/recording-dsp-smoke
           /tmp/workshop-os12-tests/recording-dsp-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_press_gesture_smoke.cpp -o /tmp/workshop-os12-tests/press-gesture-smoke
+          /tmp/workshop-os12-tests/press-gesture-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic -pthread tests/workshop_os12_mic_meter_smoke.cpp -o /tmp/workshop-os12-tests/mic-meter-smoke
+          /tmp/workshop-os12-tests/mic-meter-smoke
 
       - name: Check repository hygiene
         shell: bash

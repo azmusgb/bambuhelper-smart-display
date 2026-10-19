@@ -111,7 +111,24 @@ def validate_main_state(main_state: object, readme_text: str) -> str:
     if main_state.get("unattendedAcceptance") not in ("passed", "not-run"):
         fail("merged-unaccepted mainState must record unattendedAcceptance as passed or not-run")
     if main_state.get("unattendedAcceptance") == "not-run" and main_state.get("physicalInstall") != "passed":
-        fail("a not-run unattended acceptance needs a recorded physical install")
+        # A main that merged after the installed build (12.3.7 on top of an
+        # installed 12.3.6) records that installed build instead. It is never
+        # a pass for main itself: physicalInstall stays "not-run".
+        predecessor = main_state.get("installedPredecessor")
+        if not isinstance(predecessor, dict) or predecessor.get("physicalInstall") != "passed":
+            fail("a not-run unattended acceptance needs a recorded physical install "
+                 "(of main itself or of an installedPredecessor)")
+        if main_state.get("physicalInstall") not in ("not-run", None):
+            fail("mainState.physicalInstall must be passed or not-run")
+        for key in ("mainCommit", "installedCommit"):
+            if not SHA40.fullmatch(str(predecessor.get(key, ""))):
+                fail(f"mainState.installedPredecessor.{key} must be a 40-character lowercase SHA")
+        if predecessor.get("installedCommit") != main_state.get("testedCandidateCommit"):
+            fail("mainState.testedCandidateCommit must name the installed predecessor build")
+        if predecessor.get("installedFirmwareSha256") != main_state.get("testedFirmwareSha256"):
+            fail("mainState.testedFirmwareSha256 must name the installed predecessor image")
+        if predecessor.get("physicalAcceptance") != "pending":
+            fail("an installed predecessor without full acceptance keeps physicalAcceptance pending")
     tested_commit = require_nonempty_string(main_state, "testedCandidateCommit", "mainState")
     if not SHA40.fullmatch(tested_commit):
         fail("mainState.testedCandidateCommit must be a 40-character lowercase SHA")

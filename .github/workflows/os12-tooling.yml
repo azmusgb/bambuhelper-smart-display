@@ -29,6 +29,12 @@ on:
       - 'scripts/validate_os12_physical_acceptance.py'
       - 'scripts/validate_os12_recovery_roundtrip.py'
       - 'scripts/waveshare-usb.sh'
+      - 'scripts/validate_platformio_toolchain.py'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/run_ui13_local.sh'
+      - '.github/workflows/os12-platform-bridge.yml'
+      - '.github/workflows/os12-ux-architecture.yml'
+      - '.github/workflows/ui13-appliance-settings.yml'
   push:
     branches: [main]
     paths:
@@ -57,6 +63,12 @@ on:
       - 'scripts/validate_os12_physical_acceptance.py'
       - 'scripts/validate_os12_recovery_roundtrip.py'
       - 'scripts/waveshare-usb.sh'
+      - 'scripts/validate_platformio_toolchain.py'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/run_ui13_local.sh'
+      - '.github/workflows/os12-platform-bridge.yml'
+      - '.github/workflows/os12-ux-architecture.yml'
+      - '.github/workflows/ui13-appliance-settings.yml'
   workflow_dispatch:
 
 permissions:
@@ -117,6 +129,9 @@ jobs:
 
       - name: Validate recovery round-trip contract
         run: python3 scripts/validate_os12_recovery_roundtrip.py
+
+      - name: Validate the pinned build-toolchain and exact-artifact installer contract
+        run: python3 scripts/validate_platformio_toolchain.py
 
       - name: Exercise signed-in acceptance client against a fake device
         run: python3 scripts/test_os12_portal_session_client.py

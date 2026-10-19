@@ -15,7 +15,7 @@ Anyone who holds this key can read the current sign-in code and therefore sign i
 - created only after a tap on **Allow** on the touchscreen;
 - kept by Local AI only (the device keeps just its SHA-256);
 - revocable at any time from the Local Portal, and replaced whenever a new one is created;
-- limited to one route that is rate-limited and tied to the sign-in lock-out.
+- limited to one route that is rate-limited and has its own lock-out (12.3.8; up to 12.3.7 it shared the sign-in lock-out).
 
 If Local AI's host or its `stack.env` is compromised, revoke the key.
 
@@ -41,14 +41,14 @@ Other answers (all JSON, all `Cache-Control: no-store`):
 | Status | When | Notes |
 | --- | --- | --- |
 | `401` | no key, malformed key, wrong key, a status token, or no key set up | `WWW-Authenticate: Bearer realm="workshop-os-code"`. Counts as a failed sign-in for this client address. |
-| `429` | more than one answer in 2 s from this client, or this client is backing off after bad keys, or this client is locked out of sign-in | `Retry-After: <seconds>`. Wait that long. |
+| `429` | more than one answer in 2 s from this client, or this client is backing off after wrong keys | `Retry-After: <seconds>`. Wait that long. |
 | `404` | the display is in setup/recovery AP mode | Station Wi-Fi only. |
 | `503` | the code is not available | Should not happen on a running device. |
 
 ### Limits
 
 - Same per-client limiter as `/api/status/lite`: one answer every 2 s; after two bad keys the client is blocked for 1, 2, 4 … s, capped at 60 s.
-- **Shared with sign-in.** Every wrong key (including a missing one) counts as a failed `POST /login` for the same client address, and while that address is locked out of sign-in this route answers 429 even to a valid key. Guessing keys here costs the same as guessing codes on the sign-in page. A successful sign-in resets the count; a successful key read does not.
+- **Its own lock-out (12.3.8).** Only a well-formed `wsc_` key that does not match counts, toward this route's own per-client back-off (two free, then 1 s doubling to 60 s). A request with no key, a malformed key or a `wsl_` key never counts, and the route neither reads nor adds to the sign-in lock-out. Up to 12.3.7 every request without the right key, including one with no `Authorization` header, counted as a failed `POST /login`, so any web page open in the owner's browser could lock the owner out of sign-in. A 130-bit key cannot be guessed, so a separate counter is not a way around the sign-in back-off. A successful key read resets this route's count.
 - A signed-in portal session does **not** open this route; only the key does.
 
 ## The key
@@ -78,7 +78,7 @@ Management routes, all behind the session and same-origin checks: `GET /api/code
 ## Tests
 
 - `tests/workshop_os12_code_token_smoke.cpp` (Validate): key format; the same random bytes give `wsl_` and `wsc_` keys that are not interchangeable; strict Bearer parsing in both directions; the code-key approval flow (Allow, Cancel, 60 s expiry, show-once claim, request binding, new request wipes an unclaimed key, a status token cannot be handed over); code and boot-id checks; the exact response; malformed input and overflow fail closed; the shared limiter; the key cannot satisfy the portal policy.
-- `scripts/validate_os12_code_token.py` (OS12 UX), need/forbid on the reconstructed source, run right after the overlay and again (`--final`) on the finished tree: one `GET` registration, not `SECURE_GET`; management only behind `SECURE_*`; lock-out check, rate limit, key check, failure counted, in that order; hash-only storage in `code_sha`; Allow required to mint; nothing reaches Serial, export or diagnostics; neither the portal policy nor the status route accepts it; prompt touch before the tab bar; the Local Portal row and the video guard.
+- `scripts/validate_os12_code_token.py` (OS12 UX), need/forbid on the reconstructed source, run right after the overlay and again (`--final`) on the finished tree: one `GET` registration, not `SECURE_GET`; management only behind `SECURE_*`; own rate limit, key check, only a wrong well-formed key counted, in that order (12.3.8); hash-only storage in `code_sha`; Allow required to mint; nothing reaches Serial, export or diagnostics; neither the portal policy nor the status route accepts it; prompt touch before the tab bar; the Local Portal row and the video guard.
 - The 12.0.1 route-table audit is re-run after this overlay with `/api/status/lite` and `/api/portal-code` as the only added public routes, and the status-token validator is re-run on the finished tree.
 - `scripts/accept_os12_code_token_runtime.py` (GET-only, non-destructive) checks the real device; `scripts/test_os12_code_token_runtime.py` proves it against a fake device, including that it catches devices that are open, over-broad, leaking, unlimited, cacheable or accept a status token.
 

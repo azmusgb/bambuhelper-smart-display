@@ -164,6 +164,68 @@ void sharedLimiter() {
     assert(!limiter.admit(client, t + 500).allowed);
 }
 
+// 12.3.8: only a well-formed wsc_ key that does not match counts toward the
+// route's own lock-out. Mirrors workshopPortalCodeHandleRead: admit, classify
+// the header, compare, count with keyFailureCounts.
+bool keyRouteRequest(workshop::statuslite::ReadLimiter& limiter, std::uint32_t client, std::uint32_t now,
+                     const char* header, bool* answered) {
+    const workshop::statuslite::ReadDecision gate = limiter.admit(client, now);
+    if (!gate.allowed) return false;  // 429
+    char presented[kTokenTextLength + 1];
+    const PresentedKey kind = presentedCodeKey(header, presented);
+    const bool valid = kind == PresentedKey::WellFormed && std::strcmp(presented, kGoodKey) == 0;
+    if (!valid && keyFailureCounts(kind, valid)) limiter.noteFailure(client, now);
+    if (valid) limiter.noteSuccess(client, now);
+    if (answered != nullptr) *answered = valid;
+    return true;  // 401 or 200
+}
+
+void keyRouteLockout() {
+    char out[kTokenTextLength + 1];
+    assert(presentedCodeKey(nullptr, out) == PresentedKey::Missing);
+    assert(presentedCodeKey("", out) == PresentedKey::Missing);
+    assert(presentedCodeKey("Basic dXNlcjpwYXNz", out) == PresentedKey::Malformed);
+    assert(presentedCodeKey("Bearer ", out) == PresentedKey::Malformed);
+    assert(presentedCodeKey("Bearer wsl_ABCDEFGHJKLMNPQRSTUVWXYZ23", out) == PresentedKey::Malformed);
+    assert(presentedCodeKey("Bearer wsc_ABCDEFGHJKLMNPQRSTUVWXYZ2", out) == PresentedKey::Malformed);
+    assert(presentedCodeKey("Bearer wsc_ABCDEFGHJKLMNPQRSTUVWXYZ23", out) == PresentedKey::WellFormed);
+    assert(!keyFailureCounts(PresentedKey::Missing, false));
+    assert(!keyFailureCounts(PresentedKey::Malformed, false));
+    assert(keyFailureCounts(PresentedKey::WellFormed, false));
+    assert(!keyFailureCounts(PresentedKey::WellFormed, true));
+
+    // A web page in the owner's browser can only send requests with no key
+    // (or a junk one). Fifty of them, as fast as the route answers, never
+    // block the real key from the same address.
+    workshop::statuslite::ReadLimiter limiter;
+    const std::uint32_t browser = 0x0A00000B;
+    std::uint32_t t = 1000;
+    const char* junk[] = {"", "Bearer", "Bearer wsl_ABCDEFGHJKLMNPQRSTUVWXYZ23", "Token abc", "Bearer wsc_short"};
+    for (int i = 0; i < 50; ++i) {
+        bool answered = true;
+        assert(keyRouteRequest(limiter, browser, t, junk[i % 5], &answered));
+        assert(!answered);
+        t += 2000;
+    }
+    bool answered = false;
+    assert(keyRouteRequest(limiter, browser, t, "Bearer wsc_ABCDEFGHJKLMNPQRSTUVWXYZ23", &answered));
+    assert(answered);
+
+    // Wrong well-formed keys still back off: two free, the third blocks.
+    workshop::statuslite::ReadLimiter guess;
+    const std::uint32_t lan = 0x0A000063;
+    t = 1000;
+    for (int i = 0; i < 3; ++i) {
+        assert(keyRouteRequest(guess, lan, t, "Bearer wsc_AAAAAAAAAAAAAAAAAAAAAAAAAA", nullptr));
+        t += 2000;
+    }
+    t -= 1500;  // 500 ms after the third wrong key: inside its 1 s back-off
+    assert(!keyRouteRequest(guess, lan, t, "Bearer wsc_AAAAAAAAAAAAAAAAAAAAAAAAAA", nullptr));
+    // That back-off is this route's only: another client is unaffected.
+    assert(keyRouteRequest(guess, 0x0A000015, t, "Bearer wsc_ABCDEFGHJKLMNPQRSTUVWXYZ23", &answered));
+    assert(answered);
+}
+
 void keyCannotSatisfyPortalPolicy() {
     // The portal policy has no input for a bearer key: a request carrying only
     // the key (no session) to any protected route is refused.
@@ -193,6 +255,7 @@ int main() {
     bootIds();
     serializer();
     sharedLimiter();
+    keyRouteLockout();
     keyCannotSatisfyPortalPolicy();
     return 0;
 }

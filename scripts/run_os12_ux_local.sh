@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.7}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.8}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -119,6 +119,12 @@ python3 "$ROOT/scripts/validate_os12_tabs_overhaul.py" --repo "$BUILD"
 # live microphone meter. Changes whole functions of the tab/More layers above.
 python3 "$ROOT/apply_workshop_os12_touch_audio_fit.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_touch_audio_fit.py" --repo "$BUILD" --source-root "$ROOT"
+# 12.3.8: fixes from the 12.3.6 review: same-origin sign-in, Local AI prompts
+# answer only an armed press on the button, a press acts only on the target it
+# went down on (the outline follows the finger), no /audio/mic/echo, a
+# DC-free microphone meter and a gated recording buffer.
+python3 "$ROOT/apply_workshop_os12_review_hardening.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_review_hardening.py" --repo "$BUILD" --source-root "$ROOT"
 # The finished tree still sends every physical printer command through the
 # OS12 facade, and Stop from exactly one (hold-guarded) place.
 python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"
@@ -175,9 +181,9 @@ echo "Release identity: Workshop OS $OS12_RELEASE_VERSION @ $OS12_SOURCE_SHA"
 echo "Root portal IA: Home / Printer / Workshop / More; final WS350 visual overhaul, post-capture hardening, Workshop runtime repair, and focused physical product-polish pass applied across shell, hierarchy, cards, rows, controls, media and system surfaces."
 echo "Portal identity: Workshop OS / WS350; legacy Waveshare Home branding removed from primary surfaces."
 echo "Portal security: boot-scoped portal-code session required for normal LAN routes; the code is shown on System -> Local Portal."
-echo "Mutation security: a valid session plus real Origin/Referer same-origin provenance; no client marker header is trusted."
+echo "Mutation security: a valid session plus real Origin/Referer same-origin provenance (sign-in too); no client marker header is trusted."
 echo "Status token: GET /api/status/lite only, bearer token approved on the touchscreen, digest-only storage, no control access."
-echo "Sign-in code key: GET /api/portal-code only, separate wsc_ key approved on the touchscreen, digest-only storage, wrong keys count toward the sign-in lock-out."
+echo "Sign-in code key: GET /api/portal-code only, separate wsc_ key approved on the touchscreen, digest-only storage, its own lock-out (only a wrong wsc_ key counts), never the sign-in one."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
 echo "Home/Workshop: consume the same profile-scoped Filament Inventory projection; Unknown/Undetermined is preserved when authoritative evidence is absent."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."

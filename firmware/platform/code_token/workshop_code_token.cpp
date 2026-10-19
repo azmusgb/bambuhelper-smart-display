@@ -116,15 +116,10 @@ void workshopPortalCodeHandleRead(WebServer& server) {
     return;
   }
 
-  // A client that is locked out of sign-in is locked out here too: this route
-  // discloses the sign-in code, so it must not become a way around the
-  // login back-off.
-  const uint32_t lockedFor = securityLoginRetryAfter(server);
-  if (lockedFor > 0) {
-    sendRetry(server, lockedFor);
-    return;
-  }
-
+  // 12.3.8: this route has its own lock-out (g_limiter), separate from the
+  // portal sign-in back-off. A wsc_ key is 130 random bits, so guessing it
+  // is not a way around the sign-in back-off, and nothing a request does here
+  // can lock the owner out of the sign-in page.
   const uint32_t now = millis();
   const uint32_t client = clientKey(server);
   const ReadDecision gate = g_limiter.admit(client, now);
@@ -136,15 +131,15 @@ void workshopPortalCodeHandleRead(WebServer& server) {
   char presented[kTokenTextLength + 1] = {};
   std::uint8_t digest[kDigestBytes] = {};
   const String header = server.header("Authorization");
-  const bool parsed = parseCodeBearer(header.c_str(), presented);
-  const bool hashed = parsed && sha256Text(presented, digest);
+  const PresentedKey kind = presentedCodeKey(header.c_str(), presented);
+  const bool hashed = kind == PresentedKey::WellFormed && sha256Text(presented, digest);
   secureZero(presented, sizeof(presented));
   const bool valid = hashed && keyConfigured() && digestEqual(digest, g_digest);
   secureZero(digest, sizeof(digest));
   if (!valid) {
-    // A wrong key is a failed sign-in attempt for this client.
-    g_limiter.noteFailure(client, now);
-    securityNoteLoginFailure(server);
+    // Only a well-formed wsc_ key that does not match counts, and only toward
+    // this route's own lock-out for this client.
+    if (keyFailureCounts(kind, valid)) g_limiter.noteFailure(client, now);
     server.sendHeader("WWW-Authenticate", "Bearer realm=\"workshop-os-code\"");
     sendJson(server, 401, "{\"status\":\"error\",\"message\":\"A valid sign-in code key is required\"}");
     return;

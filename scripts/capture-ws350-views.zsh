@@ -71,7 +71,7 @@ fi
 # Feed the credential over stdin rather than a curl command-line argument so it
 # is not exposed through process inspection while login is in flight.
 HTTP="$({ printf '%s' "$CODE" | curl -sS -X POST -c "$COOKIE" -o "$LOGIN_BODY" -w '%{http_code}' \
-  --data-urlencode 'code@-' "$BASE/login"; } || true)"
+  -H "Origin: $BASE" --data-urlencode 'code@-' "$BASE/login"; } || true)"
 if [ "$HTTP" != "303" ]; then
   echo "LOGIN FAILED - HTTP $HTTP"
   cat "$LOGIN_BODY" 2>/dev/null || true
