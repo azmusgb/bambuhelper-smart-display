@@ -18,7 +18,10 @@ routes: the refused-mutation probe uses ``/api/portal-security``.
 Credential handling (SECURITY.md):
 
 * the portal code is read with ``getpass`` (never echoed, never a process
-  argument, never written to disk or evidence);
+  argument, never written to disk or evidence), unless this machine has the
+  device-issued ``wsc_`` sign-in code key: from ``WORKSHOP_OS_CODE_KEY`` or the
+  macOS login Keychain (account ``ws350``, service ``workshop-os-code-key``),
+  the helper fetches the current code from ``GET /api/portal-code`` itself;
 * the resulting session cookie may be kept in an owner-only cookie jar named by
   ``WORKSHOP_OS_COOKIE_JAR`` so several helpers in one run share one sign-in;
   wrappers create it with mode 0600 and delete it on exit;
@@ -163,6 +166,52 @@ class Client:
         self.save_session()
 
 
+CODE_KEY_ENV = "WORKSHOP_OS_CODE_KEY"
+CODE_KEY_KEYCHAIN = ("ws350", "workshop-os-code-key")  # macOS login Keychain: account, service
+
+
+def portal_code_key() -> str:
+    """The device-issued wsc_ key for GET /api/portal-code, if this machine has one.
+
+    Read from WORKSHOP_OS_CODE_KEY, else the macOS login Keychain, so it never
+    appears in argv or a file. Returns "" when neither is set.
+    """
+    key = os.environ.get(CODE_KEY_ENV, "").strip()
+    if key or sys.platform != "darwin":
+        return key
+    account, service = CODE_KEY_KEYCHAIN
+    # posix_spawn, not subprocess: once urllib has run, macOS has loaded
+    # CoreFoundation for the system proxy lookup, and a fork()ed child then
+    # crashes before exec (security exited with SIGSEGV).
+    read_end, write_end = os.pipe()
+    try:
+        actions = [(os.POSIX_SPAWN_DUP2, write_end, 1), (os.POSIX_SPAWN_CLOSE, read_end),
+                   (os.POSIX_SPAWN_OPEN, 2, os.devnull, os.O_WRONLY, 0)]
+        pid = os.posix_spawnp("security", ["security", "find-generic-password", "-a", account, "-s", service, "-w"],
+                              os.environ, file_actions=actions)
+    except OSError:
+        os.close(read_end)
+        os.close(write_end)
+        return ""
+    os.close(write_end)
+    with os.fdopen(read_end, "rb") as out:
+        value = out.read().decode("utf-8", "replace").strip()
+    _, status = os.waitpid(pid, 0)
+    return value if os.waitstatus_to_exitcode(status) == 0 else ""
+
+
+def portal_code_from_key(base_url: str, key: str) -> str:
+    req = urllib.request.Request(base_url.rstrip("/") + "/api/portal-code",
+                                 headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            code = json.loads(resp.read()).get("code", "")
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise AcceptanceError(f"GET /api/portal-code with the sign-in code key failed: {exc}") from exc
+    check(bool(code), "GET /api/portal-code returned no code; re-approve the key on the WS350")
+    return code
+
+
 def read_portal_code(prompt: str = "Portal code (System -> Local Portal on the WS350): ") -> str:
     if not sys.stdin.isatty():
         raise AcceptanceError("a portal code is required; run interactively or provide a signed-in "
@@ -225,7 +274,12 @@ def establish_portal_session(client: Client, *, fresh_code: bool = False) -> str
         client.jar.clear()
         prompt = ("New portal code after reboot (System -> Local Portal): " if fresh_code
                   else "Portal code (System -> Local Portal on the WS350): ")
-        client.sign_in(read_portal_code(prompt))
+        key = portal_code_key()
+        if key:
+            print("Signing in with the WS350 sign-in code key (GET /api/portal-code)")
+            client.sign_in(portal_code_from_key(client.base_url, key))
+        else:
+            client.sign_in(read_portal_code(prompt))
     resp = client.request("/api/portal-security", headers={"Accept": "application/json"})
     check(resp.status == 200, f"signed-in GET /api/portal-security returned HTTP {resp.status}")
     try:

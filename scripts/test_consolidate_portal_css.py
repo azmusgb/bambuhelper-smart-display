@@ -79,10 +79,11 @@ class ParserTests(unittest.TestCase):
 
 class A11yStageTests(unittest.TestCase):
     def test_light_muted_text_and_min_font(self) -> None:
-        css = (":root{--text-dim:#7b8a91}\n.badge{font-size:8px}\n.v98-ring span{font-size:7px}\n"
+        css = (":root{--text-dim:#7b8a91}\n  .app{grid-template-columns:1fr!important}\n.badge{font-size:8px}\n.v98-ring span{font-size:7px}\n"
                ".kicker{font:700 9px ui-monospace}\n.body{font-size:14px}")
         fixed, raised = overlay.apply_a11y_fixes(css)
         self.assertIn("--text-dim:#5a686f", fixed)
+        self.assertIn(".app{grid-template-columns:minmax(0,1fr)!important}", fixed)
         self.assertIn(".badge{font-size:10px}", fixed)
         self.assertIn(".v98-ring span{font-size:7px}", fixed)  # device-screen miniature keeps scale
         self.assertIn(".kicker{font:700 10px ui-monospace}", fixed)
@@ -92,6 +93,8 @@ class A11yStageTests(unittest.TestCase):
     def test_missing_anchor_fails_loudly(self) -> None:
         with self.assertRaises(overlay.PatchError):
             overlay.apply_a11y_fixes(":root{--text-dim:#000000}")
+        with self.assertRaises(overlay.PatchError):
+            overlay.apply_a11y_fixes(":root{--text-dim:#7b8a91}")  # narrow shell rule missing
 
 
 class DesignScaleTests(unittest.TestCase):
@@ -132,6 +135,7 @@ class DesignScaleTests(unittest.TestCase):
             (Path(d) / "web/app.css").write_text(".a{color:red}")
             with self.assertRaises(scale.PatchError):
                 scale.apply(Path(d))
+
 
 
 if __name__ == "__main__":
