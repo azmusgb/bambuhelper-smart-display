@@ -28,7 +28,13 @@ from urllib.parse import urljoin, urlparse
 import urllib.request
 
 from accept_os12_media_physical import update_identity
-from accept_os12_media_runtime import api, status, validate_status, wait_for_session
+from accept_os12_media_runtime import (
+    api,
+    start_video_after_page_open,
+    status,
+    validate_status,
+    wait_for_session,
+)
 from accept_os12_portal_runtime import AcceptanceError, Client, establish_portal_session, check
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -486,13 +492,10 @@ def run(args: argparse.Namespace) -> int:
         print("PASS  bounded record -> idle -> playback -> idle lifecycle")
 
         show(client, "media-video")
+        # Since 12.1.3 the page starts the video itself; older builds open Idle.
         before_video = frame_bytes(client)
-        video_start = api(client, "/os12/media/video/start", method="POST")
-        validate_status(video_start)
-        check(
-            video_start["_http_status"] == 202 and video_start["session"] == "PlayingVideo",
-            f"video start refused: {video_start.get('error')}",
-        )
+        _, video_started_by = start_video_after_page_open(client)
+        evidence["media"]["videoStartedBy"] = video_started_by
         time.sleep(0.35)
         play_a = frame_bytes(client)
         play_status_a = status(client)
