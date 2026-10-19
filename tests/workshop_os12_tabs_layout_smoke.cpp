@@ -15,7 +15,11 @@
 //   the tab bar;
 // - the calm idle screen: a full-screen scan proves every pixel is the wake
 //   target and nothing else (no tab, Home card or row behind it reacts), and
-//   its clock, date and status texts follow the 12/24 h and date settings.
+//   its clock, date and status texts follow the 12/24 h and date settings;
+// - (12.3.6) the tab bar's top guard band is dead on every view, the pressed
+//   highlight (hitRect) covers every point that hit it, and read-only items
+//   (temperatures, Info rows, the Printer status card, AMS trays) are not
+//   interactive, so they are drawn flat and never highlighted.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_tabs_layout_smoke.cpp -o /tmp/tabs-layout-smoke
 
@@ -212,6 +216,8 @@ void checkNoHiddenZones(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, 
       const Hit h = hitTest(s, v.id, n, scroll, x, y);
       if (h.kind == HitKind::None) continue;
       if (!drawnTarget(s, v, n, scroll, h).contains(x, y)) { if (!stray) { sx = x; sy = y; } ++stray; }
+      if (!hitRect(s, v.id, n, scroll, h).contains(x, y)) { if (!stray) { sx = x; sy = y; } ++stray; }
+      if (more::tabBand(s).contains(x, y) && h.kind != HitKind::Tab) { if (!stray) { sx = x; sy = y; } ++stray; }
     }
   check(stray == 0, "every tap lands on a drawn control", where, sx, sy);
 }
@@ -225,8 +231,11 @@ void checkView(Screen s, const ViewSpec& v, uint8_t n, const char* o, int& contr
   if (!v.list) check(maxS == 0, "cards views never scroll", where);
 
   for (uint8_t t = 0; t < kTabCount; ++t) {
-    expectRoutes(s, v.id, n, 0, more::tabRect(s, t), makeHit(HitKind::Tab, t, Part::Whole), where);
+    expectRoutes(s, v.id, n, 0, more::tabTouchRect(s, t), makeHit(HitKind::Tab, t, Part::Whole), where);
     ++controls;
+    const Rect drawn = more::tabRect(s, t);
+    for (int gy = drawn.y; gy < drawn.y + more::kTabGuard; ++gy)
+      check(hitTest(s, v.id, n, 0, drawn.x + drawn.w / 2, gy).kind == HitKind::None, "tab guard band is dead", where, gy);
   }
   if (v.segments)
     for (uint8_t i = 0; i < kSegmentCount; ++i) {
@@ -349,6 +358,25 @@ void checkCalmText() {
   check(strcmp(clockText(t, sizeof(t), 21, 5, true), "21:05") == 0, "calm clock, 24 h", t);
 }
 
+// Read-only items are not interactive (drawn flat, never highlighted).
+void checkInteractive() {
+  for (uint8_t i = 0; i < kViewCount; ++i) {
+    const ViewSpec& v = kViews[i];
+    for (uint8_t j = 0; j < v.itemCount; ++j) {
+      const ItemSpec& it = v.items[j];
+      bool want = true;
+      if (it.kind == ItemKind::Temps) want = false;
+      if (it.kind == ItemKind::Card) want = it.tappable;
+      if (it.kind == ItemKind::Row) want = it.rowKind != RowKind::Info && it.rowKind != RowKind::Code;
+      check(itemInteractive(it) == want, "interactive only when it does something", it.label);
+    }
+  }
+  check(!itemInteractive(view(View::PrinterAms).items[0]), "AMS trays are read-only", "AMS");
+  check(!itemInteractive(view(View::PrinterStatus).items[0]), "Printer status card is read-only", "Printer");
+  check(itemInteractive(view(View::Home).items[0]), "Home card opens Printer", "Home");
+  check(itemInteractive(view(View::Home).items[2]), "Home Filament row opens Workshop", "Home");
+}
+
 }  // namespace
 
 int main() {
@@ -356,6 +384,7 @@ int main() {
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
   checkTree("tree");
   checkCalmText();
+  checkInteractive();
   int controls[2] = {0, 0};
   for (int k = 0; k < 2; ++k) {
     checkChrome(screens[k], names[k]);

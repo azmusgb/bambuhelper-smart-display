@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.5}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.6}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -113,6 +113,12 @@ python3 "$ROOT/apply_workshop_os12_device_localai_palette.py" --repo "$BUILD" --
 # it builds on.
 python3 "$ROOT/apply_workshop_os12_tabs_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_tabs_overhaul.py" --repo "$BUILD"
+# 12.3.6: WS350 touch and audio fixes from the 12.3.5 physical acceptance:
+# changed-row pushes, immediate redraw, pressed highlight; no codec power
+# cycling, microphone capture in the audio task, mono DC-free playback and a
+# live microphone meter. Changes whole functions of the tab/More layers above.
+python3 "$ROOT/apply_workshop_os12_touch_audio_fit.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_touch_audio_fit.py" --repo "$BUILD" --source-root "$ROOT"
 # The finished tree still sends every physical printer command through the
 # OS12 facade, and Stop from exactly one (hold-guarded) place.
 python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"

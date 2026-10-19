@@ -5,6 +5,9 @@
 // all four inner edges to that control, that nothing overlaps the tab bar,
 // that every target is at least 44 x 44, that Back is the same everywhere,
 // and that the page tree is at most two levels deep and fully reachable.
+// 12.3.6: the tab bar's touch zone keeps a guard band below the content, the
+// pressed-highlight rectangle (hitRect) always contains the point that hit
+// it, and only interactive, enabled rows are drawn raised.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_more_layout_smoke.cpp -o /tmp/more-layout-smoke
 
@@ -57,6 +60,11 @@ void checkChrome(Screen s, const char* o) {
     const Rect t = tabRect(s, i);
     check(bigEnough(t), "tab at least 44x44", o, t.w, t.h);
     check(inside(t, band), "tab inside tab band", o, i);
+    const Rect touch = tabTouchRect(s, i);
+    check(bigEnough(touch), "tab touch zone at least 44x44", o, touch.w, touch.h);
+    check(inside(touch, t), "tab touch zone inside the drawn tab", o, i);
+    check(touch.y == band.y + kTabGuard, "tab touch zone starts below the guard band", o, touch.y);
+    check(touch.y - visibleRows(s) * kRowH - kRowTop >= kTabGuard - 1, "guard band between rows and tabs", o, touch.y);
     covered += t.w;
     for (uint8_t j = static_cast<uint8_t>(i + 1); j < kTabCount; ++j)
       check(!intersects(t, tabRect(s, j)), "tabs do not overlap", o, i, j);
@@ -201,9 +209,15 @@ void checkPages(Screen s, const char* o, int& controls) {
 
     // Tabs are live on every page, even with a dialog open.
     for (uint8_t t = 0; t < kTabCount; ++t) {
-      expectRoutes(s, id, 0, false, tabRect(s, t), makeHit(HitKind::Tab, t, Part::Whole), where);
-      expectRoutes(s, id, 0, true, tabRect(s, t), makeHit(HitKind::Tab, t, Part::Whole), where);
+      expectRoutes(s, id, 0, false, tabTouchRect(s, t), makeHit(HitKind::Tab, t, Part::Whole), where);
+      expectRoutes(s, id, 0, true, tabTouchRect(s, t), makeHit(HitKind::Tab, t, Part::Whole), where);
       controls += 2;
+      // The guard band above the tab touch zone belongs to nothing.
+      const Rect drawn = tabRect(s, t);
+      for (int gy = drawn.y; gy < drawn.y + kTabGuard; ++gy) {
+        check(hitTest(s, id, 0, false, drawn.x + drawn.w / 2, gy).kind == HitKind::None, "tab guard band is dead", where, gy);
+        check(hitTest(s, id, 0, true, drawn.x + drawn.w / 2, gy).kind == HitKind::None, "tab guard band is dead (dialog)", where, gy);
+      }
     }
     if (p.level > 0) {
       expectRoutes(s, id, 0, false, back, makeHit(HitKind::Back, 0, Part::Whole), where);
@@ -259,6 +273,59 @@ void checkPages(Screen s, const char* o, int& controls) {
   }
 }
 
+// Every point that hits something lies inside the rectangle the pressed
+// highlight draws for that hit, and that rectangle stays on screen. Nothing
+// but a tab is hit inside the tab band.
+void checkHitRects(Screen s, const char* o) {
+  const Rect screen = makeRect(0, 0, s.w, s.h);
+  for (uint8_t i = 0; i < kPageCount; ++i) {
+    const PageId id = kPages[i].id;
+    const uint8_t maxS = maxScroll(s, id);
+    for (int scroll = 0; scroll <= maxS; ++scroll) {
+      for (int dialog = 0; dialog < 2; ++dialog) {
+        for (int y = 0; y < s.h; y += 3) {
+          for (int x = 0; x < s.w; x += 5) {
+            const Hit h = hitTest(s, id, static_cast<uint8_t>(scroll), dialog != 0, x, y);
+            if (h.kind == HitKind::None) continue;
+            const Rect r = hitRect(s, id, static_cast<uint8_t>(scroll), h);
+            check(r.contains(x, y), "pressed highlight covers the point that hit it", kPages[i].title, x, y);
+            check(inside(r, screen), "pressed highlight on screen", kPages[i].title, x, y);
+            if (tabBand(s).contains(x, y)) check(h.kind == HitKind::Tab, "only tabs in the tab band", kPages[i].title, x, y);
+          }
+        }
+      }
+    }
+  }
+  (void)o;
+}
+
+// /hub/show media-lab: Speaker test, Microphone and Recorder all on screen.
+void checkMediaRows(Screen s, const char* o) {
+  const uint8_t scroll = scrollToRow(s, PageId::SoundAlerts, RowId::SpeakerTest);
+  const RowId rows[3] = {RowId::SpeakerTest, RowId::MicTest, RowId::Recorder};
+  for (int i = 0; i < 3; ++i) {
+    const int r = rowIndex(PageId::SoundAlerts, rows[i]);
+    check(r >= 0, "media row exists on Sound & Alerts", o, i);
+    if (r >= 0) check(!rowRect(s, PageId::SoundAlerts, scroll, static_cast<uint8_t>(r)).empty(), "media row on screen", o, i);
+  }
+  check(rowRect(s, PageId::SoundAlerts, 0, static_cast<uint8_t>(rowIndex(PageId::SoundAlerts, RowId::Recorder))).empty() ||
+            !s.landscape(),
+        "at scroll 0 the Recorder row is below the fold in landscape (why media-lab scrolls)", o);
+  check(rowIndex(PageId::SoundAlerts, RowId::None) == -1, "unknown row has no index", o);
+}
+
+void checkRowStyle() {
+  const RowKind kinds[] = {RowKind::Info, RowKind::Nav, RowKind::Toggle, RowKind::Stepper,
+                           RowKind::Action, RowKind::Action2, RowKind::Code};
+  for (unsigned i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i) {
+    const RowKind k = kinds[i];
+    const bool readOnly = k == RowKind::Info || k == RowKind::Code;
+    check(rowInteractive(k) == !readOnly, "read-only kinds are Info and Code", "row style", static_cast<int>(k));
+    check(!rowRaised(k, false), "a disabled row is drawn flat", "row style", static_cast<int>(k));
+    check(rowRaised(k, true) == !readOnly, "only interactive rows are drawn raised", "row style", static_cast<int>(k));
+  }
+}
+
 }  // namespace
 
 void checkValueText() {
@@ -269,6 +336,7 @@ void checkValueText() {
 
 int main() {
   checkValueText();
+  checkRowStyle();
   const Screen screens[2] = {makeScreen(480, 320), makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
   checkTree("tree");
@@ -276,6 +344,8 @@ int main() {
   for (int i = 0; i < 2; ++i) {
     checkChrome(screens[i], names[i]);
     checkPages(screens[i], names[i], controls[i]);
+    checkHitRects(screens[i], names[i]);
+    checkMediaRows(screens[i], names[i]);
   }
   if (g_failures) {
     printf("more-layout smoke: %d of %d checks failed\n", g_failures, g_checks);

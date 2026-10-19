@@ -112,14 +112,24 @@ def native_view_catalog(client: Client) -> list[dict]:
     return views
 
 
-def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
+# Since 12.1 there is no Media or Recorder screen: Speaker test, Microphone and
+# Recorder are rows on Sound & Alerts, below the fold at the top of the page.
+# Since 12.3.6 /hub/show page=media-lab opens Sound & Alerts scrolled to those
+# rows, so the "media" and "lab" steps request it (12.3.5 showed the top of
+# the page, and the owner answered "no" to the Recorder and live-level
+# questions because the rows were off screen).
+MEDIA_ROWS_PAGE = "media-lab"
+
+
+def resolve_native_media_view(client: Client, view: str) -> tuple[str, str, str]:
+    """(catalog id, label, /hub/show page) for a media acceptance step."""
     wanted = {
-        "media": ("settings-sounds", "sound & alerts"),
-        "lab": ("settings-sounds", "sound & alerts"),
-        "video": ("media-video", "video test"),
+        "media": ("settings-sounds", "sound & alerts", MEDIA_ROWS_PAGE),
+        "lab": ("settings-sounds", "sound & alerts", MEDIA_ROWS_PAGE),
+        "video": ("media-video", "video test", "media-video"),
     }
     check(view in wanted, f"unknown native media acceptance view: {view}")
-    preferred_id, preferred_label = wanted[view]
+    preferred_id, preferred_label, page = wanted[view]
     views = native_view_catalog(client)
 
     for item in views:
@@ -127,7 +137,7 @@ def resolve_native_media_view(client: Client, view: str) -> tuple[str, str]:
         label = str(item.get("label", "")).strip()
         if view_id.lower() == preferred_id or label.lower() == preferred_label:
             fallback = {"media": "Sound & Alerts", "lab": "Sound & Alerts", "video": "Video test"}[view]
-            return view_id, label or fallback
+            return view_id, label or fallback, page if page != preferred_id else view_id
 
     available = ", ".join(
         str(item.get("id", "")).strip()
@@ -144,11 +154,11 @@ def show_native_media_view(
     view: str,
     navigation_log: list[dict],
 ) -> None:
-    view_id, label = resolve_native_media_view(client, view)
+    view_id, label, page = resolve_native_media_view(client, view)
     response = client.request(
         "/hub/show",
         method="POST",
-        form={"page": view_id},
+        form={"page": page},
         headers={"Accept": "application/json,text/plain,*/*"},
         timeout=10.0,
     )
@@ -157,27 +167,46 @@ def show_native_media_view(
         "requestedView": view,
         "catalogViewId": view_id,
         "catalogLabel": label,
+        "shownPage": page,
         "httpStatus": response.status,
         "accepted": accepted,
         "route": "/hub/show",
     })
     check(accepted,
-          f"native view router refused {label} ({view_id}) with HTTP {response.status}")
-    print(f"DEVICE VIEW {label}: canonical /hub/show navigation accepted ({view_id})")
+          f"native view router refused {label} ({page}) with HTTP {response.status}")
+    print(f"DEVICE VIEW {label}: canonical /hub/show navigation accepted ({page})")
     time.sleep(0.45)
 
 
-def exercise_audio_visible(
-    client: Client,
-    initial: dict,
-    navigation_log: list[dict],
-    observations: dict[str, bool | None],
-) -> None:
-    show_native_media_view(client, "media", navigation_log)
-    observations["native_media_view_visible"] = observation(
-        "Did the native Media screen appear on the WS350?"
-    )
+# Exact wording of every recorded question, so evidence says what "no" meant.
+QUESTIONS = {
+    "native_media_view_visible":
+        "Is Sound & Alerts on the WS350, showing the Speaker test, Microphone and Recorder rows?",
+    "native_media_lab_view_visible":
+        "Is Sound & Alerts still showing the Recorder row (Record and Play buttons)? "
+        "Since 12.1 the Recorder is a row there, not a screen of its own.",
+    "speaker_tone_clean":
+        "Did you hear the diagnostic speaker tone clearly without obvious distortion?",
+    "microphone_level_responds":
+        "Did the Microphone row's level bar on the WS350 move with your sound?",
+    "recording_intelligible":
+        "Was the five-second microphone recording intelligible during playback?",
+    "audio_no_obvious_noise_or_instability":
+        "Did audio/recording complete without obvious electrical noise (pops, clicks, hum or hiss), "
+        "reboot, hang, or UI freeze?",
+}
 
+
+def ask(observations: dict, key: str, questions: dict | None = None) -> bool | None:
+    prompt = QUESTIONS[key]
+    if questions is not None:
+        questions[key] = prompt
+    observations[key] = observation(prompt)
+    return observations[key]
+
+
+def run_speaker_diagnostic(client: Client, initial: dict) -> dict:
+    """Bounded 1.2 s 1047 Hz tone; returns the active-state diagnostics."""
     check(initial["speakerAvailable"], "speaker is not available")
     speaker = api(client, "/os12/media/speaker-test", method="POST")
     validate_status(speaker)
@@ -187,7 +216,7 @@ def exercise_audio_visible(
     speaker_active = status(client)
     check(speaker_active["session"] == "PlayingAudio",
           f"speaker diagnostic did not remain active long enough to sample: {speaker_active['session']}")
-    observations["_speaker_active_diag"] = {
+    diag = {
         "codecReady": speaker_active.get("audioCodecReady"),
         "i2sReady": speaker_active.get("audioI2sReady"),
         "pipelineRunning": speaker_active.get("audioPipelineRunning"),
@@ -198,64 +227,82 @@ def exercise_audio_visible(
     }
     print(
         "SPEAKER ACTIVE "
-        f"codecReady={speaker_active.get('audioCodecReady')} "
-        f"i2sReady={speaker_active.get('audioI2sReady')} "
-        f"pipelineRunning={speaker_active.get('audioPipelineRunning')} "
-        f"ampEnabled={speaker_active.get('audioAmpEnabled')} "
-        f"freq={speaker_active.get('audioCurrentFrequency')} "
-        f"targetGain={speaker_active.get('audioTargetGain')} "
-        f"currentGain={speaker_active.get('audioCurrentGain')}"
+        f"codecReady={diag['codecReady']} i2sReady={diag['i2sReady']} "
+        f"pipelineRunning={diag['pipelineRunning']} ampEnabled={diag['ampEnabled']} "
+        f"freq={diag['frequency']} targetGain={diag['targetGain']} currentGain={diag['currentGain']}"
     )
     wait_for_session(client, {"Idle"}, 3.0)
-    print("PASS  bounded speaker-test lifecycle while native Media view is visible")
+    print("PASS  bounded speaker-test lifecycle while Sound & Alerts is visible")
+    return diag
 
+
+def run_microphone_diagnostic(client: Client, initial: dict, samples: int = 8, interval: float = 0.3) -> dict:
+    """Baseline sample, then samples while the operator keeps making sound.
+
+    12.3.5 asked for the sound *before* Enter and sampled after it, when the
+    sound was over. Now the operator presses Enter first and keeps talking or
+    clapping while the samples run; every sample also restarts the live meter
+    on the Microphone row, so the operator watches it move.
+    """
     check(initial["microphoneAvailable"], "microphone is not available")
     mic = api(client, "/os12/media/microphone-sample", method="POST")
     validate_status(mic)
     check(mic["_http_status"] == 200,
           f"microphone sample refused: {mic['error']}")
-    print(
-        "PASS  microphone baseline sample while native Media view is visible: "
-        f"{mic['microphoneLevelPercent']}% peak={mic.get('microphoneLastPeak')}"
-    )
     baseline_peak = mic.get("microphoneLastPeak")
-    input(
-        "Make a clear sound close to the WS350 microphone (speak/clap), "
-        "then press Enter to sample it: "
+    print(
+        "PASS  microphone baseline sample (quiet room): "
+        f"{mic['microphoneLevelPercent']}% peak={baseline_peak}"
     )
-    stimulated_peaks = []
-    stimulated_levels = []
-    for _ in range(3):
+    input(
+        "Press Enter, then keep talking or clapping close to the WS350 for about "
+        f"{samples * interval:.0f} seconds while you watch the Microphone row's level bar: "
+    )
+    peaks: list[int] = []
+    levels: list[int] = []
+    for _ in range(samples):
         stimulated = api(client, "/os12/media/microphone-sample", method="POST")
         validate_status(stimulated)
         check(stimulated["_http_status"] == 200,
               f"stimulated microphone sample refused: {stimulated['error']}")
         if isinstance(stimulated.get("microphoneLastPeak"), int):
-            stimulated_peaks.append(stimulated["microphoneLastPeak"])
+            peaks.append(stimulated["microphoneLastPeak"])
         if isinstance(stimulated.get("microphoneLevelPercent"), int):
-            stimulated_levels.append(stimulated["microphoneLevelPercent"])
-        time.sleep(0.12)
-    stimulated_peak = max(stimulated_peaks) if stimulated_peaks else None
-    stimulated_level = max(stimulated_levels) if stimulated_levels else None
+            levels.append(stimulated["microphoneLevelPercent"])
+        time.sleep(interval)
+    stimulated_peak = max(peaks) if peaks else None
+    stimulated_level = max(levels) if levels else None
     print(
         "MIC RESPONSE "
         f"baselinePeak={baseline_peak} stimulatedPeak={stimulated_peak} "
         f"stimulatedLevel={stimulated_level}%"
     )
-    observations["_mic_baseline_peak"] = baseline_peak
-    observations["_mic_stimulated_peak"] = stimulated_peak
+    return {
+        "baselinePeak": baseline_peak,
+        "baselineLevel": mic.get("microphoneLevelPercent"),
+        "stimulatedPeak": stimulated_peak,
+        "stimulatedLevel": stimulated_level,
+        "stimulatedPeaks": peaks,
+        "stimulatedLevels": levels,
+    }
 
-    show_native_media_view(client, "lab", navigation_log)
-    observations["native_media_lab_view_visible"] = observation(
-        "Did the native Recorder screen appear on the WS350?"
-    )
+
+RECORDING_KEYS = (
+    "recordingBytes", "recordingTargetBytes", "recordingWallMs", "recordingRxShortReads",
+    "playbackSlot", "playbackDcOffset", "playbackGainQ8",
+)
+
+
+def run_recorder_diagnostic(client: Client, initial: dict) -> dict:
+    """Five-second recording, then playback; returns the recorder diagnostics."""
     check(initial["psramAvailable"], "recording requires PSRAM")
+    input("Press Enter, then speak a sentence near the WS350 for the next five seconds: ")
     rec = api(client, "/os12/media/record/start", method="POST")
     validate_status(rec)
     check(rec["_http_status"] == 202 and rec["session"] == "Recording",
           f"record start refused: {rec['error']}")
-    print("STATE Recording: native Recorder visible; bounded five-second capture started")
-    completed = wait_for_session(client, {"Idle"}, 7.0)
+    print("STATE Recording: bounded five-second capture started (keep speaking)")
+    completed = wait_for_session(client, {"Idle"}, 8.0)
     check(completed["recordingAvailable"],
           "recording completed without a retained local recording")
     print("PASS  five-second PSRAM recording completed")
@@ -264,8 +311,39 @@ def exercise_audio_visible(
     validate_status(play)
     check(play["_http_status"] == 202 and play["session"] == "PlayingRecording",
           f"recording playback refused: {play['error']}")
-    wait_for_session(client, {"Idle"}, 7.0)
-    print("PASS  local recording playback completed while native Recorder is visible")
+    played = wait_for_session(client, {"Idle"}, 8.0)
+    print("PASS  local recording playback completed while Sound & Alerts is visible")
+    diag = {key: played.get(key) for key in RECORDING_KEYS}
+    target = diag.get("recordingTargetBytes")
+    got = diag.get("recordingBytes")
+    if isinstance(target, int) and isinstance(got, int):
+        diag["recordingComplete"] = target > 0 and got == target
+    wall = diag.get("recordingWallMs")
+    if isinstance(wall, int):
+        # A 5 s clip that took clearly longer than 5 s of wall time lost audio.
+        diag["recordingNoDrops"] = 0 < wall <= 5300
+    print("RECORDER " + " ".join(f"{k}={v}" for k, v in diag.items()))
+    return diag
+
+
+def exercise_audio_visible(
+    client: Client,
+    initial: dict,
+    navigation_log: list[dict],
+    observations: dict[str, bool | None],
+    questions: dict | None = None,
+) -> None:
+    show_native_media_view(client, "media", navigation_log)
+    ask(observations, "native_media_view_visible", questions)
+
+    observations["_speaker_active_diag"] = run_speaker_diagnostic(client, initial)
+    mic = run_microphone_diagnostic(client, initial)
+    observations["_mic_baseline_peak"] = mic["baselinePeak"]
+    observations["_mic_stimulated_peak"] = mic["stimulatedPeak"]
+
+    show_native_media_view(client, "lab", navigation_log)
+    ask(observations, "native_media_lab_view_visible", questions)
+    observations["_recorder_diag"] = run_recorder_diagnostic(client, initial)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -279,7 +357,7 @@ def run(args: argparse.Namespace) -> int:
     stamp = now.strftime("%Y%m%d-%H%M%S")
     destination = output_path(args.output, stamp)
     evidence = {
-        "schemaVersion": 5,
+        "schemaVersion": 6,
         "kind": "workshop-os12-media-physical-acceptance",
         "recordedAt": now.isoformat(),
         "targetHost": urlparse(base_url).hostname,
@@ -288,6 +366,7 @@ def run(args: argparse.Namespace) -> int:
         "initialMediaStatus": None,
         "finalMediaStatus": None,
         "observations": {},
+        "questions": {},
         "navigationObservations": [],
         "runtimeIdleAndClean": False,
         "runtimeUptimeStartMs": None,
@@ -298,6 +377,7 @@ def run(args: argparse.Namespace) -> int:
         "microphoneStimulatedPeak": None,
         "microphonePeakIncreased": None,
         "speakerActiveDiagnostics": None,
+        "recorderDiagnostics": None,
         "videoStartedBy": None,
         "passed": False,
         "completed": False,
@@ -341,8 +421,9 @@ def run(args: argparse.Namespace) -> int:
             f"{identity['runningVersion']} @ {identity['runningSourceCommit']}"
         )
         print("\nAUDIO / MICROPHONE\n------------------")
-        exercise_audio_visible(client, initial, navigation_log, observations)
+        exercise_audio_visible(client, initial, navigation_log, observations, evidence["questions"])
         evidence["speakerActiveDiagnostics"] = observations.pop("_speaker_active_diag", None)
+        evidence["recorderDiagnostics"] = observations.pop("_recorder_diag", None)
         baseline_peak = observations.pop("_mic_baseline_peak", None)
         stimulated_peak = observations.pop("_mic_stimulated_peak", None)
         evidence["microphoneBaselinePeak"] = baseline_peak
@@ -350,18 +431,9 @@ def run(args: argparse.Namespace) -> int:
         if isinstance(baseline_peak, int) and isinstance(stimulated_peak, int):
             evidence["microphonePeakIncreased"] = stimulated_peak > baseline_peak
 
-        observations["speaker_tone_clean"] = observation(
-            "Did you hear the diagnostic speaker tone clearly without obvious distortion?"
-        )
-        observations["microphone_level_responds"] = observation(
-            "Did the microphone level respond when you made sound near the device?"
-        )
-        observations["recording_intelligible"] = observation(
-            "Was the five-second microphone recording intelligible during playback?"
-        )
-        observations["audio_no_obvious_noise_or_instability"] = observation(
-            "Did audio/recording complete without obvious electrical noise, reboot, hang, or UI freeze?"
-        )
+        for key in ("speaker_tone_clean", "microphone_level_responds",
+                    "recording_intelligible", "audio_no_obvious_noise_or_instability"):
+            ask(observations, key, evidence["questions"])
 
         print("\nVIDEO\n-----")
         show_native_media_view(client, "video", navigation_log)

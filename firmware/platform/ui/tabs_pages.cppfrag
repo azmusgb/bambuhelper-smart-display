@@ -189,7 +189,7 @@ static void wtDrawProgress(int16_t x, int16_t y, int16_t w, uint8_t pct, uint16_
 }
 
 // Temperatures: one strip of three cells in landscape, three plain rows in
-// portrait. Read-only.
+// portrait. Read-only, so drawn flat (12.3.6): no raised surface or border.
 static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPrint& w, bool targets) {
   char values[3][24];
   const char* labels[3] = {"Nozzle", "Bed", "Chamber"};
@@ -209,14 +209,14 @@ static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPri
   if (s.landscape()) {
     if (live && w.s->dualNozzle) labels[0] = w.s->activeNozzle == 1 ? "Nozzle L" : "Nozzle R";
     const wsm::Rect surface = wsm::rowSurface(area);
-    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+    tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
+    tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
     for (uint8_t i = 0; i < 3; ++i) {
       const wsm::Rect c = wtl::tempCellRect(s, area, i);
       if (i) tft.drawFastVLine(c.x, c.y + 10, c.h - 20, OS12V_LINE);
       const int16_t mid = c.y + c.h / 2;
-      uiDrawFit(labels[i], c.x + 12, mid, 56, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_SURFACE);
-      uiDrawFit(values[i], c.right() - 10, mid, c.w - 76, FONT_BODY, MR_DATUM, live ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
+      uiDrawFit(labels[i], c.x + 12, mid, 56, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_BG);
+      uiDrawFit(values[i], c.right() - 10, mid, c.w - 76, FONT_BODY, MR_DATUM, live ? OS12V_TEXT : OS12V_MUTED, OS12V_BG);
     }
     return;
   }
@@ -535,11 +535,15 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
   return n;
 }
 
+// AMS trays are read-only, so they are drawn flat (12.3.6): the tray in use
+// is marked by an accent rail and "In use", not by a raised, outlined row
+// that looked like a selected button.
 static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t) {
   const wsm::Rect surface = wsm::rowSurface(row);
-  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, t.inUse ? OS12V_SURFACE2 : OS12V_SURFACE);
-  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, t.inUse ? OS12V_ACCENT : OS12V_LINE);
-  const uint16_t bg = t.inUse ? OS12V_SURFACE2 : OS12V_SURFACE;
+  tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
+  tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
+  if (t.inUse) tft.fillRoundRect(surface.x, surface.y + 8, 4, surface.h - 16, 2, OS12V_ACCENT);
+  const uint16_t bg = OS12V_BG;
   const int16_t mid = row.y + row.h / 2;
   // Colour swatch.
   if (t.present) tft.fillCircle(row.x + 22, mid, 8, t.color);
@@ -1193,4 +1197,71 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
     default:
       return true;
   }
+}
+
+// ---------------------------------------------------------------------------
+// 12.3.6 pressed highlight: the rectangle a touch-down at (x, y) acts on, on
+// any hub screen. False when the point would do nothing: empty space, the
+// tab guard band, read-only items (temperatures, Info rows, the Printer
+// status card, AMS trays), disabled controls, the calm idle screen and the
+// Stop button (which draws its own hold progress).
+// ---------------------------------------------------------------------------
+static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
+  const ScreenState cur = getScreenState();
+  if (cur == SCREEN_HUB_MORE || cur == SCREEN_HUB_SYSTEM || cur == SCREEN_HUB_CUSTOM) return wsMorePressRect(x, y, out);
+  const wsm::Screen s = wsScreen();
+  wtl::View id = wtl::View::Home;
+  uint8_t count = 0, scroll = 0;
+  const WtPrint w = wtPrint();
+  if (cur == SCREEN_HUB_HOME) {
+    if (wtCalmShown()) return false;
+  } else if (cur == SCREEN_HUB_PRINTER) {
+    id = wtPrinterView();
+    if (id == wtl::View::PrinterAms) {
+      WtTray trays[wtl::kMaxAmsRows];
+      const uint8_t n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
+      count = n ? n : 1;
+      scroll = g_wtAmsScroll;
+    }
+  } else if (cur == SCREEN_HUB_WORKSHOP) {
+    id = workshopInventorySnapshot().credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
+    scroll = g_wtWorkshopScroll;
+  } else {
+    return false;
+  }
+  const wtl::ViewSpec& v = wtl::view(id);
+  const wtl::Hit h = wtl::hitTest(s, id, count, scroll, x, y);
+  switch (h.kind) {
+    case wtl::HitKind::None:
+    case wtl::HitKind::Wake:
+      return false;
+    case wtl::HitKind::ScrollUp:
+      if (scroll == 0) return false;
+      break;
+    case wtl::HitKind::ScrollDown:
+      if (scroll >= wtl::maxScroll(s, v, count)) return false;
+      break;
+    case wtl::HitKind::Segment:
+      if (h.index == wtl::segmentOf(id)) return false;  // already selected
+      break;
+    case wtl::HitKind::Item: {
+      const wtl::ItemSpec& it = wtl::item(v, h.index);
+      if (!wtl::itemInteractive(it) || it.kind == wtl::ItemKind::Hold) return false;
+      if (id == wtl::View::PrinterControl) {
+        const WtControls c = wtControls(w);
+        if (it.id == wtl::ItemId::ControlPrimary && !c.pauseEnabled) return false;
+        if (it.id == wtl::ItemId::ControlLight && !c.lightEnabled) return false;
+        if (it.id == wtl::ItemId::ControlPower && !c.powerEnabled) return false;
+      } else if (cur == SCREEN_HUB_WORKSHOP) {
+        WsRowView row;
+        wtWorkshopRow(it.id, workshopInventorySnapshot(), row);
+        if (!row.enabled) return false;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  out = wtl::hitRect(s, id, count, scroll, h);
+  return !out.empty();
 }

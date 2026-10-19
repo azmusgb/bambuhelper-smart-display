@@ -22,9 +22,11 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     media = (root / "scripts/accept_os12_media_physical.py").read_text(encoding="utf-8")
     ui = (root / "scripts/accept_os12_device_ui_physical.py").read_text(encoding="utf-8")
+    retest = (root / "scripts/accept_os12_retest_12_3_6.py").read_text(encoding="utf-8")
     bootstrap = (root / "scripts/bootstrap_ws350_os12_usb_macos.sh").read_text(encoding="utf-8")
 
-    for label, text in (("media physical acceptance", media), ("whole-device UI physical acceptance", ui)):
+    for label, text in (("media physical acceptance", media), ("whole-device UI physical acceptance", ui),
+                        ("12.3.6 re-test of the 12.3.5 failures", retest)):
         for needle in (
             "--expect-source-sha",
             "exactly 40 lowercase hex characters",

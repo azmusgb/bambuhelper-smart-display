@@ -91,6 +91,10 @@ jobs:
           /tmp/workshop-os12-tests/tabs-layout-smoke
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_rapid_reset_smoke.cpp -o /tmp/workshop-os12-tests/rapid-reset-smoke
           /tmp/workshop-os12-tests/rapid-reset-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_frame_diff_smoke.cpp -o /tmp/workshop-os12-tests/frame-diff-smoke
+          /tmp/workshop-os12-tests/frame-diff-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_recording_dsp_smoke.cpp -o /tmp/workshop-os12-tests/recording-dsp-smoke
+          /tmp/workshop-os12-tests/recording-dsp-smoke
 
       - name: Check repository hygiene
         shell: bash
