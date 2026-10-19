@@ -18,7 +18,7 @@ import sys
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_VIEWS = (
-    "home","printer","workshop","more","settings-printer-power","hardware-auto-off","settings-network","system-date-time","settings-display",
+    "home","printer","printer-ams","printer-control","workshop","more","settings-printer-power","hardware-auto-off","settings-network","system-date-time","settings-display",
     "display-clock","display-gauges","settings-sounds","display-alerts","hardware-led","media-video","system-update","system-diagnostics",
 )
 MANUAL_RESIDUALS = (

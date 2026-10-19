@@ -51,6 +51,28 @@ def patch_app_js(repo: Path) -> None:
         "profile capability boot guard",
     )
 
+    # The guard above only covers hasDualNozzle. The real defect is ordering:
+    # the profile block that declares `var _profileCaps = {}` sits after the
+    # boot IIFE, and boot() -> toggleConnMode() -> refreshGaugeProfileUi()
+    # reads _profileCaps.hasAuxFanRight while it is still undefined (hoisted
+    # but not yet assigned). The TypeError escapes boot and the rest of app.js
+    # never runs. Initialise it once at the top of the file, before any boot
+    # path, and drop the later re-initialisation so it cannot reset caps.
+    profile_init = "var _profileCaps = {};\n"
+    if text.count(profile_init) != 1:
+        raise PatchError(
+            f"profile capability init: expected exactly one declaration, found {text.count(profile_init)}"
+        )
+    text = text.replace(
+        profile_init,
+        "/* _profileCaps is initialised at the top of app.js, before boot reads it. */\n",
+    )
+    text = (
+        "/* Profile capabilities: initialised before any boot path reads them. */\n"
+        + profile_init
+        + text
+    )
+
     # The custom-dashboard editor can initialize before the widget-ID registry.
     # An empty list is the correct pre-init state and avoids aborting the rest of boot.
     text = replace_required(
@@ -96,6 +118,12 @@ def patch(repo: Path) -> None:
         raise PatchError("guarded profile capability expression missing")
     if "_profileCaps.hasDualNozzle" in app.replace(profile_guard, ""):
         raise PatchError("unguarded _profileCaps.hasDualNozzle remains")
+    init_at = app.find("var _profileCaps = {};")
+    boot_at = app.find("(function boot(){")
+    if init_at < 0 or boot_at < 0 or init_at > boot_at:
+        raise PatchError("_profileCaps must be initialised before the boot IIFE")
+    if app.count("var _profileCaps") != 1:
+        raise PatchError("_profileCaps must be declared exactly once")
 
     if widget_guard not in app:
         raise PatchError("guarded dashboard widget registry expression missing")

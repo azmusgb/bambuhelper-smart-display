@@ -186,6 +186,9 @@ def main() -> int:
     need(html, 'id="statusTokenTitle">Read-only status access</h3>', "portal panel")
     need(html, "tap Allow on the display", "portal explains the Allow tap")
     need(html, "Copy this token now. It will not be shown again.", "one-time reveal copy")
+    # The label is display:flex (.os12-feed-token), which beats the browser's
+    # [hidden] rule, so the hidden attribute must sit on a plain wrapper.
+    need(html, '<div id="statusTokenReveal" hidden><label class="os12-feed-token">', "reveal hidden on a plain wrapper")
     need(app_js, "/api/status-token/claim", "one-time claim")
     forbid(app_js, "localStorage.setItem('statusToken", "token persisted in the browser")
 

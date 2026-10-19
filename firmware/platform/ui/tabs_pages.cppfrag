@@ -344,10 +344,119 @@ static const char* wtHomeExtra(WsRowView& v) {
   return "Filament";
 }
 
+// ---------------------------------------------------------------------------
+// Calm idle screen (12.3.3)
+// ---------------------------------------------------------------------------
+
+// Shown on Home after the display goes idle (More > Display > Calm idle
+// screen). Drawn and woken by the same predicate, so a tap is never routed to
+// a Home control that is not on screen.
+static bool wtCalmShown() { return g_ambientEnabled && g_ambientActive; }
+
+// What the status line says, and its dot colour. A print comes first, then
+// the workshop timer, then the printer.
+static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneLen, uint16_t& color) {
+  wtl::CalmStatus c;
+  c.state = wtl::CalmState::Idle;
+  c.percent = 0;
+  c.doneAt = doneAt;
+  c.timerSeconds = 0;
+  doneAt[0] = 0;
+  color = OS12V_GREEN;
+  if (w.active && w.online) {
+    c.state = w.paused ? wtl::CalmState::Paused : wtl::CalmState::Printing;
+    c.percent = w.s->progress;
+    color = w.paused ? OS12V_AMBER : OS12V_ACCENT;
+    if (!w.paused && w.s->remainingMinutes && !wtClockIn(doneAt, doneLen, (uint32_t)w.s->remainingMinutes * 60UL))
+      doneAt[0] = 0;
+  } else if (g_workshopTimerDone) {
+    c.state = wtl::CalmState::TimerDone;
+    color = OS12V_AMBER;
+  } else if (workshopTimerActive()) {
+    c.state = wtl::CalmState::TimerRunning;
+    c.timerSeconds = workshopTimerRemainingSeconds();
+    color = OS12V_ACCENT;
+  } else if (!w.configured) {
+    c.state = wtl::CalmState::NoPrinter;
+    color = OS12V_MUTED;
+  } else if (!w.online) {
+    c.state = wtl::CalmState::Offline;
+    color = OS12V_AMBER;
+  } else if (w.alerts || w.failed) {
+    c.state = wtl::CalmState::Attention;
+    color = OS12V_RED;
+  } else if (w.finished) {
+    c.state = wtl::CalmState::Finished;
+  }
+  return c;
+}
+
+static void wtDrawCalm(const WtPrint& w) {
+  const wsm::Screen s = wsScreen();
+  const wtl::CalmLayout c = wtl::calmLayout(s);
+  tft.fillScreen(OS12V_BG);
+
+  // Clock in the display's time zone, 12 or 24 h as set in Time & locale.
+  char clock[16], date[48];
+  const time_t now = time(nullptr);
+  struct tm t;
+  const bool clockSet = now >= 1700000000;
+  if (clockSet) {
+    localtime_r(&now, &t);
+    wtl::clockText(clock, sizeof(clock), t.tm_hour, t.tm_min, netSettings.use24h);
+    wtl::dateText(date, sizeof(date), t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_wday, netSettings.dateFormat);
+  } else {
+    strlcpy(clock, "--:--", sizeof(clock));
+    strlcpy(date, "Clock not set yet (needs Wi-Fi)", sizeof(date));
+  }
+  char* suffix = strchr(clock, ' ');  // " AM" / " PM" in 12 h
+  if (suffix) *suffix++ = 0;
+  // The digits in the 75 px numeric font; AM/PM smaller, beside them.
+  int16_t suffixW = 0;
+  if (suffix && suffix[0]) { setFont(tft, FONT_LARGE); suffixW = (int16_t)(tft.textWidth(suffix) + 10); }
+  // setFont() does not track the numeric font: drop to FONT_NONE first so the
+  // next setFont() call loads its font again.
+  setFont(tft, FONT_NONE);
+  tft.setTextFont(8);
+  tft.setTextSize(1);
+  const int16_t digitsW = (int16_t)tft.textWidth(clock), digitsH = (int16_t)tft.fontHeight();
+  const int16_t x = (int16_t)(c.clock.x + (c.clock.w - digitsW - suffixW) / 2);
+  const int16_t y = (int16_t)(c.clock.y + (c.clock.h - digitsH) / 2);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(clockSet ? OS12V_TEXT : OS12V_MUTED, OS12V_BG);
+  tft.drawString(clock, x, y);
+  if (suffixW) uiDrawFit(suffix, (int16_t)(x + digitsW + 10), (int16_t)(y + digitsH - 4), suffixW, FONT_LARGE, BL_DATUM, OS12V_MUTED, OS12V_BG);
+
+  // Date in the saved date format.
+  uiDrawFit(date, (int16_t)(c.date.x + c.date.w / 2), (int16_t)(c.date.y + c.date.h / 2), c.date.w, FONT_LARGE, MC_DATUM,
+            OS12V_MUTED, OS12V_BG);
+
+  // One calm status line on a card: a dot in the state colour and plain words.
+  char doneAt[24], status[64];
+  uint16_t dot = OS12V_GREEN;
+  wtl::calmStatusText(status, sizeof(status), wtCalmStatus(w, doneAt, sizeof(doneAt), dot));
+  const wsm::Rect card = wsm::rowSurface(c.status);
+  tft.fillRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_SURFACE2);
+  tft.drawRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_LINE);
+  const int16_t maxW = (int16_t)(card.w - 32 - 20);
+  setFont(tft, FONT_BODY);
+  int16_t textW = (int16_t)tft.textWidth(status);
+  if (textW > maxW) textW = maxW;
+  const int16_t left = (int16_t)(card.x + (card.w - (20 + textW)) / 2), mid = (int16_t)(card.y + card.h / 2);
+  tft.fillCircle(left + 5, mid, 5, dot);
+  uiDrawFit(status, (int16_t)(left + 20), mid, maxW, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_SURFACE2);
+
+  // The only thing to do here: wake. No tab bar, no other targets.
+  uiDrawFit("Tap anywhere to wake", (int16_t)(c.hint.x + c.hint.w / 2), (int16_t)(c.hint.y + c.hint.h / 2), (int16_t)(c.hint.w - 32),
+            FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_BG);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
 static void wtDrawHome(bool full) {
   (void)full;
   const WtPrint w = wtPrint();
-  if (g_ambientEnabled && g_ambientActive) { drawAmbientHome(w.p, w.s); return; }
+  if (wtCalmShown()) { wtDrawCalm(w); return; }
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::Home);
   tft.fillScreen(OS12V_BG);
@@ -871,6 +980,17 @@ static void wtDrawWorkshop(bool full) {
 // Touch
 // ---------------------------------------------------------------------------
 
+// /hub/show printer, printer-ams and printer-control: Printer with that
+// segment selected (the capture scripts open each one by id).
+static bool wtShowPrinterView(const char* name) {
+  wtl::View v = wtl::View::PrinterStatus;
+  if (!wtl::printerViewFromId(name, v)) return false;
+  g_printerMode = wtl::segmentOf(v);
+  g_wtAmsScroll = 0;
+  setPage(SCREEN_HUB_PRINTER);
+  return true;
+}
+
 static void wtTab(uint8_t i) {
   if (i == 0) setPage(SCREEN_HUB_HOME);
   else if (i == 1) setPage(SCREEN_HUB_PRINTER);
@@ -879,9 +999,15 @@ static void wtTab(uint8_t i) {
 }
 
 static bool wtHomeTouch(int16_t x, int16_t y) {
-  // The calm idle screen is drawn without the tab bar: a tap only wakes it.
-  if (g_ambientActive) { g_ambientActive = false; g_dirty = true; return true; }
   const wsm::Screen s = wsScreen();
+  // The calm idle screen has no tab bar and no controls: the whole screen is
+  // one wake target, and the tap that wakes it ends here (it never reaches
+  // the Home card, the Filament row or a tab).
+  if (wtCalmShown()) {
+    if (wtl::calmHitTest(s, x, y).kind == wtl::HitKind::Wake) { g_ambientActive = false; g_dirty = true; }
+    return true;
+  }
+  g_ambientActive = false;
   const wtl::Hit h = wtl::hitTest(s, wtl::View::Home, 0, 0, x, y);
   if (h.kind == wtl::HitKind::Tab) { wtTab(h.index); return true; }
   if (h.kind != wtl::HitKind::Item) return true;

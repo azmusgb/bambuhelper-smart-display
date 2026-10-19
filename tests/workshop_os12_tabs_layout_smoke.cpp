@@ -12,7 +12,10 @@
 // - Stop is only its drawn button, is never next to Pause, and its label and
 //   the rest of its row do nothing;
 // - the Local AI prompts keep their buttons inside the dialog card, clear of
-//   the tab bar.
+//   the tab bar;
+// - the calm idle screen: a full-screen scan proves every pixel is the wake
+//   target and nothing else (no tab, Home card or row behind it reacts), and
+//   its clock, date and status texts follow the 12/24 h and date settings.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_tabs_layout_smoke.cpp -o /tmp/tabs-layout-smoke
 
@@ -81,6 +84,8 @@ void checkChrome(Screen s, const char* o) {
     for (uint8_t j = static_cast<uint8_t>(i + 1); j < kSegmentCount; ++j)
       check(!intersects(r, segmentRect(s, j)), "segments do not overlap", o, i, j);
     check(segmentOf(segmentView(i)) == i, "segment <-> view round trip", o, i);
+    View back = View::Home;
+    check(printerViewFromId(printerViewId(segmentView(i)), back) && back == segmentView(i), "/hub/show id round trip", o, i);
   }
   // Local AI prompts: buttons in the dialog card, never on the tab bar.
   const Rect card = more::dialogCard(s);
@@ -116,6 +121,13 @@ void checkTree(const char* o) {
   const ViewSpec& c = view(View::PrinterControl);
   check(c.items[0].id == ItemId::ControlPrimary && c.items[c.itemCount - 1].id == ItemId::ControlStop,
         "Pause first, Stop last on Control", o);
+  // /hub/show ids of the Printer segments.
+  View pv = View::Home;
+  check(printerViewFromId("printer", pv) && pv == View::PrinterStatus, "printer opens Status", o);
+  check(printerViewFromId("printer-ams", pv) && pv == View::PrinterAms, "printer-ams opens AMS", o);
+  check(printerViewFromId("printer-control", pv) && pv == View::PrinterControl, "printer-control opens Control", o);
+  check(!printerViewFromId("printer-am", pv) && !printerViewFromId("printer-amss", pv) && !printerViewFromId("", pv) &&
+        !printerViewFromId(nullptr, pv), "other ids are not Printer views", o);
   // The clock text used for "done at".
   char t[16];
   check(strcmp(clockText(t, sizeof(t), 18, 42, false), "6:42 PM") == 0, "12-hour clock", t);
@@ -265,16 +277,90 @@ void checkStop(Screen s, const char* o) {
   }
 }
 
+
+// The calm idle screen: every pixel wakes, and only wakes.
+void checkCalm(Screen s, const char* o) {
+  const CalmLayout c = calmLayout(s);
+  const Rect screen = makeRect(0, 0, s.w, s.h);
+  const Rect parts[4] = {c.clock, c.date, c.status, c.hint};
+  for (int i = 0; i < 4; ++i) {
+    check(!parts[i].empty() && inside(parts[i], screen), "calm part on screen", o, i);
+    for (int j = i + 1; j < 4; ++j) check(!intersects(parts[i], parts[j]), "calm parts do not overlap", o, i, j);
+    if (i < 3) check(parts[i].bottom() <= parts[i + 1].y, "calm parts top to bottom", o, i);
+  }
+  check(c.clock.h >= 90 && c.clock.w >= 280, "calm clock is large", o, c.clock.w, c.clock.h);
+  check(c.status.h == more::kRowH, "calm status is one line", o, c.status.h);
+  check(c.hint.y == more::tabBand(s).y && c.hint.h == more::tabBand(s).h, "wake hint where the tab bar would be", o);
+  check(c.clock.y >= 16, "calm clock clear of the top edge", o, c.clock.y);
+
+  // Full-screen scan: every pixel is the wake target, including every pixel
+  // where Home would have a tab, its card or its rows.
+  int notWake = 0, nx = -1, ny = -1, homeControls = 0;
+  for (int y = 0; y < s.h; ++y)
+    for (int x = 0; x < s.w; ++x) {
+      const Hit h = calmHitTest(s, x, y);
+      if (h.kind != HitKind::Wake || h.index != 0 || h.part != Part::Whole) { if (!notWake) { nx = x; ny = y; } ++notWake; }
+      const Hit home = hitTest(s, View::Home, 0, 0, x, y);
+      if (home.kind != HitKind::None) ++homeControls;
+    }
+  check(notWake == 0, "every calm pixel only wakes", o, nx, ny);
+  check(homeControls > 0, "Home has controls the wake tap must not reach", o, homeControls);
+  // Off-screen points are not a target.
+  check(calmHitTest(s, -1, 0).kind == HitKind::None && calmHitTest(s, s.w, s.h - 1).kind == HitKind::None,
+        "nothing off screen", o);
+  // No view's hit test ever returns Wake: only the calm screen wakes.
+  for (uint8_t i = 0; i < kViewCount; ++i)
+    for (int y = 0; y < s.h; y += 7)
+      for (int x = 0; x < s.w; x += 7)
+        if (hitTest(s, kViews[i].id, 0, 0, x, y).kind == HitKind::Wake) {
+          check(false, "only the calm screen wakes", kViews[i].title, x, y);
+          y = s.h;
+          break;
+        }
+}
+
+void checkCalmText() {
+  char t[64];
+  check(strcmp(dateText(t, sizeof(t), 2026, 10, 18, 0, 2), "Sunday · 10/18/2026") == 0, "date MM/DD/YYYY", t);
+  check(strcmp(dateText(t, sizeof(t), 2026, 10, 8, 4, 0), "Thursday · 08.10.2026") == 0, "date DD.MM.YYYY", t);
+  check(strcmp(dateText(t, sizeof(t), 2026, 1, 5, 1, 1), "Monday · 05-01-2026") == 0, "date DD-MM-YYYY", t);
+  check(strcmp(dateText(t, sizeof(t), 2026, 3, 9, 1, 3), "Monday · 2026-03-09") == 0, "date YYYY-MM-DD", t);
+  check(strcmp(dateText(t, sizeof(t), 2026, 12, 7, 1, 4), "Monday · 7 Dec 2026") == 0, "date DD Mon YYYY", t);
+  check(strcmp(dateText(t, sizeof(t), 2026, 12, 7, 1, 5), "Monday · Dec 7, 2026") == 0, "date Mon DD, YYYY", t);
+  CalmStatus st;
+  st.state = CalmState::Printing; st.percent = 42; st.doneAt = "6:42 PM"; st.timerSeconds = 0;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Printing 42% · done 6:42 PM") == 0, "printing with done time", t);
+  st.doneAt = "18:42";
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Printing 42% · done 18:42") == 0, "printing, 24 h done time", t);
+  st.doneAt = "";
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Printing 42%") == 0, "printing without a clock", t);
+  st.state = CalmState::Paused;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Paused at 42%") == 0, "paused", t);
+  st.state = CalmState::TimerRunning; st.timerSeconds = 754;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Timer 12:34 left") == 0, "timer", t);
+  st.timerSeconds = 3723;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Timer 1:02:03 left") == 0, "long timer", t);
+  st.state = CalmState::TimerDone;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Timer done") == 0, "timer done", t);
+  st.state = CalmState::Idle;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Printer idle") == 0, "idle", t);
+  // The large clock follows the 12/24 h setting.
+  check(strcmp(clockText(t, sizeof(t), 9, 5, false), "9:05 AM") == 0, "calm clock, 12 h", t);
+  check(strcmp(clockText(t, sizeof(t), 21, 5, true), "21:05") == 0, "calm clock, 24 h", t);
+}
+
 }  // namespace
 
 int main() {
   const Screen screens[2] = {more::makeScreen(480, 320), more::makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
   checkTree("tree");
+  checkCalmText();
   int controls[2] = {0, 0};
   for (int k = 0; k < 2; ++k) {
     checkChrome(screens[k], names[k]);
     checkStop(screens[k], names[k]);
+    checkCalm(screens[k], names[k]);
     for (uint8_t i = 0; i < kViewCount; ++i) {
       const ViewSpec& v = kViews[i];
       if (v.repeat) {
