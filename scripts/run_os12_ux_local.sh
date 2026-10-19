@@ -106,6 +106,8 @@ python3 -m py_compile "$ROOT/scripts/accept_os12_code_token_runtime.py"
 # date format defaults to MM/DD/YYYY (validated by validate_os12_more_overhaul.py).
 python3 "$ROOT/apply_workshop_os12_more_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
+# Touchscreen palette: the three role-named RGB565 palettes take LocalAI's colours.
+python3 "$ROOT/apply_workshop_os12_device_localai_palette.py" --repo "$BUILD" --apply
 # 12.3.x Home, Printer and Workshop tabs on the More design system. Owning
 # patch for the three tabs; runs after the More overhaul, whose layout and rows
 # it builds on.

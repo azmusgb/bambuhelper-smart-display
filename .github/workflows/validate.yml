@@ -59,6 +59,7 @@ jobs:
           python3 scripts/test_x2d_viewer_polish.py
           python3 scripts/test_consolidate_portal_css.py
           python3 scripts/test_portal_phone_fit.py
+          python3 scripts/test_device_localai_palette.py
 
       - name: Validate tracked shell syntax
         shell: bash
