@@ -147,9 +147,10 @@ if sensitivity:
         raise SystemExit(f'Refusing unverified UI12 portal redaction geometry: {w}x{h}')
     if catalog_version >= 3:
         # Workshop OS 12.1 Local Portal page: cover the whole "Access code"
-        # row (second 44 px row, below the 44 px header). Pinned by
-        # tests/workshop_os12_more_layout_smoke.cpp.
-        redaction = (8, 89, 472, 133)
+        # row (second row, below the 44 px header): y 89-133 with 44 px rows
+        # (12.1-12.3.5), y 100-155 with 55 px rows (12.3.6+). One box covers
+        # both. Pinned by tests/workshop_os12_more_layout_smoke.cpp.
+        redaction = (8, 89, 472, 155)
     else:
         # UI12 Local Portal card: preserve heading, IP and lifecycle copy while
         # covering the complete access-code text line.

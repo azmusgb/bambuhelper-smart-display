@@ -74,7 +74,8 @@ void checkChrome(Screen s, const char* o) {
   check(!intersects(up, down) && !intersects(back, up), "header controls do not overlap", o);
   check(titleRect(s, false, true).w >= 96, "title has room next to the scroll buttons", o, titleRect(s, false, true).w);
   check(!intersects(header, band), "header and tab bar are apart", o);
-  check(visibleRows(s) >= 5, "at least five rows fit", o, visibleRows(s));
+  check(visibleRows(s) >= 4, "at least four rows fit", o, visibleRows(s));
+  check(kRowH >= 52, "rows at least 52 px (8 mm) tall", o, kRowH);
   check(scrollStep(s) >= 1, "scroll step positive", o);
 
   const Rect card = dialogCard(s), cancel = dialogCancelRect(s), confirm = dialogConfirmRect(s);
@@ -127,14 +128,14 @@ void checkTree(const char* o) {
   int codeRows = 0;
   for (uint8_t r = 0; r < portal.rowCount; ++r) if (portal.rows[r].kind == RowKind::Code) ++codeRows;
   check(codeRows == 1, "Local Portal shows the access code", o, codeRows);
-  // scripts/capture-ws350-views.zsh redacts (8, 89)-(472, 133) on catalog v3:
-  // the access-code row must be exactly there in 480x320 and never scroll.
+  // scripts/capture-ws350-views.zsh redacts (8, 89)-(472, 155) on catalog v3:
+  // the access-code row must be inside it in 480x320 and never scroll.
   const Screen land = makeScreen(480, 320);
   check(maxScroll(land, PageId::LocalPortal) == 0, "Local Portal does not scroll", o);
   for (uint8_t r = 0; r < portal.rowCount; ++r) {
     if (portal.rows[r].kind != RowKind::Code) continue;
     const Rect code = rowRect(land, PageId::LocalPortal, 0, r);
-    check(code.x == 8 && code.y == 89 && code.right() == 472 && code.bottom() == 133,
+    check(code.x == 8 && code.y >= 89 && code.right() == 472 && code.bottom() <= 155,
           "access-code row matches the capture redaction", o, code.y, code.bottom());
   }
 }

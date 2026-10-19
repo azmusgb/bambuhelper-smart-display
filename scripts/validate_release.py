@@ -153,7 +153,7 @@ def validate_capture_security() -> None:
         "catalog_version = int(sys.argv[6])", "sensitivity != 'portal-code'",
         "view_id != 'system-portal'", "Refusing unverified UI12 portal redaction geometry",
         "redaction = (236, 146, 472, 192)",
-        "redaction = (8, 89, 472, 133)", "if version not in (1, 2, 3):",
+        "redaction = (8, 89, 472, 155)", "if version not in (1, 2, 3):",
         "catalog_version == 1 and view_id == 'system'",
         "Refusing unverified legacy System redaction geometry",
         "redaction = (330, 196, 468, 230)", "Unsupported capture catalog version",

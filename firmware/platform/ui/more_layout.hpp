@@ -11,7 +11,8 @@
 // - at most two levels below More;
 // - one 44 px header on every page, Back at top-left going to the parent;
 // - the tab bar is drawn and live on every page and nothing else sits on it;
-// - single-line rows, 44 px tall, every touch target at least 44 x 44;
+// - single-line rows, 55 px tall (about 8.5 mm on the WS350's 3.5" panel,
+//   four to a landscape screen), every touch target at least 44 x 44;
 // - long pages scroll a row at a time with visible up/down buttons in the
 //   header (no gestures, no hidden zones).
 
@@ -65,7 +66,7 @@ inline Screen makeScreen(int w, int h) {
 
 static const int16_t kHeaderH = 44;
 static const int16_t kTabH = 54;      // same as hubNavH()
-static const int16_t kRowH = 44;
+static const int16_t kRowH = 55;
 static const int16_t kRowTop = 45;
 static const int16_t kMarginX = 8;
 static const int16_t kMinTouch = 44;
@@ -309,7 +310,6 @@ static const RowSpec kLocalPortalRows[] = {
   {RowId::PortalAddress, RowKind::Info, "Address", PageId::Root},
   {RowId::PortalCode, RowKind::Code, "Access code", PageId::Root},
   {RowId::PortalSignIn, RowKind::Info, "Require access code", PageId::Root},
-  {RowId::PortalName, RowKind::Info, "Name", PageId::Root},
   {RowId::PortalCodeKey, RowKind::Info, "Local AI code access", PageId::Root},
 };
 
@@ -460,7 +460,7 @@ inline Rect rowRect(Screen s, PageId id, uint8_t scroll, uint8_t row) {
 // Drawn surface of a row: inset 1 px top and bottom so neighbours separate.
 inline Rect rowSurface(const Rect& row) { return makeRect(row.x, row.y + 1, row.w, row.h - 2); }
 
-inline int stepperValueWidth(Screen s) { return s.landscape() ? 150 : 76; }
+inline int stepperValueWidth(Screen s) { return s.landscape() ? 140 : 76; }
 inline int actionButtonWidth(Screen s) { return s.landscape() ? 112 : 84; }
 inline int action2ButtonWidth(Screen s) { return s.landscape() ? 96 : 70; }
 
@@ -468,21 +468,21 @@ inline int action2ButtonWidth(Screen s) { return s.landscape() ? 96 : 70; }
 inline Rect partDrawRect(Screen s, const Rect& row, RowKind kind, Part part) {
   switch (kind) {
     case RowKind::Stepper: {
-      const Rect plus = makeRect(row.right() - 6 - 44, row.y + 4, 44, 36);
+      const Rect plus = makeRect(row.right() - 6 - 52, row.y + 5, 52, row.h - 10);
       if (part == Part::Plus) return plus;
-      if (part == Part::Minus) return makeRect(plus.x - stepperValueWidth(s) - 44, row.y + 4, 44, 36);
+      if (part == Part::Minus) return makeRect(plus.x - stepperValueWidth(s) - 52, row.y + 5, 52, row.h - 10);
       return makeRect(0, 0, 0, 0);
     }
     case RowKind::Toggle:
-      return part == Part::Whole ? makeRect(row.right() - 12 - 52, row.y + 7, 52, 30) : makeRect(0, 0, 0, 0);
+      return part == Part::Whole ? makeRect(row.right() - 12 - 60, row.y + (row.h - 34) / 2, 60, 34) : makeRect(0, 0, 0, 0);
     case RowKind::Action:
-      return part == Part::Whole ? makeRect(row.right() - 8 - actionButtonWidth(s), row.y + 5, actionButtonWidth(s), 34)
+      return part == Part::Whole ? makeRect(row.right() - 8 - actionButtonWidth(s), row.y + 6, actionButtonWidth(s), row.h - 12)
                                  : makeRect(0, 0, 0, 0);
     case RowKind::Action2: {
       const int bw = action2ButtonWidth(s);
-      const Rect b = makeRect(row.right() - 8 - bw, row.y + 5, bw, 34);
+      const Rect b = makeRect(row.right() - 8 - bw, row.y + 6, bw, row.h - 12);
       if (part == Part::ActionB) return b;
-      if (part == Part::ActionA) return makeRect(b.x - 8 - bw, row.y + 5, bw, 34);
+      if (part == Part::ActionA) return makeRect(b.x - 8 - bw, row.y + 6, bw, row.h - 12);
       return makeRect(0, 0, 0, 0);
     }
     default:
@@ -490,15 +490,17 @@ inline Rect partDrawRect(Screen s, const Rect& row, RowKind kind, Part part) {
   }
 }
 
-// Touch rectangle for a row part. Buttons are widened by 4 px each side and
-// span the full row height; whole-row controls use the row.
+// Touch rectangle for a row part. Buttons span the full row height and are
+// widened sideways: stepper buttons by 6 px, Action2 buttons by 4 px (half
+// the 8 px gap between them). Whole-row controls use the row.
 inline Rect partTouchRect(Screen s, const Rect& row, RowKind kind, Part part) {
   switch (kind) {
     case RowKind::Stepper:
     case RowKind::Action2: {
       const Rect d = partDrawRect(s, row, kind, part);
       if (d.empty()) return d;
-      return makeRect(d.x - 4, row.y, d.w + 8, row.h);
+      const int widen = kind == RowKind::Stepper ? 6 : 4;
+      return makeRect(d.x - widen, row.y, d.w + 2 * widen, row.h);
     }
     default:
       return part == Part::Whole ? row : makeRect(0, 0, 0, 0);

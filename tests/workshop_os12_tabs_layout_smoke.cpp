@@ -106,11 +106,13 @@ void checkTree(const char* o) {
     for (uint8_t j = 0; j < v.itemCount; ++j) {
       const ItemSpec& it = v.items[j];
       check(it.label && it.label[0], "item has a label", v.title, j);
-      if (v.list) check(it.kind == ItemKind::Row, "lists hold rows only", it.label);
+      if (v.list) check(it.kind == ItemKind::Row || it.kind == ItemKind::Primary || it.kind == ItemKind::Hold,
+                        "lists hold one-slot items only", it.label);
       if (it.kind == ItemKind::Card && it.tappable) check(v.id == View::Home, "only the Home card is a button", it.label);
     }
   }
-  // Stop exists exactly once, as the hold item on Control, after Pause.
+  // Stop exists exactly once, as the hold item on Control, after Pause with a
+  // row between them.
   int holds = 0, primaries = 0;
   for (uint8_t i = 0; i < kViewCount; ++i)
     for (uint8_t j = 0; j < kViews[i].itemCount; ++j) {
@@ -119,8 +121,8 @@ void checkTree(const char* o) {
     }
   check(holds == 1 && primaries == 1, "one hold (Stop) and one primary (Pause/Resume)", o, holds, primaries);
   const ViewSpec& c = view(View::PrinterControl);
-  check(c.items[0].id == ItemId::ControlPrimary && c.items[c.itemCount - 1].id == ItemId::ControlStop,
-        "Pause first, Stop last on Control", o);
+  check(c.items[0].id == ItemId::ControlPrimary && c.itemCount >= 3 && c.items[2].id == ItemId::ControlStop,
+        "Pause first, Stop third on Control", o);
   // /hub/show ids of the Printer segments.
   View pv = View::Home;
   check(printerViewFromId("printer", pv) && pv == View::PrinterStatus, "printer opens Status", o);
@@ -141,7 +143,7 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
   const ItemSpec& it = item(v, i);
   char where[112];
   snprintf(where, sizeof(where), "%s / %s / %s / n=%u scroll=%u", o, v.title, it.label, (unsigned)n, (unsigned)scroll);
-  check(r.h >= kMinTouch && r.h % more::kRowH == 0, "item is whole 44 px slots", where, r.h);
+  check(r.h >= kMinTouch && r.h % more::kRowH == 0, "item is whole slots", where, r.h);
   check(inside(r, more::contentBand(s)), "item inside the content area", where, r.y, r.bottom());
   check(!intersects(r, more::tabBand(s)) && !intersects(r, more::headerBand(s)), "item clear of header and tab bar", where);
   if (v.segments) check(!intersects(r, segmentBand(s)), "item clear of the segments", where);
@@ -264,10 +266,11 @@ void checkView(Screen s, const ViewSpec& v, uint8_t n, const char* o, int& contr
 void checkStop(Screen s, const char* o) {
   const ViewSpec& c = view(View::PrinterControl);
   const Rect primary = itemRect(s, c, 0, 0, 0);
-  const Rect stopRow = itemRect(s, c, 0, 0, static_cast<uint8_t>(c.itemCount - 1));
+  const Rect stopRow = itemRect(s, c, 0, 0, 2);
   const Rect stop = holdItemTouch(s, View::PrinterControl, 0, 0, ItemId::ControlStop);
   check(!stop.empty() && stop.x == holdTouchRect(s, stopRow).x, "Stop target found by id", o);
-  check(stop.y - primary.bottom() >= 2 * more::kRowH, "two rows between Pause and Stop", o, stop.y - primary.bottom());
+  check(!stop.empty(), "Stop on the first Control screen", o);
+  check(stop.y - primary.bottom() >= more::kRowH, "a row between Pause and Stop", o, stop.y - primary.bottom());
   check(!intersects(stop, more::tabBand(s)), "Stop clear of the tab bar", o);
   check(stop.w * stop.h < primary.w * primary.h / 2, "Stop is a smaller target than Pause", o);
   // No other view has a Stop target.

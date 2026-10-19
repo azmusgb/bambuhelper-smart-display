@@ -4,19 +4,19 @@
 //
 // Plain C++11, no Arduino. Built on the More layout (more_layout.hpp, which
 // must be included first): the same 44 px header, the same tab bar, the same
-// 44 px slots and row controls. The firmware draws and hit-tests the three
+// 55 px slots and row controls. The firmware draws and hit-tests the three
 // tabs from these functions only, and tests/workshop_os12_tabs_layout_smoke.cpp
 // checks them on the host in both orientations, for every state the firmware
 // can show.
 //
 // Rules this file encodes (on top of the More rules):
-// - a view is a stack of items in 44 px slots between the header and the tab
+// - a view is a stack of items in 55 px slots between the header and the tab
 //   bar: status cards (several slots), a temperature strip (one slot in
 //   landscape, three plain rows in portrait) and More-style rows;
 // - nothing is tappable unless it is drawn as tappable (a card with a chevron,
 //   a row control, a button). There are no invisible zones;
-// - Stop is a hold-guarded button on its own row, never next to Pause, and
-//   only the drawn button routes to it;
+// - Pause and Stop are both hold-guarded, each on its own row with a row
+//   between them, and only the drawn buttons route to them;
 // - the calm idle screen (12.3.3) has no controls at all: the whole screen is
 //   one wake target, and a wake tap never reaches a control below it.
 
@@ -100,21 +100,24 @@ static const ItemSpec kHomeItems[] = {
   {ItemId::HomeExtra, ItemKind::Row, RowKind::Nav, false, "Filament"},
 };
 
+// Layer, speed and errors are in the card (four slots: segments, a two-slot
+// card, temperatures).
 static const ItemSpec kPrinterStatusItems[] = {
   {ItemId::PrinterCard, ItemKind::Card, RowKind::Info, false, "Status"},
   {ItemId::PrinterTemps, ItemKind::Temps, RowKind::Info, false, "Temperatures"},
-  {ItemId::PrinterDetail, ItemKind::Row, RowKind::Info, false, "Layer"},
 };
 
 static const ItemSpec kPrinterAmsItems[] = {
   {ItemId::AmsTray, ItemKind::Row, RowKind::Info, false, "Slot"},
 };
 
+// Pause, the light, then Stop on the first screen; printer power scrolls in
+// below Stop.
 static const ItemSpec kPrinterControlItems[] = {
   {ItemId::ControlPrimary, ItemKind::Primary, RowKind::Action, false, "Pause print"},
   {ItemId::ControlLight, ItemKind::Row, RowKind::Toggle, false, "Chamber light"},
-  {ItemId::ControlPower, ItemKind::Row, RowKind::Action, false, "Printer power"},
   {ItemId::ControlStop, ItemKind::Hold, RowKind::Action, false, "Stop print"},
+  {ItemId::ControlPower, ItemKind::Row, RowKind::Action, false, "Printer power"},
 };
 
 static const ItemSpec kWorkshopSetupItems[] = {
@@ -140,7 +143,7 @@ static const ViewSpec kViews[] = {
   {View::Home, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeItems)},
   {View::PrinterStatus, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterStatusItems)},
   {View::PrinterAms, Tab::Printer, true, true, true, "Printer", WT_ITEMS(kPrinterAmsItems)},
-  {View::PrinterControl, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterControlItems)},
+  {View::PrinterControl, Tab::Printer, true, true, false, "Printer", WT_ITEMS(kPrinterControlItems)},
   {View::WorkshopSetup, Tab::Workshop, false, true, false, "Workshop", WT_ITEMS(kWorkshopSetupItems)},
   {View::WorkshopInventory, Tab::Workshop, false, true, false, "Workshop", WT_ITEMS(kWorkshopInventoryItems)},
 };
@@ -176,8 +179,7 @@ inline uint8_t itemSlots(Screen s, const ViewSpec& v, const ItemSpec& it) {
   (void)v;
   switch (it.kind) {
     case ItemKind::Card:
-      if (it.id == ItemId::HomeCard) return 3;
-      return s.landscape() ? 2 : 3;
+      return 2;
     case ItemKind::Temps:
       return s.landscape() ? 1 : 3;
     default:
@@ -279,16 +281,16 @@ inline Rect tempCellRect(Screen s, const Rect& area, uint8_t i) {
 inline Rect primaryDrawRect(const Rect& row) { return makeRect(row.x, row.y + 2, row.w, row.h - 4); }
 
 // Hold button (Stop): right-aligned, smaller than a primary button and
-// outlined. The touch area is the button widened by 4 px and the full row
+// outlined. The touch area is the button widened by 6 px and the full row
 // height; the rest of the row is not a target.
 inline Rect holdDrawRect(Screen s, const Rect& row) {
   const int w = s.landscape() ? 136 : 116;
-  return makeRect(row.right() - 8 - w, row.y + 5, w, 34);
+  return makeRect(row.right() - 8 - w, row.y + 6, w, row.h - 12);
 }
 
 inline Rect holdTouchRect(Screen s, const Rect& row) {
   const Rect d = holdDrawRect(s, row);
-  return makeRect(d.x - 4, row.y, d.w + 8, row.h);
+  return makeRect(d.x - 6, row.y, d.w + 12, row.h);
 }
 
 // Card chevron (drawn on tappable cards so the target is visible).

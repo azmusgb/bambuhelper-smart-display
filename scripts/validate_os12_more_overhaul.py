@@ -248,7 +248,7 @@ def validate(repo: Path) -> str:
     for needle in ("g_toolsView=true", "g_displayExperienceView=true", "g_audioSettingsView=true", "g_networkSettingsView=true"):
         forbid(hub, needle, "12.0 page state set anywhere")
     need(catalog, '{"version":3,', "catalog v3 (12.1 Local Portal redaction geometry)")
-    need(read(ROOT / "scripts/capture-ws350-views.zsh"), "redaction = (8, 89, 472, 133)", "capture redaction of the access-code row")
+    need(read(ROOT / "scripts/capture-ws350-views.zsh"), "redaction = (8, 89, 472, 155)", "capture redaction of the access-code row")
     return run_host_test()
 
 
