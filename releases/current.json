@@ -20,11 +20,11 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.3.1",
-    "branch": "feature/os12-tabs-printer-12-3-1",
-    "name": "Workshop OS 12.3.1 Printer Overhaul",
-    "purpose": "Printer on the More design system: Status card with done-at clock time, temperatures with targets, every AMS tray and the external spool as plain rows, and Control with Pause/Resume as the one primary button. Stop stays hold-to-confirm and is now sent only for a hold that started and stayed on the Stop button. Stacked on 12.3.0 (PR #174).",
-    "pullRequest": 175,
+    "version": "12.3.2",
+    "branch": "feature/os12-tabs-workshop-12-3-2",
+    "name": "Workshop OS 12.3.2 Workshop Overhaul",
+    "purpose": "Workshop as a More-style list that is useful without Filament Inventory: one honest set-up row (Back returns to Workshop), how to connect, the workshop timer startable on the device with the portal presets, and the portal note; connected inventory as plain rows. The Local AI status-token prompt moves onto the More dialog card so its buttons no longer sit on the tab-bar strip. Stacked on 12.3.1 (PR #175).",
+    "pullRequest": 176,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
