@@ -57,6 +57,11 @@ EXTRA_DARK = {"--ui5-accent": "#6cb6ff"}
 TYPE = {"--fs-2xs": "11px", "--fs-xs": "11px", "--fs-sm": "13px", "--fs-md": "13px",
         "--fs-base": "15px", "--fs-lg": "17px", "--fs-xl": "22px", "--fs-2xl": "28px"}
 
+# The old orange accent survived as two raw colours (focus ring, primary-button
+# glow) outside the token system; they follow the new accent too.
+STRAY_ACCENT = {"rgba(255,122,47,.82)": "var(--accent)", "rgba(255,122,47,.18)": "var(--accent-soft)"}
+DEVICE_MINIATURE = re.compile(r"\.v9[689]-")
+
 THEME_DEFAULT_OLD = "t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';"
 THEME_DEFAULT_NEW = "t='dark';"
 
@@ -93,6 +98,17 @@ def theme_css(css: str, font: bytes) -> str:
             lines[i] = set_tokens(line, EXTRA_DARK, "legacy dark tokens", required=False)
         elif line.startswith(":root{") and "--fs-2xs:" in line:
             lines[i] = set_tokens(line, TYPE, "type scale")
+        elif line.startswith('html[data-theme="light"]{') and any(f"{k}:" in line for k in LIGHT):
+            # A later layer (12.3.5 phone fit) re-declares light tokens with a
+            # more specific selector than :root; keep it on the LocalAI palette.
+            lines[i] = set_tokens(line, {**LIGHT, **EXTRA_LIGHT}, "light override", required=False)
+
+    for i, line in enumerate(lines):
+        if DEVICE_MINIATURE.search(line.split("{", 1)[0]):
+            continue
+        for old, new in STRAY_ACCENT.items():
+            line = line.replace(old, new)
+        lines[i] = line
 
     sans = one(lambda l: l.startswith(":root{") and "--sans:" in l, "font token")
     lines[sans] = re.sub(r"--sans:[^;}]+", f"--sans:{SANS}", lines[sans], count=1)

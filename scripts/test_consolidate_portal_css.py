@@ -20,6 +20,13 @@ theme_spec = importlib.util.spec_from_file_location("css_theme", ROOT / "apply_w
 theme = importlib.util.module_from_spec(theme_spec)
 theme_spec.loader.exec_module(theme)
 
+rail_spec = importlib.util.spec_from_file_location("css_rail", ROOT / "apply_workshop_os12_portal_icon_rail.py")
+rail = importlib.util.module_from_spec(rail_spec)
+rail_spec.loader.exec_module(rail)
+labels_spec = importlib.util.spec_from_file_location("labels", ROOT / "apply_workshop_os12_portal_release_labels.py")
+labels = importlib.util.module_from_spec(labels_spec)
+labels_spec.loader.exec_module(labels)
+
 scale_spec = importlib.util.spec_from_file_location("css_scale", ROOT / "apply_workshop_os12_portal_design_scale.py")
 scale = importlib.util.module_from_spec(scale_spec)
 scale_spec.loader.exec_module(scale)
@@ -149,7 +156,8 @@ class LocalAIThemeTests(unittest.TestCase):
            ":root{--fs-2xs:10px;--fs-xs:11px;--fs-sm:12px;--fs-md:13px;--fs-base:14px;--fs-lg:16px;--fs-xl:24px;--fs-2xl:28px}\n"
            ":root{" + ";".join(f"{k}:#000" for k in theme.LIGHT) + "}\n"
            'html[data-theme="dark"]{' + ";".join(f"{k}:#000" for k in theme.DARK) + "}\n"
-           ".v98-ring span{font-size:7px;color:#ff6b23}")
+           ".v98-ring span{font-size:7px;color:#ff6b23}\n"
+           ".btn:focus-visible{outline:3px solid rgba(255,122,47,.82)}")
 
     def test_palettes_type_and_font_follow_localai(self) -> None:
         out = theme.theme_css(self.CSS, b"woff2-bytes")
@@ -161,6 +169,13 @@ class LocalAIThemeTests(unittest.TestCase):
         self.assertIn("@font-face{font-family:Figtree;", out)
         self.assertIn("SIL OFL 1.1", out)
         self.assertIn(".v98-ring span{font-size:7px;color:#ff6b23}", out)  # device miniature untouched
+        self.assertIn(".btn:focus-visible{outline:3px solid var(--accent)}", out)  # stray orange follows the accent
+
+    def test_more_specific_light_override_follows_the_palette(self) -> None:
+        css = self.CSS + '\nhtml[data-theme="light"]{--accent:#0d7068;--ui5-accent:#0d7068;--success:#1b7346}'
+        out = theme.theme_css(css, b"x")
+        self.assertIn('html[data-theme="light"]{--accent:#1b62bd;--ui5-accent:#1b62bd;--success:#18794e}', out)
+        self.assertNotIn("#0d7068", out)
 
     def test_missing_token_fails_loudly(self) -> None:
         with self.assertRaises(theme.PatchError):
@@ -181,6 +196,35 @@ class LocalAIThemeTests(unittest.TestCase):
             for fg in ("--text", "--text-mid", "--text-dim", "--accent", "--danger", "--success", "--warn"):
                 for bg in ("--bg", "--bg-elev", "--bg-sub"):
                     self.assertGreaterEqual(ratio(palette[fg], palette[bg]), 4.5, f"{fg} on {bg}")
+
+
+
+class RailAndLabelTests(unittest.TestCase):
+    NAV = "".join(f'<button class="nav-item" type="button" data-section="{s}"><span>{s}</span></button>'
+                  for s in ("home", "printer", "workshop", "more"))
+
+    def test_every_workspace_button_gets_one_icon(self) -> None:
+        out = rail.add_icons(self.NAV)
+        self.assertEqual(out.count('class="nav-ico"'), 4)
+        self.assertIn('data-section="home"><svg class="nav-ico"', out)
+
+    def test_missing_button_fails_loudly(self) -> None:
+        with self.assertRaises(rail.PatchError):
+            rail.add_icons(self.NAV.replace('data-section="more"', 'data-section="system"'))
+
+    def test_rail_css_keeps_phone_drawer(self) -> None:
+        self.assertIn("@media(min-width:821px)", rail.RAIL_CSS)
+        self.assertIn("--sidebar-w:84px", rail.RAIL_CSS)
+        self.assertIn("@media(max-width:820px)", rail.RAIL_CSS)
+
+    def test_version_labels_follow_release(self) -> None:
+        self.assertIn("WORKSHOP_OS_RELEASE_VERSION", labels.TEMPLATE_NEW)
+        for old, new in labels.PAGE_LABELS:
+            self.assertIn("%SMART_VER%", new)
+            self.assertEqual(labels.swap(old, old, new, "x"), new)
+            self.assertEqual(labels.swap(new, old, new, "x"), new)  # idempotent
+        with self.assertRaises(labels.PatchError):
+            labels.swap("<small>WS350 · 12.9.9</small>", labels.PAGE_LABELS[0][0], labels.PAGE_LABELS[0][1], "x")
 
 
 if __name__ == "__main__":

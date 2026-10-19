@@ -126,6 +126,10 @@ python3 "$ROOT/apply_workshop_os12_portal_css_consolidate.py" --repo "$BUILD" --
 python3 "$ROOT/apply_workshop_os12_portal_design_scale.py" --repo "$BUILD" --apply
 # Then the LocalAI design system: palette, type, radii and Figtree (dark by default).
 python3 "$ROOT/apply_workshop_os12_portal_localai_theme.py" --repo "$BUILD" --apply
+# Version labels show the running release instead of v11.28 / 12.0.0.
+python3 "$ROOT/apply_workshop_os12_portal_release_labels.py" --repo "$BUILD" --apply
+# LocalAI-style icon rail on desktop, icons in the phone drawer.
+python3 "$ROOT/apply_workshop_os12_portal_icon_rail.py" --repo "$BUILD" --apply
 # The finished portal boots: _profileCaps is initialised before boot() reads
 # it, and nothing that starts hidden is shown by an app.css display rule.
 # Runs after the last layer that edits web/app.css.
