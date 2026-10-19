@@ -32,6 +32,9 @@ DEFAULT_CAMERA_ROOT = Path.home() / "Library/Application Support/BambuStudio/cam
 DEFAULT_PLUGIN_ROOT = Path.home() / "Library/Application Support/BambuStudio/plugins"
 DEFAULT_URL_FILE = DEFAULT_CAMERA_ROOT / "url.txt"
 MAX_JPEG_BYTES = 384 * 1024
+# A pipeline that has exited, or produced no frame for this long, is restarted.
+STALL_SECONDS = 15.0
+RESTART_BACKOFF_SECONDS = (2.0, 5.0, 15.0, 30.0, 60.0)
 
 
 class LatestFrame:
@@ -82,6 +85,7 @@ class CameraPipeline:
         self.thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.last_error: Optional[str] = None
+        self.restarts = 0
 
     def validate(self) -> None:
         source = self.camera_root / "bambu_source"
@@ -100,6 +104,7 @@ class CameraPipeline:
 
     def start(self) -> None:
         self.validate()
+        self.stop_event = threading.Event()
         source_path = self.camera_root / "bambu_source"
         encoded_path = quote(str(self.url_file.resolve()), safe="/")
         camera_uri = f"bambu:///camera/{encoded_path}"
@@ -206,6 +211,56 @@ class CameraPipeline:
         if self.thread is not None:
             self.thread.join(timeout=1)
 
+    def running(self) -> bool:
+        """True while both processes and the frame reader are alive."""
+        return (
+            self.source is not None and self.source.poll() is None
+            and self.encoder is not None and self.encoder.poll() is None
+            and self.thread is not None and self.thread.is_alive()
+        )
+
+
+def needs_restart(pipeline: CameraPipeline, latest: LatestFrame, started: float, now: float) -> Optional[str]:
+    """Why the pipeline should be restarted, or None while it is healthy."""
+    if not pipeline.running():
+        return "camera pipeline exited"
+    _, _, age = latest.snapshot()
+    if now - started < STALL_SECONDS:
+        return None
+    if age is None or age > STALL_SECONDS:
+        return f"no camera frame for {STALL_SECONDS:.0f} s"
+    return None
+
+
+def supervise(pipeline: CameraPipeline, latest: LatestFrame, stop: threading.Event) -> None:
+    """Restart the camera pipeline when it exits or stalls.
+
+    The printer only streams while Bambu Studio's live view is open, and
+    bambu_source exits when the tunnel closes. Restarting re-reads url.txt, so
+    reopening the live view in Studio is enough to bring frames back.
+    """
+    started = time.monotonic()
+    failures = 0
+    while not stop.wait(1.0):
+        now = time.monotonic()
+        reason = needs_restart(pipeline, latest, started, now)
+        if reason is None:
+            if latest.snapshot()[2] is not None and now - started >= STALL_SECONDS:
+                failures = 0
+            continue
+        delay = RESTART_BACKOFF_SECONDS[min(failures, len(RESTART_BACKOFF_SECONDS) - 1)]
+        sys.stderr.write(f"[bridge] {reason}; restarting in {delay:.0f} s\n")
+        pipeline.stop()
+        if stop.wait(delay):
+            return
+        failures += 1
+        try:
+            pipeline.start()
+            pipeline.restarts += 1
+        except Exception as exc:  # url.txt missing while Studio is closed, etc.
+            pipeline.last_error = str(exc)
+        started = time.monotonic()
+
 
 class BridgeServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -269,6 +324,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             "ffmpegRunning": ffmpeg_rc is None,
             "uptimeSeconds": round(time.monotonic() - self.server.started_monotonic),
             "lastError": self.server.pipeline.last_error,
+            "pipelineRestarts": self.server.pipeline.restarts,
         }
         encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE)
@@ -315,6 +371,11 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
+
+    supervisor = threading.Thread(
+        target=supervise, args=(pipeline, latest, stop_requested), name="x2d-supervisor", daemon=True
+    )
+    supervisor.start()
 
     print(f"X2D JPEG bridge listening on http://{args.bind}:{args.port}/x2d/frame.jpg")
     print("Health: /x2d/health.json")

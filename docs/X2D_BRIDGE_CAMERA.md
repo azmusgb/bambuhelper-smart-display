@@ -88,8 +88,17 @@ open http://127.0.0.1:8091/x2d/frame.jpg
 A healthy response resembles:
 
 ```json
-{"ok":true,"frameSequence":42,"frameAgeMs":120,"frameBytes":48321,"sourceRunning":true,"ffmpegRunning":true,"uptimeSeconds":12,"lastError":null}
+{"ok":true,"frameSequence":42,"frameAgeMs":120,"frameBytes":48321,"sourceRunning":true,"ffmpegRunning":true,"uptimeSeconds":12,"lastError":null,"pipelineRestarts":0}
 ```
+
+The bridge restarts its camera pipeline by itself, with a back-off from 2 s up to 60 s, when:
+
+- `bambu_source` or FFmpeg exits, for example because the live view in Bambu Studio was closed; or
+- no new frame arrives for 15 s.
+
+Each restart re-reads `url.txt`, so reopening the X2D live view in Studio is enough to bring frames back. `pipelineRestarts` counts the restarts.
+
+Run the bridge in a terminal you keep open (or under `launchd`). A shell that ends sends it SIGTERM, which shuts it down cleanly. The supervisor does not survive that.
 
 Find the active Mac LAN address. For Wi-Fi this is commonly:
 

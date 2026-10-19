@@ -105,6 +105,33 @@ class LatestFrameTests(unittest.TestCase):
         self.assertEqual(sequence, 0)
 
 
+class FakePipeline:
+    def __init__(self, running: bool) -> None:
+        self._running = running
+
+    def running(self) -> bool:
+        return self._running
+
+
+class SupervisorTests(unittest.TestCase):
+    JPEG = b"\xff\xd8frame\xff\xd9"
+
+    def test_exited_pipeline_restarts_immediately(self) -> None:
+        latest = bridge.LatestFrame()
+        latest.update(self.JPEG)
+        self.assertEqual(bridge.needs_restart(FakePipeline(False), latest, 0.0, 1.0), "camera pipeline exited")
+
+    def test_grace_period_before_first_frame(self) -> None:
+        latest = bridge.LatestFrame()
+        self.assertIsNone(bridge.needs_restart(FakePipeline(True), latest, 100.0, 100.0 + bridge.STALL_SECONDS - 1))
+        self.assertIsNotNone(bridge.needs_restart(FakePipeline(True), latest, 100.0, 100.0 + bridge.STALL_SECONDS + 1))
+
+    def test_fresh_frames_keep_pipeline(self) -> None:
+        latest = bridge.LatestFrame()
+        latest.update(self.JPEG)
+        self.assertIsNone(bridge.needs_restart(FakePipeline(True), latest, 0.0, bridge.STALL_SECONDS + 5))
+
+
 class BridgeUrlTests(unittest.TestCase):
     def test_accepts_private_literal_ip_and_fixed_path(self) -> None:
         self.assertEqual(
