@@ -124,6 +124,8 @@ python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-ro
 python3 "$ROOT/apply_workshop_os12_portal_css_consolidate.py" --repo "$BUILD" --apply
 # Then one type/radius/breakpoint/colour scale: small, measured visual changes.
 python3 "$ROOT/apply_workshop_os12_portal_design_scale.py" --repo "$BUILD" --apply
+# Then the LocalAI design system: palette, type, radii and Figtree (dark by default).
+python3 "$ROOT/apply_workshop_os12_portal_localai_theme.py" --repo "$BUILD" --apply
 
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"

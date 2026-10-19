@@ -16,6 +16,10 @@ spec = importlib.util.spec_from_file_location("css_overlay", ROOT / "apply_works
 overlay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(overlay)
 
+theme_spec = importlib.util.spec_from_file_location("css_theme", ROOT / "apply_workshop_os12_portal_localai_theme.py")
+theme = importlib.util.module_from_spec(theme_spec)
+theme_spec.loader.exec_module(theme)
+
 scale_spec = importlib.util.spec_from_file_location("css_scale", ROOT / "apply_workshop_os12_portal_design_scale.py")
 scale = importlib.util.module_from_spec(scale_spec)
 scale_spec.loader.exec_module(scale)
@@ -136,6 +140,47 @@ class DesignScaleTests(unittest.TestCase):
             with self.assertRaises(scale.PatchError):
                 scale.apply(Path(d))
 
+
+
+
+class LocalAIThemeTests(unittest.TestCase):
+    CSS = ("/* x, consolidated at build time by\n   y */\n"
+           ":root{--sp-2:8px;--sans:-apple-system,sans-serif;--mono:ui-monospace}\n"
+           ":root{--fs-2xs:10px;--fs-xs:11px;--fs-sm:12px;--fs-md:13px;--fs-base:14px;--fs-lg:16px;--fs-xl:24px;--fs-2xl:28px}\n"
+           ":root{" + ";".join(f"{k}:#000" for k in theme.LIGHT) + "}\n"
+           'html[data-theme="dark"]{' + ";".join(f"{k}:#000" for k in theme.DARK) + "}\n"
+           ".v98-ring span{font-size:7px;color:#ff6b23}")
+
+    def test_palettes_type_and_font_follow_localai(self) -> None:
+        out = theme.theme_css(self.CSS, b"woff2-bytes")
+        self.assertIn("--accent:#6cb6ff", out)          # LocalAI --ds-accent, dark
+        self.assertIn("--bg:#0a111c", out)              # LocalAI --ds-bg
+        self.assertIn("--accent:#1b62bd", out)          # derived light accent
+        self.assertIn("--fs-base:15px", out)            # LocalAI --ds-fs-2
+        self.assertIn('--sans:Figtree,system-ui', out)
+        self.assertIn("@font-face{font-family:Figtree;", out)
+        self.assertIn("SIL OFL 1.1", out)
+        self.assertIn(".v98-ring span{font-size:7px;color:#ff6b23}", out)  # device miniature untouched
+
+    def test_missing_token_fails_loudly(self) -> None:
+        with self.assertRaises(theme.PatchError):
+            theme.theme_css(self.CSS.replace("--bg-elev:#000;", ""), b"x")
+
+    def test_dark_is_the_default_but_a_saved_choice_wins(self) -> None:
+        html = "if(t!=='light'&&t!=='dark'){" + theme.THEME_DEFAULT_OLD + "}"
+        self.assertEqual(theme.theme_pages(html), "if(t!=='light'&&t!=='dark'){t='dark';}")
+        self.assertEqual(theme.theme_pages(theme.theme_pages(html)), theme.theme_pages(html))
+
+    def test_light_palette_meets_wcag_aa(self) -> None:
+        def lum(h):
+            r, g, b = (int(h[i:i + 2], 16) / 255 for i in (1, 3, 5))
+            f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+            return .2126 * f(r) + .7152 * f(g) + .0722 * f(b)
+        ratio = lambda a, b: (max(lum(a), lum(b)) + .05) / (min(lum(a), lum(b)) + .05)
+        for palette in (theme.LIGHT, theme.DARK):
+            for fg in ("--text", "--text-mid", "--text-dim", "--accent", "--danger", "--success", "--warn"):
+                for bg in ("--bg", "--bg-elev", "--bg-sub"):
+                    self.assertGreaterEqual(ratio(palette[fg], palette[bg]), 4.5, f"{fg} on {bg}")
 
 
 if __name__ == "__main__":
