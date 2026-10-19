@@ -20,11 +20,11 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.2.0",
-    "branch": "feature/code-token-portal-code",
-    "name": "Workshop OS 12.2.0 Sign-in Code Key",
-    "purpose": "A second device-issued key, separate from the read-only status token, whose only route is GET /api/portal-code: it returns the current Local Portal sign-in code and a per-boot id so Local AI can show the code. Created after Allow on the touchscreen, stored as SHA-256 only, rate-limited and tied to the sign-in lock-out. Whoever holds the key can sign in. On top of 12.1.4 (main).",
-    "pullRequest": 172,
+    "version": "12.2.1",
+    "branch": "fix/more-toggle-bar-portal-tile-date-12-2-1",
+    "name": "Workshop OS 12.2.1 More Polish",
+    "purpose": "Small polish of the 12.2.0 More pages from real WS350 screenshots: no stray vertical bar left of toggle switches (an empty value was drawn as an em dash the font lacks), the Local Portal tile shows its address on one line without cutting off, and a date format that was never saved defaults to MM/DD/YYYY (a saved choice is never changed). On top of 12.2.0 (main, PR #172).",
+    "pullRequest": 173,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"

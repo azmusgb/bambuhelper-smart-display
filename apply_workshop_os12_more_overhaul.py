@@ -22,6 +22,9 @@ editing lines inside them, so earlier layers cannot silently undo it.
   video area instead of over the header and tab bar.
 - The tab bar's rectangles come from the layout (hubNavRect), the More tab
   always opens the More root, and the /hub/views catalog lists the new pages.
+- Date format (12.2.1): a device that never saved one starts on MM/DD/YYYY
+  instead of DD.MM.YYYY. Only the getUChar fallback changes, so a saved
+  "net_datefmt" (any value, including DD.MM.YYYY) is always kept.
 """
 from __future__ import annotations
 
@@ -501,6 +504,18 @@ def patch_smart_hub(repo: Path, source_root: Path) -> str:
     return fragment
 
 
+DATE_FORMAT_OLD = 'netSettings.dateFormat = prefs.getUChar("net_datefmt", 0);'
+DATE_FORMAT_NEW = ('netSettings.dateFormat = prefs.getUChar("net_datefmt", 2);'
+                   '  // never saved: MM/DD/YYYY (12.2.1); a saved choice is read as is')
+
+
+def patch_settings(repo: Path) -> None:
+    path = repo / "src" / "settings.cpp"
+    text = load(path)
+    text = replace_once(text, DATE_FORMAT_OLD, DATE_FORMAT_NEW, "date format default")
+    path.write_text(text, encoding="utf-8")
+
+
 def patch_media_backend(repo: Path) -> None:
     path = repo / "src" / "ws350_media_backend.cpp"
     text = load(path)
@@ -525,6 +540,7 @@ def apply(repo: Path, source_root: Path) -> None:
     fragment = patch_smart_hub(repo, source_root)
     patch_catalog(repo, source_root, fragment)
     patch_media_backend(repo)
+    patch_settings(repo)
     build_path.write_text(build.rstrip() + "\n" + BUILD_MARKER + "\n", encoding="utf-8")
     print("Workshop OS 12.1 More pages installed")
 

@@ -1301,6 +1301,13 @@ static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bo
   uiDrawFit(label, r.x + r.w / 2, r.y + r.h / 2, r.w - 12, FONT_SMALL, MC_DATUM, fg, bg);
 }
 
+// Every value slot of a row goes through here. An empty value draws nothing
+// (uiDrawFit would draw an em dash, shown on the WS350 as a stray "|").
+static void wsDrawRowValue(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color) {
+  if (!wsm::drawsValueText(text)) return;
+  uiDrawFit(text, x, y, w, font, datum, color, OS12V_SURFACE);
+}
+
 static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row) {
   WsRowView v;
   wsRowView(spec.id, v);
@@ -1322,17 +1329,17 @@ static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm:
   switch (spec.kind) {
     case wsm::RowKind::Info:
     case wsm::RowKind::Nav:
-      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
       if (spec.kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
       break;
     case wsm::RowKind::Code:
-      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w,
-                strlen(value) <= 13 ? wsFitFont(value, valueSlot.w, FONT_LARGE, FONT_BODY) : FONT_SMALL,
-                MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w,
+                     strlen(value) <= 13 ? wsFitFont(value, valueSlot.w, FONT_LARGE, FONT_BODY) : FONT_SMALL,
+                     MR_DATUM, valueColor);
       break;
     case wsm::RowKind::Toggle: {
       const wsm::Rect sw = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Whole);
-      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
       const bool on = v.enabled && v.on;
       tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_SURFACE2);
       tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_LINE);
@@ -1354,16 +1361,16 @@ static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm:
         if (i == 1) tft.fillRect(cx - 1, cy - 7, 3, 15, c);
       }
       const wsm::Rect valueRect = wsm::stepperValueRect(s, row);
-      uiDrawFit(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, FONT_SMALL, MC_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawRowValue(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, FONT_SMALL, MC_DATUM, valueColor);
       break;
     }
     case wsm::RowKind::Action: {
-      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
       wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false);
       break;
     }
     case wsm::RowKind::Action2: {
-      uiDrawFit(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, OS12V_SURFACE);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
       wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false);
       wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false);
       break;
@@ -1371,7 +1378,7 @@ static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm:
   }
 }
 
-static void wsTileStatus(wsm::PageId id, char* out, size_t len, uint16_t& color) {
+static void wsTileStatus(wsm::PageId id, char* out, size_t len, int16_t maxW, uint16_t& color) {
   using P = wsm::PageId;
   color = OS12V_MUTED;
   char ip[20];
@@ -1400,7 +1407,11 @@ static void wsTileStatus(wsm::PageId id, char* out, size_t len, uint16_t& color)
     case P::LocalPortal:
       if (!workshopPlatformWifiOnline()) { strlcpy(out, "Needs Wi-Fi", len); color = OS12V_AMBER; break; }
       wsIpText(ip, sizeof(ip));
-      snprintf(out, len, "Open %s · code inside", ip);
+      // Same one-line style as the other tiles; just the address when the
+      // hint does not fit (12.2.0 cut it to "Open 10.0.0.124 · code in...").
+      snprintf(out, len, "%s · code inside", ip);
+      setFont(tft, FONT_SMALL);
+      if (tft.textWidth(out) > maxW) strlcpy(out, ip, len);
       color = OS12V_ACCENT;
       break;
     case P::UpdatesAbout: {
@@ -1449,8 +1460,8 @@ static void wsDrawRoot(const wsm::Screen& s) {
     wsDrawTileIcon(badge, id, c);
     char status[64];
     uint16_t statusColor = OS12V_MUTED;
-    wsTileStatus(id, status, sizeof(status), statusColor);
     const int16_t textX = t.x + 52, textW = t.w - 52 - 26;
+    wsTileStatus(id, status, sizeof(status), textW, statusColor);
     uiDrawFit(wsm::page(id).title, textX, t.y + t.h / 2 - 2, textW, FONT_BODY, BL_DATUM, OS12V_TEXT, OS12V_SURFACE);
     uiDrawFit(status, textX, t.y + t.h / 2 + 4, textW, FONT_SMALL, TL_DATUM, statusColor, OS12V_SURFACE);
     wsDrawChevronRight(t.right() - 14, t.y + t.h / 2, OS12V_MUTED);

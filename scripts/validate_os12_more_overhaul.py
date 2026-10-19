@@ -196,6 +196,37 @@ def validate(repo: Path) -> str:
         if "v.enabled = false;" in line and "v.reason" not in line:
             raise ValidationError(f"disabled row without a reason: {line.strip()}")
 
+    # 12.2.1: no stray "|" beside a toggle. Every value slot goes through
+    # wsDrawRowValue, which draws nothing for an empty value (uiDrawFit would
+    # draw an em dash, which the WS350 font shows as "|"). The row label is
+    # the only direct text draw left in wsDrawRow.
+    row = block(hub, "static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row)")
+    forbid(row, "uiDrawFit(value", "value text drawn without the empty-value guard")
+    if row.count("uiDrawFit(") != 1:
+        raise ValidationError("wsDrawRow may draw text directly only for the label")
+    toggle = row[row.find("case wsm::RowKind::Toggle:"):row.find("case wsm::RowKind::Stepper:")]
+    for needle in ("drawFastVLine", "drawLine", "fillRect(", "drawRect(", "drawString(", "drawChar("):
+        forbid(toggle, needle, "extra drawing between a toggle's label and switch")
+    value_draw = block(hub, "static void wsDrawRowValue(")
+    need(value_draw, "if (!wsm::drawsValueText(text)) return;", "empty values draw nothing")
+    need(layout, "inline bool drawsValueText(const char* value) { return value != nullptr && value[0] != '\\0'; }",
+         "empty-value predicate")
+
+    # 12.2.1: the Local Portal tile fits its status line (no "Open ... code in...").
+    tiles = block(hub, "static void wsTileStatus(")
+    forbid(tiles, "Open %s", "Local Portal tile status that does not fit")
+    need(tiles, 'snprintf(out, len, "%s · code inside", ip);', "Local Portal tile status")
+    need(tiles, "if (tft.textWidth(out) > maxW) strlcpy(out, ip, len);", "Local Portal tile falls back to the address")
+    need(block(hub, "static void wsDrawRoot(const wsm::Screen& s)"),
+         "wsTileStatus(id, status, sizeof(status), textW, statusColor);", "tile status sized to the tile text")
+
+    # 12.2.1: a date format that was never saved defaults to MM/DD/YYYY; a
+    # saved one is read unchanged (only the NVS fallback differs).
+    settings = read(repo / "src/settings.cpp")
+    need(settings, 'netSettings.dateFormat = prefs.getUChar("net_datefmt", 2);', "MM/DD/YYYY default for an unsaved date format")
+    if settings.count('"net_datefmt"') != 2 or 'prefs.putUChar("net_datefmt", netSettings.dateFormat);' not in settings:
+        raise ValidationError("the saved date format must be read and written unchanged")
+
     # Local Portal still shows the access code, and its capture is sensitive.
     need(view, "securityPortalCode()", "Local Portal access code")
     forbid(fragment, "securitySetPortalCodeRequired", "touch control that turns off the access code")

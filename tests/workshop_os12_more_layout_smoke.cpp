@@ -179,6 +179,16 @@ void checkRow(Screen s, PageId id, uint8_t scroll, uint8_t r, const Rect& row, c
   if (spec.kind != RowKind::Stepper && spec.kind != RowKind::Action2) {
     check(valueRect(s, row, spec.kind).w > 40 || spec.kind == RowKind::Action, "value slot has room", where);
   }
+  if (spec.kind == RowKind::Toggle) {
+    // 12.2.1: the only thing between a toggle's label and its switch is the
+    // optional value text, and an empty value draws nothing (12.2.0 drew an
+    // em dash there, shown as a stray "|").
+    const Rect sw = partDrawRect(s, row, spec.kind, Part::Whole);
+    const Rect value = valueRect(s, row, spec.kind);
+    check(value.right() <= sw.x - 8, "toggle value text clear of the switch", where, value.right(), sw.x);
+    check(labelRect(s, row, spec.kind).right() <= sw.x - 8, "toggle label clear of the switch", where);
+    check(!drawsValueText("") && !drawsValueText(nullptr), "toggle with no value draws nothing beside the switch", where);
+  }
 }
 
 void checkPages(Screen s, const char* o, int& controls) {
@@ -251,7 +261,14 @@ void checkPages(Screen s, const char* o, int& controls) {
 
 }  // namespace
 
+void checkValueText() {
+  check(!drawsValueText(nullptr), "null value draws nothing", "value text");
+  check(!drawsValueText(""), "empty value draws nothing", "value text");
+  check(drawsValueText("Off (stable)"), "a value is drawn", "value text");
+}
+
 int main() {
+  checkValueText();
   const Screen screens[2] = {makeScreen(480, 320), makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
   checkTree("tree");
