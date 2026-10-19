@@ -6,6 +6,7 @@ power, update, sign-in or settings route is ever changed. Checks on a running
 WS350:
 
 * GET /api/portal-code without a key -> 401 with WWW-Authenticate: Bearer;
+* requests with no key or a malformed key never count toward the lock-out;
 * a well-formed but wrong "wsc_" key -> 401, and a status-token-shaped
   "wsl_" key -> 401;
 * repeated wrong keys back off with 429 + Retry-After;
@@ -16,9 +17,10 @@ WS350:
 * the key opens nothing else: every other probed route answers the same with
   the key as without it, and never 200 for the protected ones.
 
-Wrong keys count as failed sign-ins for this computer's address, like wrong
-codes on the sign-in page. The script waits out the back-off it causes before
-it finishes, and a successful sign-in resets the count.
+Only a well-formed but wrong "wsc_" key counts toward this route's own
+lock-out for this computer's address (12.3.8: it no longer touches the sign-in
+lock-out, and a request with no key or a malformed key never counts). The
+script waits out the back-off it causes before it finishes.
 
 The key is read at a hidden prompt, or from an owner-only (0600) file named by
 WORKSHOP_OS_CODE_TOKEN_FILE. Neither the key nor the code is printed or
@@ -112,6 +114,18 @@ def run(base: str, key: str, pause: float = 2.2) -> None:
     check("Bearer" in headers.get("WWW-Authenticate", ""), "401 lacks WWW-Authenticate: Bearer")
     print("PASS  no key -> 401")
     time.sleep(pause)
+
+    # 12.3.8: a request with no key, or a malformed one, never counts toward
+    # the lock-out. Any web page can make a browser send those, so counting
+    # them would let a page lock the owner out.
+    # Six probes 2.2 s apart: if they counted, the back-off (1 s, 2 s, 4 s from
+    # the third) would answer the sixth with 429.
+    for probe in (None, "not-a-key", None, "not-a-key", None, None):
+        status, _, _ = get(base, ROUTE, probe)
+        check(status == 401, f"a request with no key or a malformed key returned HTTP {status}, expected 401 "
+                             "(requests without a well-formed wsc_ key must not count toward the lock-out)")
+        time.sleep(pause)
+    print("PASS  requests with no key or a malformed key never count toward the lock-out")
 
     status, _, _ = get(base, ROUTE, WRONG_KEY)
     check(status == 401, f"wrong key returned HTTP {status}, expected 401")

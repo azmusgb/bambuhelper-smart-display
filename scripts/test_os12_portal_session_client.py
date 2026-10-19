@@ -10,7 +10,9 @@ A loopback fake WS350 implements the 12.0.1 portal policy. The test proves:
   cookie in an owner-only (0600) jar, and the jar is reused by a second client;
 * every mutation carries the device's own Origin and never the marker header;
 * runtime identity is read from the public /recovery/status probe;
-* sign-out revokes the session.
+* sign-out revokes the session;
+* sign-in itself needs the device's own Origin (12.3.8), and a device that
+  takes a cross-site sign-in is detected.
 """
 from __future__ import annotations
 
@@ -36,6 +38,7 @@ class FakeDevice(http.server.BaseHTTPRequestHandler):
     seen: list[dict] = []
     code_free = False  # emulate the retired 12.0.0 overlay
     trust_marker = False  # emulate the retired X-BambuHelper-Client shortcut
+    login_cross_site_open = False  # emulate 12.3.7 and earlier: /login took any origin
 
     def log_message(self, *args):  # quiet
         pass
@@ -94,6 +97,9 @@ class FakeDevice(http.server.BaseHTTPRequestHandler):
         self._record("POST", body)
         path = urllib.parse.urlparse(self.path).path
         if path == "/login":
+            # 12.3.8: sign-in needs the device's own Origin like any mutation.
+            if not self.login_cross_site_open and not self._same_origin():
+                return self._send(403, '{"status":"error"}')
             code = urllib.parse.parse_qs(body).get("code", [""])[0]
             if code != CODE:
                 return self._send(401, "bad", "text/html")
@@ -198,6 +204,14 @@ def main() -> int:
             FakeDevice.sessions.clear()
             expect_failure(lambda: portal.assert_unauthenticated_contract(base), "X-BambuHelper-Client shortcut")
             FakeDevice.trust_marker = False
+
+            # 12.3.8: cross-site sign-in is refused, and detected when it is not.
+            portal.assert_cross_site_sign_in_refused(base)
+            FakeDevice.login_cross_site_open = True
+            expect_failure(lambda: portal.assert_cross_site_sign_in_refused(base), "cross-site sign-in accepted")
+            FakeDevice.login_cross_site_open = False
+            assert portal.release_at_least("12.3.8", (12, 3, 8)) and portal.release_at_least("12.10.0", (12, 3, 8))
+            assert not portal.release_at_least("12.3.7", (12, 3, 8)) and not portal.release_at_least("x", (12, 3, 8))
 
             # A world-readable jar is refused.
             Path(jar).write_text("# Netscape HTTP Cookie File\n")

@@ -99,7 +99,8 @@ def main() -> int:
         ("OS12 UX workflow", ux_workflow),
         ("UI13 workflow", ui13_workflow),
     ):
-        require(workflow, "actions/setup-python@v5", label)
+        require(workflow, "actions/setup-python@v6", label)
+        forbid(workflow, "actions/setup-python@v5", f"{label} stale setup-python")
         require(workflow, "python-version: '3.12'", label)
         require(workflow, "scripts/ensure-platformio.sh", label)
 

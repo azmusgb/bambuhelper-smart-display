@@ -2,7 +2,7 @@
 """Host test for scripts/accept_os12_code_token_runtime.py (no device needed).
 
 A loopback fake WS350 implements the /api/portal-code rules (key check, 2 s
-rate limit, back-off after bad keys shared with sign-in). The acceptance
+rate limit, back-off after wrong wsc_ keys on the route's own counter). The acceptance
 helper must pass against it, send only GET requests, never put the key in a
 URL, and FAIL against devices that:
 * let the key open another route;
@@ -10,7 +10,8 @@ URL, and FAIL against devices that:
 * accept a status-token ("wsl_") key;
 * add a field to the response;
 * skip the 2-second rate limit;
-* answer with a cacheable response.
+* answer with a cacheable response;
+* count a request without a well-formed key toward the lock-out.
 """
 from __future__ import annotations
 
@@ -75,9 +76,12 @@ class Fake(http.server.BaseHTTPRequestHandler):
         if self.mode == "status-key":
             accepted.add("Bearer " + acc.STATUS_SHAPED)
         if auth not in accepted:
-            self.failures[0] += 1
-            if self.failures[0] > 2:
-                self.blocked_until[0] = now + 2 ** (self.failures[0] - 3)
+            # 12.3.8: only a well-formed wsc_ key counts (mode "counts-missing"
+            # is the old behaviour, where any request without the key counted).
+            if self.mode == "counts-missing" or acc.KEY_RE.fullmatch(auth[len("Bearer "):] if auth.startswith("Bearer ") else ""):
+                self.failures[0] += 1
+                if self.failures[0] > 2:
+                    self.blocked_until[0] = now + 2 ** (self.failures[0] - 3)
             return self._send(401, {}, {"WWW-Authenticate": 'Bearer realm="workshop-os-code"'})
         body = {"code": CODE, "bootId": BOOT}
         if self.mode == "extra-field":
@@ -114,7 +118,8 @@ def main() -> int:
 
         for mode, label in (("opens-other", "key opening another route"), ("open", "answering without a key"),
                             ("status-key", "status token accepted"), ("extra-field", "extra response field"),
-                            ("no-limit", "missing rate limit"), ("cacheable", "cacheable response")):
+                            ("no-limit", "missing rate limit"), ("cacheable", "cacheable response"),
+                            ("counts-missing", "requests without a key counting toward the lock-out")):
             reset(mode)
             try:
                 acc.run(base, KEY)

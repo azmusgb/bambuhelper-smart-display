@@ -16,6 +16,14 @@
 
 #include <cstring>
 
+// 12.3.8: the sign-in code key's prompt shares the touchscreen. Every build
+// that installs the status token also installs the code key (12.2.0 and
+// later); the check keeps older reconstructions compiling.
+#if __has_include("workshop_code_token.h")
+#include "workshop_code_token.h"
+#define WORKSHOP_STATUS_LITE_SEES_CODE_PROMPT 1
+#endif
+
 #ifndef WORKSHOP_OS_RELEASE_VERSION
 #define WORKSHOP_OS_RELEASE_VERSION "unknown"
 #endif
@@ -194,6 +202,15 @@ void workshopStatusTokenHandleState(WebServer& server) {
 }
 
 void workshopStatusTokenHandleCreate(WebServer& server) {
+  // One question on the display at a time (12.3.8): a status request must not
+  // replace the sign-in code key's prompt, or a tap meant for one would answer
+  // the other.
+#if defined(WORKSHOP_STATUS_LITE_SEES_CODE_PROMPT)
+  if (workshopCodeTokenPromptVisible()) {
+    sendJson(server, 409, "{\"status\":\"error\",\"message\":\"Another Local AI request is waiting on the display. Answer it first.\"}");
+    return;
+  }
+#endif
   // The consent prompt lives on the touchscreen hub. Bring it forward (this
   // also wakes a sleeping panel); without the hub there is nobody to ask.
   if (!smartHubShowPage("home")) {

@@ -52,6 +52,24 @@ inline bool parseCodeBearer(const char* header, char out[kTokenTextLength + 1]) 
     return statuslite::parseBearer(header, out, kCodeTokenPrefix);
 }
 
+// What a request presented on the key route (12.3.8). Only a well-formed
+// "wsc_" key that does not match counts toward the route's lock-out: a request
+// with no Authorization header is what any web page can make the owner's
+// browser send (a cross-site <img> or fetch carries no custom header), and a
+// malformed or "wsl_" header proves nothing about guessing this key. The
+// key route keeps its own counter; it never touches the portal sign-in one.
+enum class PresentedKey { Missing, Malformed, WellFormed };
+
+inline PresentedKey presentedCodeKey(const char* header, char out[kTokenTextLength + 1]) {
+    if (out != nullptr) out[0] = '\0';
+    if (header == nullptr || header[0] == '\0') return PresentedKey::Missing;
+    return parseCodeBearer(header, out) ? PresentedKey::WellFormed : PresentedKey::Malformed;
+}
+
+inline bool keyFailureCounts(PresentedKey presented, bool matched) {
+    return presented == PresentedKey::WellFormed && !matched;
+}
+
 // Approval flow whose hand-over only accepts "wsc_" keys.
 class CodeApprovalFlow : public statuslite::ApprovalFlow {
 public:

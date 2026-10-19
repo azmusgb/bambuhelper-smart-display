@@ -265,6 +265,26 @@ def assert_unauthenticated_contract(base_url: str) -> None:
     check(cross.status == 403, f"cross-origin mutation returned HTTP {cross.status}, expected 403")
 
 
+def assert_cross_site_sign_in_refused(base_url: str) -> None:
+    """12.3.8+: POST /login from another site is refused (403) before the code
+    is read, so it is not a failed sign-in. Sends a code that cannot be right."""
+    anon = Client(base_url, follow_redirects=False, anonymous=True)
+    cross = anon.request("/login", method="POST", form={"code": "ZZZZZZZZZZ"},
+                         headers={"Origin": "http://invalid.example"})
+    check(cross.status == 403, f"cross-site sign-in returned HTTP {cross.status}, expected 403")
+    bare = anon.request("/login", method="POST", form={"code": "ZZZZZZZZZZ"}, headers={"Origin": ""})
+    check(bare.status == 403, f"sign-in without Origin or Referer returned HTTP {bare.status}, expected 403")
+    check(not anon.has_session_cookie(), "a refused sign-in set a session cookie")
+
+
+def release_at_least(version: object, minimum: tuple[int, ...]) -> bool:
+    try:
+        parts = tuple(int(p) for p in str(version).split("."))
+    except ValueError:
+        return False
+    return parts >= minimum
+
+
 def establish_portal_session(client: Client, *, fresh_code: bool = False) -> str:
     """Check the signed-out boundary, sign in (or reuse the shared session) and
     return the portal mode for evidence. ``fresh_code`` forces a new code, e.g.
@@ -308,6 +328,9 @@ def run(args: argparse.Namespace) -> int:
     print("PASS  signed-out GET /status, /hardware/health and /os12/update/status answer 401")
     print("PASS  signed-out mutations are refused, including with X-BambuHelper-Client: 1")
     print("PASS  cross-origin mutation is rejected")
+    if release_at_least(runtime_identity(base).get("releaseVersion"), (12, 3, 8)):
+        assert_cross_site_sign_in_refused(base)
+        print("PASS  cross-site sign-in is refused (403) and not counted as a failed sign-in")
     if args.probe_only:
         print()
         print("RUNTIME PORTAL SIGN-IN BOUNDARY (PROBE): PASS")
