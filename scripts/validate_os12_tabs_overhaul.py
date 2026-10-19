@@ -4,8 +4,9 @@
 String and behaviour contracts on the rebuilt src/smart_hub.cpp, plus the
 host-compiled geometry and touch-routing test
 tests/workshop_os12_tabs_layout_smoke.cpp (both orientations, every view and
-state, every control at its centre and edges, and a full-screen scan for taps
-that land outside a drawn control).
+state, every control at its centre and edges, a full-screen scan for taps
+that land outside a drawn control, and a full-screen scan of the calm idle
+screen, where every tap only wakes).
 """
 from __future__ import annotations
 
@@ -82,13 +83,18 @@ def validate_home(hub: str, fragment: str) -> None:
     # drawHome hands Home to the new page; the calm idle screen is kept.
     need(block(hub, "static void drawHome(bool full)"), "wtDrawHome(full);", "drawHome hands Home to the tabs")
     home = block(hub, "static void wtDrawHome(bool full)")
-    ordered(home, ["drawAmbientHome(", "wtDrawHeader(", "wtl::itemRect(", "uiBottomNav(0, nullptr);"],
-            "Home draws header, items and tab bar")
+    ordered(home, ["if (wtCalmShown()) { wtDrawCalm(w); return; }", "wtDrawHeader(", "wtl::itemRect(", "uiBottomNav(0, nullptr);"],
+            "Home draws the calm screen, or header, items and tab bar")
     # No invisible zones: the 12.0 Home rectangles are gone, Home touch goes
     # through the shared hit test, and only drawn items react.
     forbid(hub, "hubHomeRect", "12.0 Home zones")
     touch_fn = block(hub, "static bool wtHomeTouch(int16_t x, int16_t y)")
-    ordered(touch_fn, ["if (g_ambientActive)", "wtl::hitTest(s, wtl::View::Home"], "calm screen wakes before any hit test")
+    ordered(touch_fn, ["if (wtCalmShown()) {", "wtl::calmHitTest(s, x, y)", "return true;", "wtl::hitTest(s, wtl::View::Home"],
+            "calm screen wakes, and only wakes, before any Home hit test")
+    wake = touch_fn[touch_fn.find("if (wtCalmShown()) {"):touch_fn.find("wtl::hitTest(s, wtl::View::Home")]
+    for needle in ("setPage(", "wsOpen", "wtTab(", "wsClick()"):
+        forbid(wake, needle, "a wake tap that does more than wake")
+    validate_calm(hub, fragment)
     need(touch_fn, "if (h.kind != wtl::HitKind::Item) return true;", "untargeted Home taps do nothing")
     # Plain words, Title Case: no ALL-CAPS card labels.
     for caps in ('"PRINTER"', '"FILAMENT"', '"PRINTING"', '"READY"', '"OFFLINE"', '"ATTENTION"', '"SETUP"'):
@@ -111,6 +117,52 @@ def validate_home(hub: str, fragment: str) -> None:
     need(hub, "wsOpenFrom(wsm::PageId::LocalPortal, 0);", "Home -> Local Portal returns to Home")
     need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"),
          "else if (g_wsReturnTab >= 0 && p.level == 1) wsTab((uint8_t)g_wsReturnTab);", "Back returns to the tab")
+
+
+def validate_calm(hub: str, fragment: str) -> None:
+    """12.3.3 calm idle screen on the tabs design system."""
+    need(block(hub, "static bool wtCalmShown()"), "return g_ambientEnabled && g_ambientActive;",
+         "calm screen drawn and woken by one predicate")
+    calm = block(hub, "static void wtDrawCalm(const WtPrint& w)")
+    for needle, label in (
+        ("wtl::calmLayout(s)", "calm geometry from the shared layout"),
+        ("localtime_r(&now, &t);", "clock in the display's time zone"),
+        ("wtl::clockText(clock, sizeof(clock), t.tm_hour, t.tm_min, netSettings.use24h);", "clock follows the 12/24 h setting"),
+        ("netSettings.dateFormat);", "date in the saved date format"),
+        ("tft.setTextFont(8);", "large numeric clock"),
+        ("wtl::calmStatusText(", "one status line"),
+        ('"Tap anywhere to wake"', "wake hint"),
+    ):
+        need(calm, needle, label)
+    # Nothing else on it: no header, no tab bar, no row or button drawing.
+    for needle in ("uiBottomNav(", "wtDrawHeader(", "wsDrawRowBody(", "hubV1125Action(", "wsDrawChevronRight("):
+        forbid(calm, needle, "control drawn on the calm screen")
+    status = block(hub, "static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneLen, uint16_t& color)")
+    ordered(status, ["wtl::CalmState::Printing", "wtl::CalmState::TimerDone", "wtl::CalmState::TimerRunning", "wtl::CalmState::Offline"],
+            "print first, then the timer, then the printer")
+    need(status, "wtClockIn(doneAt, doneLen,", "done time as a clock time")
+    # The 12.0 ambient renderer and its helpers are gone.
+    for gone in ("drawAmbientHome", "uiSignatureMaterialRail", "uiClockText(", "uiClockDateText("):
+        forbid(hub, gone, "12.0 calm screen code")
+
+
+def validate_printer_views(hub: str, web: str, layout: str) -> None:
+    """/hub/views lists the Printer segments; /hub/show opens each one."""
+    catalog = web[web.find('static const char kCatalog[] = R"json('):web.find(')json";')]
+    need(catalog, '{"version":3,', "catalog v3")
+    view_ids = re.findall(r'\{"id":"([a-z0-9-]+)"', catalog)
+    page_views = re.findall(r'PageLayout::\w+, "[^"]*", "[^"]*", "([a-z0-9-]+)"', read(ROOT / "firmware/platform/ui/more_layout.hpp"))
+    want = ["home", "printer", "printer-ams", "printer-control", "workshop"] + page_views
+    if view_ids != want:
+        raise ValidationError(f"/hub/views must list {want}, got {view_ids}")
+    for vid in ("printer", "printer-ams", "printer-control"):
+        need(layout, f'"{vid}"', f"{vid} id in tabs_layout.hpp")
+    show = block(hub, "bool smartHubShowPage(const char* pageName)")
+    need(show, "if (wtShowPrinterView(pageName)) return true;", "/hub/show opens the Printer segments")
+    forbid(show, 'strcmp(pageName, "printer")', "Printer opened without choosing its segment")
+    open_view = block(hub, "static bool wtShowPrinterView(const char* name)")
+    ordered(open_view, ["wtl::printerViewFromId(name, v)", "g_printerMode = wtl::segmentOf(v);", "setPage(SCREEN_HUB_PRINTER);"],
+            "segment chosen before Printer opens")
 
 
 def validate_printer(hub: str, fragment: str) -> None:
@@ -207,6 +259,7 @@ def validate(repo: Path) -> str:
     validate_home(hub, fragment)
     validate_printer(hub, fragment)
     validate_workshop(hub, fragment)
+    validate_printer_views(hub, read(repo / "src/web_server.cpp"), read(LAYOUT))
     return run_host_test()
 
 
@@ -219,7 +272,7 @@ def main() -> int:
     except (ValidationError, subprocess.CalledProcessError) as exc:
         raise SystemExit(f"FAIL: {exc}")
     print(summary)
-    print("PASS: Home, Printer and Workshop tabs on the shared layout; geometry and touch routing hold in 480x320 and 320x480")
+    print("PASS: Home, Printer, Workshop and the calm idle screen on the shared layout; geometry and touch routing hold in 480x320 and 320x480")
     return 0
 
 

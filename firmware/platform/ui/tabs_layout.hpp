@@ -16,7 +16,11 @@
 // - nothing is tappable unless it is drawn as tappable (a card with a chevron,
 //   a row control, a button). There are no invisible zones;
 // - Stop is a hold-guarded button on its own row, never next to Pause, and
-//   only the drawn button routes to it.
+//   only the drawn button routes to it;
+// - the calm idle screen (12.3.3) has no controls at all: the whole screen is
+//   one wake target, and a wake tap never reaches a control below it.
+
+#include <stdio.h>
 
 namespace workshop {
 namespace ui {
@@ -238,6 +242,25 @@ inline uint8_t segmentOf(View v) {
   return v == View::PrinterAms ? 1 : (v == View::PrinterControl ? 2 : 0);
 }
 
+// /hub/views and /hub/show ids of the three Printer segments (catalog v3,
+// 12.3.3): "printer" opens Status, "printer-ams" AMS, "printer-control"
+// Control.
+inline const char* printerViewId(View v) {
+  return v == View::PrinterAms ? "printer-ams" : (v == View::PrinterControl ? "printer-control" : "printer");
+}
+
+inline bool printerViewFromId(const char* id, View& out) {
+  if (!id) return false;
+  for (uint8_t i = 0; i < kSegmentCount; ++i) {
+    const View v = segmentView(i);
+    const char* a = printerViewId(v);
+    const char* b = id;
+    while (*a && *a == *b) { ++a; ++b; }
+    if (*a == 0 && *b == 0) { out = v; return true; }
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Inside items
 // ---------------------------------------------------------------------------
@@ -278,7 +301,7 @@ inline Rect titleRect(Screen s, bool scrollButtons) { return more::titleRect(s, 
 // Hit testing
 // ---------------------------------------------------------------------------
 
-enum class HitKind : uint8_t { None = 0, Tab, ScrollUp, ScrollDown, Segment, Item };
+enum class HitKind : uint8_t { None = 0, Tab, ScrollUp, ScrollDown, Segment, Item, Wake };
 
 struct Hit {
   HitKind kind;
@@ -382,6 +405,98 @@ inline char* clockText(char* out, size_t len, int hour, int minute, bool use24h)
   out[o++] = static_cast<char>('0' + minute % 10);
   for (const char* p = suffix; *p && o + 1 < len; ++p) out[o++] = *p;
   out[o < len ? o : len - 1] = '\0';
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Calm idle screen (12.3.3): a large clock, the date, one status line and
+// "Tap anywhere to wake". No header, no tab bar, nothing else to tap.
+// ---------------------------------------------------------------------------
+
+struct CalmLayout {
+  Rect clock;   // the time, centred
+  Rect date;    // the date in the saved format
+  Rect status;  // one status line on a card surface
+  Rect hint;    // "Tap anywhere to wake", where the tab bar would be
+};
+
+static const int16_t kCalmClockH = 96;
+static const int16_t kCalmDateH = 32;
+static const int16_t kCalmGap = 20;
+
+inline CalmLayout calmLayout(Screen s) {
+  CalmLayout c;
+  c.hint = more::tabBand(s);
+  const int total = kCalmClockH + kCalmDateH + kCalmGap + more::kRowH;
+  const int top = (c.hint.y - total) / 2;
+  const int margin = 16;
+  c.clock = makeRect(margin, top, s.w - 2 * margin, kCalmClockH);
+  c.date = makeRect(margin, top + kCalmClockH, s.w - 2 * margin, kCalmDateH);
+  const int statusW = s.landscape() ? 384 : s.w - 2 * margin;
+  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + kCalmGap, statusW, more::kRowH);
+  return c;
+}
+
+// The calm screen's only target is the whole screen, and a tap on it only
+// wakes the display: it never reaches the tab bar or a Home control.
+inline Hit calmHitTest(Screen s, int x, int y) {
+  if (x < 0 || y < 0 || x >= s.w || y >= s.h) return makeHit(HitKind::None, 0, Part::Whole);
+  return makeHit(HitKind::Wake, 0, Part::Whole);
+}
+
+// Date in the saved format (netSettings.dateFormat, 0-5), after the weekday:
+// "Sunday · 10/18/2026". `month` is 1-12, `wday` 0 (Sunday) - 6.
+inline char* dateText(char* out, size_t len, int year, int month, int day, int wday, uint8_t format) {
+  static const char* kDays[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+  static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  if (!out || !len) return out;
+  const char* wd = kDays[((wday % 7) + 7) % 7];
+  const char* mon = kMonths[((month - 1) % 12 + 12) % 12];
+  switch (format % 6U) {
+    case 1: snprintf(out, len, "%s · %02d-%02d-%04d", wd, day, month, year); break;
+    case 2: snprintf(out, len, "%s · %02d/%02d/%04d", wd, month, day, year); break;
+    case 3: snprintf(out, len, "%s · %04d-%02d-%02d", wd, year, month, day); break;
+    case 4: snprintf(out, len, "%s · %d %s %04d", wd, day, mon, year); break;
+    case 5: snprintf(out, len, "%s · %s %d, %04d", wd, mon, day, year); break;
+    default: snprintf(out, len, "%s · %02d.%02d.%04d", wd, day, month, year); break;
+  }
+  return out;
+}
+
+// What the calm status line says. A print comes first, then the workshop
+// timer, then the printer.
+enum class CalmState : uint8_t { NoPrinter, Offline, Attention, Idle, Finished, Printing, Paused, TimerRunning, TimerDone };
+
+struct CalmStatus {
+  CalmState state;
+  uint8_t percent;        // Printing, Paused
+  const char* doneAt;     // Printing: clock time ("6:42 PM"), or empty when unknown
+  uint32_t timerSeconds;  // TimerRunning
+};
+
+inline char* calmStatusText(char* out, size_t len, const CalmStatus& c) {
+  if (!out || !len) return out;
+  const unsigned pct = c.percent > 100 ? 100U : c.percent;
+  switch (c.state) {
+    case CalmState::Printing:
+      if (c.doneAt && c.doneAt[0]) snprintf(out, len, "Printing %u%% · done %s", pct, c.doneAt);
+      else snprintf(out, len, "Printing %u%%", pct);
+      break;
+    case CalmState::Paused: snprintf(out, len, "Paused at %u%%", pct); break;
+    case CalmState::TimerRunning: {
+      const unsigned long t = c.timerSeconds, h = t / 3600UL, m = (t % 3600UL) / 60UL, sec = t % 60UL;
+      if (h) snprintf(out, len, "Timer %lu:%02lu:%02lu left", h, m, sec);
+      else snprintf(out, len, "Timer %lu:%02lu left", m, sec);
+      break;
+    }
+    case CalmState::TimerDone: snprintf(out, len, "Timer done"); break;
+    case CalmState::Attention: snprintf(out, len, "Printer needs attention"); break;
+    case CalmState::Offline: snprintf(out, len, "Printer offline"); break;
+    case CalmState::NoPrinter: snprintf(out, len, "No printer set up"); break;
+    case CalmState::Finished: snprintf(out, len, "Print finished"); break;
+    case CalmState::Idle:
+    default: snprintf(out, len, "Printer idle"); break;
+  }
   return out;
 }
 

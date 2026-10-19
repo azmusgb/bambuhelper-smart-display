@@ -19,7 +19,16 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": null,
+  "candidate": {
+    "version": "12.3.3",
+    "branch": "feature/os12-calm-idle-12-3-3",
+    "name": "Workshop OS 12.3.3 Calm Idle Screen",
+    "purpose": "The calm idle screen on the tabs/More design system: a large clock in the display's time zone and 12/24 h setting, the date in the saved date format, one status line (printing % and done time, the workshop timer, or the printer state) and \"Tap anywhere to wake\". The whole screen is one wake target, so a wake tap never reaches a Home control or the tab bar. /hub/views lists printer-ams and printer-control, and /hub/show opens Printer with that segment selected. On top of 12.3.2 (main).",
+    "pullRequest": 180,
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required"
+  },
   "mainState": {
     "version": "12.3.2",
     "commit": "b44fb4c124d40e99d524f38ddc8d8cf48eb5500b",
