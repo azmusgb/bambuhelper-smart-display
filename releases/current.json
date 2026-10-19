@@ -19,40 +19,32 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": {
-    "version": "12.3.2",
-    "branch": "feature/os12-tabs-workshop-12-3-2",
-    "name": "Workshop OS 12.3.2 Workshop Overhaul",
-    "purpose": "Workshop as a More-style list that is useful without Filament Inventory: one honest set-up row (Back returns to Workshop), how to connect, the workshop timer startable on the device with the portal presets, and the portal note; connected inventory as plain rows. The Local AI status-token prompt moves onto the More dialog card so its buttons no longer sit on the tab-bar strip. Stacked on 12.3.1 (PR #175).",
-    "pullRequest": 176,
-    "status": "physical-acceptance-required",
-    "exactHeadCi": "required",
-    "physicalAcceptance": "required"
-  },
+  "candidate": null,
   "mainState": {
-    "version": "12.1.4",
-    "commit": "6c86a72cf8b79c0d5da187b02a533ea1e7e8703c",
-    "name": "Workshop OS 12.1.4 More Overhaul",
-    "originatingBranch": "feature/os12-more-cleanup",
-    "originatingPullRequest": 170,
+    "version": "12.3.2",
+    "commit": "b44fb4c124d40e99d524f38ddc8d8cf48eb5500b",
+    "name": "Workshop OS 12.3.2 Home, Printer and Workshop Overhaul",
+    "originatingBranch": "feature/os12-tabs-workshop-12-3-2",
+    "originatingPullRequest": 176,
     "includedPullRequests": [
-      166,
-      167,
-      168,
-      169,
-      170
+      172,
+      173,
+      174,
+      175,
+      176,
+      177
     ],
     "status": "merged-unaccepted",
     "exactHeadCi": "passed",
-    "testedCandidateCommit": "2e7e8c331f4333715980c05b8314b84bc9afb15f",
-    "testedFirmwareSha256": "0d5dbf68268b227d1816d84333d4974436a6a068ddceeadc1ccf2b46ee0cc1a3",
-    "mainFirmwareSha256": "0b4442140ae847c71f41c7918a018519a1a8f8eaaa8cff66d0b95e17c249b817",
-    "mainArtifact": "os12-ux-ws350-6c86a72cf8b79c0d5da187b02a533ea1e7e8703c",
+    "testedCandidateCommit": "cceb074dff70b818e0bb0e8ac870f7e19ebb68ab",
+    "testedFirmwareSha256": "78e1c6380258fc9ab26481a5660bc9f679e1543ddb2c2bc25865fc5ba571be33",
+    "mainFirmwareSha256": "ef462c35b1858a90961418704add57c22eae6c74d2e6bc31c78ec7793dc197ab",
+    "mainArtifact": "os12-ux-ws350-b44fb4c124d40e99d524f38ddc8d8cf48eb5500b",
     "physicalInstall": "passed",
     "ownerReview": "passed",
     "unattendedAcceptance": "not-run",
     "physicalAcceptance": "pending",
-    "note": "Exact CI candidate 2e7e8c331f4333715980c05b8314b84bc9afb15f (PR #170 head) was installed on the WS350 and is running with candidatePending false; the owner reviewed it on the device and approved the merge. main 6c86a72 has a source tree identical to 2e7e8c3; its CI image differs only in the embedded source SHA and the image checksum. The unattended acceptance script, sensory physical acceptance and a full-image recovery round-trip have not been run for 12.1.x, so physical acceptance stays pending and nothing is promoted."
+    "note": "Exact CI candidate cceb074dff70b818e0bb0e8ac870f7e19ebb68ab (PR #176 head) is installed on the WS350 and running with candidatePending false; the owner reviewed Home, Printer and Workshop on the device and merged it. main b44fb4c has a source tree identical to cceb074; its CI image differs only in the embedded source SHA and the image checksum (101 bytes). The unattended acceptance script, sensory physical acceptance and a full-image recovery round-trip have not been run for 12.2.x/12.3.x, so physical acceptance stays pending and nothing is promoted."
   },
   "validation": {
     "acceptedSource": {
