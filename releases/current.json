@@ -20,11 +20,11 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.3.0",
-    "branch": "feature/os12-tabs-home-12-3-0",
-    "name": "Workshop OS 12.3.0 Home Overhaul",
-    "purpose": "Home on the More design system: one header with a state chip, one big status card (file, percent, time left, done-at clock time, layer), a read-only temperature strip, and one row to Workshop (timer or filament). The invisible 12.0 Home tap zones are removed; only the card and the row react. Shared tab layout and host touch test for Home, Printer and Workshop. On top of 12.2.1 (PR #173).",
-    "pullRequest": 174,
+    "version": "12.3.1",
+    "branch": "feature/os12-tabs-printer-12-3-1",
+    "name": "Workshop OS 12.3.1 Printer Overhaul",
+    "purpose": "Printer on the More design system: Status card with done-at clock time, temperatures with targets, every AMS tray and the external spool as plain rows, and Control with Pause/Resume as the one primary button. Stop stays hold-to-confirm and is now sent only for a hold that started and stayed on the Stop button. Stacked on 12.3.0 (PR #174).",
+    "pullRequest": 175,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
