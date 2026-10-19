@@ -226,7 +226,11 @@ inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t 
 // Printer segments (Status / AMS / Control)
 // ---------------------------------------------------------------------------
 
-static const uint8_t kSegmentCount = 3;
+// Four buttons: Status, AMS and Control select a view; Camera (12.3.7) opens
+// the camera page, whose Back returns to Printer.
+static const uint8_t kSegmentCount = 4;
+static const uint8_t kViewSegments = 3;
+static const uint8_t kCameraSegment = 3;
 
 inline Rect segmentBand(Screen s) { return more::slotRect(s, 0); }
 
@@ -254,7 +258,7 @@ inline const char* printerViewId(View v) {
 
 inline bool printerViewFromId(const char* id, View& out) {
   if (!id) return false;
-  for (uint8_t i = 0; i < kSegmentCount; ++i) {
+  for (uint8_t i = 0; i < kViewSegments; ++i) {
     const View v = segmentView(i);
     const char* a = printerViewId(v);
     const char* b = id;

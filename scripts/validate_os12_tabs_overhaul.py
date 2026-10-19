@@ -176,6 +176,15 @@ def validate_printer(hub: str, fragment: str) -> None:
         forbid(fragment, jargon, "jargon on Printer")
     touch = block(hub, "static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress)")
     need(touch, "if (id != wtl::View::PrinterControl) return true;  // Status and AMS are read-only", "read-only Status and AMS")
+    # 12.3.7: Printer > Camera opens the video page in camera mode; Back
+    # returns to Printer, and the camera source is the printer's (the X2D
+    # dev overlay swaps in the Mac bridge).
+    need(touch, "if (h.index == wtl::kCameraSegment) { wsOpenCamera(1); wsClick(); return true; }", "Camera segment opens the camera page")
+    need(fragment, '"Status", "AMS", "Control", "Camera"', "Camera segment label")
+    need(block(hub, "static void wsVideoStart()"), "media.playMjpeg(kWsCameraSource, millis())", "camera mode plays the camera source")
+    need(hub, 'static const char kWsCameraSource[] = "', "camera source constant")
+    need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"),
+         "else if (g_wsReturnTab >= 0 && g_wsCameraMode) wsTab((uint8_t)g_wsReturnTab);", "Back from Camera returns to Printer")
     # The only printer commands the tabs send: light, pause/resume, and the
     # hold-guarded Stop. Power goes through the existing confirm screen.
     commands = set(re.findall(r"workshop::platform::PrinterCommand::(\w+)", fragment))

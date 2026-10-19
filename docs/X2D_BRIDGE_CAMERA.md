@@ -209,7 +209,9 @@ An already-published firmware image will not contain this experimental overlay o
 
 ## 6. Start and control the viewer
 
-Use the existing authenticated OS12 session mechanism.
+On the touchscreen (12.3.7+), tap **Printer → Camera**. The camera page plays the bridge with a Pause/Resume row. **‹ Printer** (Back) or any tab stops it. On builds without the X2D overlay, the same button plays the printer's own camera stream, which needs LAN mode and the printer's access code. The motion test is still at More → Sound & Alerts.
+
+From the portal or a script, use the existing authenticated OS12 session mechanism.
 
 ```text
 POST /os12/media/video/start-x2d-bridge

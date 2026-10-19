@@ -57,6 +57,12 @@ CAPTURE_NEW = """  g_wsCaptureCompose = false;
     g_hubFramePrimed = false;
   }
 """
+# 12.3.7 Printer > Camera: on this build the camera is the Mac bridge.
+CAMERA_SOURCE_OLD = 'static const char kWsCameraSource[] = "printer-camera";'
+CAMERA_SOURCE_NEW = 'static const char kWsCameraSource[] = "x2d-bridge";'
+CAMERA_HINT_OLD = '"The printer needs LAN mode and its access code."'
+CAMERA_HINT_NEW = '"Open the X2D Live View in Bambu Studio on the Mac."'
+
 CAPTURE_DECLARATION = "namespace workshop { namespace media { bool x2dRedrawLastFrame(); } }\n\n"
 CAPTURE_SIGNATURE = "bool smartHubCapturePrepare(uint16_t* width, uint16_t* height) {"
 
@@ -76,6 +82,9 @@ def patch_smart_hub(hub: str) -> str:
     if "smartHubCapturePrepare" not in hub or "smartHubCaptureRgbRow" not in hub:
         raise PatchError("visual capture support must be reconstructed before X2D viewer polish")
     hub = replace_once_or_verified(hub, LAUNCH_OLD, LAUNCH_NEW, "buzzerPlay(BUZZ_ERROR);}", "launch failure feedback")
+    if "g_wsCameraMode" in hub:  # trees with Printer > Camera (12.3.7+)
+        hub = replace_once_or_verified(hub, CAMERA_SOURCE_OLD, CAMERA_SOURCE_NEW, CAMERA_SOURCE_NEW, "camera source")
+        hub = replace_once_or_verified(hub, CAMERA_HINT_OLD, CAMERA_HINT_NEW, CAMERA_HINT_NEW, "camera hint")
     hub = replace_once_or_verified(hub, CAPTURE_OLD, CAPTURE_NEW, CAPTURE_MARKER, "capture camera frame")
     hub = replace_once_or_verified(hub, CAPTURE_SIGNATURE, CAPTURE_DECLARATION + CAPTURE_SIGNATURE,
                                    "bool x2dRedrawLastFrame();", "capture frame declaration")
