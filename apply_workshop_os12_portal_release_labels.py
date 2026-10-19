@@ -3,9 +3,13 @@
 
 The header pill read SMART_HOME_VERSION ("v11.28", the old UI generation) and
 the sidebar brand and footer hard-coded "12.0.0", so a 12.3.x build announced
-two wrong versions. %SMART_VER% now expands to WORKSHOP_OS_RELEASE_VERSION
-(set per build by apply_workshop_os12_release_identity.py), and both sidebar
-labels use it.
+two wrong versions, and app.js wrote a third ("Workshop OS v10.4 ·
+ws_lcd_350") into the drawer footer. %SMART_VER% now expands to
+WORKSHOP_OS_RELEASE_VERSION (set per build by
+apply_workshop_os12_release_identity.py); the sidebar labels use it, the page
+hands it to app.js as DEV.ver, and the footer reads DEV.ver and DEV.board.
+The v9.2 orange "Workshop OS" pill, a second copy of the brand next to the
+brand, is no longer added.
 """
 from __future__ import annotations
 
@@ -21,6 +25,20 @@ from scripts.smart_home_patch_utils import PatchError
 
 TEMPLATE_OLD = 'if (strcmp(name, "SMART_VER") == 0) { out = SMART_HOME_VERSION; return true; }'
 TEMPLATE_NEW = 'if (strcmp(name, "SMART_VER") == 0) { out = WORKSHOP_OS_RELEASE_VERSION; return true; }'
+DEV_OLD = "<script>var DEV={board:'%BOARD%',"
+DEV_NEW = "<script>var DEV={ver:'%SMART_VER%',board:'%BOARD%',"
+FOOTER_OLD = "footer.innerHTML='<strong>Workshop OS v10.4</strong><span>ws_lcd_350 · local-first</span>"
+FOOTER_NEW = "footer.innerHTML='<strong>Workshop OS '+(DEV.ver||'')+'</strong><span>'+(DEV.board||'WS350')+' · local-first</span>"
+PILL_OLD = """  var brand = document.querySelector('.brand');
+  if (brand && !document.getElementById('smartHomeBuildPill')){
+    var pill = document.createElement('span');
+    pill.id = 'smartHomeBuildPill';
+    pill.className = 'version-pill v92-build-pill';
+    pill.textContent = 'Workshop OS';
+    brand.appendChild(pill);
+  }
+"""
+PILL_NEW = "  // The brand and its version pill already name Workshop OS; no second pill.\n"
 PAGE_LABELS = (
     ("<small>WS350 · 12.0.0</small>", "<small>WS350 · %SMART_VER%</small>"),
     ("<strong>Workshop OS 12.0.0</strong>", "<strong>Workshop OS %SMART_VER%</strong>"),
@@ -47,8 +65,15 @@ def apply(repo: Path) -> None:
     p = pages.read_text(encoding="utf-8")
     for old, new in PAGE_LABELS:
         p = swap(p, old, new, "sidebar version label")
+    p = swap(p, DEV_OLD, DEV_NEW, "DEV.ver for app.js")
+    script = repo / "web" / "app.js"
+    if not script.is_file():
+        raise PatchError(f"missing reconstructed source: {script}")
+    js = swap(script.read_text(encoding="utf-8"), FOOTER_OLD, FOOTER_NEW, "drawer footer version")
+    js = swap(js, PILL_OLD, PILL_NEW, "v9.2 build pill")
     template.write_text(t, encoding="utf-8")
     pages.write_text(p, encoding="utf-8")
+    script.write_text(js, encoding="utf-8")
     print("Portal version labels follow WORKSHOP_OS_RELEASE_VERSION")
 
 

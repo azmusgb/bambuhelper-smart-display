@@ -231,6 +231,10 @@ class RailAndLabelTests(unittest.TestCase):
             self.assertEqual(labels.swap(new, old, new, "x"), new)  # idempotent
         with self.assertRaises(labels.PatchError):
             labels.swap("<small>WS350 · 12.9.9</small>", labels.PAGE_LABELS[0][0], labels.PAGE_LABELS[0][1], "x")
+        self.assertIn("DEV.ver", labels.FOOTER_NEW)
+        self.assertNotIn("v10.4", labels.FOOTER_NEW)
+        self.assertIn("ver:'%SMART_VER%'", labels.DEV_NEW)
+        self.assertNotIn("v92-build-pill", labels.PILL_NEW)
 
 
 if __name__ == "__main__":
