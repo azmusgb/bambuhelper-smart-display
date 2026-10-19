@@ -23,7 +23,7 @@ Bambu Studio bambu_source + libBambuSource.dylib (Mac)
    v
 FFmpeg (Mac)
    |
-   | 480x270 JPEG, default 5 fps
+   | 320x180 JPEG, default 5 fps
    v
 tools/x2d_camera_bridge.py
    |
@@ -36,7 +36,7 @@ reconstructed WS350 image + experimental X2D overlay
 foreground media poll decodes newest frame
    |
    v
-480x270 camera viewport + existing controls
+Video test viewport (frame fitted to its JPEG size) + existing controls
 ```
 
 The bridge never returns Bambu `url.txt`, printer UID, access code, credentials, or the raw Bambu camera URI.
@@ -68,7 +68,7 @@ Defaults:
 - bind: `0.0.0.0`
 - port: `8091`
 - JPEG rate: `5 fps`
-- JPEG width: `480 px` (`270 px` high for the 16:9 X2D stream)
+- JPEG width: `320 px` (`180 px` high for the 16:9 X2D stream), the WS350 viewer size
 
 Lower-load example:
 
@@ -213,7 +213,7 @@ The experimental overlay is deliberately conservative:
 - maximum acquisition cadence: 5 fps, including HTTP latency,
 - JPEG maximum: 384 KiB,
 - PSRAM frame allocation,
-- expected frame dimensions: 480x270,
+- frame fitted to the size in its JPEG header (up to 480x270),
 - JPEG SOI/EOI validation,
 - bounded connect/read timeouts,
 - no public Internet dependency,
@@ -238,6 +238,20 @@ Do not promote this overlay into the canonical media architecture until the real
 11. No Bambu credential, UID, access code, raw camera URI, or sensitive session data appears in serial logs or exported diagnostics.
 
 If touch materially stalls during bridge failure or recovery, this overlay is not acceptable.
+
+## Soak results (2026-10-19)
+
+These runs used the WS350 on 12.3.x with X2D overlays, during a print, with the bridge at 320 px / 5 fps.
+
+| Run | Result |
+|---|---|
+| 20 min, viewer only | No stop. 4,231 frames, about 4.2 fps steady. |
+| 30 min, `scripts/soak_x2d_viewer.py` (status at 1 Hz, capture every 10 s, pause/resume every 60 s) | No reboot. 306/306 status OK (p50 125 ms, p95 532 ms). 108/108 captures OK. Pause/resume max 1.3 s / 0.4 s. PSRAM free flat at 6.82–6.83 MB. Ended at 18 min when someone tapped the Workshop tab, which leaves the viewer and stops the video by design. |
+
+Notes:
+
+- A framebuffer capture takes about 5 s and stalls drawing while it runs. With a capture every 10 s the viewer drops to about 0.8 fps, so measure frame rate with `--no-captures`.
+- Keep hands off the display during a soak. The script records the touch counters when the session ends, so a tap shows up as a `touchPresses` increase.
 
 ## Framebuffer evidence
 

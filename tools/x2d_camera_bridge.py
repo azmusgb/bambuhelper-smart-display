@@ -3,7 +3,7 @@
 
 The bridge intentionally keeps Bambu authentication/session material local to the
 Mac. It launches Bambu Studio's existing ``bambu_source`` helper, decodes the raw
-H.264 stream with the installed FFmpeg, scales it to 480x270, and retains only
+H.264 stream with the installed FFmpeg, scales it (320 px wide by default), and retains only
 the latest complete JPEG in memory. The WS350 polls a fixed endpoint such as:
 
     http://<mac-lan-ip>:8091/x2d/frame.jpg
