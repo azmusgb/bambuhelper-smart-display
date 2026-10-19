@@ -727,6 +727,147 @@ static void wtDrawPrinter(bool full) {
 }
 
 // ---------------------------------------------------------------------------
+// Workshop: filament inventory, the workshop timer and the note
+// ---------------------------------------------------------------------------
+
+static uint8_t g_wtWorkshopScroll = 0;
+static uint16_t g_wtTimerMinutes = 0;  // 0 = the first portal preset
+
+// Timer length: one of the four presets set in Local Portal, low to high.
+static uint16_t wtTimerLength() {
+  if (!g_wtTimerMinutes) g_wtTimerMinutes = g_timerPresets[0];
+  return g_wtTimerMinutes;
+}
+
+static void wtStepTimer(int dir) {
+  uint16_t sorted[4];
+  for (uint8_t i = 0; i < 4; ++i) sorted[i] = g_timerPresets[i];
+  for (uint8_t i = 1; i < 4; ++i)
+    for (uint8_t j = i; j > 0 && sorted[j - 1] > sorted[j]; --j) { const uint16_t x = sorted[j]; sorted[j] = sorted[j - 1]; sorted[j - 1] = x; }
+  g_wtTimerMinutes = wsStepList(wtTimerLength(), sorted, 4, dir);
+}
+
+static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v) {
+  wsView(v);
+  using workshop::platform::Freshness;
+  using workshop::platform::InventoryPlacementState;
+  const auto& st = inv.state;
+  const bool fresh = st.available && st.freshness == Freshness::Fresh;
+  switch (id) {
+    case wtl::ItemId::WsInventorySetup:
+      if (!workshopPlatformWifiOnline()) { v.enabled = false; v.reason = "Needs Wi-Fi to connect"; break; }
+      strlcpy(v.value, "Not connected · set up", sizeof(v.value));
+      v.valueColor = OS12V_AMBER;
+      break;
+    case wtl::ItemId::WsHowTo:
+      strlcpy(v.value, "Local Portal > More > Filament Inventory", sizeof(v.value));
+      v.reason = "Paste a WS350 device token from Filament Inventory > Sync";
+      break;
+    case wtl::ItemId::WsInventory:
+      v.button = inv.busy ? "Refreshing" : "Refresh";
+      if (inv.busy) { v.enabled = false; v.reason = "Refreshing"; break; }
+      if (!st.available) { strlcpy(v.value, inv.statusMessage[0] ? inv.statusMessage : "Unavailable", sizeof(v.value)); v.valueColor = OS12V_AMBER; }
+      else if (st.freshness == Freshness::Conflicting) { strlcpy(v.value, "Needs review", sizeof(v.value)); v.valueColor = OS12V_RED; }
+      else if (!fresh) { strlcpy(v.value, "Out of date", sizeof(v.value)); v.valueColor = OS12V_AMBER; }
+      else { snprintf(v.value, sizeof(v.value), "Current · %u spools", (unsigned)st.spoolCount); v.valueColor = OS12V_GREEN; }
+      break;
+    case wtl::ItemId::WsReadiness: {
+      if (!fresh) { strlcpy(v.value, "Unknown until inventory is current", sizeof(v.value)); break; }
+      strlcpy(v.value, hubOs12WorkshopReadinessLabel(st.readiness), sizeof(v.value));
+      const uint16_t c = hubOs12WorkshopReadinessColor(st.readiness);
+      v.valueColor = c == C10_GREEN ? OS12V_GREEN : (c == C10_RED ? OS12V_RED : (c == C10_ORANGE ? OS12V_AMBER : OS12V_TEXT));
+      break;
+    }
+    case wtl::ItemId::WsLoaded:
+      if (!st.available) strlcpy(v.value, "Unknown", sizeof(v.value));
+      else if (st.placementState == InventoryPlacementState::Current && !st.placementVerificationRequired) {
+        snprintf(v.value, sizeof(v.value), "%u loaded of %u", (unsigned)st.loadedCount, (unsigned)st.spoolCount);
+        v.valueColor = OS12V_TEXT;
+      } else if (st.placementState == InventoryPlacementState::Conflict) {
+        snprintf(v.value, sizeof(v.value), "%u conflicts", (unsigned)st.placementConflictCount);
+        v.valueColor = OS12V_RED;
+      } else {
+        strlcpy(v.value, "Check in Filament Inventory", sizeof(v.value));
+        v.valueColor = OS12V_AMBER;
+      }
+      break;
+    case wtl::ItemId::WsReview: {
+      if (!st.available) { strlcpy(v.value, "Unknown", sizeof(v.value)); break; }
+      const unsigned qty = st.unknownQuantityCount + st.staleQuantityCount + st.conflictCount + st.invalidLineageCount;
+      const unsigned place = st.unknownPlacementCount + st.stalePlacementCount + st.placementConflictCount;
+      if (fresh && !st.lowCount && !qty && !place && !st.quantityVerificationRequired && !st.placementVerificationRequired) {
+        strlcpy(v.value, "Nothing to review", sizeof(v.value));
+        v.valueColor = OS12V_GREEN;
+      } else {
+        snprintf(v.value, sizeof(v.value), "Low %u · Amount %u · Place %u", (unsigned)st.lowCount, qty, place);
+        v.valueColor = (st.conflictCount || st.invalidLineageCount || st.placementConflictCount) ? OS12V_RED : OS12V_AMBER;
+      }
+      break;
+    }
+    case wtl::ItemId::WsManage:
+      if (!workshopPlatformWifiOnline()) { v.enabled = false; v.reason = "Needs Wi-Fi"; break; }
+      strlcpy(v.value, "Address and sign-in code", sizeof(v.value));
+      break;
+    case wtl::ItemId::WsTimer:
+      if (g_workshopTimerDone) { strlcpy(v.value, "Done", sizeof(v.value)); v.valueColor = OS12V_AMBER; v.button = "Clear"; }
+      else if (workshopTimerActive()) {
+        const uint32_t sec = workshopTimerRemainingSeconds();
+        snprintf(v.value, sizeof(v.value), "%lu:%02lu left", (unsigned long)(sec / 60UL), (unsigned long)(sec % 60UL));
+        v.valueColor = OS12V_ACCENT;
+        v.button = "Cancel";
+      } else {
+        strlcpy(v.value, "Not running", sizeof(v.value));
+        v.button = "Start";
+      }
+      break;
+    case wtl::ItemId::WsTimerLength:
+      snprintf(v.value, sizeof(v.value), "%u min", (unsigned)wtTimerLength());
+      v.valueColor = OS12V_TEXT;
+      if (workshopTimerActive()) { v.enabled = false; v.reason = "Cancel the timer to change it"; }
+      break;
+    case wtl::ItemId::WsNote:
+      if (g_workshopNote[0]) { strlcpy(v.value, g_workshopNote, sizeof(v.value)); v.valueColor = OS12V_TEXT; }
+      else { strlcpy(v.value, "None", sizeof(v.value)); v.reason = "Write a note in Local Portal"; }
+      break;
+    default:
+      break;
+  }
+}
+
+static void wtDrawWorkshop(bool full) {
+  (void)full;
+  const wsm::Screen s = wsScreen();
+  const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
+  const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
+  const wtl::ViewSpec& v = wtl::view(id);
+  g_wtWorkshopScroll = wtl::clampScroll(s, v, 0, g_wtWorkshopScroll);
+  const uint8_t maxS = wtl::maxScroll(s, v, 0);
+  const bool scrollButtons = maxS > 0;
+  const char* chip = nullptr;
+  uint16_t chipColor = OS12V_MUTED;
+  if (workshopTimerActive()) { chip = "Timer on"; chipColor = OS12V_ACCENT; }
+  else if (g_workshopTimerDone) { chip = "Timer done"; chipColor = OS12V_AMBER; }
+  tft.fillScreen(OS12V_BG);
+  wtDrawHeader(s, v.title, chip, chipColor, scrollButtons, g_wtWorkshopScroll, maxS);
+  for (uint8_t i = 0; i < v.itemCount; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, 0, g_wtWorkshopScroll, i);
+    if (r.empty()) continue;
+    WsRowView row;
+    wtWorkshopRow(v.items[i].id, inv, row);
+    wsDrawRowBody(s, v.items[i].rowKind, v.items[i].label, row, r);
+  }
+  if (scrollButtons) {
+    const int16_t top = wsm::slotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);
+    const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / v.itemCount);
+    tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
+    tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * g_wtWorkshopScroll / maxS), 2, thumb, OS12V_MUTED);
+  }
+  uiBottomNav(2, nullptr);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+// ---------------------------------------------------------------------------
 // Touch
 // ---------------------------------------------------------------------------
 
@@ -865,6 +1006,63 @@ static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress) {
         setPrinterFeedback(3, "Hold to stop", 1000);
         wsToast(longPress ? "Start and keep the hold on the Stop button" : "Hold the Stop button for 1 second");
       }
+      return true;
+    default:
+      return true;
+  }
+}
+
+// ---- Workshop touch ----
+
+static bool wtWorkshopTouch(int16_t x, int16_t y) {
+  const wsm::Screen s = wsScreen();
+  const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
+  const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
+  const wtl::ViewSpec& v = wtl::view(id);
+  const wtl::Hit h = wtl::hitTest(s, id, 0, g_wtWorkshopScroll, x, y);
+  switch (h.kind) {
+    case wtl::HitKind::Tab:
+      wtTab(h.index);
+      return true;
+    case wtl::HitKind::ScrollUp:
+      if (g_wtWorkshopScroll > 0) { g_wtWorkshopScroll = wtl::clampScroll(s, v, 0, (int)g_wtWorkshopScroll - wsm::scrollStep(s)); wsClick(); }
+      return true;
+    case wtl::HitKind::ScrollDown:
+      if (g_wtWorkshopScroll < wtl::maxScroll(s, v, 0)) { g_wtWorkshopScroll = wtl::clampScroll(s, v, 0, (int)g_wtWorkshopScroll + wsm::scrollStep(s)); wsClick(); }
+      return true;
+    case wtl::HitKind::Item:
+      break;
+    default:
+      return true;
+  }
+  const wtl::ItemSpec& it = v.items[h.index];
+  WsRowView row;
+  wtWorkshopRow(it.id, inv, row);
+  if (!row.enabled || it.rowKind == wsm::RowKind::Info) {
+    // Disabled and read-only rows say why instead of doing nothing.
+    if (row.reason) wsToast(row.reason);
+    return true;
+  }
+  switch (it.id) {
+    case wtl::ItemId::WsInventorySetup:
+    case wtl::ItemId::WsManage:
+      // Local Portal shows the address and the sign-in code; Back returns here.
+      wsOpenFrom(wsm::PageId::LocalPortal, 2);
+      wsClick();
+      return true;
+    case wtl::ItemId::WsInventory:
+      if (workshopInventoryRequestRefresh()) wsClick();
+      else wsToast("Could not refresh now");
+      g_dirty = true;
+      return true;
+    case wtl::ItemId::WsTimer:
+      if (g_workshopTimerDone || workshopTimerActive()) clearWorkshopTimer();
+      else startWorkshopTimer(wtTimerLength());
+      wsClick();
+      return true;
+    case wtl::ItemId::WsTimerLength:
+      wtStepTimer(h.part == wsm::Part::Minus ? -1 : 1);
+      wsClick();
       return true;
     default:
       return true;

@@ -152,6 +152,36 @@ def validate_printer(hub: str, fragment: str) -> None:
     need(block(hub, "static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c)"), "OS12V_ACCENT", "Pause is the filled primary")
 
 
+def validate_workshop(hub: str, fragment: str) -> None:
+    need(block(hub, "static void drawWorkshop(bool full)"), "wtDrawWorkshop(full);", "drawWorkshop hands Workshop to the tabs")
+    for gone in ("hubOs12WorkshopActionRect", "hubOs12WorkshopSetupRect", "Set Up Inventory"):
+        forbid(hub, gone, "12.0 Workshop geometry or giant set-up button")
+    draw = block(hub, "static void wtDrawWorkshop(bool full)")
+    ordered(draw, ["wtDrawHeader(", "wtl::itemRect(", "wsDrawRowBody(", "uiBottomNav(2, nullptr);"], "Workshop draws header, rows, tab bar")
+    # Useful without inventory: the timer and the note live on Workshop, and
+    # set-up is one row that says where to go.
+    rows = block(hub, "static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v)")
+    for needle in ('"Not connected · set up"', '"Local Portal > More > Filament Inventory"', '"Start"', '"Cancel"',
+                   "g_workshopNote", "wtTimerLength()"):
+        need(rows, needle, "Workshop rows")
+    touch = block(hub, "static bool wtWorkshopTouch(int16_t x, int16_t y)")
+    need(touch, "wsOpenFrom(wsm::PageId::LocalPortal, 2);", "Workshop -> Local Portal returns to Workshop")
+    need(touch, "startWorkshopTimer(wtTimerLength());", "start the workshop timer on the device")
+    need(touch, "clearWorkshopTimer();", "cancel the workshop timer on the device")
+    need(touch, "if (row.reason) wsToast(row.reason);", "disabled rows say why")
+    need(block(hub, "static void wtStepTimer(int dir)"), "g_timerPresets[i]", "timer lengths are the portal presets")
+    for prompt in ("hubStatusTokenPromptDraw", "hubCodeTokenPromptDraw"):
+        body = block(hub, f"static bool {prompt}(bool force)")
+        need(body, "wsm::dialogCard(s)", f"{prompt} on the More dialog card")
+        forbid(body, "drawHeader(", f"{prompt} uses the 12.0 header")
+        forbid(body, "uiBottomNav(", f"{prompt} draws the tab bar under a modal prompt")
+    need(hub, "static HubRect hubStatusTokenCancelRect() { return wsHub(wsm::dialogCancelRect(wsScreen())); }",
+         "status prompt Cancel inside the card")
+    need(hub, "static HubRect hubStatusTokenAllowRect() { return wsHub(wsm::dialogConfirmRect(wsScreen())); }",
+         "status prompt Allow inside the card")
+    forbid(hub, "(int16_t)(H-68)", "status prompt buttons on the tab-bar strip")
+
+
 def validate(repo: Path) -> str:
     build = read(repo / "include/smart_home_build.h")
     hub = read(repo / "src/smart_hub.cpp")
@@ -168,6 +198,7 @@ def validate(repo: Path) -> str:
     ordered(touch, ["if(hubStatusTokenPromptTouch(x,y))return true;", "if(hubCodeTokenPromptTouch(x,y))return true;",
                     "return wsMoreTouch(x,y,longPress);", "if(cur==SCREEN_HUB_HOME)return wtHomeTouch(x,y);",
                     "if(cur==SCREEN_HUB_PRINTER)return wtPrinterTouch(x,y,longPress);",
+                    "if(cur==SCREEN_HUB_WORKSHOP)return wtWorkshopTouch(x,y);",
                     "hubNavRect(i).contains(x,y)"], "touch hand-off order")
     # Geometry only from the shared layout in the new code.
     for needle in ("hubRc2HitRef", "hubHomeRect", "hubPrinterActionRect", "hubV1125PrinterModeRect", " hr(", "(hr(", "=hr("):
@@ -175,6 +206,7 @@ def validate(repo: Path) -> str:
     need(block(hub, "static void wtTab(uint8_t i)"), "wsOpen(wsm::PageId::Root);", "More tab opens the More root")
     validate_home(hub, fragment)
     validate_printer(hub, fragment)
+    validate_workshop(hub, fragment)
     return run_host_test()
 
 
