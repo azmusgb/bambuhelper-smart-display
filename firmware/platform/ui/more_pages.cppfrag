@@ -16,6 +16,9 @@ static uint8_t g_wsScroll = 0;
 static WsDialog g_wsDialog = WsDialog::None;
 static char g_wsToast[72] = {0};
 static unsigned long g_wsToastUntilMs = 0;
+// Set when a level-1 page was opened from the Home or Workshop tab (12.3):
+// its Back then returns to that tab instead of the More root.
+static int8_t g_wsReturnTab = -1;
 
 // Pages this build draws with the new layout (all of them since 12.1.3).
 static bool wsPageLive(wsm::PageId id) {
@@ -105,9 +108,21 @@ static void wsOpen(wsm::PageId id) {
   g_wsScroll = 0;
   g_wsDialog = WsDialog::None;
   g_wsToast[0] = 0;
+  g_wsReturnTab = -1;
   if (getScreenState() != SCREEN_HUB_MORE) setPage(SCREEN_HUB_MORE);
   if (id == wsm::PageId::VideoTest) wsVideoStart();
   g_dirty = true;
+}
+
+// Opens a level-1 More page from another tab; Back returns to that tab.
+static void wsOpenFrom(wsm::PageId id, uint8_t tab) {
+  wsOpen(id);
+  if (wsm::page(g_wsPage).level == 1 && tab < 3) g_wsReturnTab = (int8_t)tab;
+}
+
+static const char* wsReturnLabel(uint8_t tab) {
+  static const char* kNames[3] = {"Home", "Printer", "Workshop"};
+  return kNames[tab < 3 ? tab : 0];
 }
 
 
@@ -1253,7 +1268,8 @@ static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
   if (p.level > 0) {
     const wsm::Rect back = wsm::backRect(s);
     wsDrawChevronLeft(back.x + 16, back.y + back.h / 2, OS12V_ACCENT);
-    uiDrawFit(p.backLabel, back.x + 26, back.y + back.h / 2, back.w - 30, FONT_BODY, ML_DATUM, OS12V_ACCENT, OS12V_BG);
+    const char* backLabel = (g_wsReturnTab >= 0 && p.level == 1) ? wsReturnLabel((uint8_t)g_wsReturnTab) : p.backLabel;
+    uiDrawFit(backLabel, back.x + 26, back.y + back.h / 2, back.w - 30, FONT_BODY, ML_DATUM, OS12V_ACCENT, OS12V_BG);
     tft.drawFastVLine(back.right(), 10, wsm::kHeaderH - 20, OS12V_LINE);
   } else {
     tft.fillRoundRect(OS12V_INSET, 12, 4, 20, 2, OS12V_ACCENT);
@@ -1308,29 +1324,29 @@ static void wsDrawRowValue(const char* text, int16_t x, int16_t y, int16_t w, Fo
   uiDrawFit(text, x, y, w, font, datum, color, OS12V_SURFACE);
 }
 
-static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row) {
-  WsRowView v;
-  wsRowView(spec.id, v);
+// One row of any page: More, and (12.3) the Home, Printer and Workshop tabs.
+static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                          const wsm::Rect& row) {
   const wsm::Rect surface = wsm::rowSurface(row);
   tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
   tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
   const int16_t mid = row.y + row.h / 2;
-  const wsm::Rect label = wsm::labelRect(s, row, spec.kind);
-  const wsm::Rect valueSlot = wsm::valueRect(s, row, spec.kind);
+  const wsm::Rect label = wsm::labelRect(s, row, kind);
+  const wsm::Rect valueSlot = wsm::valueRect(s, row, kind);
   const char* value = v.enabled ? v.value : (v.reason ? v.reason : v.value);
-  const bool infoOnly = spec.kind == wsm::RowKind::Info && !value[0];
+  const bool infoOnly = kind == wsm::RowKind::Info && !value[0];
   int16_t labelW = label.w;
-  if (value[0] && spec.kind != wsm::RowKind::Stepper && spec.kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
+  if (value[0] && kind != wsm::RowKind::Stepper && kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
     labelW = valueSlot.x - 8 - label.x;
-  uiDrawFit(spec.label, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
+  uiDrawFit(labelText, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
             (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
   const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_AMBER;
 
-  switch (spec.kind) {
+  switch (kind) {
     case wsm::RowKind::Info:
     case wsm::RowKind::Nav:
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
-      if (spec.kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
+      if (kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
       break;
     case wsm::RowKind::Code:
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w,
@@ -1338,7 +1354,7 @@ static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm:
                      MR_DATUM, valueColor);
       break;
     case wsm::RowKind::Toggle: {
-      const wsm::Rect sw = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Whole);
+      const wsm::Rect sw = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
       const bool on = v.enabled && v.on;
       tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_SURFACE2);
@@ -1349,8 +1365,8 @@ static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm:
       break;
     }
     case wsm::RowKind::Stepper: {
-      const wsm::Rect minus = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Minus);
-      const wsm::Rect plus = wsm::partDrawRect(s, row, spec.kind, wsm::Part::Plus);
+      const wsm::Rect minus = wsm::partDrawRect(s, row, kind, wsm::Part::Minus);
+      const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
       for (uint8_t i = 0; i < 2; ++i) {
         const wsm::Rect b = i == 0 ? minus : plus;
         tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, v.enabled ? OS12V_SURFACE2 : OS12V_SURFACE);
@@ -1366,17 +1382,24 @@ static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm:
     }
     case wsm::RowKind::Action: {
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
-      wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false);
+      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false);
       break;
     }
     case wsm::RowKind::Action2: {
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
-      wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false);
-      wsDrawButton(wsm::partDrawRect(s, row, spec.kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false);
+      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false);
+      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false);
       break;
     }
   }
 }
+
+static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row) {
+  WsRowView v;
+  wsRowView(spec.id, v);
+  wsDrawRowBody(s, spec.kind, spec.label, v, row);
+}
+
 
 static void wsTileStatus(wsm::PageId id, char* out, size_t len, int16_t maxW, uint16_t& color) {
   using P = wsm::PageId;
@@ -1591,6 +1614,7 @@ static void wsVideoGuard(ScreenState screen) {
 
 static void wsTab(uint8_t i) {
   g_wsDialog = WsDialog::None;
+  g_wsReturnTab = -1;
   if (i < 3) { wsLeavePage(wsm::PageId::Root); g_wsPage = wsm::PageId::Root; g_wsScroll = 0; }
   if (i == 0) setPage(SCREEN_HUB_HOME);
   else if (i == 1) setPage(SCREEN_HUB_PRINTER);
@@ -1636,6 +1660,7 @@ static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
       return true;
     case wsm::HitKind::Back:
       if (g_wsDialog != WsDialog::None) g_wsDialog = WsDialog::None;
+      else if (g_wsReturnTab >= 0 && p.level == 1) wsTab((uint8_t)g_wsReturnTab);
       else wsOpen(p.parent);
       wsClick();
       return true;
