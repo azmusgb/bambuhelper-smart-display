@@ -987,6 +987,9 @@ static void wtDrawWorkshop(bool full) {
 // /hub/show printer, printer-ams and printer-control: Printer with that
 // segment selected (the capture scripts open each one by id).
 static bool wtShowPrinterView(const char* name) {
+  // "printer-camera" opens Printer > Camera, so capture and acceptance
+  // scripts can reach it without a touch (it is a page, not a /hub/views id).
+  if (name && strcmp(name, "printer-camera") == 0) { wsOpenCamera(1); return true; }
   wtl::View v = wtl::View::PrinterStatus;
   if (!wtl::printerViewFromId(name, v)) return false;
   g_printerMode = wtl::segmentOf(v);
