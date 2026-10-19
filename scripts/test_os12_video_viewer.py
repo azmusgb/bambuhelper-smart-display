@@ -7,7 +7,7 @@ import os
 import time
 
 from accept_os12_portal_runtime import Client, AcceptanceError, check
-from accept_os12_media_runtime import api, status, validate_status
+from accept_os12_media_runtime import api, start_video_after_page_open, status, validate_status
 
 
 def main() -> int:
@@ -28,16 +28,9 @@ def main() -> int:
     check(show.status == 200, f"Camera Viewer navigation returned HTTP {show.status}")
     print("DEVICE VIEW Camera Viewer: opened")
 
-    initial = status(client)
-    check(initial["session"] == "Idle", f"video test must start Idle, got {initial['session']}")
-
-    start = api(client, "/os12/media/video/start", method="POST")
-    validate_status(start)
-    check(
-        start["_http_status"] == 202 and start["session"] == "PlayingVideo",
-        "video start refused: " + str(start["error"]),
-    )
-    print("STATE PlayingVideo: runtime session entered")
+    # Since 12.1.3 the page starts the video itself; older builds open Idle.
+    _, started_by = start_video_after_page_open(client)
+    print(f"STATE PlayingVideo: runtime session entered (started by {started_by})")
     print(f"WATCH THE PHYSICAL WS350 FOR {args.seconds} SECONDS")
 
     for second in range(1, max(1, args.seconds) + 1):
