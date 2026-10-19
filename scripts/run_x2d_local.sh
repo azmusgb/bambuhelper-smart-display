@@ -91,7 +91,14 @@ python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
 PIO_BIN="${PIO_BIN:-$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")}"
 [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable' >&2; exit 1; }
 # Install library deps first: a build that also installs them can fail silently.
-(cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 >/dev/null)
+# The PlatformIO registry occasionally drops a download (HTTPClientError);
+# retry instead of failing the whole build on one network hiccup.
+for attempt in 1 2 3; do
+  if (cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 >/dev/null); then break; fi
+  if [[ "$attempt" -eq 3 ]]; then echo "FAIL: pio pkg install failed 3 times" >&2; exit 1; fi
+  echo "pio pkg install failed (attempt $attempt of 3); retrying in $((attempt * 15)) s" >&2
+  sleep $((attempt * 15))
+done
 (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
 FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
 PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"

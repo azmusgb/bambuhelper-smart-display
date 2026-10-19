@@ -148,7 +148,14 @@ if [[ "${1:-}" == "--build" ]]; then
 
   echo "=== Build WS350 OS12 signed-in local-portal candidate ==="
   # Install library deps first: a build that also installs them can fail silently.
-  (cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 -e jc3248w535 >/dev/null)
+  # The PlatformIO registry occasionally drops a download (HTTPClientError);
+  # retry instead of failing the whole build on one network hiccup.
+  for attempt in 1 2 3; do
+    if (cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 -e jc3248w535 >/dev/null); then break; fi
+    if [[ "$attempt" -eq 3 ]]; then echo "FAIL: pio pkg install failed 3 times" >&2; exit 1; fi
+    echo "pio pkg install failed (attempt $attempt of 3); retrying in $((attempt * 15)) s" >&2
+    sleep $((attempt * 15))
+  done
   (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
   test -s "$BUILD/.pio/build/ws_lcd_350/firmware.bin" || { echo 'FAIL: WS350 image missing' >&2; exit 1; }
 
