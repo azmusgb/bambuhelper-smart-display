@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.4}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.5}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -124,6 +124,9 @@ python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-ro
 python3 "$ROOT/apply_workshop_os12_portal_css_consolidate.py" --repo "$BUILD" --apply
 # Then one type/radius/breakpoint/colour scale: small, measured visual changes.
 python3 "$ROOT/apply_workshop_os12_portal_design_scale.py" --repo "$BUILD" --apply
+# 12.3.5: 44 px tap targets on phones and WCAG AA colours in both themes.
+python3 "$ROOT/apply_workshop_os12_portal_phone_fit.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_portal_phone_fit.py" --repo "$BUILD"
 # Then the LocalAI design system: palette, type, radii and Figtree (dark by default).
 python3 "$ROOT/apply_workshop_os12_portal_localai_theme.py" --repo "$BUILD" --apply
 # Version labels show the running release instead of v11.28 / 12.0.0.
