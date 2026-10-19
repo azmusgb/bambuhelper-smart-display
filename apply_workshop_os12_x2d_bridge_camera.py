@@ -310,16 +310,41 @@ STOP_ADDITION = (
 
 RENDER_X2D = r'''
 #if defined(BOARD_IS_WS350) && defined(BOARD_HAS_PSRAM) && defined(ESP32)
-// Fit the bridge's 480x270 frame inside the Video test page's video area.
-static float x2dViewportOrigin(int16_t* x, int16_t* y) {
+// Frame size from the JPEG's start-of-frame marker, so the bridge can send
+// frames at the size the viewer shows (smaller over Wi-Fi, no scaling).
+static bool x2dJpegSize(const uint8_t* d, size_t n, int16_t* w, int16_t* h) {
+  size_t i = 2;
+  while (i + 9 < n) {
+    if (d[i] != 0xFFU) return false;
+    const uint8_t marker = d[i + 1];
+    const size_t len = (static_cast<size_t>(d[i + 2]) << 8) | d[i + 3];
+    const bool sof = marker >= 0xC0U && marker <= 0xCFU &&
+                     marker != 0xC4U && marker != 0xC8U && marker != 0xCCU;
+    if (sof) {
+      *h = static_cast<int16_t>((d[i + 5] << 8) | d[i + 6]);
+      *w = static_cast<int16_t>((d[i + 7] << 8) | d[i + 8]);
+      return *w > 0 && *h > 0;
+    }
+    i += 2 + len;
+  }
+  return false;
+}
+
+// Fit the frame inside the Video test page's video area, never scaling up.
+static float x2dViewportOrigin(const uint8_t* frame, size_t bytes, int16_t* x, int16_t* y) {
+  int16_t fw = kBridgeCameraWidth, fh = kBridgeCameraHeight;
+  if (!x2dJpegSize(frame, bytes, &fw, &fh)) {
+    fw = kBridgeCameraWidth;
+    fh = kBridgeCameraHeight;
+  }
   int16_t ax = 0, ay = 0, aw = 0, ah = 0;
   ws350VideoArea(ax, ay, aw, ah);
-  float scale = static_cast<float>(aw) / kBridgeCameraWidth;
-  const float heightScale = static_cast<float>(ah) / kBridgeCameraHeight;
+  float scale = static_cast<float>(aw) / fw;
+  const float heightScale = static_cast<float>(ah) / fh;
   if (heightScale < scale) scale = heightScale;
   if (scale > 1.0f) scale = 1.0f;
-  *x = static_cast<int16_t>(ax + (aw - static_cast<int16_t>(kBridgeCameraWidth * scale)) / 2);
-  *y = static_cast<int16_t>(ay + (ah - static_cast<int16_t>(kBridgeCameraHeight * scale)) / 2);
+  *x = static_cast<int16_t>(ax + (aw - static_cast<int16_t>(fw * scale)) / 2);
+  *y = static_cast<int16_t>(ay + (ah - static_cast<int16_t>(fh * scale)) / 2);
   return scale;
 }
 #endif
@@ -332,7 +357,7 @@ bool x2dRedrawLastFrame() {
   if (!gX2dDisplayFrame || gX2dDisplayBytes < 4U) return false;
   int16_t x = 0;
   int16_t y = 0;
-  const float scale = x2dViewportOrigin(&x, &y);
+  const float scale = x2dViewportOrigin(gX2dDisplayFrame, gX2dDisplayBytes, &x, &y);
   return tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(gX2dDisplayBytes), x, y, 0, 0, 0, 0, scale, scale);
 #else
   return false;
@@ -373,7 +398,7 @@ void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
   gX2dDisplayBytes = frameBytes;
   int16_t x = 0;
   int16_t y = 0;
-  const float scale = x2dViewportOrigin(&x, &y);
+  const float scale = x2dViewportOrigin(gX2dDisplayFrame, frameBytes, &x, &y);
   // Same size and place every frame, so no black clear here (a panel flush
   // between clear and decode would show a black frame). The Video test page
   // clears the area once when the session starts.
