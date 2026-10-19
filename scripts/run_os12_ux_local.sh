@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.0}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.1}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -111,6 +111,9 @@ python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
 # it builds on.
 python3 "$ROOT/apply_workshop_os12_tabs_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_tabs_overhaul.py" --repo "$BUILD"
+# The finished tree still sends every physical printer command through the
+# OS12 facade, and Stop from exactly one (hold-guarded) place.
+python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"
 # The finished tree: both Local AI keys still have exactly their own route.
 python3 "$ROOT/scripts/validate_os12_code_token.py" --repo "$BUILD" --source-root "$ROOT" --final
 python3 "$ROOT/scripts/validate_os12_status_lite.py" --repo "$BUILD" --source-root "$ROOT"

@@ -10,6 +10,7 @@ that land outside a drawn control).
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -103,12 +104,52 @@ def validate_home(hub: str, fragment: str) -> None:
     need(card, '"Printer offline"', "offline state")
     need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), '"Not connected · set up in Workshop"', "inventory empty state")
     # Empty values draw nothing (the WS350 font shows the fitter's em dash as "|").
-    need(block(hub, "static void wtText("), "if (!wsm::drawsValueText(text)) return;", "empty card text draws nothing")
+    need(block(hub, "static void wtTextOn("), "if (!wsm::drawsValueText(text)) return;", "empty card text draws nothing")
+    need(block(hub, "static void wtText("), "wtTextOn(", "card text goes through the empty-value guard")
     forbid(fragment, '"—"', "em dash drawn on the tabs")
     # Cross-links from Home come back to Home.
     need(hub, "wsOpenFrom(wsm::PageId::LocalPortal, 0);", "Home -> Local Portal returns to Home")
     need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"),
          "else if (g_wsReturnTab >= 0 && p.level == 1) wsTab((uint8_t)g_wsReturnTab);", "Back returns to the tab")
+
+
+def validate_printer(hub: str, fragment: str) -> None:
+    need(block(hub, "static void drawPrinter(bool full)"), "wtDrawPrinter(full);", "drawPrinter hands Printer to the tabs")
+    for gone in ("hubPrinterActionRect", "hubV1125PrinterModeRect", "hubV1125ModeTabs(", "hubV1125TelemetryColumn", "hubV1125AmsSlot"):
+        forbid(hub, gone, "12.0 Printer geometry or widget")
+    draw = block(hub, "static void wtDrawPrinter(bool full)")
+    ordered(draw, ["wtDrawHeader(", "wtDrawSegments(", "wtl::itemRect(", "uiBottomNav(1, nullptr);"], "Printer draws header, segments, items, tab bar")
+    # Plain words on AMS (no 12.0 jargon footer); AMS and Status are read-only.
+    for jargon in ("TELEMETRY", "authoritative in Filament Inventory"):
+        forbid(fragment, jargon, "jargon on Printer")
+    touch = block(hub, "static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress)")
+    need(touch, "if (id != wtl::View::PrinterControl) return true;  // Status and AMS are read-only", "read-only Status and AMS")
+    # The only printer commands the tabs send: light, pause/resume, and the
+    # hold-guarded Stop. Power goes through the existing confirm screen.
+    commands = set(re.findall(r"workshop::platform::PrinterCommand::(\w+)", fragment))
+    if commands != {"Pause", "Resume", "ChamberLightOn", "ChamberLightOff", "Stop"}:
+        raise ValidationError(f"unexpected printer commands on the tabs: {sorted(commands)}")
+    if hub.count("workshop::platform::PrinterCommand::Stop") != 1:
+        raise ValidationError("Stop must be dispatched from exactly one place")
+    stop_case = touch[touch.find("case wtl::ItemId::ControlStop:"):]
+    stop_case = stop_case[:stop_case.find("default:")]
+    ordered(stop_case, ["if (!c.stopEnabled)", "if (longPress && stopHeld) {",
+                        "workshopPlatformDispatchPrinterCommand(slot, workshop::platform::PrinterCommand::Stop, true)"],
+            "Stop needs a long press that started and stayed on the Stop button, with the confirm flag")
+    need(touch, "const bool stopHeld = wtStopHoldConsume();", "Stop hold state read for every press")
+    track = block(hub, "static bool wtStopHoldTrack(int16_t x, int16_t y, wsm::Rect& drawn)")
+    need(track, "if (!g_wtStopHoldStarted) { g_wtStopHoldStarted = true; g_wtStopHoldValid = on; }", "hold must start on Stop")
+    need(track, "else if (!on) g_wtStopHoldValid = false;", "hold must stay on Stop")
+    need(track, "wtControls(w).stopEnabled", "hold only counts while Stop is live")
+    hold = block(hub, "void smartHubUpdateHoldProgress(uint16_t rawX, uint16_t rawY, uint32_t holdMs)")
+    need(hold, "if(wtStopHoldTrack(x,y,stop))", "hold progress follows the Stop tracker")
+    need(hold, "wtDrawStopHold(", "hold progress drawn over the Stop button")
+    need(fragment, "if (powerConfirmOpenForSlot(slot)) wsClick();", "printer power asks first (existing confirm screen)")
+    forbid(fragment, "tasmotaSetPower", "direct plug switching from the tabs")
+    # Pause/Resume is the primary action; Stop is outlined, never filled red.
+    stop_draw = block(hub, "static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtControls& c)")
+    forbid(stop_draw, "fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_RED)", "Stop drawn as a filled red button")
+    need(block(hub, "static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c)"), "OS12V_ACCENT", "Pause is the filled primary")
 
 
 def validate(repo: Path) -> str:
@@ -126,12 +167,14 @@ def validate(repo: Path) -> str:
     touch = block(hub, "bool smartHubHandleTouch(uint16_t rawX, uint16_t rawY, bool longPress)")
     ordered(touch, ["if(hubStatusTokenPromptTouch(x,y))return true;", "if(hubCodeTokenPromptTouch(x,y))return true;",
                     "return wsMoreTouch(x,y,longPress);", "if(cur==SCREEN_HUB_HOME)return wtHomeTouch(x,y);",
+                    "if(cur==SCREEN_HUB_PRINTER)return wtPrinterTouch(x,y,longPress);",
                     "hubNavRect(i).contains(x,y)"], "touch hand-off order")
     # Geometry only from the shared layout in the new code.
     for needle in ("hubRc2HitRef", "hubHomeRect", "hubPrinterActionRect", "hubV1125PrinterModeRect", " hr(", "(hr(", "=hr("):
         forbid(fragment, needle, "hand-placed geometry in the tab pages")
     need(block(hub, "static void wtTab(uint8_t i)"), "wsOpen(wsm::PageId::Root);", "More tab opens the More root")
     validate_home(hub, fragment)
+    validate_printer(hub, fragment)
     return run_host_test()
 
 

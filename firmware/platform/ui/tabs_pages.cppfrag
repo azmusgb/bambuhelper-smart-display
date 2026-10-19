@@ -89,10 +89,17 @@ static bool wtClockIn(char* out, size_t len, uint32_t seconds) {
   return wtClockOf(out, len, time(nullptr) + (time_t)seconds);
 }
 
-// Text on a card; an empty value draws nothing (see wsDrawRowValue).
-static void wtText(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color) {
+// Text with an explicit background; an empty value draws nothing (the text
+// fitter would draw an em dash, which the WS350 font shows as "|").
+static void wtTextOn(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color,
+                     uint16_t bg) {
   if (!wsm::drawsValueText(text)) return;
-  uiDrawFit(text, x, y, w, font, datum, color, OS12V_SURFACE2);
+  uiDrawFit(text, x, y, w, font, datum, color, bg);
+}
+
+// Text on a card.
+static void wtText(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color) {
+  wtTextOn(text, x, y, w, font, datum, color, OS12V_SURFACE2);
 }
 
 // The first printer error in words.
@@ -366,6 +373,360 @@ static void wtDrawHome(bool full) {
 }
 
 // ---------------------------------------------------------------------------
+// Printer: Status, AMS and Control
+// ---------------------------------------------------------------------------
+
+static uint8_t g_wtAmsScroll = 0;
+
+static wtl::View wtPrinterView() { return wtl::segmentView(g_printerMode < wtl::kSegmentCount ? g_printerMode : 0); }
+
+// One AMS row: a tray, or the external spool.
+struct WtTray {
+  char label[24];
+  char value[40];
+  uint16_t color;
+  bool present;
+  bool inUse;
+};
+
+// The rows Printer > AMS lists, in printer order. Zero when there is nothing
+// to list (the page then shows one row that says why).
+static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
+  if (!w.s || !w.online) return 0;
+  const AmsState& a = w.s->ams;
+  uint8_t n = 0;
+  if (a.present) {
+    const uint8_t units = a.unitCount > AMS_MAX_UNITS ? AMS_MAX_UNITS : a.unitCount;
+    for (uint8_t u = 0; u < units; ++u) {
+      const uint8_t trays = a.units[u].trayCount == 1 ? 1 : AMS_TRAYS_PER_UNIT;
+      for (uint8_t i = 0; i < trays && n < max; ++i) {
+        const uint8_t index = (uint8_t)(u * AMS_TRAYS_PER_UNIT + i);
+        const AmsTray& tr = a.trays[index];
+        WtTray& r = out[n++];
+        if (a.units[u].trayCount == 1) snprintf(r.label, sizeof(r.label), units > 1 ? "AMS %u (HT)" : "AMS HT", (unsigned)(u + 1));
+        else if (units > 1) snprintf(r.label, sizeof(r.label), "AMS %u · Slot %u", (unsigned)(u + 1), (unsigned)(i + 1));
+        else snprintf(r.label, sizeof(r.label), "Slot %u", (unsigned)(i + 1));
+        r.present = tr.present;
+        r.color = tr.present ? (tr.colorRgb565 ? tr.colorRgb565 : (uint16_t)0x1082) : OS12V_LINE;
+        r.inUse = a.activeTray == index;
+        if (!tr.present) strlcpy(r.value, "Empty", sizeof(r.value));
+        else if (tr.remain >= 0) snprintf(r.value, sizeof(r.value), "%s · %d%%", tr.type[0] ? tr.type : "Filament", (int)tr.remain);
+        else strlcpy(r.value, tr.type[0] ? tr.type : "Filament", sizeof(r.value));
+      }
+    }
+  }
+  if (a.vtPresent && n < max) {
+    WtTray& r = out[n++];
+    strlcpy(r.label, "External spool", sizeof(r.label));
+    strlcpy(r.value, a.vtType[0] ? a.vtType : "Filament", sizeof(r.value));
+    r.present = true;
+    r.color = a.vtColorRgb565 ? a.vtColorRgb565 : (uint16_t)0x1082;
+    r.inUse = a.activeTray == 254;
+  }
+  return n;
+}
+
+static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t) {
+  const wsm::Rect surface = wsm::rowSurface(row);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, t.inUse ? OS12V_SURFACE2 : OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, t.inUse ? OS12V_ACCENT : OS12V_LINE);
+  const uint16_t bg = t.inUse ? OS12V_SURFACE2 : OS12V_SURFACE;
+  const int16_t mid = row.y + row.h / 2;
+  // Colour swatch.
+  if (t.present) tft.fillCircle(row.x + 22, mid, 8, t.color);
+  tft.drawCircle(row.x + 22, mid, 8, t.present ? OS12V_MUTED : OS12V_LINE);
+  const int16_t labelX = row.x + 40;
+  const int16_t labelW = s.landscape() ? 150 : 104;
+  uiDrawFit(t.label, labelX, mid, labelW, FONT_BODY, ML_DATUM, t.present ? OS12V_TEXT : OS12V_MUTED, bg);
+  const int16_t right = row.right() - 12;
+  int16_t valueRight = right;
+  if (t.inUse) {
+    uiDrawFit("In use", right, mid, 60, FONT_SMALL, MR_DATUM, OS12V_ACCENT, bg);
+    setFont(tft, FONT_SMALL);
+    valueRight = (int16_t)(right - tft.textWidth("In use") - 12);
+  }
+  const int16_t valueX = labelX + labelW + 8;
+  if (valueRight > valueX)
+    uiDrawFit(t.value, valueRight, mid, valueRight - valueX, FONT_SMALL, MR_DATUM, t.present ? OS12V_TEXT : OS12V_MUTED, bg);
+}
+
+static void wtDrawSegments(const wsm::Screen& s, uint8_t selected) {
+  static const char* kLabels[wtl::kSegmentCount] = {"Status", "AMS", "Control"};
+  const wsm::Rect band = wtl::segmentBand(s);
+  const wsm::Rect surface = wsm::rowSurface(band);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_LINE);
+  for (uint8_t i = 0; i < wtl::kSegmentCount; ++i) {
+    const wsm::Rect r = wtl::segmentRect(s, i);
+    const bool on = i == selected;
+    if (on) tft.fillRoundRect(r.x + 4, r.y + 5, r.w - 8, r.h - 10, 9, OS12V_ACCENT);
+    else if (i) tft.drawFastVLine(r.x, r.y + 12, r.h - 24, OS12V_LINE);
+    uiDrawFit(kLabels[i], r.x + r.w / 2, r.y + r.h / 2, r.w - 16, FONT_BODY, MC_DATUM, on ? OS12V_BG : OS12V_MUTED,
+              on ? OS12V_ACCENT : OS12V_SURFACE);
+  }
+}
+
+static const char* wtSpeedText(uint8_t speed) {
+  switch (speed) {
+    case 1: return "Silent speed";
+    case 2: return "Standard speed";
+    case 3: return "Sport speed";
+    case 4: return "Ludicrous speed";
+    default: return "";
+  }
+}
+
+static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
+  (void)s;
+  wtDrawCardSurface(r, w.color);
+  const int16_t x = r.x + 18, textW = r.w - 18 - 18;
+  const int16_t y = (int16_t)(r.y + (r.h - 88) / 2);  // the 88 px layout, centred in taller cards
+  if (!w.configured) {
+    wtText("No printer set up", x, y + 8, textW, FONT_LARGE, TL_DATUM, OS12V_TEXT);
+    wsDrawWrapped("Add your printer in Local Portal: More, then Local Portal.", x, y + 42, textW, 22, 2, FONT_BODY,
+                  OS12V_MUTED, OS12V_SURFACE2);
+    return;
+  }
+  const BambuState& st = *w.s;
+  if (w.active && w.online) {
+    char pct[8];
+    snprintf(pct, sizeof(pct), "%u%%", (unsigned)st.progress);
+    wtText(w.paused ? "Paused" : "Printing", x, y + 6, textW - 90, FONT_LARGE, TL_DATUM, w.paused ? OS12V_AMBER : OS12V_TEXT);
+    wtText(pct, x + textW, y + 6, 88, FONT_LARGE, TR_DATUM, w.paused ? OS12V_AMBER : OS12V_TEXT);
+    const char* job = jobDisplayName(st);
+    wtText(job && job[0] ? job : "Print in progress", x, y + 34, textW, FONT_BODY, TL_DATUM, OS12V_MUTED);
+    wtDrawProgress(x, y + 56, textW, st.progress, w.paused ? OS12V_AMBER : OS12V_ACCENT);
+    char dur[16], done[24], line[64];
+    wtDurationText(dur, sizeof(dur), st.remainingMinutes);
+    line[0] = 0;
+    if (dur[0]) snprintf(line, sizeof(line), "%s left", dur);
+    if (!w.paused && st.remainingMinutes && wtClockIn(done, sizeof(done), (uint32_t)st.remainingMinutes * 60UL)) {
+      if (line[0]) strlcat(line, "  ·  ", sizeof(line));
+      strlcat(line, "done ", sizeof(line));
+      strlcat(line, done, sizeof(line));
+    }
+    wtText(line, x, y + 70, textW, FONT_BODY, TL_DATUM, OS12V_TEXT);
+    return;
+  }
+  const char* headline = "Ready";
+  uint16_t color = OS12V_GREEN;
+  char detail[96];
+  strlcpy(detail, "Ready for the next print.", sizeof(detail));
+  if (!w.online) {
+    headline = "Offline";
+    color = OS12V_AMBER;
+    strlcpy(detail, "Check that the printer is on and on the same Wi-Fi as this display.", sizeof(detail));
+  } else if (w.alerts || w.failed) {
+    headline = w.failed && !w.alerts ? "Print failed" : "Needs attention";
+    color = OS12V_RED;
+    wtAlertText(w, detail, sizeof(detail));
+  } else if (w.finished) {
+    headline = "Finished";
+    const char* job = jobDisplayName(st);
+    char at[24];
+    if (wtClockOf(at, sizeof(at), (time_t)st.finishEpoch)) snprintf(detail, sizeof(detail), "%s · done at %s", job && job[0] ? job : "Last print", at);
+    else strlcpy(detail, job && job[0] ? job : "Take the print off the plate.", sizeof(detail));
+  }
+  wtText(headline, x, y + 8, textW, FONT_LARGE, TL_DATUM, color);
+  wsDrawWrapped(detail, x, y + 42, textW, 22, 2, FONT_BODY, OS12V_MUTED, OS12V_SURFACE2);
+}
+
+// Printer > Status bottom row: the first error, else layer and speed while
+// printing, else the printer's Wi-Fi.
+static const char* wtPrinterDetail(const WtPrint& w, WsRowView& v) {
+  wsView(v);
+  v.valueColor = OS12V_TEXT;
+  if (!w.configured) { strlcpy(v.value, "Not set up", sizeof(v.value)); v.valueColor = OS12V_MUTED; return "Printer"; }
+  if (!w.online) { strlcpy(v.value, "Offline", sizeof(v.value)); v.valueColor = OS12V_AMBER; return "Printer"; }
+  if (w.alerts) {
+    wtAlertText(w, v.value, sizeof(v.value));
+    v.valueColor = OS12V_RED;
+    return w.alerts > 1 ? "Printer errors" : "Printer error";
+  }
+  const BambuState& st = *w.s;
+  if (w.active) {
+    if (st.totalLayers) snprintf(v.value, sizeof(v.value), "%u of %u", (unsigned)st.layerNum, (unsigned)st.totalLayers);
+    const char* speed = wtSpeedText(st.speedLevel);
+    if (speed[0]) {
+      if (v.value[0]) strlcat(v.value, "  ·  ", sizeof(v.value));
+      strlcat(v.value, speed, sizeof(v.value));
+    }
+    return "Layer";
+  }
+  const int rssi = st.wifiSignal;
+  if (rssi >= 0) { strlcpy(v.value, "Not reported", sizeof(v.value)); v.valueColor = OS12V_MUTED; return "Printer Wi-Fi"; }
+  snprintf(v.value, sizeof(v.value), "%s · %d dBm", rssi >= -55 ? "Excellent" : (rssi >= -67 ? "Good" : (rssi >= -75 ? "Fair" : "Weak")), rssi);
+  v.valueColor = rssi >= -67 ? OS12V_GREEN : OS12V_AMBER;
+  return "Printer Wi-Fi";
+}
+
+// ---- Control ----
+
+struct WtControls {
+  bool pauseEnabled;
+  const char* pauseLabel;
+  const char* pauseReason;
+  bool resume;
+  bool lightEnabled;
+  bool lightOn;
+  bool lightKnown;
+  uint8_t plug;
+  bool powerEnabled;
+  const char* powerReason;
+  bool stopEnabled;
+  const char* stopReason;
+};
+
+static WtControls wtControls(const WtPrint& w) {
+  WtControls c;
+  memset(&c, 0, sizeof(c));
+  c.resume = w.paused;
+  c.pauseLabel = printerFeedbackLabel(1, w.paused ? "Resume print" : "Pause print");
+  const char* offline = !w.configured ? "No printer set up" : "Printer offline";
+  c.pauseEnabled = w.online && w.active;
+  c.pauseReason = !w.online ? offline : "No print running";
+  c.lightEnabled = w.online;
+  c.lightKnown = w.s && w.s->lightState >= 0;
+  c.lightOn = w.s && w.s->lightState == 1;
+  c.plug = w.configured ? tasmotaControlPlugForSlot(wsSlot()) : 0xFF;
+  c.powerEnabled = c.plug != 0xFF && tasmotaSettings[c.plug].enabled;
+  c.powerReason = !w.configured ? "No printer set up" : (c.plug == 0xFF ? "No smart plug for this printer" : "Smart plug is off");
+  c.stopEnabled = w.online && w.active;
+  c.stopReason = !w.online ? offline : "No print running";
+  return c;
+}
+
+static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c) {
+  const wsm::Rect b = wtl::primaryDrawRect(row);
+  const uint16_t bg = !c.pauseEnabled ? OS12V_SURFACE : (c.resume ? OS12V_GREEN : OS12V_ACCENT);
+  tft.fillRoundRect(b.x, b.y, b.w, b.h, 12, bg);
+  tft.drawRoundRect(b.x, b.y, b.w, b.h, 12, c.pauseEnabled ? bg : OS12V_LINE);
+  if (c.pauseEnabled) {
+    // Pause bars or a play triangle, then the label.
+    const int16_t cy = b.y + b.h / 2, ix = b.x + b.w / 2 - 72;
+    if (c.resume) tft.fillTriangle(ix, cy - 8, ix, cy + 8, ix + 13, cy, OS12V_BG);
+    else { tft.fillRect(ix, cy - 8, 4, 16, OS12V_BG); tft.fillRect(ix + 8, cy - 8, 4, 16, OS12V_BG); }
+    uiDrawFit(c.pauseLabel, b.x + b.w / 2 + 10, cy, b.w - 120, FONT_LARGE, MC_DATUM, OS12V_BG, bg);
+  } else {
+    uiDrawFit(c.pauseReason, b.x + b.w / 2, b.y + b.h / 2, b.w - 24, FONT_BODY, MC_DATUM, OS12V_MUTED, bg);
+  }
+}
+
+// Stop: label on the left, an outlined red "Hold to stop" button on the right.
+static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtControls& c) {
+  const wsm::Rect surface = wsm::rowSurface(row);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  const int16_t mid = row.y + row.h / 2;
+  const wsm::Rect b = wtl::holdDrawRect(s, row);
+  uiDrawFit("Stop print", row.x + 12, mid, 120, FONT_BODY, ML_DATUM, c.stopEnabled ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
+  const int16_t hintX = row.x + 140;
+  if (b.x - 8 > hintX)
+    wtTextOn(c.stopEnabled ? "Hold the button 1 s" : c.stopReason, b.x - 8, mid, b.x - 8 - hintX, FONT_SMALL, MR_DATUM,
+             c.stopEnabled ? OS12V_MUTED : OS12V_AMBER, OS12V_SURFACE);
+  tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, c.stopEnabled ? OS12V_RED : OS12V_LINE);
+  if (c.stopEnabled) tft.drawRoundRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2, 9, OS12V_RED);
+  uiDrawFit(printerFeedbackLabel(3, "Hold to stop"), b.x + b.w / 2, b.y + b.h / 2, b.w - 16, FONT_BODY, MC_DATUM,
+            c.stopEnabled ? OS12V_RED : OS12V_MUTED, OS12V_SURFACE);
+}
+
+// Drawn over the Stop button while it is held (smartHubUpdateHoldProgress).
+static void wtDrawStopHold(const wsm::Rect& b, uint8_t segments) {
+  tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_RED);
+  uiDrawFit("Keep holding", b.x + b.w / 2, b.y + 12, b.w - 16, FONT_SMALL, MC_DATUM, OS12V_BG, OS12V_RED);
+  const int16_t gap = 3, total = b.w - 20, sw = (int16_t)((total - gap * 4) / 5);
+  for (uint8_t i = 0; i < 5; ++i)
+    tft.fillRoundRect((int16_t)(b.x + 10 + i * (sw + gap)), b.y + b.h - 10, sw, 6, 3, i < segments ? OS12V_BG : 0x9000);
+}
+
+static void wtControlRow(wtl::ItemId id, const WtControls& c, WsRowView& v) {
+  wsView(v);
+  if (id == wtl::ItemId::ControlLight) {
+    v.enabled = c.lightEnabled;
+    v.reason = "Printer offline";
+    v.on = c.lightOn;
+    const char* sent = printerFeedbackLabel(0, "");
+    if (sent[0]) { strlcpy(v.value, sent, sizeof(v.value)); v.valueColor = OS12V_ACCENT; }
+    else if (!c.lightKnown) strlcpy(v.value, "Not reported", sizeof(v.value));
+  } else if (id == wtl::ItemId::ControlPower) {
+    v.enabled = c.powerEnabled;
+    v.reason = c.powerReason;
+    v.button = "Open";
+    strlcpy(v.value, "Smart plug", sizeof(v.value));
+  }
+}
+
+static void wtDrawPrinter(bool full) {
+  (void)full;
+  const WtPrint w = wtPrint();
+  const wsm::Screen s = wsScreen();
+  const wtl::View id = wtPrinterView();
+  const wtl::ViewSpec& v = wtl::view(id);
+  WtTray trays[wtl::kMaxAmsRows];
+  uint8_t n = 0;
+  if (id == wtl::View::PrinterAms) {
+    n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
+    g_wtAmsScroll = wtl::clampScroll(s, v, n ? n : 1, g_wtAmsScroll);
+  }
+  const uint8_t count = id == wtl::View::PrinterAms ? (n ? n : 1) : 0;
+  const uint8_t scroll = id == wtl::View::PrinterAms ? g_wtAmsScroll : 0;
+  const bool scrollButtons = wtl::scrolls(s, v, count);
+  tft.fillScreen(OS12V_BG);
+  wtDrawHeader(s, v.title, w.chip, w.color, scrollButtons, scroll, wtl::maxScroll(s, v, count));
+  wtDrawSegments(s, wtl::segmentOf(id));
+  const WtControls c = wtControls(w);
+  const uint8_t items = wtl::itemCount(v, count);
+  for (uint8_t i = 0; i < items; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, count, scroll, i);
+    if (r.empty()) continue;
+    const wtl::ItemSpec& it = wtl::item(v, i);
+    switch (it.id) {
+      case wtl::ItemId::PrinterCard: wtDrawPrinterCard(s, r, w); break;
+      case wtl::ItemId::PrinterTemps: if (w.configured) wtDrawTemps(s, r, w, true); break;
+      case wtl::ItemId::PrinterDetail: {
+        WsRowView row;
+        const char* label = wtPrinterDetail(w, row);
+        wsDrawRowBody(s, wsm::RowKind::Info, label, row, r);
+        break;
+      }
+      case wtl::ItemId::AmsTray:
+        if (n) wtDrawTray(s, r, trays[i]);
+        else {
+          WsRowView row;
+          wsView(row);
+          strlcpy(row.value, !w.configured ? "No printer set up" : (!w.online ? "Printer offline" : "None reported by the printer"),
+                  sizeof(row.value));
+          wsDrawRowBody(s, wsm::RowKind::Info, "AMS", row, r);
+        }
+        break;
+      case wtl::ItemId::ControlPrimary: wtDrawPrimary(r, c); break;
+      case wtl::ItemId::ControlLight:
+      case wtl::ItemId::ControlPower: {
+        WsRowView row;
+        wtControlRow(it.id, c, row);
+        wsDrawRowBody(s, it.rowKind, it.label, row, r);
+        break;
+      }
+      case wtl::ItemId::ControlStop: wtDrawStop(s, r, c); break;
+      default: break;
+    }
+  }
+  if (scrollButtons) {
+    // Scroll position, as on the long More pages.
+    const uint8_t maxS = wtl::maxScroll(s, v, count);
+    const wsm::Rect first = wtl::itemRect(s, v, count, scroll, scroll);
+    const int16_t top = first.y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);
+    const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / count);
+    tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
+    tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * scroll / maxS), 2, thumb, OS12V_MUTED);
+  }
+  uiBottomNav(1, nullptr);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+// ---------------------------------------------------------------------------
 // Touch
 // ---------------------------------------------------------------------------
 
@@ -393,4 +754,119 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     wsClick();
   }
   return true;
+}
+
+// ---- Printer touch ----
+
+// Stop is sent only for a hold that started on the Stop button and never left
+// it (12.2 judged the release point only: press elsewhere, slide onto Stop,
+// release, and Stop was sent). smartHubUpdateHoldProgress feeds every sample.
+static bool g_wtStopHoldStarted = false;
+static bool g_wtStopHoldValid = false;
+
+static wsm::Rect wtStopTouchRect() {
+  return wtl::holdItemTouch(wsScreen(), wtl::View::PrinterControl, 0, 0, wtl::ItemId::ControlStop);
+}
+
+// True (with the drawn button) while a valid Stop hold is in progress.
+static bool wtStopHoldTrack(int16_t x, int16_t y, wsm::Rect& drawn) {
+  const bool onPage = getScreenState() == SCREEN_HUB_PRINTER && wtPrinterView() == wtl::View::PrinterControl;
+  const WtPrint w = wtPrint();
+  const bool on = onPage && wtControls(w).stopEnabled && wtStopTouchRect().contains(x, y);
+  if (!g_wtStopHoldStarted) { g_wtStopHoldStarted = true; g_wtStopHoldValid = on; }
+  else if (!on) g_wtStopHoldValid = false;
+  if (!g_wtStopHoldValid) return false;
+  const wsm::Screen s = wsScreen();
+  const wtl::ViewSpec& v = wtl::view(wtl::View::PrinterControl);
+  drawn = wtl::holdDrawRect(s, wtl::itemRect(s, v, 0, 0, (uint8_t)(v.itemCount - 1)));
+  return true;
+}
+
+// Reads and clears the hold state of the press that just ended.
+static bool wtStopHoldConsume() {
+  const bool ok = g_wtStopHoldStarted && g_wtStopHoldValid;
+  g_wtStopHoldStarted = false;
+  g_wtStopHoldValid = false;
+  return ok;
+}
+
+static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress) {
+  const bool stopHeld = wtStopHoldConsume();
+  const wsm::Screen s = wsScreen();
+  const wtl::View id = wtPrinterView();
+  const wtl::ViewSpec& v = wtl::view(id);
+  const WtPrint w = wtPrint();
+  uint8_t count = 0;
+  if (id == wtl::View::PrinterAms) {
+    WtTray trays[wtl::kMaxAmsRows];
+    const uint8_t n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
+    count = n ? n : 1;
+  }
+  const uint8_t scroll = id == wtl::View::PrinterAms ? g_wtAmsScroll : 0;
+  const wtl::Hit h = wtl::hitTest(s, id, count, scroll, x, y);
+  switch (h.kind) {
+    case wtl::HitKind::Tab:
+      wtTab(h.index);
+      return true;
+    case wtl::HitKind::Segment:
+      if (g_printerMode != h.index) { g_printerMode = h.index; g_wtAmsScroll = 0; wsClick(); }
+      return true;
+    case wtl::HitKind::ScrollUp:
+      if (g_wtAmsScroll > 0) { g_wtAmsScroll = wtl::clampScroll(s, v, count, (int)g_wtAmsScroll - wsm::scrollStep(s)); wsClick(); }
+      return true;
+    case wtl::HitKind::ScrollDown:
+      if (g_wtAmsScroll < wtl::maxScroll(s, v, count)) { g_wtAmsScroll = wtl::clampScroll(s, v, count, (int)g_wtAmsScroll + wsm::scrollStep(s)); wsClick(); }
+      return true;
+    case wtl::HitKind::Item:
+      break;
+    default:
+      return true;
+  }
+  if (id != wtl::View::PrinterControl) return true;  // Status and AMS are read-only
+  const wtl::ItemId item = wtl::item(v, h.index).id;
+  const WtControls c = wtControls(w);
+  const uint8_t slot = wsSlot();
+  using workshop::platform::CommandResult;
+  switch (item) {
+    case wtl::ItemId::ControlPrimary:
+      if (!c.pauseEnabled) { wsToast(c.pauseReason); return true; }
+      if (workshopPlatformDispatchPrinterCommand(slot, w.paused ? workshop::platform::PrinterCommand::Resume : workshop::platform::PrinterCommand::Pause, false) ==
+          CommandResult::Accepted) {
+        setPrinterFeedback(1, w.paused ? "Resume sent" : "Pause sent");
+        wsClick();
+      } else {
+        wsToast("The printer did not take the command");
+      }
+      return true;
+    case wtl::ItemId::ControlLight:
+      if (!c.lightEnabled) { wsToast("Printer offline"); return true; }
+      if (workshopPlatformDispatchPrinterCommand(slot, c.lightOn ? workshop::platform::PrinterCommand::ChamberLightOff : workshop::platform::PrinterCommand::ChamberLightOn,
+                                                 false) == CommandResult::Accepted) {
+        setPrinterFeedback(0, "Light sent");
+        wsClick();
+      }
+      return true;
+    case wtl::ItemId::ControlPower:
+      if (!c.powerEnabled) { wsToast(c.powerReason); return true; }
+      // The power screen asks before switching anything.
+      if (powerConfirmOpenForSlot(slot)) wsClick();
+      else wsToast(c.powerReason);
+      return true;
+    case wtl::ItemId::ControlStop:
+      if (!c.stopEnabled) { wsToast(c.stopReason); return true; }
+      if (longPress && stopHeld) {
+        if (workshopPlatformDispatchPrinterCommand(slot, workshop::platform::PrinterCommand::Stop, true) == CommandResult::Accepted) {
+          setPrinterFeedback(3, "Stop sent", 1800);
+          wsClick();
+        } else {
+          wsToast("The printer did not take the command");
+        }
+      } else {
+        setPrinterFeedback(3, "Hold to stop", 1000);
+        wsToast(longPress ? "Start and keep the hold on the Stop button" : "Hold the Stop button for 1 second");
+      }
+      return true;
+    default:
+      return true;
+  }
 }
