@@ -29,6 +29,7 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 
 from accept_os12_media_runtime import (
     api,
+    start_video_after_page_open,
     status,
     validate_status,
     wait_for_session,
@@ -297,6 +298,7 @@ def run(args: argparse.Namespace) -> int:
         "microphoneStimulatedPeak": None,
         "microphonePeakIncreased": None,
         "speakerActiveDiagnostics": None,
+        "videoStartedBy": None,
         "passed": False,
         "completed": False,
         "failure": None,
@@ -367,16 +369,8 @@ def run(args: argparse.Namespace) -> int:
             "Did the dedicated Video Viewer screen appear on the WS350?"
         )
 
-        idle = status(client)
-        check(idle["session"] == "Idle",
-              f"video physical check requires Idle media service, got {idle['session']}")
-        start = api(client, "/os12/media/video/start", method="POST")
-        validate_status(start)
-        check(
-            start["_http_status"] == 202 and start["session"] == "PlayingVideo",
-            "video start refused: " + str(start["error"]) +
-            " (built-in WS350 demo source must be available)",
-        )
+        # Since 12.1.3 the page starts the video itself; older builds open Idle.
+        _, evidence["videoStartedBy"] = start_video_after_page_open(client)
         print(
             "STATE PlayingVideo: runtime session entered. "
             "This proves the command/state transition only, not visible video."

@@ -28,6 +28,9 @@ def main() -> int:
             '"minimumRequired": 0.02',
             "stale Recorder content suspected",
             '"physicalAcceptancePassed": None',
+            # Since 12.1.3 the Video test page starts the video itself.
+            "start_video_after_page_open(client)",
+            'evidence["media"]["videoStartedBy"]',
         ),
     )
 

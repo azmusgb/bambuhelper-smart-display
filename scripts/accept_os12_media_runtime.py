@@ -105,6 +105,38 @@ def wait_for_session(client: Client, wanted: set[str], timeout: float) -> dict:
     raise AcceptanceError(f"timed out waiting for media session in {sorted(wanted)}")
 
 
+def start_video_after_page_open(client: Client) -> tuple[dict, str]:
+    """Make sure the demo video is playing after /hub/show opened media-video.
+
+    Since 12.1.3 (#169) opening the Video test page starts the built-in demo
+    by itself (wsOpen -> wsVideoStart in more_pages.cppfrag), so the media
+    session is already PlayingVideo and a second POST /os12/media/video/start
+    is refused with Busy. Older builds open the page Idle and need the POST.
+
+    Returns (status payload, started_by) where started_by is "page" when the
+    page started the video and "api" when this helper had to POST start.
+    """
+    current = status(client)
+    session = str(current["session"])
+    if session == "PlayingVideo":
+        print("STATE PlayingVideo: Video test page started the demo itself")
+        return current, "page"
+    check(
+        session == "Idle",
+        f"after opening Video test the media session is {session} "
+        f"(error={current.get('error')}); expected PlayingVideo or Idle",
+    )
+    start = api(client, "/os12/media/video/start", method="POST")
+    validate_status(start)
+    check(
+        start["_http_status"] == 202 and start["session"] == "PlayingVideo",
+        "video start refused: " + str(start.get("error")) +
+        " (built-in WS350 demo source must be available)",
+    )
+    print("STATE PlayingVideo: video started by POST /os12/media/video/start")
+    return start, "api"
+
+
 def ask(prompt: str) -> bool | None:
     while True:
         value = input(f"{prompt} [y/n/u]: ").strip().lower()
