@@ -19,7 +19,17 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": null,
+  "candidate": {
+    "version": "12.3.4",
+    "branch": "fix/os12-portal-boot-12-3-4",
+    "name": "Workshop OS 12.3.4 Local Portal Boot Fix",
+    "purpose": "The Local Portal boots again: _profileCaps is initialised at the top of app.js, before boot() -> toggleConnMode() -> refreshGaugeProfileUi() reads it, so the rest of app.js runs and the Local AI status/code panels and Filament Inventory load. The \"Copy this token now\" and \"Copy this key now\" fields stay hidden until a token is created (hidden is on a plain wrapper, not the display:flex label). Stacked on PR #180 (12.3.3 calm idle screen), on top of 12.3.2 (main).",
+    "pullRequest": 181,
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required",
+    "stackedOn": 180
+  },
   "mainState": {
     "version": "12.3.2",
     "commit": "b44fb4c124d40e99d524f38ddc8d8cf48eb5500b",

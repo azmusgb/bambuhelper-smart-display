@@ -262,6 +262,9 @@ def main() -> int:
     need(html, 'onclick="revokeCodeToken()">Revoke</button>', "Revoke button")
     need(html, "Anyone who has this key can read the code and sign in", "portal states the trade-off")
     need(html, "Copy this key now. It will not be shown again.", "one-time reveal copy")
+    # The label is display:flex (.os12-feed-token), which beats the browser's
+    # [hidden] rule, so the hidden attribute must sit on a plain wrapper.
+    need(html, '<div id="codeTokenReveal" hidden><label class="os12-feed-token">', "reveal hidden on a plain wrapper")
     status_at, code_at = html.find('id="statusTokenTitle"'), html.find('id="codeTokenTitle"')
     between = html[status_at:code_at]
     if status_at < 0 or code_at < status_at or between.count("<section") != 1:

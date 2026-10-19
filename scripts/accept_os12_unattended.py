@@ -36,6 +36,8 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_VIEWS = (
     "home",
     "printer",
+    "printer-ams",
+    "printer-control",
     "workshop",
     "more",
     "settings-printer-power",

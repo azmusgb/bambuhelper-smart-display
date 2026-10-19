@@ -25,10 +25,18 @@ builds on, and owns whole functions rather than editing lines inside them.
   returns to Workshop. The status-token consent prompt moves onto the More
   dialog geometry, like the sign-in code key prompt: its buttons no longer
   sit on the tab-bar strip.
+- 12.3.3, calm idle screen: drawn by the tab pages on the same design system
+  (large clock in the display's time zone and 12/24 h setting, the date in
+  the saved format, one status line, "Tap anywhere to wake"). The whole screen
+  is one wake target, so a wake tap never reaches a Home control. The 12.0
+  ambient renderer and the helpers only it used are deleted. /hub/views lists
+  printer-ams and printer-control, and /hub/show opens Printer with that
+  segment selected.
 """
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys as _sys
 from pathlib import Path
@@ -154,6 +162,27 @@ STATUS_DRAW = """static bool hubStatusTokenPromptDraw(bool force) {
 }
 """
 
+# 12.3.3: the calm idle screen is drawn by wtDrawCalm (tabs_pages.cppfrag).
+# The 12.0 ambient renderer and the helpers only it used go.
+REPLACED_CALM = (
+    "static void drawAmbientHome(const PrinterSlot* p,const BambuState* s)",
+    "static void uiSignatureMaterialRail(const HubRect& r,const BambuState* s)",
+    "static void uiClockText(char* out, size_t len)",
+    "static void uiClockDateText(char* out,size_t len)",
+)
+CALM_RAIL_DECL = "static void uiSignatureMaterialRail(const HubRect& r,const BambuState* s);\n"
+
+# /hub/show: printer, printer-ams and printer-control open Printer with that
+# segment selected (wtShowPrinterView, ids from tabs_layout.hpp).
+SHOW_PRINTER_OLD = '  if (strcmp(pageName, "printer") == 0) { setPage(SCREEN_HUB_PRINTER); return true; }\n'
+SHOW_PRINTER_NEW = '  if (wtShowPrinterView(pageName)) return true;  // printer, printer-ams, printer-control\n'
+
+# /hub/views (catalog v3): the two Printer segments right after Printer.
+CATALOG_PRINTER_OLD = '{"id":"printer","label":"Printer","group":"Primary"},\n'
+CATALOG_PRINTER_NEW = ('{"id":"printer","label":"Printer","group":"Primary"},\n'
+                       '    {"id":"printer-ams","label":"Printer AMS","group":"Primary"},\n'
+                       '    {"id":"printer-control","label":"Printer Control","group":"Primary"},\n')
+
 MORE_HANDOFF = "  if(cur==SCREEN_HUB_MORE||cur==SCREEN_HUB_SYSTEM||cur==SCREEN_HUB_CUSTOM)return wsMoreTouch(x,y,longPress);\n"
 TABS_HANDOFF = (MORE_HANDOFF
                 + "  // Home, Printer and Workshop own their touch too (tab bar included).\n"
@@ -227,7 +256,28 @@ def patch_smart_hub(repo: Path, source_root: Path) -> None:
     text = replace_once(text, NAMESPACE_END, "\n" + fragment.rstrip() + "\n" + NAMESPACE_END, "tab pages")
     text = replace_once(text, MORE_HANDOFF, TABS_HANDOFF, "tab touch hand-off")
     text = replace_once(text, OLD_HOME_TOUCH, "", "old Home touch")
+    text = replace_once(text, CALM_RAIL_DECL, "", "material rail declaration")
+    for signature in REPLACED_CALM:
+        text = replace_cpp_function(text, signature, "", f"replaced {signature}")
+    text = replace_once(text, SHOW_PRINTER_OLD, SHOW_PRINTER_NEW, "/hub/show Printer segments")
     path.write_text(text, encoding="utf-8")
+
+
+def patch_catalog(repo: Path) -> None:
+    path = repo / "src" / "web_server.cpp"
+    text = load(path)
+    start = text.find('static const char kCatalog[] = R"json(')
+    end = text.find(')json";', start)
+    if start < 0 or end < 0:
+        raise PatchError("/hub/views catalog not found")
+    catalog = text[start:end]
+    if '{"version":3,' not in catalog:
+        raise PatchError("/hub/views catalog is not version 3")
+    catalog = replace_once(catalog, "    " + CATALOG_PRINTER_OLD, "    " + CATALOG_PRINTER_NEW, "/hub/views Printer segments")
+    ids = re.findall(r'\{"id":"([a-z0-9-]+)"', catalog)
+    if len(ids) != len(set(ids)):
+        raise PatchError(f"duplicate view ids in catalog: {ids}")
+    path.write_text(text[:start] + catalog + text[end:], encoding="utf-8")
 
 
 def apply(repo: Path, source_root: Path) -> None:
@@ -239,8 +289,9 @@ def apply(repo: Path, source_root: Path) -> None:
         raise PatchError("the tabs overhaul is already applied")
     install_layout(repo, source_root)
     patch_smart_hub(repo, source_root)
+    patch_catalog(repo)
     build_path.write_text(build.rstrip() + "\n" + BUILD_MARKER + "\n", encoding="utf-8")
-    print("Workshop OS 12.3 tabs installed: Home, Printer, Workshop; Local AI prompts on the dialog card")
+    print("Workshop OS 12.3 tabs installed: Home, Printer, Workshop, calm idle screen; Local AI prompts on the dialog card")
 
 
 def main() -> int:
