@@ -87,6 +87,37 @@ static void wsVideoStop() {
 // Set while smartHubCapturePrepare composes a capture into the sprite.
 static bool g_wsCaptureCompose = false;
 
+// ---------------------------------------------------------------------------
+// 12.3.6 live microphone meter. Up to 12.3.5 the Microphone row showed one
+// "Level N%" text from a single blocking 250 ms sample, and an API sample
+// (/os12/media/microphone-sample) changed nothing on screen. Now a tap on
+// Test, or any API sample, starts an 8 s live meter: the audio task reads
+// the microphone continuously, and the row's bar follows the last ~100 ms.
+// ---------------------------------------------------------------------------
+#if defined(BOARD_HAS_ES8311_AUDIO) && defined(BOARD_HAS_MICROPHONE)
+#define WS_MIC_METER 1
+#else
+#define WS_MIC_METER 0
+#endif
+static const unsigned long kWsMicLiveMs = 8000UL;
+static const unsigned long kWsMicPollMs = 100UL;
+static unsigned long g_wsMicLiveUntilMs = 0;
+static unsigned long g_wsMicLastPollMs = 0;
+static uint8_t g_wsMicLiveLevel = 0;
+static uint32_t g_wsMicSeenSamples = 0;
+
+static bool wsMicLive() { return g_wsMicLiveUntilMs != 0 && (long)(millis() - g_wsMicLiveUntilMs) < 0; }
+
+static void wsMicLiveStart() {
+#if WS_MIC_METER
+  if (!buzzerBackendMicMeterBegin()) return;
+  g_wsMicLiveUntilMs = millis() + kWsMicLiveMs;
+  if (!g_wsMicLiveUntilMs) g_wsMicLiveUntilMs = 1;
+  g_wsMicLastPollMs = 0;
+  g_dirty = true;
+#endif
+}
+
 // True while the Video test page shows a running video (see smartHubDraw).
 static bool wsVideoDirect() {
   // (The Local AI consent prompts take the whole screen; they must not be
@@ -137,6 +168,7 @@ struct WsRowView {
   const char* reason;   // why the row is disabled; shown in the value slot
   const char* reasonB;  // why Action2's second button is disabled
   uint16_t valueColor;
+  int8_t meter;         // 0-100: a level bar in the value slot (live microphone); -1 none
   bool on;
   bool enabled;
   bool enabledB;
@@ -149,6 +181,7 @@ static void wsView(WsRowView& v) {
   v.reason = nullptr;
   v.reasonB = nullptr;
   v.valueColor = OS12V_MUTED;
+  v.meter = -1;
   v.on = false;
   v.enabled = true;
   v.enabledB = true;
@@ -676,9 +709,14 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
     }
     case R::MicTest: {
       const workshop::media::Snapshot& m = workshopMediaSnapshot();
-      v.button = "Test";
+      v.button = wsMicLive() ? "Stop" : "Test";
       if (!m.capabilities.microphoneAvailable) { v.enabled = false; v.reason = "No microphone found"; break; }
-      if (m.runtime.microphoneLevelPercent > 0) {
+      if (wsMicLive()) {
+        // Live: a bar plus the number, updated about ten times a second.
+        v.meter = (int8_t)g_wsMicLiveLevel;
+        snprintf(v.value, sizeof(v.value), "%u%%", (unsigned)g_wsMicLiveLevel);
+        v.valueColor = OS12V_TEXT;
+      } else if (m.runtime.microphoneLevelPercent > 0) {
         snprintf(v.value, sizeof(v.value), "Level %u%%", (unsigned)m.runtime.microphoneLevelPercent);
         v.valueColor = OS12V_GREEN;
       }
@@ -1064,8 +1102,10 @@ static void wsRowTap(wsm::RowId id, wsm::Part part) {
     }
     case R::MicTest: {
       workshop::media::MediaService& media = workshopMediaService();
+      if (wsMicLive()) { g_wsMicLiveUntilMs = 0; g_dirty = true; break; }
       if (media.snapshot().runtime.session != workshop::media::SessionState::Idle) { wsToast("Wait for the current sound"); break; }
       media.sampleMicrophone(millis());
+      wsMicLiveStart();
       g_dirty = true;
       break;
     }
@@ -1309,27 +1349,57 @@ static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
   tft.drawFastHLine(OS12V_INSET, wsm::kHeaderH - 1, s.w - OS12V_INSET * 2, OS12V_LINE);
 }
 
-static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bool primary) {
-  const uint16_t bg = !enabled ? OS12V_SURFACE : (primary ? OS12V_ACCENT : OS12V_SURFACE2);
+// 12.3.6: a disabled button is only its muted label on the row's (flat)
+// background, with no fill and no outline, so it no longer looks pressable.
+static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bool primary, uint16_t rowBg) {
+  const uint16_t bg = !enabled ? rowBg : (primary ? OS12V_ACCENT : OS12V_SURFACE2);
   const uint16_t fg = !enabled ? OS12V_MUTED : (primary ? OS12V_BG : OS12V_TEXT);
-  tft.fillRoundRect(r.x, r.y, r.w, r.h, 10, bg);
-  tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, enabled ? (primary ? OS12V_ACCENT : OS12V_LINE) : OS12V_LINE);
+  if (enabled) {
+    tft.fillRoundRect(r.x, r.y, r.w, r.h, 10, bg);
+    tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, primary ? OS12V_ACCENT : OS12V_LINE);
+  }
   uiDrawFit(label, r.x + r.w / 2, r.y + r.h / 2, r.w - 12, FONT_SMALL, MC_DATUM, fg, bg);
 }
 
 // Every value slot of a row goes through here. An empty value draws nothing
 // (uiDrawFit would draw an em dash, shown on the WS350 as a stray "|").
-static void wsDrawRowValue(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color) {
+static void wsDrawRowValue(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color,
+                           uint16_t bg) {
   if (!wsm::drawsValueText(text)) return;
-  uiDrawFit(text, x, y, w, font, datum, color, OS12V_SURFACE);
+  uiDrawFit(text, x, y, w, font, datum, color, bg);
+}
+
+// Live level bar (12.3.6 microphone meter), right-aligned in the value slot.
+static void wsDrawMeter(const wsm::Rect& slot, int16_t mid, uint8_t level, uint16_t bg) {
+  const int16_t w = slot.w < 96 ? slot.w : 96;
+  const int16_t x = slot.right() - w;
+  tft.fillRoundRect(x, mid - 6, w, 12, 6, OS12V_SURFACE2);
+  tft.drawRoundRect(x, mid - 6, w, 12, 6, OS12V_LINE);
+  const int16_t fw = (int16_t)((int32_t)(w - 4) * (level > 100 ? 100 : level) / 100);
+  if (fw > 0) tft.fillRoundRect(x + 2, mid - 4, fw, 8, 4, level >= 85 ? OS12V_AMBER : OS12V_GREEN);
+  (void)bg;
 }
 
 // One row of any page: More, and (12.3) the Home, Printer and Workshop tabs.
+//
+// 12.3.6: only a row that does something right now is raised (surface and
+// border, wsm::rowRaised). Read-only and disabled rows are drawn flat on the
+// page background with a hairline under them, so nothing that does nothing
+// looks like a button. A disabled switch is an empty outline (no knob), a
+// disabled stepper hides its "-" and "+", and a disabled button is only its
+// muted label; the reason stays in the value slot.
 static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
                           const wsm::Rect& row) {
   const wsm::Rect surface = wsm::rowSurface(row);
-  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  const bool raised = wsm::rowRaised(kind, v.enabled);
+  const uint16_t bg = raised ? OS12V_SURFACE : OS12V_BG;
+  if (raised) {
+    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  } else {
+    tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
+    tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
+  }
   const int16_t mid = row.y + row.h / 2;
   const wsm::Rect label = wsm::labelRect(s, row, kind);
   const wsm::Rect valueSlot = wsm::valueRect(s, row, kind);
@@ -1339,56 +1409,71 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
   if (value[0] && kind != wsm::RowKind::Stepper && kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
     labelW = valueSlot.x - 8 - label.x;
   uiDrawFit(labelText, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
-            (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
+            (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, bg);
   const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_AMBER;
 
   switch (kind) {
     case wsm::RowKind::Info:
     case wsm::RowKind::Nav:
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
       if (kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
       break;
     case wsm::RowKind::Code:
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w,
                      strlen(value) <= 13 ? wsFitFont(value, valueSlot.w, FONT_LARGE, FONT_BODY) : FONT_SMALL,
-                     MR_DATUM, valueColor);
+                     MR_DATUM, valueColor, bg);
       break;
     case wsm::RowKind::Toggle: {
       const wsm::Rect sw = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
       const bool on = v.enabled && v.on;
+      if (!v.enabled) {
+        // Disabled: an empty outline, no knob (an "off" switch has a knob).
+        tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, OS12V_LINE);
+        break;
+      }
       tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_SURFACE2);
       tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_LINE);
       const int16_t d = sw.h - 8;
       const int16_t cx = on ? sw.right() - 4 - d / 2 : sw.x + 4 + d / 2;
-      tft.fillCircle(cx, sw.y + sw.h / 2, d / 2, on ? OS12V_BG : (v.enabled ? OS12V_MUTED : OS12V_LINE));
+      tft.fillCircle(cx, sw.y + sw.h / 2, d / 2, on ? OS12V_BG : OS12V_MUTED);
       break;
     }
     case wsm::RowKind::Stepper: {
       const wsm::Rect minus = wsm::partDrawRect(s, row, kind, wsm::Part::Minus);
       const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
+      if (!v.enabled) {
+        // Disabled: no "-" / "+"; the reason uses the whole control area.
+        wsDrawRowValue(value, plus.right(), mid, plus.right() - minus.x, FONT_SMALL, MR_DATUM, valueColor, bg);
+        break;
+      }
       for (uint8_t i = 0; i < 2; ++i) {
         const wsm::Rect b = i == 0 ? minus : plus;
-        tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, v.enabled ? OS12V_SURFACE2 : OS12V_SURFACE);
+        tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_SURFACE2);
         tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_LINE);
         const int16_t cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-        const uint16_t c = v.enabled ? OS12V_ACCENT : OS12V_LINE;
-        tft.fillRect(cx - 7, cy - 1, 15, 3, c);
-        if (i == 1) tft.fillRect(cx - 1, cy - 7, 3, 15, c);
+        tft.fillRect(cx - 7, cy - 1, 15, 3, OS12V_ACCENT);
+        if (i == 1) tft.fillRect(cx - 1, cy - 7, 3, 15, OS12V_ACCENT);
       }
       const wsm::Rect valueRect = wsm::stepperValueRect(s, row);
-      wsDrawRowValue(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, FONT_SMALL, MC_DATUM, valueColor);
+      wsDrawRowValue(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, FONT_SMALL, MC_DATUM, valueColor, bg);
       break;
     }
     case wsm::RowKind::Action: {
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
-      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false);
+      if (v.meter >= 0 && v.enabled) {
+        wsDrawMeter(valueSlot, mid, (uint8_t)v.meter, bg);
+        const int16_t textR = valueSlot.right() - (valueSlot.w < 96 ? valueSlot.w : 96) - 6;
+        wsDrawRowValue(value, textR, mid, textR - valueSlot.x, FONT_SMALL, MR_DATUM, valueColor, bg);
+      } else {
+        wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
+      }
+      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false, bg);
       break;
     }
     case wsm::RowKind::Action2: {
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor);
-      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false);
-      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
+      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false, bg);
+      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false, bg);
       break;
     }
   }
@@ -1733,5 +1818,64 @@ static bool wsMoreShowPage(const char* name) {
   }
   if (!wsPageLive(id)) return false;
   wsOpen(id);
+  // 12.3.6: "media" and "media-lab" (the media acceptance views) open Sound &
+  // Alerts on its Speaker test, Microphone and Recorder rows; at the top of
+  // the page those rows are below the fold.
+  if (!strcmp(name, "media") || !strcmp(name, "media-lab"))
+    g_wsScroll = wsm::scrollToRow(wsScreen(), wsm::PageId::SoundAlerts, wsm::RowId::SpeakerTest);
   return true;
+}
+
+// Called every loop (smartHubService): drives the live microphone meter.
+static void wsMoreService() {
+#if WS_MIC_METER
+  const uint32_t samples = buzzerBackendMicSampleCount();
+  if (samples != g_wsMicSeenSamples) {
+    // A sample was taken (the Test button or /os12/media/microphone-sample):
+    // show it live on Sound & Alerts.
+    g_wsMicSeenSamples = samples;
+    if (getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::SoundAlerts && !wsMicLive()) wsMicLiveStart();
+    else if (wsMicLive()) g_wsMicLiveUntilMs = millis() + kWsMicLiveMs;
+  }
+  if (!g_wsMicLiveUntilMs) return;
+  if (!wsMicLive()) { g_wsMicLiveUntilMs = 0; g_dirty = true; return; }
+  if (getScreenState() != SCREEN_HUB_MORE || g_wsPage != wsm::PageId::SoundAlerts) return;
+  const unsigned long now = millis();
+  if (g_wsMicLastPollMs && now - g_wsMicLastPollMs < kWsMicPollMs) return;
+  g_wsMicLastPollMs = now;
+  const int level = buzzerBackendMicLiveLevel();
+  if (level >= 0 && (uint8_t)level != g_wsMicLiveLevel) {
+    g_wsMicLiveLevel = (uint8_t)level;
+    g_dirty = true;
+  }
+#else
+  (void)g_wsMicLastPollMs;
+  (void)g_wsMicSeenSamples;
+#endif
+}
+
+// 12.3.6 pressed highlight: the rectangle a touch-down at (x, y) on a More
+// page acts on. False when the point would do nothing (empty space, the tab
+// guard band, read-only or disabled rows, a scroll button at its end).
+static bool wsMorePressRect(int16_t x, int16_t y, wsm::Rect& out) {
+  if (g_rotationPreviewMode) return false;
+  const wsm::Screen s = wsScreen();
+  const wsm::PageSpec& p = wsm::page(g_wsPage);
+  const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y);
+  switch (h.kind) {
+    case wsm::HitKind::None: return false;
+    case wsm::HitKind::ScrollUp: if (g_wsScroll == 0) return false; break;
+    case wsm::HitKind::ScrollDown: if (g_wsScroll >= wsm::maxScroll(s, p.id)) return false; break;
+    case wsm::HitKind::Row: {
+      const wsm::RowSpec& spec = p.rows[h.index];
+      if (!wsm::rowInteractive(spec.kind)) return false;
+      WsRowView v;
+      wsRowView(spec.id, v);
+      if (!(h.part == wsm::Part::ActionB ? v.enabledB : v.enabled)) return false;
+      break;
+    }
+    default: break;
+  }
+  out = wsm::hitRect(s, p.id, g_wsScroll, h);
+  return !out.empty();
 }

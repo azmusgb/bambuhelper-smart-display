@@ -13,7 +13,15 @@
 // - the tab bar is drawn and live on every page and nothing else sits on it;
 // - single-line rows, 44 px tall, every touch target at least 44 x 44;
 // - long pages scroll a row at a time with visible up/down buttons in the
-//   header (no gestures, no hidden zones).
+//   header (no gestures, no hidden zones);
+// - (12.3.6) the tab bar's touch zone starts kTabGuard px below its drawn
+//   top, so a tap that lands just under the bottom row's control does
+//   nothing instead of switching tabs;
+// - (12.3.6) only a row that does something is drawn raised: read-only and
+//   disabled rows are drawn flat (rowRaised), so the screen shows what is
+//   tappable;
+// - (12.3.6) hitRect() gives the rectangle a hit refers to, for the pressed
+//   highlight drawn on touch-down.
 
 #include <stddef.h>
 #include <stdint.h>
@@ -69,6 +77,7 @@ static const int16_t kRowH = 44;
 static const int16_t kRowTop = 45;
 static const int16_t kMarginX = 8;
 static const int16_t kMinTouch = 44;
+static const int16_t kTabGuard = 4;   // dead band between the content and the tab bar (12.3.6)
 static const uint8_t kTabCount = 4;
 
 // ---------------------------------------------------------------------------
@@ -386,6 +395,13 @@ inline Rect tabRect(Screen s, uint8_t i) {
 }
 
 inline Rect tabBand(Screen s) { return makeRect(0, s.h - kTabH, s.w, kTabH); }
+
+// Touch zone of tab i: the drawn tab minus the top kTabGuard px. The band
+// between the last content row and this zone belongs to nothing.
+inline Rect tabTouchRect(Screen s, uint8_t i) {
+  const Rect t = tabRect(s, i);
+  return makeRect(t.x, t.y + kTabGuard, t.w, t.h - kTabGuard);
+}
 inline Rect headerBand(Screen s) { return makeRect(0, 0, s.w, kHeaderH); }
 inline Rect contentBand(Screen s) { return makeRect(0, kHeaderH, s.w, s.h - kTabH - kHeaderH); }
 
@@ -443,6 +459,22 @@ inline uint8_t clampScroll(Screen s, PageId id, int scroll) {
   return static_cast<uint8_t>(scroll > m ? m : scroll);
 }
 
+// Index of row `row` on page `id`, or -1.
+inline int rowIndex(PageId id, RowId row) {
+  const PageSpec& p = page(id);
+  for (uint8_t i = 0; i < p.rowCount; ++i)
+    if (p.rows[i].id == row) return i;
+  return -1;
+}
+
+// Scroll position that brings row `first` to the top, or as close as the
+// page allows (12.3.6: /hub/show media-lab opens Sound & Alerts on its
+// Speaker test, Microphone and Recorder rows).
+inline uint8_t scrollToRow(Screen s, PageId id, RowId first) {
+  const int i = rowIndex(id, first);
+  return clampScroll(s, id, i < 0 ? 0 : i);
+}
+
 inline Rect slotRect(Screen s, uint8_t slot) {
   return makeRect(kMarginX, kRowTop + slot * kRowH, s.w - 2 * kMarginX, kRowH);
 }
@@ -459,6 +491,15 @@ inline Rect rowRect(Screen s, PageId id, uint8_t scroll, uint8_t row) {
 
 // Drawn surface of a row: inset 1 px top and bottom so neighbours separate.
 inline Rect rowSurface(const Rect& row) { return makeRect(row.x, row.y + 1, row.w, row.h - 2); }
+
+// Whether a row kind does anything when tapped (Info and Code rows only show
+// text; a tap on them at most explains why).
+inline bool rowInteractive(RowKind kind) { return kind != RowKind::Info && kind != RowKind::Code; }
+
+// Only rows that do something right now are drawn raised (surface + border).
+// Read-only rows and disabled rows are drawn flat on the page background, so
+// nothing looks like a button unless it is one (12.3.6).
+inline bool rowRaised(RowKind kind, bool enabled) { return rowInteractive(kind) && enabled; }
 
 inline int stepperValueWidth(Screen s) { return s.landscape() ? 150 : 76; }
 inline int actionButtonWidth(Screen s) { return s.landscape() ? 112 : 84; }
@@ -603,7 +644,8 @@ inline Hit makeHit(HitKind kind, uint8_t index, Part part) {
 inline Hit hitTest(Screen s, PageId id, uint8_t scroll, bool dialogOpen, int x, int y) {
   // The tab bar is drawn on every page, so it is always live.
   for (uint8_t i = 0; i < kTabCount; ++i)
-    if (tabRect(s, i).contains(x, y)) return makeHit(HitKind::Tab, i, Part::Whole);
+    if (tabTouchRect(s, i).contains(x, y)) return makeHit(HitKind::Tab, i, Part::Whole);
+  if (tabBand(s).contains(x, y)) return makeHit(HitKind::None, 0, Part::Whole);  // the guard band
   const PageSpec& p = page(id);
   if (p.level > 0 && backRect(s).contains(x, y)) return makeHit(HitKind::Back, 0, Part::Whole);
   if (dialogOpen) {
@@ -637,6 +679,33 @@ inline Hit hitTest(Screen s, PageId id, uint8_t scroll, bool dialogOpen, int x, 
     return makeHit(HitKind::Row, r, Part::Whole);
   }
   return makeHit(HitKind::None, 0, Part::Whole);
+}
+
+// Rectangle a hit refers to: what the pressed highlight outlines on
+// touch-down. Empty for HitKind::None. Every point that hitTest routes to a
+// hit lies inside hitRect of that hit.
+inline Rect hitRect(Screen s, PageId id, uint8_t scroll, const Hit& h) {
+  switch (h.kind) {
+    case HitKind::Tab: return tabTouchRect(s, h.index);
+    case HitKind::Back: return backRect(s);
+    case HitKind::ScrollUp: return scrollUpRect(s);
+    case HitKind::ScrollDown: return scrollDownRect(s);
+    case HitKind::Tile: return tileRect(s, h.index);
+    case HitKind::DialogCancel: return dialogCancelRect(s);
+    case HitKind::DialogConfirm: return dialogConfirmRect(s);
+    case HitKind::Row: {
+      const PageSpec& p = page(id);
+      if (h.index >= p.rowCount) return makeRect(0, 0, 0, 0);
+      const Rect row = rowRect(s, id, scroll, h.index);
+      if (row.empty()) return row;
+      const RowKind kind = p.rows[h.index].kind;
+      if (kind == RowKind::Stepper || kind == RowKind::Action2) return partTouchRect(s, row, kind, h.part);
+      return row;
+    }
+    case HitKind::None:
+    default:
+      return makeRect(0, 0, 0, 0);
+  }
 }
 
 }  // namespace more

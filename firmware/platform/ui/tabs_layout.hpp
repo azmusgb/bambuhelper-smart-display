@@ -18,7 +18,10 @@
 // - Stop is a hold-guarded button on its own row, never next to Pause, and
 //   only the drawn button routes to it;
 // - the calm idle screen (12.3.3) has no controls at all: the whole screen is
-//   one wake target, and a wake tap never reaches a control below it.
+//   one wake target, and a wake tap never reaches a control below it;
+// - (12.3.6) the tab bar touch zone keeps the More guard band (tabTouchRect),
+//   only interactive items are drawn raised (itemInteractive), and hitRect()
+//   gives the rectangle the pressed highlight outlines.
 
 #include <stdio.h>
 
@@ -320,7 +323,8 @@ inline Hit makeHit(HitKind kind, uint8_t index, Part part) {
 inline Hit hitTest(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, int x, int y) {
   // The tab bar is drawn on every tab, so it is always live.
   for (uint8_t i = 0; i < kTabCount; ++i)
-    if (more::tabRect(s, i).contains(x, y)) return makeHit(HitKind::Tab, i, Part::Whole);
+    if (more::tabTouchRect(s, i).contains(x, y)) return makeHit(HitKind::Tab, i, Part::Whole);
+  if (more::tabBand(s).contains(x, y)) return makeHit(HitKind::None, 0, Part::Whole);  // the guard band
   const ViewSpec& v = view(id);
   if (scrolls(s, v, runtimeCount)) {
     if (more::scrollUpRect(s).contains(x, y)) return makeHit(HitKind::ScrollUp, 0, Part::Whole);
@@ -357,6 +361,42 @@ inline Hit hitTest(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, int 
     }
   }
   return makeHit(HitKind::None, 0, Part::Whole);
+}
+
+// Whether an item does something when tapped. Read-only items (temperature
+// strip, Info rows, non-tappable cards) are drawn flat and get no pressed
+// highlight (12.3.6).
+inline bool itemInteractive(const ItemSpec& it) {
+  switch (it.kind) {
+    case ItemKind::Card: return it.tappable;
+    case ItemKind::Temps: return false;
+    case ItemKind::Primary:
+    case ItemKind::Hold: return true;
+    case ItemKind::Row:
+    default: return more::rowInteractive(it.rowKind);
+  }
+}
+
+// Rectangle a hit refers to (the pressed highlight). Empty for None and
+// Wake. Every point hitTest routes to a hit lies inside hitRect of that hit.
+inline Rect hitRect(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, const Hit& h) {
+  const ViewSpec& v = view(id);
+  switch (h.kind) {
+    case HitKind::Tab: return more::tabTouchRect(s, h.index);
+    case HitKind::ScrollUp: return more::scrollUpRect(s);
+    case HitKind::ScrollDown: return more::scrollDownRect(s);
+    case HitKind::Segment: return segmentRect(s, h.index);
+    case HitKind::Item: {
+      const Rect r = itemRect(s, v, runtimeCount, scroll, h.index);
+      if (r.empty()) return r;
+      const ItemSpec& it = item(v, h.index);
+      if (it.kind == ItemKind::Hold) return holdTouchRect(s, r);
+      if (it.kind == ItemKind::Row && it.rowKind == RowKind::Stepper) return more::partTouchRect(s, r, it.rowKind, h.part);
+      return r;
+    }
+    default:
+      return makeRect(0, 0, 0, 0);
+  }
 }
 
 // Rectangle the hold-progress bar is drawn over for a hold item (empty when

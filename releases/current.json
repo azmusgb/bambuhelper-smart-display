@@ -19,7 +19,16 @@
     "rollbackVersion": "7.2",
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
-  "candidate": null,
+  "candidate": {
+    "version": "12.3.6",
+    "branch": "fix/ws350-touch-audio-12-3-6",
+    "name": "Workshop OS 12.3.6 WS350 Touch and Audio Fit",
+    "purpose": "Fixes what the owner's 12.3.5 physical walk failed. Touch: only changed rows are pushed to the panel, a hub change is drawn on the next loop instead of the next 250 ms tick, the control under the finger is outlined on touch-down, a 4 px guard band above the tab bar, and read-only or disabled rows are drawn flat. Audio: the codec is no longer powered down at idle on the WS350 (no amplifier pin, it popped), microphone capture runs in the audio task so audio is not dropped, playback uses the microphone slot without DC and with at most 16x gain, a live microphone meter, and media-lab opens Sound & Alerts on its media rows. Re-test: scripts/accept_os12_retest_12_3_6.py.",
+    "pullRequest": 194,
+    "status": "physical-acceptance-required",
+    "exactHeadCi": "required",
+    "physicalAcceptance": "required"
+  },
   "mainState": {
     "version": "12.3.5",
     "commit": "2799596890a32c7fbabd8e2bb0ff976d0f52c193",

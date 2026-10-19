@@ -45,10 +45,13 @@ on:
       - 'scripts/validate_os12_tabs_overhaul.py'
       - 'scripts/validate_os12_portal_boot.py'
       - 'scripts/validate_os12_portal_phone_fit.py'
+      - 'scripts/validate_os12_touch_audio_fit.py'
       - 'tests/workshop_os12_more_layout_smoke.cpp'
       - 'tests/workshop_os12_tabs_layout_smoke.cpp'
       - 'tests/workshop_os12_rapid_reset_smoke.cpp'
       - 'tests/workshop_os12_code_token_smoke.cpp'
+      - 'tests/workshop_os12_frame_diff_smoke.cpp'
+      - 'tests/workshop_os12_recording_dsp_smoke.cpp'
       - '.github/workflows/os12-ux-architecture.yml'
   pull_request:
     branches: [main]
@@ -90,10 +93,13 @@ on:
       - 'scripts/validate_os12_tabs_overhaul.py'
       - 'scripts/validate_os12_portal_boot.py'
       - 'scripts/validate_os12_portal_phone_fit.py'
+      - 'scripts/validate_os12_touch_audio_fit.py'
       - 'tests/workshop_os12_more_layout_smoke.cpp'
       - 'tests/workshop_os12_tabs_layout_smoke.cpp'
       - 'tests/workshop_os12_rapid_reset_smoke.cpp'
       - 'tests/workshop_os12_code_token_smoke.cpp'
+      - 'tests/workshop_os12_frame_diff_smoke.cpp'
+      - 'tests/workshop_os12_recording_dsp_smoke.cpp'
       - '.github/workflows/os12-ux-architecture.yml'
 
 permissions:
@@ -109,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OS12_RELEASE_VERSION: '12.3.5'
+      OS12_RELEASE_VERSION: '12.3.6'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -140,6 +146,7 @@ jobs:
             apply_workshop_os12_rapid_reset.py \
             apply_workshop_os12_more_overhaul.py \
             apply_workshop_os12_tabs_overhaul.py \
+            apply_workshop_os12_touch_audio_fit.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
             scripts/validate_os12_ux_physical_fit.py \
@@ -157,6 +164,8 @@ jobs:
             scripts/validate_os12_tabs_overhaul.py \
             scripts/validate_os12_portal_boot.py \
             scripts/validate_os12_portal_phone_fit.py \
+            scripts/validate_os12_touch_audio_fit.py \
+            scripts/accept_os12_retest_12_3_6.py \
             scripts/accept_os12_status_lite_runtime.py \
             scripts/accept_os12_code_token_runtime.py \
             scripts/accept_os12_portal_runtime.py \
