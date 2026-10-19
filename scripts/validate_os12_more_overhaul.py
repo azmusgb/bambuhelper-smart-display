@@ -141,8 +141,11 @@ def validate(repo: Path) -> str:
 
     # Tab bar drawn on every More page and hit-tested first on every page.
     draw = block(hub, "static void wsMoreDraw(bool full)")
-    need(draw, "uiBottomNav(3, nullptr);", "tab bar drawn on every More page")
-    if "if" in draw[draw.find("wsDrawScrollbar(s, p);"):draw.find("uiBottomNav(3, nullptr);")].split("}")[-1]:
+    # (wsNavTab() is More, or the tab a cross-linked page such as Printer >
+    # Camera returns to.)
+    need(draw, "uiBottomNav(wsNavTab(), nullptr);", "tab bar drawn on every More page")
+    need(block(hub, "static uint8_t wsNavTab()"), "return g_wsReturnTab >= 0 ? (uint8_t)g_wsReturnTab : 3;", "More highlighted unless cross-linked")
+    if "if" in draw[draw.find("wsDrawScrollbar(s, p);"):draw.find("uiBottomNav(wsNavTab(), nullptr);")].split("}")[-1]:
         raise ValidationError("the tab bar must be drawn unconditionally")
     need(layout, "// The tab bar is drawn on every page, so it is always live.", "tab bar hit first")
     need(block(hub, "static bool wsMoreTouch(int16_t x, int16_t y, bool longPress)"), "wsm::hitTest(", "touch uses the shared hit test")
@@ -165,7 +168,7 @@ def validate(repo: Path) -> str:
     draw_hub = block(hub, "void smartHubDraw(ScreenState screen, bool forceRedraw)")
     need(draw_hub, "screen == SCREEN_HUB_MORE && wsVideoDirect();", "direct video drawing")
     need(draw_hub, "const bool buffered = !directVideoViewer && hubEnsureFrame();", "no sprite over running video")
-    need(block(hub, "static void wsMoreDraw(bool full)"), "uiBottomNav(3, nullptr);", "video page tab bar")
+    need(block(hub, "static void wsMoreDraw(bool full)"), "uiBottomNav(wsNavTab(), nullptr);", "video page tab bar")
     for name in REPLACED_RENDERERS:
         forbid(hub, f"static void {name}(", "replaced renderer still present")
     # No hard-coded channel labels; the channel is read from the update service.

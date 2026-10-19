@@ -87,10 +87,12 @@ void checkChrome(Screen s, const char* o) {
     check(inside(r, content), "segment inside content", o, i);
     for (uint8_t j = static_cast<uint8_t>(i + 1); j < kSegmentCount; ++j)
       check(!intersects(r, segmentRect(s, j)), "segments do not overlap", o, i, j);
+    if (i == kCameraSegment) continue;  // Camera opens a page; it is not a view
     check(segmentOf(segmentView(i)) == i, "segment <-> view round trip", o, i);
     View back = View::Home;
     check(printerViewFromId(printerViewId(segmentView(i)), back) && back == segmentView(i), "/hub/show id round trip", o, i);
   }
+  check(kViewSegments == 3 && kCameraSegment == kSegmentCount - 1, "Camera is the last segment, after the three views", o);
   // Local AI prompts: buttons in the dialog card, never on the tab bar.
   const Rect card = more::dialogCard(s);
   const Rect cancel = promptCancelRect(s), allow = promptAllowRect(s);

@@ -60,6 +60,11 @@ static void wsClearLegacy() {
 static bool g_wsVideoChromeDrawn = false;
 static bool g_wsVideoAreaCleared = false;
 static bool g_wsVideoStartFailed = false;
+// 12.3.7: the same page doubles as Printer > Camera. In camera mode it plays
+// the printer camera instead of the motion test, is titled "Camera", and Back
+// returns to Printer.
+static bool g_wsCameraMode = false;
+static const char kWsCameraSource[] = "printer-camera";
 
 static bool wsVideoSessionActive() {
   const workshop::media::SessionState s = workshopMediaSnapshot().runtime.session;
@@ -73,6 +78,10 @@ static void wsVideoStart() {
   g_wsVideoStartFailed = false;
   if (media.snapshot().runtime.session != workshop::media::SessionState::Idle) return;
   if (!media.snapshot().capabilities.videoDecoderAvailable) { g_wsVideoStartFailed = true; return; }
+  if (g_wsCameraMode) {
+    if (!media.playMjpeg(kWsCameraSource, millis())) g_wsVideoStartFailed = true;
+    return;
+  }
   if(!media.playMjpeg("demo-video",millis()))g_wsVideoStartFailed=true;
 }
 
@@ -128,7 +137,10 @@ static bool wsVideoDirect() {
 }
 
 static void wsLeavePage(wsm::PageId next) {
-  if (g_wsPage == wsm::PageId::VideoTest && next != wsm::PageId::VideoTest) wsVideoStop();
+  if (g_wsPage == wsm::PageId::VideoTest && next != wsm::PageId::VideoTest) {
+    wsVideoStop();
+    g_wsCameraMode = false;
+  }
 }
 
 static void wsOpen(wsm::PageId id) {
@@ -148,8 +160,19 @@ static void wsOpen(wsm::PageId id) {
 // Opens a level-1 More page from another tab; Back returns to that tab.
 static void wsOpenFrom(wsm::PageId id, uint8_t tab) {
   wsOpen(id);
-  if (wsm::page(g_wsPage).level == 1 && tab < 3) g_wsReturnTab = (int8_t)tab;
+  if ((wsm::page(g_wsPage).level == 1 || g_wsCameraMode) && tab < 3) g_wsReturnTab = (int8_t)tab;
 }
+
+// Printer > Camera: the video page in camera mode; Back returns to `tab`.
+static void wsOpenCamera(uint8_t tab) {
+  wsLeavePage(wsm::PageId::Root);  // a running video (motion test) stops first
+  g_wsPage = wsm::PageId::Root;    // so wsOpen does not leave (and reset) camera mode
+  g_wsCameraMode = true;
+  wsOpenFrom(wsm::PageId::VideoTest, tab);
+}
+
+// Tab the tab bar highlights: the tab a cross-linked page returns to.
+static uint8_t wsNavTab() { return g_wsReturnTab >= 0 ? (uint8_t)g_wsReturnTab : 3; }
 
 static const char* wsReturnLabel(uint8_t tab) {
   static const char* kNames[3] = {"Home", "Printer", "Workshop"};
@@ -849,7 +872,7 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       v.button = paused ? "Resume" : "Pause";
       if (paused) strlcpy(v.value, "Paused", sizeof(v.value));
       else if (wsVideoSessionActive()) { strlcpy(v.value, "Playing", sizeof(v.value)); v.valueColor = OS12V_GREEN; }
-      else { v.enabled = false; v.reason = g_wsVideoStartFailed ? "Video could not start" : "Not playing"; }
+      else { v.enabled = false; v.reason = g_wsVideoStartFailed ? (g_wsCameraMode ? "Camera not available" : "Video could not start") : "Not playing"; }
       break;
     }
     default:
@@ -1308,7 +1331,7 @@ static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
   if (p.level > 0) {
     const wsm::Rect back = wsm::backRect(s);
     wsDrawChevronLeft(back.x + 16, back.y + back.h / 2, OS12V_ACCENT);
-    const char* backLabel = (g_wsReturnTab >= 0 && p.level == 1) ? wsReturnLabel((uint8_t)g_wsReturnTab) : p.backLabel;
+    const char* backLabel = (g_wsReturnTab >= 0 && (p.level == 1 || g_wsCameraMode)) ? wsReturnLabel((uint8_t)g_wsReturnTab) : p.backLabel;
     uiDrawFit(backLabel, back.x + 26, back.y + back.h / 2, back.w - 30, FONT_BODY, ML_DATUM, OS12V_ACCENT, OS12V_BG);
     tft.drawFastVLine(back.right(), 10, wsm::kHeaderH - 20, OS12V_LINE);
   } else {
@@ -1319,7 +1342,8 @@ static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
   if (wsToastActive()) {
     uiDrawFit(g_wsToast, titleX, title.y + title.h / 2, title.right() - titleX, FONT_SMALL, ML_DATUM, OS12V_AMBER, OS12V_BG);
   } else {
-    uiDrawFit(p.title, titleX, title.y + title.h / 2, title.right() - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
+    const char* pageTitle = (g_wsCameraMode && p.id == wsm::PageId::VideoTest) ? "Camera" : p.title;
+    uiDrawFit(pageTitle, titleX, title.y + title.h / 2, title.right() - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
   }
   if (scrolls) {
     const uint8_t maxS = wsm::maxScroll(s, p.id);
@@ -1627,10 +1651,14 @@ static void wsDrawVideoIdle(const wsm::Screen& s) {
   const wsm::Rect v = wsm::videoRect(s, wsm::PageId::VideoTest);
   tft.fillRect(v.x, v.y, v.w, v.h, TFT_BLACK);
   const bool running = wsVideoSessionActive();
-  uiDrawFit(running ? "Video playing" : (g_wsVideoStartFailed ? "Video could not start" : "Video is not running"),
-            v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
-  uiDrawFit(running ? "Moving shapes check the screen refresh." : "Go back and open Video test again to retry.",
-            v.x + v.w / 2, v.y + v.h / 2 + 14, v.w - 32, FONT_SMALL, MC_DATUM, OS12V_MUTED, TFT_BLACK);
+  const char* headline = running ? "Video playing" : (g_wsVideoStartFailed ? "Video could not start" : "Video is not running");
+  const char* hint = running ? "Moving shapes check the screen refresh." : "Go back and open Video test again to retry.";
+  if (g_wsCameraMode) {
+    headline = running ? "Camera on" : (g_wsVideoStartFailed ? "Camera not available" : "Camera is off");
+    hint = running ? "Waiting for the next frame." : "The printer needs LAN mode and its access code.";
+  }
+  uiDrawFit(headline, v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
+  uiDrawFit(hint, v.x + v.w / 2, v.y + v.h / 2 + 14, v.w - 32, FONT_SMALL, MC_DATUM, OS12V_MUTED, TFT_BLACK);
 }
 
 static void wsDrawVideoControls(const wsm::Screen& s, const wsm::PageSpec& p) {
@@ -1656,7 +1684,7 @@ static void wsMoreDraw(bool full) {
       tft.fillRect(0, v.bottom(), s.w, s.h - v.bottom(), OS12V_BG);
       wsDrawHeader(s, p);
       wsDrawVideoControls(s, p);
-      uiBottomNav(3, nullptr);
+      uiBottomNav(wsNavTab(), nullptr);
       g_wsVideoChromeDrawn = true;
       markFrameDirty();
     }
@@ -1681,7 +1709,7 @@ static void wsMoreDraw(bool full) {
     }
     wsDrawScrollbar(s, p);
   }
-  uiBottomNav(3, nullptr);
+  uiBottomNav(wsNavTab(), nullptr);
   hubMarkFrameDirty();
   g_dirty = false;
 }
@@ -1745,6 +1773,7 @@ static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
       return true;
     case wsm::HitKind::Back:
       if (g_wsDialog != WsDialog::None) g_wsDialog = WsDialog::None;
+      else if (g_wsReturnTab >= 0 && g_wsCameraMode) wsTab((uint8_t)g_wsReturnTab);
       else if (g_wsReturnTab >= 0 && p.level == 1) wsTab((uint8_t)g_wsReturnTab);
       else wsOpen(p.parent);
       wsClick();
