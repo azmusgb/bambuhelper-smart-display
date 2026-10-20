@@ -43,6 +43,7 @@ static void sendWorkshopLocalAiStatus(int httpCode = 200) {
   doc["failures"] = snap.failures;
   doc["lastSuccessAgoS"] = snap.lastSuccessAtMs ? (long)((millis() - snap.lastSuccessAtMs) / 1000UL) : -1L;
   doc["status"] = snap.status;
+  doc["nvsFreeEntries"] = (unsigned)workshopLocalAiFeedNvsFreeEntries();
   JsonArray cards = doc["cards"].to<JsonArray>();
   for (uint8_t i = 0; i < snap.count; ++i) {
     JsonObject c = cards.add<JsonObject>();
@@ -64,7 +65,7 @@ static void handleWorkshopLocalAiConfig() {
   }
   const bool ok = workshopLocalAiFeedConfigure(server.arg("address").c_str(), server.arg("name").c_str(),
                                                server.arg("key").c_str(), server.arg("ca").c_str());
-  if (!ok) { server.send(400, "application/json", "{\"error\":\"address must be a private IPv4 address, name a certificate name, key a wsd_ display key and ca a PEM certificate\"}"); return; }
+  if (!ok) { sendWorkshopLocalAiStatus(400); return; }  // status says why: invalid settings, or storage full
   sendWorkshopLocalAiStatus(202);
 }
 

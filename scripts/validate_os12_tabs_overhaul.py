@@ -229,7 +229,7 @@ def validate_workshop(hub: str, fragment: str) -> None:
     # Useful without inventory: the timer and the note live on Workshop, and
     # set-up is one row that says where to go.
     rows = block(hub, "static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v)")
-    for needle in ('"Not connected · set up"', '"Local Portal > More > Filament Inventory"', '"Start"', '"Cancel"',
+    for needle in ('"Not set up"', '"Local Portal > More > Filament Inventory"', '"Start"', '"Cancel"',
                    "g_workshopNote", "wtTimerLength()"):
         need(rows, needle, "Workshop rows")
     touch = block(hub, "static bool wtWorkshopTouch(int16_t x, int16_t y)")

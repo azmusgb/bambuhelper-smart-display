@@ -23,7 +23,7 @@ Bambu Studio bambu_source + libBambuSource.dylib (Mac)
    v
 FFmpeg (Mac)
    |
-   | 320x180 JPEG, default 5 fps
+   | 384x216 JPEG, default 5 fps
    v
 tools/x2d_camera_bridge.py
    |
@@ -68,7 +68,7 @@ Defaults:
 - bind: `0.0.0.0`
 - port: `8091`
 - JPEG rate: `5 fps`
-- JPEG width: `320 px` (`180 px` high for the 16:9 X2D stream), the WS350 viewer size
+- JPEG width: `384 px` (`216 px` high for the 16:9 X2D stream): it fills the 12.3.9+ Printer › Camera page, at the same frame rate as 320 px (3.7 fps measured)
 
 Lower-load example:
 

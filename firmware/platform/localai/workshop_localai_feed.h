@@ -4,6 +4,7 @@
 
 #include "workshop_localai_feed_core.hpp"
 
+#include <cstddef>
 #include <cstdint>
 
 struct WorkshopLocalAiFeedSnapshot {
@@ -24,3 +25,5 @@ void workshopLocalAiFeedLoop();
 bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem);
 void workshopLocalAiFeedClear();
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
+// Free entries in the default NVS partition (32 bytes each), for the portal's status.
+std::size_t workshopLocalAiFeedNvsFreeEntries();
