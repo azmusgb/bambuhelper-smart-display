@@ -922,7 +922,7 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
   switch (id) {
     case wtl::ItemId::WsInventorySetup:
       if (!workshopPlatformWifiOnline()) { v.enabled = false; v.reason = "Needs Wi-Fi to connect"; break; }
-      strlcpy(v.value, "Not connected · set up", sizeof(v.value));
+      strlcpy(v.value, "Not set up", sizeof(v.value));  // the same words as Home's Filament row
       v.valueColor = OS12V_ACCENT;  // 12.3.9: a way in, not a warning
       break;
     case wtl::ItemId::WsHowTo:

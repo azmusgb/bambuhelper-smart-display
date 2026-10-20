@@ -3,24 +3,29 @@
 // One small HTTPS request a minute on a background task, backing off to 10 minutes while Local AI doesn't answer.
 // The connection goes to Local AI's IP address and checks its certificate against Local AI's own CA and the name
 // on the certificate (the ESP32's mbedTLS 2.28 can't match IP addresses in certificates). The display key signs
-// it in for this one route. The key and CA are kept in NVS ("ws12-lai") and are never sent back by the portal.
+// it in for this one route. The settings, key and CA are kept in /localai.json on LittleFS, on the flash's spare
+// "spiffs" partition (NVS is nearly full on the WS350: a 600-byte CA did not fit), and are never sent back by the
+// portal.
 
 #include "workshop_localai_feed.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <Preferences.h>
+#include <LittleFS.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
 #include <cstring>
+
+#include <nvs.h>
 
 namespace {
 
 using workshop::localai::Card;
 namespace lai = workshop::localai;
 
-constexpr char kNamespace[] = "ws12-lai";
+constexpr char kSettingsPath[] = "/localai.json";
+bool g_fsReady = false;
 constexpr size_t kMaxCaBytes = 4096;
 constexpr size_t kMaxBodyBytes = 8192;
 
@@ -151,15 +156,24 @@ void fetchTask(void*) {
 
 }  // namespace
 
+// Mounts LittleFS on the "spiffs" partition (formatting it the first time), once.
+bool mountSettings() {
+    if (!g_fsReady) g_fsReady = LittleFS.begin(true, "/lfs", 4, "spiffs");
+    return g_fsReady;
+}
+
 void workshopLocalAiFeedBegin() {
     if (!ensureCaBuffer()) return;
-    Preferences prefs;
-    if (prefs.begin(kNamespace, true)) {
-        copyText(g_address, sizeof(g_address), prefs.getString("addr", "").c_str());
-        copyText(g_tlsName, sizeof(g_tlsName), prefs.getString("name", "").c_str());
-        copyText(g_key, sizeof(g_key), prefs.getString("key", "").c_str());
-        copyText(g_ca, kMaxCaBytes, prefs.getString("ca", "").c_str());
-        prefs.end();
+    if (mountSettings() && LittleFS.exists(kSettingsPath)) {
+        File f = LittleFS.open(kSettingsPath, "r");
+        JsonDocument doc;
+        if (f && !deserializeJson(doc, f)) {
+            copyText(g_address, sizeof(g_address), doc["address"] | "");
+            copyText(g_tlsName, sizeof(g_tlsName), doc["name"] | "");
+            copyText(g_key, sizeof(g_key), doc["key"] | "");
+            copyText(g_ca, kMaxCaBytes, doc["ca"] | "");
+        }
+        if (f) f.close();
     }
     portENTER_CRITICAL(&g_mux);
     g_snap = WorkshopLocalAiFeedSnapshot{};
@@ -187,16 +201,28 @@ void workshopLocalAiFeedLoop() {
 }
 
 bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem) {
-    if (!lai::validPrivateIp(address) || !lai::validTlsName(tlsName) || !lai::validKey(key)) return false;
-    if (!caPem || strlen(caPem) >= kMaxCaBytes || !strstr(caPem, "-----BEGIN CERTIFICATE-----")) return false;
+    if (!lai::validPrivateIp(address) || !lai::validTlsName(tlsName) || !lai::validKey(key) ||
+        !caPem || strlen(caPem) >= kMaxCaBytes || !strstr(caPem, "-----BEGIN CERTIFICATE-----")) {
+        setStatus("Not saved: the address, certificate name, key or CA is not valid.");
+        return false;
+    }
     if (!ensureCaBuffer()) return false;
-    Preferences prefs;
-    if (!prefs.begin(kNamespace, false)) return false;
-    prefs.putString("addr", address);
-    prefs.putString("name", tlsName);
-    prefs.putString("key", key);
-    prefs.putString("ca", caPem);
-    prefs.end();
+    // Write a new file, then rename it over the old one, so a power cut never leaves half the settings.
+    if (!mountSettings()) { setStatus("Could not save: the settings storage could not be opened."); return false; }
+    JsonDocument doc;
+    doc["address"] = address;
+    doc["name"] = tlsName;
+    doc["key"] = key;
+    doc["ca"] = caPem;
+    File f = LittleFS.open("/localai.tmp", "w");
+    const size_t want = measureJson(doc);
+    const bool written = f && serializeJson(doc, f) == want;
+    if (f) f.close();
+    if (!written || !LittleFS.rename("/localai.tmp", kSettingsPath)) {
+        LittleFS.remove("/localai.tmp");
+        setStatus("Could not save the settings file.");
+        return false;
+    }
     portENTER_CRITICAL(&g_mux);
     copyText(g_address, sizeof(g_address), address);
     copyText(g_tlsName, sizeof(g_tlsName), tlsName);
@@ -213,8 +239,7 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
 }
 
 void workshopLocalAiFeedClear() {
-    Preferences prefs;
-    if (prefs.begin(kNamespace, false)) { prefs.clear(); prefs.end(); }
+    if (mountSettings()) LittleFS.remove(kSettingsPath);
     portENTER_CRITICAL(&g_mux);
     memset(g_key, 0, sizeof(g_key));
     g_address[0] = g_tlsName[0] = 0;
@@ -223,6 +248,11 @@ void workshopLocalAiFeedClear() {
     g_snap = WorkshopLocalAiFeedSnapshot{};
     copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are not set up.");
     portEXIT_CRITICAL(&g_mux);
+}
+
+std::size_t workshopLocalAiFeedNvsFreeEntries() {
+    nvs_stats_t st;
+    return nvs_get_stats(nullptr, &st) == ESP_OK ? st.free_entries : 0;
 }
 
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot() {
