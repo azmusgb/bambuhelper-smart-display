@@ -15,6 +15,9 @@
 // decided; a heartbeat every 5 minutes; and, while nothing else is waiting, a long poll (GET /api/display/events)
 // that brings news in about 2 s. The long poll gives way at once to a question, a picture or an approval. Still one
 // request at a time: the jobs below, in that order of priority.
+//
+// 12.7: pairing from the touchscreen (LocalAI docs/WORKSHOP-DISPLAY.md › Pairing): Local AI's CA over plain HTTP, then
+// the 6-digit code over HTTPS pinned to it, for a new display key; the settings are saved as by the portal.
 
 #include "workshop_localai_feed.h"
 
@@ -61,7 +64,9 @@ std::uint32_t g_nextAtMs = 0;
 bool g_taskActive = false;
 
 // Jobs for the one task, highest priority first.
-enum class Job : std::uint8_t { Ask, Decide, Approvals, Image, Feed, Heartbeat, Events };
+enum class Job : std::uint8_t { Pair, Ask, Decide, Approvals, Image, Feed, Heartbeat, Events };
+char g_pairAddress[16] = {};
+char g_pairCode[8] = {};
 WorkshopLocalAiExtras g_extras;
 char g_askPending[12] = {};
 bool g_imagePending = false;
@@ -123,33 +128,25 @@ bool somethingWaits() {
 // Caddy). Sends it with the display key (and `body`, as JSON, for a POST) and reads the status line and headers; on
 // HTTP 200 the body is next on `client`. False with `error` set otherwise (the connection is closed then). It waits up
 // to `waitMs` for the answer to start, and (when `yieldToPerson`) stops waiting when someone asks for something.
-bool openRequest(WiFiClientSecure& client, const char* method, const char* path, const char* accept, const char* body,
-                 size_t& contentLength, char* contentType, size_t contentTypeLen, char* error, size_t errorLen,
-                 std::uint32_t waitMs = 8000UL, bool yieldToPerson = false) {
+// To Local AI at `address`, checking its certificate against `ca` and `name`; with the display key when `key` is set.
+bool openRequestTo(WiFiClientSecure& client, const char* address, const char* name, const char* ca, char* key, const char* method,
+                   const char* path, const char* accept, const char* body, size_t& contentLength, char* contentType,
+                   size_t contentTypeLen, char* error, size_t errorLen, std::uint32_t waitMs, bool yieldToPerson) {
     contentLength = 0;
     if (contentType && contentTypeLen) contentType[0] = 0;
-    if (WiFi.status() != WL_CONNECTED) { copyText(error, errorLen, "Waiting for Wi-Fi."); return false; }
-    char address[16], name[64], key[56];
-    static char ca[kMaxCaBytes];  // one request at a time (the task)
-    portENTER_CRITICAL(&g_mux);
-    memcpy(address, g_address, sizeof(address));
-    memcpy(name, g_tlsName, sizeof(name));
-    memcpy(key, g_key, sizeof(key));
-    copyText(ca, sizeof(ca), g_ca);
-    portEXIT_CRITICAL(&g_mux);
-
+    if (WiFi.status() != WL_CONNECTED) { copyText(error, errorLen, "Waiting for Wi-Fi."); if (key) memset(key, 0, 56); return false; }
     IPAddress ip;
-    if (!ip.fromString(address)) { copyText(error, errorLen, "Local AI's address is not valid."); memset(key, 0, sizeof(key)); return false; }
+    if (!ip.fromString(address)) { copyText(error, errorLen, "Local AI's address is not valid."); if (key) memset(key, 0, 56); return false; }
     client.setHandshakeTimeout(10);  // seconds
     if (!client.connect(ip, 443, name, ca, nullptr, nullptr)) {
         copyText(error, errorLen, "Local AI isn't answering, or its certificate didn't match.");
-        memset(key, 0, sizeof(key));
+        if (key) memset(key, 0, 56);
         return false;
     }
     const size_t bodyLen = body ? strlen(body) : 0;
     client.printf("%s %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Workshop-Display/12 ESP32HTTPClient\r\n"
-                  "Accept: %s\r\nX-LocalAI-Display-Key: %s\r\nConnection: close\r\n", method, path, name, accept, key);
-    memset(key, 0, sizeof(key));
+                  "Accept: %s\r\nConnection: close\r\n", method, path, name, accept);
+    if (key) { client.printf("X-LocalAI-Display-Key: %s\r\n", key); memset(key, 0, 56); }
     if (body) client.printf("Content-Type: application/json\r\nContent-Length: %u\r\n\r\n%s", (unsigned)bodyLen, body);
     else client.print("\r\n");
 
@@ -176,10 +173,30 @@ bool openRequest(WiFiClientSecure& client, const char* method, const char* path,
     }
     if (code != 200) {
         snprintf(error, errorLen, code == 401 || code == 403 ? "Local AI turned the display key down (HTTP %d)." : "Local AI answered HTTP %d.", code);
+        // Local AI's own words, when it sent any (pairing says why a code was refused).
+        if (code >= 400 && code < 500 && code != 401) {
+            JsonDocument why;
+            if (!deserializeJson(why, client) && (why["error"] | "")[0]) copyText(error, errorLen, why["error"] | "");
+        }
         client.stop();
         return false;
     }
     return true;
+}
+
+bool openRequest(WiFiClientSecure& client, const char* method, const char* path, const char* accept, const char* body,
+                 size_t& contentLength, char* contentType, size_t contentTypeLen, char* error, size_t errorLen,
+                 std::uint32_t waitMs = 8000UL, bool yieldToPerson = false) {
+    char address[16], name[64], key[56];
+    static char ca[kMaxCaBytes];  // one request at a time (the task)
+    portENTER_CRITICAL(&g_mux);
+    memcpy(address, g_address, sizeof(address));
+    memcpy(name, g_tlsName, sizeof(name));
+    memcpy(key, g_key, sizeof(key));
+    copyText(ca, sizeof(ca), g_ca);
+    portEXIT_CRITICAL(&g_mux);
+    return openRequestTo(client, address, name, ca, key, method, path, accept, body, contentLength, contentType, contentTypeLen,
+                         error, errorLen, waitMs, yieldToPerson);
 }
 
 bool openGet(WiFiClientSecure& client, const char* path, const char* accept, size_t& contentLength, char* contentType,
@@ -520,12 +537,82 @@ void runEvents() {
     portEXIT_CRITICAL(&g_mux);
 }
 
+// 12.7: Local AI's CA from http://<address>/localai-ca.crt (plain HTTP: the display can't check anything yet; the
+// code, sent next over HTTPS pinned to this CA, is what proves both ends).
+bool fetchCa(const char* address, char* ca, size_t caLen, char* error, size_t errorLen) {
+    IPAddress ip;
+    if (!ip.fromString(address)) { copyText(error, errorLen, "Local AI's address is not valid."); return false; }
+    WiFiClient client;
+    client.setTimeout(5);
+    if (!client.connect(ip, 80)) { copyText(error, errorLen, "Local AI isn't answering at that address."); return false; }
+    client.printf("GET /localai-ca.crt HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", address);
+    const std::uint32_t start = millis();
+    while (!client.available() && client.connected() && millis() - start < 5000UL) delay(10);
+    const String status = client.readStringUntil('\n');
+    for (;;) { const String line = client.readStringUntil('\n'); if (line.length() <= 1) break; }
+    size_t n = 0;
+    while ((client.connected() || client.available()) && millis() - start < 8000UL && n + 1 < caLen) {
+        const int c = client.read();
+        if (c < 0) { delay(5); continue; }
+        ca[n++] = (char)c;
+    }
+    ca[n] = 0;
+    client.stop();
+    if (!status.startsWith("HTTP/1.") || status.substring(9, 12).toInt() != 200 || !strstr(ca, "-----BEGIN CERTIFICATE-----")) {
+        copyText(error, errorLen, "Local AI's certificate authority could not be read.");
+        return false;
+    }
+    return true;
+}
+
+void runPair() {
+    char address[16], code[8], error[96] = {};
+    portENTER_CRITICAL(&g_mux);
+    copyText(address, sizeof(address), g_pairAddress);
+    copyText(code, sizeof(code), g_pairCode);
+    g_pairCode[0] = 0;
+    portEXIT_CRITICAL(&g_mux);
+    static char ca[kMaxCaBytes];
+    bool ok = fetchCa(address, ca, sizeof(ca), error, sizeof(error));
+    char key[56] = {}, name[64] = "localai.home.arpa";
+    if (ok) {
+        char body[32];
+        snprintf(body, sizeof(body), "{\"code\":\"%s\"}", code);
+        WiFiClientSecure client;
+        size_t contentLength = 0;
+        ok = openRequestTo(client, address, name, ca, nullptr, "POST", "/api/display/pair", "application/json", body, contentLength,
+                           nullptr, 0, error, sizeof(error), 15000UL, false);
+        if (ok) {
+            JsonDocument doc;
+            const DeserializationError err = deserializeJson(doc, client);
+            client.stop();
+            copyText(key, sizeof(key), doc["key"] | "");
+            if (lai::validTlsName(doc["tlsName"] | "")) copyText(name, sizeof(name), doc["tlsName"] | "");
+            ok = !err && lai::validKey(key);
+            if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a display key.");
+        }
+    }
+    if (ok) ok = workshopLocalAiFeedConfigure(address, name, key, ca);
+    if (ok) copyText(error, sizeof(error), "Paired with Local AI.");
+    else if (!error[0]) copyText(error, sizeof(error), "Could not save the pairing.");
+    memset(key, 0, sizeof(key));
+    memset(code, 0, sizeof(code));
+    portENTER_CRITICAL(&g_mux);
+    g_extras.pairOk = ok;
+    copyText(g_extras.pairStatus, sizeof(g_extras.pairStatus), error);
+    g_extras.pairBusy = false;
+    ++g_extras.pairSeq;
+    finishJob();
+    portEXIT_CRITICAL(&g_mux);
+}
+
 void fetchTask(void* arg) {
     const Job job = static_cast<Job>(reinterpret_cast<std::uintptr_t>(arg));
     portENTER_CRITICAL(&g_mux);
     const std::uint32_t generation = g_generation;
     portEXIT_CRITICAL(&g_mux);
     switch (job) {
+        case Job::Pair: runPair(); break;
         case Job::Ask: runAsk(); break;
         case Job::Decide: runDecide(); break;
         case Job::Approvals: runApprovals(); break;
@@ -572,7 +659,10 @@ void workshopLocalAiFeedLoop() {
     Job job = Job::Feed;
     bool due = false;
     portENTER_CRITICAL(&g_mux);
-    if (g_snap.configured && !g_taskActive) {
+    if (g_pairCode[0] && !g_taskActive) {  // 12.7: pairing needs no settings yet
+        due = true;
+        job = Job::Pair;
+    } else if (g_snap.configured && !g_taskActive) {
         due = true;
         if (g_askPending[0]) job = Job::Ask;
         else if (g_decideId[0]) job = Job::Decide;
@@ -597,6 +687,7 @@ void workshopLocalAiFeedLoop() {
             case Job::Decide: g_decideId[0] = 0; break;
             case Job::Heartbeat: g_nextBeatAtMs = now + lai::kHeartbeatMs; break;
             case Job::Events: g_eventsPauseUntilMs = now + 10000UL; break;
+            case Job::Pair: g_pairCode[0] = 0; g_extras.pairBusy = false; copyText(g_extras.pairStatus, sizeof(g_extras.pairStatus), "Could not start pairing."); ++g_extras.pairSeq; break;
         }
         portEXIT_CRITICAL(&g_mux);
         if (job == Job::Feed) setStatus("Could not start the Local AI request.");
@@ -744,6 +835,28 @@ bool workshopLocalAiFeedDecide(const char* id, bool approve) {
     }
     portEXIT_CRITICAL(&g_mux);
     return ok;
+}
+
+bool workshopLocalAiFeedPair(const char* address, const char* code) {
+    if (!lai::validPrivateIp(address) || !code || strlen(code) != 6) return false;
+    for (const char* c = code; *c; ++c) if (*c < '0' || *c > '9') return false;
+    portENTER_CRITICAL(&g_mux);
+    const bool ok = !g_extras.pairBusy;
+    if (ok) {
+        copyText(g_pairAddress, sizeof(g_pairAddress), address);
+        copyText(g_pairCode, sizeof(g_pairCode), code);
+        g_extras.pairBusy = true;
+        g_extras.pairOk = false;
+        copyText(g_extras.pairStatus, sizeof(g_extras.pairStatus), "Pairing...");
+    }
+    portEXIT_CRITICAL(&g_mux);
+    return ok;
+}
+
+void workshopLocalAiFeedAddress(char* out, std::size_t len) {
+    portENTER_CRITICAL(&g_mux);
+    copyText(out, len, g_address);
+    portEXIT_CRITICAL(&g_mux);
 }
 
 WorkshopLocalAiExtras workshopLocalAiFeedExtras() {
