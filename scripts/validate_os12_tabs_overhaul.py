@@ -132,7 +132,7 @@ def validate_calm(hub: str, fragment: str) -> None:
          "calm screen drawn and woken by one predicate")
     calm = block(hub, "static void wtDrawCalm(const WtPrint& w)")
     for needle, label in (
-        ("wtl::calmLayout(s)", "calm geometry from the shared layout"),
+        ("wtl::calmLayout(s, aiShown)", "calm geometry from the shared layout"),
         ("localtime_r(&now, &t);", "clock in the display's time zone"),
         ("wtl::clockText(clock, sizeof(clock), t.tm_hour, t.tm_min, netSettings.use24h);", "clock follows the 12/24 h setting"),
         ("netSettings.dateFormat);", "date in the saved date format"),

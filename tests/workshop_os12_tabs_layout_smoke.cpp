@@ -308,6 +308,18 @@ void checkCalm(Screen s, const char* o) {
   check(c.status.h == more::kRowH, "calm status is one line", o, c.status.h);
   check(c.hint.y == more::tabBand(s).y && c.hint.h == more::tabBand(s).h, "wake hint where the tab bar would be", o);
   check(c.clock.y >= 16, "calm clock clear of the top edge", o, c.clock.y);
+  check(c.ai.empty(), "no Local AI card slot unless asked for", o);
+
+  // 12.3.10: with a Local AI card, five parts top to bottom, nothing overlaps, the clock is still clear of the top.
+  const CalmLayout a = calmLayout(s, true);
+  const Rect ap[5] = {a.clock, a.date, a.status, a.ai, a.hint};
+  for (int i = 0; i < 5; ++i) {
+    check(!ap[i].empty() && inside(ap[i], screen), "calm part on screen (with Local AI)", o, i);
+    for (int j = i + 1; j < 5; ++j) check(!intersects(ap[i], ap[j]), "calm parts do not overlap (with Local AI)", o, i, j);
+    if (i < 4) check(ap[i].bottom() <= ap[i + 1].y, "calm parts top to bottom (with Local AI)", o, i);
+  }
+  check(a.ai.h == more::kRowH && a.ai.w == a.status.w && a.ai.x == a.status.x, "Local AI card lines up with the status", o);
+  check(a.clock.y >= 16 && a.clock.h == c.clock.h, "the clock keeps its size and stays clear of the top", o, a.clock.y);
 
   // Full-screen scan: every pixel is the wake target, including every pixel
   // where Home would have a tab, its card or its rows.

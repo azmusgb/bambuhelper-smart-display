@@ -43,6 +43,8 @@ on:
       - 'scripts/validate_os12_rapid_reset.py'
       - 'scripts/validate_os12_more_overhaul.py'
       - 'scripts/validate_os12_tabs_overhaul.py'
+      - 'scripts/validate_os12_localai_feed.py'
+      - 'tests/workshop_os12_localai_feed_smoke.cpp'
       - 'scripts/validate_os12_portal_boot.py'
       - 'scripts/validate_os12_portal_phone_fit.py'
       - 'scripts/validate_os12_touch_audio_fit.py'
@@ -95,6 +97,8 @@ on:
       - 'scripts/validate_os12_rapid_reset.py'
       - 'scripts/validate_os12_more_overhaul.py'
       - 'scripts/validate_os12_tabs_overhaul.py'
+      - 'scripts/validate_os12_localai_feed.py'
+      - 'tests/workshop_os12_localai_feed_smoke.cpp'
       - 'scripts/validate_os12_portal_boot.py'
       - 'scripts/validate_os12_portal_phone_fit.py'
       - 'scripts/validate_os12_touch_audio_fit.py'
@@ -123,7 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OS12_RELEASE_VERSION: '12.3.9'
+      OS12_RELEASE_VERSION: '12.3.10'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -172,6 +176,9 @@ jobs:
             scripts/validate_os12_rapid_reset.py \
             scripts/validate_os12_more_overhaul.py \
             scripts/validate_os12_tabs_overhaul.py \
+            scripts/validate_os12_localai_feed.py \
+            apply_workshop_os12_localai_feed.py \
+            scripts/configure_localai_feed.py \
             scripts/validate_os12_portal_boot.py \
             scripts/validate_os12_portal_phone_fit.py \
             scripts/validate_os12_touch_audio_fit.py \

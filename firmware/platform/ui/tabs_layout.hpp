@@ -522,23 +522,30 @@ struct CalmLayout {
   Rect clock;   // the time, centred
   Rect date;    // the date in the saved format
   Rect status;  // one status line on a card surface
+  Rect ai;      // 12.3.10: one Local AI card under it, when there are cards (empty otherwise)
   Rect hint;    // "Tap anywhere to wake", where the tab bar would be
 };
 
 static const int16_t kCalmClockH = 96;
 static const int16_t kCalmDateH = 32;
+static const int16_t kCalmGapWithAi = 10;
+static const int16_t kCalmAiGap = 6;
 static const int16_t kCalmGap = 20;
 
-inline CalmLayout calmLayout(Screen s) {
+// withAi (12.3.10): room for one Local AI card under the status line; the gaps shrink so the clock stays clear of
+// the top edge. Without cards the screen is exactly as before.
+inline CalmLayout calmLayout(Screen s, bool withAi = false) {
   CalmLayout c;
   c.hint = more::tabBand(s);
-  const int total = kCalmClockH + kCalmDateH + kCalmGap + more::kRowH;
+  const int gap = withAi ? kCalmGapWithAi : kCalmGap;
+  const int total = kCalmClockH + kCalmDateH + gap + more::kRowH + (withAi ? kCalmAiGap + more::kRowH : 0);
   const int top = (c.hint.y - total) / 2;
   const int margin = 16;
   c.clock = makeRect(margin, top, s.w - 2 * margin, kCalmClockH);
   c.date = makeRect(margin, top + kCalmClockH, s.w - 2 * margin, kCalmDateH);
   const int statusW = s.landscape() ? 384 : s.w - 2 * margin;
-  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + kCalmGap, statusW, more::kRowH);
+  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + gap, statusW, more::kRowH);
+  c.ai = withAi ? makeRect(c.status.x, c.status.bottom() + kCalmAiGap, statusW, more::kRowH) : makeRect(0, 0, 0, 0);
   return c;
 }
 
