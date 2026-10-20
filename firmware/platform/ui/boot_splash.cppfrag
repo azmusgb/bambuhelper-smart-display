@@ -1,0 +1,234 @@
+// ---------------------------------------------------------------------------
+// Workshop OS 12.5 boot splash (apply_workshop_os12_boot_splash.py).
+//
+// 2.6 s while Wi-Fi starts: a hexagon is "printed" layer by layer by a moving
+// nozzle (violet at the bed to Local AI blue at the top), Local AI's sparkle is
+// cut out of it, a light sweeps across, a ring pulses out, and the name types
+// in. The bar under it fills with the boot and the line under that says what
+// Wi-Fi is doing. Every frame is drawn whole from the time since boot into a
+// PSRAM sprite and pushed at once, so nothing flickers; without the sprite the
+// finished frame is drawn once, straight to the panel.
+// /hub/show boot-splash[-<percent>] draws a frame into the hub framebuffer so
+// captures can check it.
+// ---------------------------------------------------------------------------
+
+static const uint32_t kBootSplashMs = 2600;  // main.cpp holds the splash this long
+void bootSplashTick();
+static lgfx::LGFX_Sprite* g_bootSprite = nullptr;
+static uint32_t g_bootSplashStart = 0;
+
+// LocalAI palette (app.css --ds-*), RGB565.
+static const uint16_t kBsBg = 0x0883, kBsGlow = 0x1947, kBsDot = 0x1928, kBsLine = 0x2A4D;
+static const uint16_t kBsText = 0xEF9F, kBsMuted = 0x9537, kBsAccent = 0x6DBF, kBsViolet = 0xACFF;
+static const uint16_t kBsGood = 0x3EB3, kBsSurface = 0x1107, kBsWhite = 0xFFFF;
+
+static uint16_t bsLerp(uint16_t a, uint16_t b, float f) {
+  if (f <= 0.0f) return a;
+  if (f >= 1.0f) return b;
+  const int ar = a >> 11, ag = (a >> 5) & 63, ab = a & 31, br = b >> 11, bg = (b >> 5) & 63, bb = b & 31;
+  return (uint16_t)(((int)(ar + (br - ar) * f) << 11) | ((int)(ag + (bg - ag) * f) << 5) | (int)(ab + (bb - ab) * f));
+}
+
+// 0..1 for t in [a, b], eased out.
+static float bsPhase(uint32_t t, uint32_t a, uint32_t b) {
+  if (t <= a) return 0.0f;
+  if (t >= b) return 1.0f;
+  const float x = (float)(t - a) / (float)(b - a);
+  return 1.0f - (1.0f - x) * (1.0f - x);
+}
+
+// Half-width of a pointy-top hexagon of radius r at height dy from its centre.
+static int bsHexHalf(int r, int dy) {
+  if (dy < 0) dy = -dy;
+  const float w = 0.866f * r;
+  if (dy <= r / 2) return (int)w;
+  if (dy >= r) return 0;
+  return (int)(w * (float)(r - dy) / (float)(r - r / 2));
+}
+
+static void bsSparkle(lgfx::LovyanGFX& g, int x, int y, int s, uint16_t c) {
+  if (s < 2) return;
+  const int k = s / 4 + 1;
+  g.fillTriangle(x, y - s, x - k, y, x + k, y, c);
+  g.fillTriangle(x, y + s, x - k, y, x + k, y, c);
+  g.fillTriangle(x - s, y, x, y - k, x, y + k, c);
+  g.fillTriangle(x + s, y, x, y - k, x, y + k, c);
+}
+
+static void bsFont(lgfx::LovyanGFX& g, FontID id, bool panelCache) {
+  if (panelCache) setFont(g, id);  // the hub framebuffer: setFont() keeps its cache right
+  else loadFontInto(g, id);        // the splash sprite: a target setFont() doesn't track
+}
+
+// The whole splash at `t` ms after boot onto `g` (sprite, hub framebuffer or panel).
+static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
+  const int sw = g.width(), sh = g.height(), cx = sw / 2;
+  const bool landscape = sw > sh;
+  const int r = landscape ? 62 : 70;
+  const int cy = landscape ? 112 : 168;
+  g.fillScreen(kBsBg);
+
+  // A dot grid fades in, and a glow grows behind the mark.
+  const uint16_t dot = bsLerp(kBsBg, kBsDot, bsPhase(t, 0, 600));
+  for (int y = 12; y < sh; y += 24)
+    for (int x = 12; x < sw; x += 24) g.drawPixel(x, y, dot);
+  const float glow = bsPhase(t, 100, 900);
+  for (int i = 8; i >= 1; --i) g.fillCircle(cx, cy, (int)((r + 10 + i * 9) * glow), bsLerp(kBsBg, kBsGlow, (9 - i) / 9.0f * glow));
+
+  // The print: one layer every 3 px, bottom to top, the nozzle going back and forth.
+  const int layers = (2 * r) / 3;
+  const float printed = bsPhase(t, 150, 1450) * layers;
+  const int done = (int)printed;
+  for (int i = 0; i < layers && i <= done; ++i) {
+    const int y = cy + r - 2 - i * 3;
+    const int half = bsHexHalf(r, y - cy);
+    if (half <= 0) continue;
+    const uint16_t c = bsLerp(kBsViolet, kBsAccent, (float)i / layers);
+    if (i < done) { g.fillRect(cx - half, y, half * 2, 2, c); continue; }
+    if (done >= layers) continue;
+    // The layer being printed, up to the nozzle (left to right on even layers, right to left on odd).
+    const float f = printed - done;
+    const int len = (int)(half * 2 * f);
+    const int nx = (i % 2 == 0) ? cx - half + len : cx + half - len;
+    if (i % 2 == 0) g.fillRect(cx - half, y, len, 2, c);
+    else g.fillRect(nx, y, len, 2, c);
+    g.fillCircle(nx, y, 4, bsLerp(kBsBg, kBsAccent, 0.5f));  // the hot spot
+    g.fillCircle(nx, y, 2, kBsWhite);
+    g.fillTriangle(nx - 5, y - 6, nx + 5, y - 6, nx, y - 1, kBsMuted);  // the nozzle and its heater block
+    g.fillRoundRect(nx - 9, y - 16, 18, 10, 3, kBsLine);
+    g.drawRoundRect(nx - 9, y - 16, 18, 10, 3, kBsMuted);
+  }
+
+  // Local AI's sparkle is cut out of the finished print, and a small one twinkles beside it.
+  const float cut = bsPhase(t, 1450, 1750);
+  if (cut > 0.0f) {
+    bsSparkle(g, cx, cy, (int)(r * 0.55f * cut), kBsBg);
+    const float tw = bsPhase(t, 1650, 1900);
+    bsSparkle(g, cx + (int)(r * 0.62f), cy - (int)(r * 0.62f), (int)(9 * tw), bsLerp(kBsWhite, kBsAccent, tw));
+  }
+
+  // The outline lights up, then a band of light sweeps across the mark.
+  if (t >= 1450) {
+    const uint16_t edge = bsLerp(kBsBg, kBsAccent, bsPhase(t, 1450, 1700));
+    int px = cx, py = cy - r;
+    for (int k = 1; k <= 6; ++k) {
+      const float a = (k * 60 - 90) * 0.0174533f;
+      const int qx = cx + (int)(r * cosf(a)), qy = cy + (int)(r * sinf(a));
+      g.drawLine(px, py, qx, qy, edge);
+      px = qx; py = qy;
+    }
+  }
+  const float sweep = bsPhase(t, 1750, 2150);
+  if (sweep > 0.0f && sweep < 1.0f) {
+    const int sx = cx - r - 20 + (int)((2 * r + 40) * sweep);
+    for (int y = cy - r; y <= cy + r; ++y) {
+      const int half = bsHexHalf(r, y - cy);
+      const int x0 = sx + (y - cy) / 2;  // a slanted band, 10 px wide
+      for (int x = x0; x < x0 + 10; ++x)
+        if (x > cx - half && x < cx + half && g.readPixel(x, y) != kBsBg) g.drawPixel(x, y, bsLerp(g.readPixel(x, y), kBsWhite, 0.55f));
+    }
+  }
+
+  // A ring pulses out when the mark is done.
+  const float ring = bsPhase(t, 2050, 2550);
+  if (ring > 0.0f && ring < 1.0f) {
+    const int rr = r + 6 + (int)(46 * ring);
+    const uint16_t rc = bsLerp(kBsAccent, kBsBg, ring);
+    g.drawCircle(cx, cy, rr, rc);
+    g.drawCircle(cx, cy, rr + 1, rc);
+  }
+
+  // The name types in, then the line under it.
+  static const char kName[] = "Workshop OS";
+  const int nameY = landscape ? 212 : 290;
+  const float typed = bsPhase(t, 1100, 1700);
+  if (typed > 0.0f) {
+    bsFont(g, FONT_XLARGE, panelCache);
+    g.setTextSize(1.5f);
+    const int full = g.textWidth(kName);
+    char shown[sizeof(kName)];
+    const size_t n = (size_t)(typed * (sizeof(kName) - 1) + 0.5f);
+    memcpy(shown, kName, n);
+    shown[n] = 0;
+    g.setTextDatum(ML_DATUM);
+    g.setTextColor(kBsText, kBsBg);
+    g.drawString(shown, cx - full / 2, nameY);
+    if (n < sizeof(kName) - 1) g.fillRect(cx - full / 2 + g.textWidth(shown) + 2, nameY - 14, 3, 28, kBsAccent);  // the cursor
+    g.setTextSize(1.0f);
+  }
+  bsFont(g, FONT_SMALL, panelCache);
+  g.setTextDatum(MC_DATUM);
+  const float sub = bsPhase(t, 1600, 2000);
+  if (sub > 0.0f) {
+    g.setTextColor(bsLerp(kBsBg, kBsMuted, sub), kBsBg);
+    g.drawString("Local AI  \xC2\xB7  Printer  \xC2\xB7  Workshop", cx, nameY + (landscape ? 30 : 34));
+  }
+
+  // The boot bar, with a highlight running along it, and what Wi-Fi is doing.
+  const int barW = landscape ? 220 : 200, barX = cx - barW / 2, barY = landscape ? sh - 44 : sh - 80;
+  g.fillRoundRect(barX, barY, barW, 4, 2, kBsSurface);
+  const float boot = t >= kBootSplashMs ? 1.0f : (float)t / kBootSplashMs;
+  const int fill = (int)(barW * boot);
+  if (fill > 3) g.fillRoundRect(barX, barY, fill, 4, 2, kBsAccent);
+  const int hx = barX + (int)((t % 900) / 900.0f * barW);
+  if (hx < barX + fill - 6) g.fillRect(hx, barY, 6, 4, kBsWhite);
+  char status[64];
+  uint16_t statusColor = kBsMuted;
+  if (WiFi.status() == WL_CONNECTED) {
+    snprintf(status, sizeof(status), "Wi-Fi connected  \xC2\xB7  %s", WiFi.localIP().toString().c_str());
+    statusColor = kBsGood;
+  } else if (WiFi.SSID().length()) {
+    snprintf(status, sizeof(status), "Joining %s...", WiFi.SSID().c_str());
+  } else {
+    snprintf(status, sizeof(status), "Starting...");
+  }
+  g.setTextColor(statusColor, kBsBg);
+  g.drawString(status, cx, barY + 18);
+
+  // Corners: the device and the release.
+  g.setTextColor(kBsLine, kBsBg);
+  g.setTextDatum(BL_DATUM);
+  g.drawString("WS350", 10, sh - 8);
+  g.setTextDatum(BR_DATUM);
+  g.drawString(WORKSHOP_OS_RELEASE_VERSION, sw - 10, sh - 8);
+  g.setTextDatum(TL_DATUM);
+}
+
+// Called from initDisplay(): the first frame.
+void bootSplashBegin() {
+  g_bootSplashStart = millis();
+  g_bootSprite = new lgfx::LGFX_Sprite(&tft);
+  g_bootSprite->setPsram(true);
+  g_bootSprite->setColorDepth(16);
+  if (!g_bootSprite->createSprite(tft.width(), tft.height())) {
+    delete g_bootSprite;
+    g_bootSprite = nullptr;
+    bootSplashRender(tft, kBootSplashMs, false);  // no memory for frames: the finished splash, once
+    flushFrame();
+    return;
+  }
+  bootSplashTick();
+}
+
+// Called from the splash phase of loop() until it ends: one frame.
+void bootSplashTick() {
+  if (!g_bootSprite) { delay(10); return; }
+  bootSplashRender(*g_bootSprite, millis() - g_bootSplashStart, false);
+  g_bootSprite->pushSprite(0, 0);
+  flushFrame();
+}
+
+void bootSplashEnd() {
+  if (!g_bootSprite) return;
+  bootSplashRender(*g_bootSprite, kBootSplashMs, false);  // always end on the finished frame
+  g_bootSprite->pushSprite(0, 0);
+  flushFrame();
+  g_bootSprite->deleteSprite();
+  delete g_bootSprite;
+  g_bootSprite = nullptr;
+}
+
+// /hub/show boot-splash: the frame at `percent` of the splash, onto the hub framebuffer.
+void bootSplashPreview(lgfx::LovyanGFX& g, uint8_t percent) {
+  bootSplashRender(g, (uint32_t)kBootSplashMs * (percent > 100 ? 100 : percent) / 100U, true);
+}
