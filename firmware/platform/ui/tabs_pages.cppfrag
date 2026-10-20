@@ -413,6 +413,12 @@ static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& car
   const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(row.right() - 30 - textX);
   if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
   wsDrawChevronRight((int16_t)(row.right() - 16), mid, OS12V_MUTED);
+  // 12.8: Now playing shows how far in it is: a thin bar along the bottom of the row.
+  if (!strcmp(card.kind, "playing") && card.percent <= 100) {
+    const int16_t bx = (int16_t)(row.x + 14), bw = (int16_t)(row.w - 28), by = (int16_t)(row.bottom() - 4);
+    tft.fillRoundRect(bx, by, bw, 3, 1, OS12V_SURFACE2);
+    if (card.percent) tft.fillRoundRect(bx, by, (int16_t)(bw * card.percent / 100), 3, 1, OS12V_ACCENT);
+  }
 }
 
 // 12.6: messages from Local AI (feed v2): a banner over the header for 12 s (20 s when it needs you), with a chime

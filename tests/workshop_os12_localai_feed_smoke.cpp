@@ -70,6 +70,7 @@ int main() {
   }
   {  // 12.6
     CHECK(shownKind("done") && shownKind("disk"), "finished work and the disk are shown");
+    CHECK(shownKind("playing") && shownKind("home"), "12.8: Now playing and the Pi hub's issue are shown");
     CHECK(validQuestion("today") && validQuestion("next") && validQuestion("weather"), "the new questions");
     Card c{};
     strcpy(c.kind, "running");
