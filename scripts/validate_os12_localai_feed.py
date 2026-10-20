@@ -76,11 +76,12 @@ def validate(repo: Path) -> None:
          "waits for the answer before reading it (12.3.11: a read straight away gave HTTP 0)")
     need(fetch, "X-LocalAI-Display-Key: %s", "the display key signs the request in")
     need(fetch, "memset(key, 0, sizeof(key));", "the key copy is wiped after the request")
-    need(block(feed, "bool fetch(Card* cards, std::uint8_t& count, char* imagePath, char* imageTitle, char* imageText, char* error, size_t errorLen)"),
+    need(block(feed, "bool fetch(Card* cards, std::uint8_t& count, char* imagePath, char* imageTitle, char* imageText, std::uint32_t& imageAt,"),
          'openGet(client, "/api/display/feed"', "the feed route")
     # 12.4.2: ask buttons and the latest image.
     need(block(feed, "bool ask(const char* question, char* answer, size_t answerLen)"), '"/api/display/ask?q=%s"', "the ask route")
     need(feed, "if (!lai::validQuestion(question)) return false;", "only the three questions are asked")
+    need(feed, "strcmp(imagePath, g_imageLoaded) != 0", "12.4.3: a new picture is fetched in the background, once")
     image = block(feed, "bool downloadImage(const char* path, char* error, size_t errorLen)")
     need(image, "contentLength > lai::kMaxImageBytes", "the picture is size-capped")
     need(image, "if (got >= limit) { tooLarge = true; break; }", "a picture without a length is capped too")
