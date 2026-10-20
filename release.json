@@ -1,6 +1,6 @@
 {
-  "release": "production-workshop-os-12.4.4",
-  "sourceCommit": "1468a7d52e3bd95735cda3783bee544df43cfc5a",
+  "release": "production-workshop-os-12.7.1",
+  "sourceCommit": "06a49e10acb938468751ec206efb3a53eacbd8f6",
   "board": {
     "id": "ws_lcd_350",
     "name": "Waveshare ESP32-S3-Touch-LCD-3.5",
@@ -11,9 +11,21 @@
     "psram": "8 MB"
   },
   "profiles": {
-    "workshop-os-12.4.4": {
-      "label": "Workshop OS 12.4.4 — recommended",
+    "workshop-os-12.7.1": {
+      "label": "Workshop OS 12.7.1 — recommended",
       "recommended": true,
+      "version": "Workshop OS 12.7.1",
+      "file": "firmware/Workshop-OS-12.7.1-ws_lcd_350-Full.bin",
+      "size": 2569072,
+      "sha256": "744b634ebf53c3ecefb037e1948e24d1eb0be9034ea95579d9830015e8fa43e6",
+      "otaFile": "firmware/Workshop-OS-12.7.1-ws_lcd_350-OTA.bin",
+      "otaSize": 2503536,
+      "otaSha256": "cb0ea61e8ed66d3c69df4143e6c9d3b0aff0093f001235cf6735ceac40708741",
+      "description": "Current Workshop OS: Local AI live on the display (messages, gallery, approvals, six questions, pairing from the touchscreen), the animated boot splash, and Home that goes back to Local AI after a print. The OTA image is the exact CI build that passed unattended acceptance on the WS350 (20 Oct 2026); the Full image wraps the same application for a fresh USB install."
+    },
+    "workshop-os-12.4.4": {
+      "label": "Workshop OS 12.4.4 (rollback)",
+      "recommended": false,
       "version": "Workshop OS 12.4.4",
       "file": "firmware/Workshop-OS-12.4.4-ws_lcd_350-Full.bin",
       "size": 2543408,
@@ -21,10 +33,10 @@
       "otaFile": "firmware/Workshop-OS-12.4.4-ws_lcd_350-OTA.bin",
       "otaSize": 2477872,
       "otaSha256": "bbaf81e46a19670e53cc34b35c179c85fce261ade3cd0fa713074aab51682c3f",
-      "description": "Current Workshop OS: Home, Printer, Local AI and More tabs, Local AI cards, ask buttons and latest image. The OTA image is the exact CI build that passed unattended acceptance on the WS350 (20 Oct 2026). The Full image wraps that same application with the bootloader and partition table for a fresh USB install."
+      "description": "Previous installer release, kept as the immediate rollback."
     },
     "workshop-os-v11.19.1": {
-      "label": "Workshop OS v11.19.1 (rollback)",
+      "label": "Workshop OS v11.19.1 (older rollback)",
       "recommended": false,
       "version": "BambuHelper v3.8.1 + Workshop OS v11.19.1 Physical Fit RC2",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-Full.bin",
