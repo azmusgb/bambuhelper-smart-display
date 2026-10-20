@@ -62,6 +62,12 @@ static void sendWorkshopLocalAiStatus(int httpCode = 200) {
   doc["pairing"] = extras.pairBusy;
   doc["pairOk"] = extras.pairOk;
   doc["pairStatus"] = extras.pairSeq ? extras.pairStatus : "";
+  // Why the display last started, and its internal memory now and at its lowest (diagnosing restarts).
+  doc["resetReason"] = (int)esp_reset_reason();
+  doc["uptimeS"] = millis() / 1000UL;
+  doc["heapFree"] = ESP.getFreeHeap();
+  doc["heapMin"] = ESP.getMinFreeHeap();
+  doc["heapLargest"] = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   String json;
   serializeJson(doc, json);
   server.sendHeader("Cache-Control", "no-store");
@@ -223,7 +229,7 @@ def apply(repo: Path, source_root: Path) -> None:
     staged[repo / "src/main.cpp"] = main
 
     web = load("src/web_server.cpp")
-    web = insert_after_once(web, '#include "workshop_inventory_service.h"\n', INCLUDE, "web include")
+    web = insert_after_once(web, '#include "workshop_inventory_service.h"\n', INCLUDE + "#include <esp_heap_caps.h>\n#include <esp_system.h>\n", "web include")
     if "sendWorkshopLocalAiStatus" not in web:
         marker = "void initWebServer() {\n"
         if web.count(marker) != 1:
