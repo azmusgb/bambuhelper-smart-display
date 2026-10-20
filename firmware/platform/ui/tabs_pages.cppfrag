@@ -28,6 +28,22 @@ struct WtPrint {
   uint16_t color;
 };
 
+// 12.4.4: HMS 0500-0500-0001-0007, "MQTT Command verification failed. Please update Studio ... or Handy": the printer
+// turned down a command from an app it couldn't verify (Bambu's authorization). The print goes on and nothing on the
+// printer is wrong, so it doesn't make Home and Printer red or say "Needs attention"; the printer's alert list (More,
+// the portal) still shows it.
+static bool wtCommandNotice(uint32_t attr, uint32_t code) { return attr == 0x05000500UL && code == 0x00010007UL; }
+
+// Printer errors that need someone: HMS codes and print_error, less the command notice.
+static uint8_t wtAlertCount(const BambuState& s) {
+  uint8_t n = uiHmsCount(s);
+#if HAS_HMS_UI
+  for (uint8_t i = 0; i < s.hmsCount && n; ++i)
+    if (wtCommandNotice(s.hms[i].attr, s.hms[i].code)) --n;
+#endif
+  return n;
+}
+
 static WtPrint wtPrint() {
   WtPrint w;
   memset(&w, 0, sizeof(w));
@@ -44,7 +60,7 @@ static WtPrint wtPrint() {
   w.active = w.printing || w.paused;
   w.finished = !w.active && w.s->gcodeStateId == GCODE_FINISH;
   w.failed = !w.active && w.s->gcodeStateId == GCODE_FAILED;
-  w.alerts = w.online ? uiHmsCount(*w.s) : 0;
+  w.alerts = w.online ? wtAlertCount(*w.s) : 0;
   if (!w.online) { w.chip = "Offline"; w.color = OS12V_AMBER; }
   else if (w.alerts || w.failed) { w.chip = "Attention"; w.color = OS12V_RED; }
   else if (w.paused) { w.chip = "Paused"; w.color = OS12V_AMBER; }
@@ -117,8 +133,9 @@ static void wtAlertText(const WtPrint& w, char* out, size_t len) {
   out[0] = 0;
   if (!w.s) return;
 #if HAS_HMS_UI
-  if (w.s->hmsCount) {
-    const char* text = hmsLookupText(w.s->hms[0].attr, w.s->hms[0].code);
+  for (uint8_t i = 0; i < w.s->hmsCount; ++i) {  // worst first; the command notice is not an error (wtAlertCount)
+    if (wtCommandNotice(w.s->hms[i].attr, w.s->hms[i].code)) continue;
+    const char* text = hmsLookupText(w.s->hms[i].attr, w.s->hms[i].code);
     strlcpy(out, text && text[0] ? text : "Printer reported an error", len);
     return;
   }
