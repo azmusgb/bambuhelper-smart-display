@@ -360,12 +360,16 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
 }
 
 // 12.6: a finished print keeps the big card (and the calm screen's line) for 30 minutes after it finished; then Home
-// goes back to Local AI, with the result on the printer row. Without a known finish time it stays, as before.
+// goes back to Local AI, with the result on the printer row. Without a finish time (the display restarted after the
+// print ended) it counts from when it first saw the print finished.
 static bool wtFinishedRecently(const WtPrint& w) {
-  if (!w.finished || !w.s) return false;
+  static uint32_t seenAt = 0;
+  if (!w.finished || !w.s) { seenAt = 0; return false; }
+  if (!seenAt) seenAt = millis() | 1U;
   const time_t now = time(nullptr);
-  if (!w.s->finishEpoch || now < 1700000000) return true;
-  return (uint32_t)now < w.s->finishEpoch || (uint32_t)now - w.s->finishEpoch < 1800U;
+  if (w.s->finishEpoch && now >= 1700000000)
+    return (uint32_t)now < w.s->finishEpoch || (uint32_t)now - w.s->finishEpoch < 1800U;
+  return millis() - seenAt < 1800000UL;
 }
 
 // ---------------------------------------------------------------------------
