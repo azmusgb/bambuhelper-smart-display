@@ -627,13 +627,13 @@ static void wtDrawHomeIdle(const WtPrint& w) {
 }
 
 // 12.5: /hub/show boot-splash[-<percent>] shows a frame of the boot splash on Home until the next touch or show, or
-// for a minute at most.
+// for 15 s at most.
 static uint8_t g_wtBootPreview = 0;  // 0 off, else percent + 1
 static uint32_t g_wtBootPreviewAt = 0;
 
 static void wtDrawHome(bool full) {
   (void)full;
-  if (g_wtBootPreview && millis() - g_wtBootPreviewAt > 60000UL) g_wtBootPreview = 0;
+  if (g_wtBootPreview && millis() - g_wtBootPreviewAt > 15000UL) g_wtBootPreview = 0;
   if (g_wtBootPreview) { bootSplashPreview(tft, (uint8_t)(g_wtBootPreview - 1)); hubMarkFrameDirty(); g_dirty = false; return; }
   const WtPrint w = wtPrint();
   if (wtCalmShown()) { wtDrawCalm(w); return; }
