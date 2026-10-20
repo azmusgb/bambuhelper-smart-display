@@ -1,4 +1,15 @@
-# Local AI cards on the calm screen
+# Local AI cards
+
+**Where they show (12.4.0):**
+- **Local AI tab** (third tab, sparkle icon): every card, one row each, then the workshop tools (filament, timer,
+  note).
+- **Home:** the first row is Local AI's most important card, or the workshop timer while it runs; it opens the Local
+  AI tab.
+- **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;
+  otherwise a second Local AI card shows there.
+
+The rest of this page started with 12.3.10, when the cards were only on the calm screen.
+
 
 Since Workshop OS 12.3.10, the calm idle screen (what the display shows while nobody is using it, printing or not)
 shows one card from Local AI under its print status line, and a different card every 8 seconds:
