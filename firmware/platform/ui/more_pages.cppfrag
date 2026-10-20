@@ -1491,9 +1491,10 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
       const wsm::Rect minus = wsm::partDrawRect(s, row, kind, wsm::Part::Minus);
       const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
       if (!v.enabled) {
-        // Disabled: no "-" / "+"; the reason uses the whole control area.
-        wsDrawRowValue(value, plus.right(), mid, plus.right() - minus.x, wsValueFont(value, plus.right() - minus.x), MR_DATUM,
-                       valueColor, bg);
+        // Disabled: no "-" / "+"; the reason uses the whole control area, ending 12 px from the row's edge like
+        // every other row's value (the "+" button's edge is 6 px further right).
+        const int16_t right = (int16_t)(row.right() - 12), w = (int16_t)(right - minus.x);
+        wsDrawRowValue(value, right, mid, w, wsValueFont(value, w), MR_DATUM, valueColor, bg);
         break;
       }
       for (uint8_t i = 0; i < 2; ++i) {
