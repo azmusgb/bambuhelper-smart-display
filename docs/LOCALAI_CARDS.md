@@ -29,7 +29,7 @@ The cards are display only: tapping anywhere still just wakes the screen.
 **Since 12.7: pair.** In Local AI, open **Services › Workshop display › Pair display**; it shows a 6-digit code for
 10 minutes. Type it on the display (**Local AI tab › Local AI connection**) or in the Local Portal (**More › Local AI
 on the display**). The display reads Local AI's CA over plain HTTP, sends the code over HTTPS pinned to it, and saves
-the new display key with the CA. Pairing again replaces the key (the old one stops working at once); **Unpair** in the
+the new display key with the CA. Pairing again replaces the key (Local AI stops recognising the old one at once; while its sign-in is report-only, an unrecognised caller is still only reported); **Unpair** in the
 portal forgets it on the display.
 
 The Mac way, from before pairing, still works. On the Mac:
