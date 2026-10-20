@@ -359,6 +359,19 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
   if (detail[0]) wsDrawWrapped(detail, x, r.y + 70, textW, 22, 2, FONT_BODY, OS12V_MUTED, bg);
 }
 
+// 12.6: a finished print keeps the big card (and the calm screen's line) for 30 minutes after it finished; then Home
+// goes back to Local AI, with the result on the printer row. Without a finish time (the display restarted after the
+// print ended) it counts from when it first saw the print finished.
+static bool wtFinishedRecently(const WtPrint& w) {
+  static uint32_t seenAt = 0;
+  if (!w.finished || !w.s) { seenAt = 0; return false; }
+  if (!seenAt) seenAt = millis() | 1U;
+  const time_t now = time(nullptr);
+  if (w.s->finishEpoch && now >= 1700000000)
+    return (uint32_t)now < w.s->finishEpoch || (uint32_t)now - w.s->finishEpoch < 1800U;
+  return millis() - seenAt < 1800000UL;
+}
+
 // ---------------------------------------------------------------------------
 // Local AI (12.4.0): its cards lead the third tab, take Home's bottom row and
 // the calm screen's top card. One place decides what to say with no cards.
@@ -386,6 +399,8 @@ static uint16_t wtAiToneColor(workshop::localai::Tone t) {
   using workshop::localai::Tone;
   return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : t == Tone::Busy ? OS12V_ACCENT : OS12V_MUTED;
 }
+// The banner's edge: info is Local AI blue rather than grey.
+static uint16_t wtToneColor(workshop::localai::Tone t) { return t == workshop::localai::Tone::Info ? OS12V_ACCENT : wtAiToneColor(t); }
 
 // One Local AI card as a row: a dot in its tone, the title, then the line, and (12.4.3) a chevron: a tap opens the
 // Local AI tab from Home, and asks about the card on the tab.
@@ -400,12 +415,81 @@ static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& car
   wsDrawChevronRight((int16_t)(row.right() - 16), mid, OS12V_MUTED);
 }
 
-// 12.4.3: the Ask question a card leads to (nullptr: just open Ask).
-static const char* wtAiQuestionFor(const char* kind) {
-  if (!strcmp(kind, "needs")) return "needs";
-  if (!strcmp(kind, "running")) return "running";
-  if (!strcmp(kind, "watch")) return "health";
+// 12.6: messages from Local AI (feed v2): a banner over the header for 12 s (20 s when it needs you), with a chime
+// when Local AI asks for one; a tap does its action (start the timer, or open a page). It wakes the calm screen.
+static workshop::localai::Message g_wtBanner{};
+static uint32_t g_wtBannerAt = 0, g_wtBannerMs = 0;
+static bool wtBannerShown() { return g_wtBannerMs && millis() - g_wtBannerAt < g_wtBannerMs; }
+
+static uint16_t wtToneColor(workshop::localai::Tone t);
+
+static void wtPollMessage() {
+  using workshop::localai::Tone;
+  if (wtBannerShown()) return;
+  if (g_wtBannerMs) { g_wtBannerMs = 0; g_dirty = true; }  // the last one just went
+  workshop::localai::Message m;
+  if (!workshopLocalAiFeedTakeMessage(&m)) return;
+  g_wtBanner = m;
+  g_wtBannerAt = millis();
+  g_wtBannerMs = (m.tone == Tone::Attention || m.tone == Tone::Warning) ? 20000UL : 12000UL;
+  g_ambientActive = false;
+  if (m.chime) buzzerPlay(m.tone == Tone::Warning ? BUZZ_ERROR : m.tone == Tone::Ok ? BUZZ_PRINT_FINISHED : BUZZ_CONNECTED);
+  g_dirty = true;
+}
+
+static const char* wtBannerAction(char* buf, size_t len) {
+  using workshop::localai::Action;
+  if (g_wtBanner.action == Action::Timer) { snprintf(buf, len, "Start %u min", (unsigned)g_wtBanner.minutes); return buf; }
+  if (g_wtBanner.action == Action::Show) return !strcmp(g_wtBanner.page, "image") ? "See it" : "Open";
   return nullptr;
+}
+
+static void wtDrawBanner(const wsm::Screen& s) {
+  if (!wtBannerShown()) return;
+  const wsm::Rect r = wtl::bannerRect(s);
+  const uint16_t tone = wtToneColor(g_wtBanner.tone);
+  tft.fillRoundRect(r.x + 2, r.y + 4, r.w, r.h, 14, 0x0000);  // a soft shadow
+  tft.fillRoundRect(r.x, r.y, r.w, r.h, 14, OS12V_SURFACE2);
+  tft.drawRoundRect(r.x, r.y, r.w, r.h, 14, tone);
+  tft.fillRoundRect(r.x + 10, r.y + 12, 4, r.h - 24, 2, tone);
+  char label[20];
+  const char* action = wtBannerAction(label, sizeof(label));
+  int16_t right = (int16_t)(r.right() - 12);
+  if (action) {
+    setFont(tft, FONT_BODY);
+    const int16_t bw = (int16_t)(tft.textWidth(action) + 28);
+    const wsm::Rect b = wsm::makeRect(right - bw, r.y + (r.h - 34) / 2, bw, 34);
+    tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_ACCENT);
+    uiDrawFit(action, (int16_t)(b.x + b.w / 2), (int16_t)(b.y + b.h / 2), (int16_t)(b.w - 8), FONT_BODY, MC_DATUM, OS12V_BG, OS12V_ACCENT);
+    right = (int16_t)(b.x - 10);
+  }
+  const int16_t x = (int16_t)(r.x + 24), w = (int16_t)(right - x);
+  uiDrawFit(g_wtBanner.title, x, (int16_t)(r.y + 18), w, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_SURFACE2);
+  if (g_wtBanner.text[0]) uiDrawFit(g_wtBanner.text, x, (int16_t)(r.y + 39), w, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_SURFACE2);
+  // How long it stays: a thin line along the bottom that shortens.
+  const uint32_t left = g_wtBannerMs - (millis() - g_wtBannerAt);
+  const int16_t lw = (int16_t)((int32_t)(r.w - 28) * (int32_t)left / (int32_t)g_wtBannerMs);
+  if (lw > 0) tft.drawFastHLine(r.x + 14, r.bottom() - 4, lw, tone);
+}
+
+static void wtOpenImage();
+static void wtOpenPage(const char* page) {
+  if (!strcmp(page, "printer")) setPage(SCREEN_HUB_PRINTER);
+  else if (!strcmp(page, "camera")) wsOpenCamera(1);
+  else if (!strcmp(page, "image")) wtOpenImage();
+  else setPage(SCREEN_HUB_WORKSHOP);
+}
+
+// A tap on the banner does its action and dismisses it; true when the tap was on the banner.
+static bool wtBannerTouch(int16_t x, int16_t y) {
+  using workshop::localai::Action;
+  if (!wtBannerShown() || !wtl::bannerRect(wsScreen()).contains(x, y)) return false;
+  g_wtBannerMs = 0;
+  if (g_wtBanner.action == Action::Timer) { startWorkshopTimer(g_wtBanner.minutes); wsToast("Timer started"); }
+  else if (g_wtBanner.action == Action::Show) wtOpenPage(g_wtBanner.page);
+  wsClick();
+  g_dirty = true;
+  return true;
 }
 
 // Home's bottom row: the workshop timer while it runs, otherwise Local AI's
@@ -472,7 +556,7 @@ static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneL
   } else if (w.alerts || w.failed) {
     c.state = wtl::CalmState::Attention;
     color = OS12V_RED;
-  } else if (w.finished) {
+  } else if (w.finished && wtFinishedRecently(w)) {
     c.state = wtl::CalmState::Finished;
   }
   return c;
@@ -582,7 +666,7 @@ static void wtDrawCalm(const WtPrint& w) {
 // 12.4.1: Home keeps the big print card for a print that is running, finished or failed (or an error); otherwise
 // it is Local AI's cards, a printer row and the timer.
 static bool wtHomeIdle(const WtPrint& w) {
-  return !(w.configured && w.online && (w.active || w.finished || w.failed || w.alerts));
+  return !(w.configured && w.online && (w.active || wtFinishedRecently(w) || w.failed || w.alerts));
 }
 
 static uint8_t g_wtHomeScroll = 0;
@@ -593,7 +677,10 @@ static void wtHomePrinterRow(const WtPrint& w, WsRowView& v) {
   wsView(v);
   if (!w.configured) { strlcpy(v.value, "Not set up", sizeof(v.value)); v.valueColor = OS12V_MUTED; return; }
   if (!w.online) { strlcpy(v.value, "Offline", sizeof(v.value)); v.valueColor = OS12V_AMBER; return; }
-  snprintf(v.value, sizeof(v.value), "%s · Ready", w.p && w.p->config.name[0] ? w.p->config.name : "Printer");
+  const char* name = w.p && w.p->config.name[0] ? w.p->config.name : "Printer";
+  char at[24];
+  if (w.finished && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) snprintf(v.value, sizeof(v.value), "%s · Finished %s", name, at);
+  else snprintf(v.value, sizeof(v.value), "%s · Ready", name);  // 12.6: the last result, once the big card has gone
   v.valueColor = OS12V_GREEN;
 }
 
@@ -622,6 +709,7 @@ static void wtDrawHomeIdle(const WtPrint& w) {
     wsDrawRowBody(s, it.rowKind, it.label, row, r);
   }
   uiBottomNav(0, nullptr);
+  wtDrawBanner(s);  // 12.6
   hubMarkFrameDirty();
   g_dirty = false;
 }
@@ -633,6 +721,7 @@ static uint32_t g_wtBootPreviewAt = 0;
 
 static void wtDrawHome(bool full) {
   (void)full;
+  wtPollMessage();  // 12.6: a message from Local AI wakes the calm screen
   if (g_wtBootPreview && millis() - g_wtBootPreviewAt > 15000UL) g_wtBootPreview = 0;
   if (g_wtBootPreview) { bootSplashPreview(tft, (uint8_t)(g_wtBootPreview - 1)); hubMarkFrameDirty(); g_dirty = false; return; }
   const WtPrint w = wtPrint();
@@ -658,6 +747,7 @@ static void wtDrawHome(bool full) {
     }
   }
   uiBottomNav(0, nullptr);
+  wtDrawBanner(s);  // 12.6
   hubMarkFrameDirty();
   g_dirty = false;
 }
@@ -942,6 +1032,7 @@ static void wtControlRow(wtl::ItemId id, const WtControls& c, WsRowView& v) {
 }
 
 static void wtDrawPrinter(bool full) {
+  wtPollMessage();
   (void)full;
   const WtPrint w = wtPrint();
   const wsm::Screen s = wsScreen();
@@ -1006,6 +1097,7 @@ static void wtDrawPrinter(bool full) {
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * scroll / maxS), 2, thumb, OS12V_MUTED);
   }
   uiBottomNav(1, nullptr);
+  wtDrawBanner(s);  // 12.6
   hubMarkFrameDirty();
   g_dirty = false;
 }
@@ -1015,14 +1107,17 @@ static void wtDrawPrinter(bool full) {
 // ---------------------------------------------------------------------------
 
 static uint8_t g_wtWorkshopScroll = 0;
-// 12.4.2: the Local AI tab's overlays: 0 none, 1 Ask, 2 the latest image.
+// 12.4.2: the Local AI tab's overlays: 0 none, 1 Ask, 2 the latest image (12.6: the gallery), 3 approvals (12.6).
 static uint8_t g_wtAiOverlay = 0;
+static int8_t g_wtApprovalArmed = -1;  // 12.6: row * 2 + (1 approve, 0 reject) waiting for its second tap
+static uint32_t g_wtApprovalArmedAt = 0;
 static const uint32_t kWtImageRedraw = 0xFFFFFFFFUL;
 static uint32_t g_wtImageDrawnKey = kWtImageRedraw;  // what the image overlay last drew (decoding takes ~1 s)
 static uint32_t g_wtImageDrawnAt = 0;
-static const char* const kWtAskIds[3] = {"needs", "running", "health"};
-static const char* const kWtAskLabels[3] = {"Needs me?", "Running?", "All OK?"};
-static const char* const kWtAskQuestions[3] = {"Anything need me?", "What's running?", "Is everything OK?"};
+static const char* const kWtAskIds[6] = {"needs", "running", "health", "today", "next", "weather"};
+static const char* const kWtAskLabels[6] = {"Needs me?", "Running?", "All OK?", "Today?", "Next?", "Weather?"};
+static const char* const kWtAskQuestions[6] = {"Anything need me?", "What's running?", "Is everything OK?",
+                                               "What finished today?", "What's next?", "What's the weather?"};
 
 // 12.4.3: "12 min ago · <what it shows>" for the Latest image row and caption (the words alone when the time is not
 // known).
@@ -1030,8 +1125,10 @@ static void wtAiImageLine(const WorkshopLocalAiExtras& e, char* out, size_t len)
   char ago[24];
   const time_t now = time(nullptr);
   workshop::localai::agoText(ago, sizeof(ago), now >= 1700000000 ? (uint32_t)now : 0U, e.imageAt);
-  if (ago[0]) snprintf(out, len, "%s · %s", ago, e.imageText);
-  else strlcpy(out, e.imageText, len);
+  char pos[12] = "";
+  if (e.imageCount > 1) snprintf(pos, sizeof(pos), "%u/%u · ", (unsigned)(e.imageIndex + 1), (unsigned)e.imageCount);  // 12.6
+  if (ago[0]) snprintf(out, len, "%s%s · %s", pos, ago, e.imageText);
+  else snprintf(out, len, "%s%s", pos, e.imageText);
 }
 
 static uint16_t g_wtTimerMinutes = 0;  // 0 = the first portal preset
@@ -1139,6 +1236,14 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
       wtAiImageLine(e, v.value, sizeof(v.value));
       break;
     }
+    case wtl::ItemId::WsApprovals: {  // 12.6
+      const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!e.approvalSeq) strlcpy(v.value, "Review", sizeof(v.value));
+      else if (e.approvalTotal) { snprintf(v.value, sizeof(v.value), "%u waiting", (unsigned)e.approvalTotal); v.valueColor = OS12V_AMBER; }
+      else strlcpy(v.value, "None waiting", sizeof(v.value));
+      break;
+    }
     case wtl::ItemId::WsNote:
       if (g_workshopNote[0]) { strlcpy(v.value, g_workshopNote, sizeof(v.value)); v.valueColor = OS12V_TEXT; }
       else { strlcpy(v.value, "None", sizeof(v.value)); v.reason = "Write a note in Local Portal"; }
@@ -1171,6 +1276,7 @@ static void wtDrawAsk(const wsm::Screen& s) {
     else wsDrawWrapped(e.askAnswer, x, (int16_t)(a.y + 38), w, 22, (uint8_t)((a.h - 46) / 22), FONT_BODY, e.askOk ? OS12V_TEXT : OS12V_AMBER, OS12V_SURFACE);
   }
   uiBottomNav(2, nullptr);
+  wtDrawBanner(s);  // 12.6
   hubMarkFrameDirty();
   g_dirty = false;
 }
@@ -1208,14 +1314,96 @@ static void wtDrawImage(const wsm::Screen& s, bool full) {
   wtAiImageLine(e, caption, sizeof(caption));
   uiDrawFit(caption, (int16_t)(cap.x + 12), (int16_t)(cap.y + cap.h / 2), (int16_t)(cap.w - 24 - hintW), FONT_SMALL, ML_DATUM, OS12V_TEXT, OS12V_BG);
   uiDrawFit("Tap to close", (int16_t)(cap.right() - 12), (int16_t)(cap.y + cap.h / 2), hintW, FONT_SMALL, MR_DATUM, OS12V_MUTED, OS12V_BG);
+  if (e.imageCount > 1) {  // 12.6: the gallery: tap the left or right edge for the previous or next picture
+    const int16_t mid = (int16_t)(area.y + area.h / 2);
+    for (uint8_t side = 0; side < 2; ++side) {
+      const int16_t cx = side ? (int16_t)(area.right() - 22) : (int16_t)(area.x + 22);
+      tft.fillCircle(cx, mid, 16, OS12V_SURFACE2);
+      tft.drawCircle(cx, mid, 16, OS12V_LINE);
+      if (side) wsDrawChevronRight((int16_t)(cx + 1), mid, OS12V_TEXT);
+      else wsDrawChevronLeft((int16_t)(cx - 1), mid, OS12V_TEXT);
+    }
+  }
   hubMarkFrameDirty();
   g_dirty = false;
 }
 
+// 12.6 Approvals: what waits in Local AI. Approve or Reject only where Local AI allows it from here (low risk, by
+// default; never code changes or deploys), each with a second tap to confirm; the rest say to use the phone.
+static void wtDrawApprovals(const wsm::Screen& s) {
+  const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+  if (g_wtApprovalArmed >= 0 && millis() - g_wtApprovalArmedAt > 4000UL) g_wtApprovalArmed = -1;
+  tft.fillScreen(OS12V_BG);
+  char title[32];
+  if (e.approvalTotal > e.approvalCount) snprintf(title, sizeof(title), "Approvals · %u of %u", (unsigned)e.approvalCount, (unsigned)e.approvalTotal);
+  else strlcpy(title, "Approvals", sizeof(title));
+  wtDrawHeader(s, title, nullptr, OS12V_MUTED, false, 0, 0);
+  wsDrawButton(wtl::askDoneRect(s), "Done", true, false, OS12V_BG);
+  workshop::localai::Approval list[workshop::localai::kMaxApprovals];
+  const uint8_t n = workshopLocalAiFeedApprovals(list, workshop::localai::kMaxApprovals);
+  for (uint8_t i = 0; i < n && i < wtl::kApprovalRows; ++i) {
+    const wsm::Rect r = wtl::approvalRowRect(s, i);
+    tft.drawFastHLine(r.x + 4, r.bottom() - 1, r.w - 8, OS12V_LINE);
+    const uint16_t riskColor = !strcmp(list[i].risk, "low") ? OS12V_GREEN : !strcmp(list[i].risk, "high") ? OS12V_RED : OS12V_AMBER;
+    const wsm::Rect a = wtl::approvalApproveRect(s, i), j = wtl::approvalRejectRect(s, i);
+    const int16_t textW = (int16_t)((list[i].decidable ? a.x : j.x) - r.x - 22);
+    tft.fillCircle(r.x + 10, r.y + 16, 4, riskColor);
+    uiDrawFit(list[i].title, (int16_t)(r.x + 22), (int16_t)(r.y + 16), textW, wsFitFont(list[i].title, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_TEXT, OS12V_BG);
+    char risk[24];
+    snprintf(risk, sizeof(risk), "%s risk", list[i].risk[0] ? list[i].risk : "unknown");
+    uiDrawFit(risk, (int16_t)(r.x + 22), (int16_t)(r.y + 36), textW, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_BG);
+    if (list[i].decidable && !e.approvalsBusy) {
+      const bool armA = g_wtApprovalArmed == (int8_t)(i * 2 + 1), armR = g_wtApprovalArmed == (int8_t)(i * 2);
+      wsDrawButton(a, armA ? "Confirm" : "Approve", true, true, OS12V_BG);
+      wsDrawButton(j, armR ? "Confirm" : "Reject", true, false, OS12V_BG);
+    } else {
+      uiDrawFit(list[i].decidable ? "..." : "On your phone", (int16_t)(r.right() - 8), (int16_t)(r.y + r.h / 2), 120, FONT_SMALL, MR_DATUM, OS12V_MUTED, OS12V_BG);
+    }
+  }
+  if (!n && !(e.approvalsBusy && !e.approvalSeq) && !e.approvalStatus[0]) {
+    // Nothing waits: a calm empty state in the middle, not a lone line at the bottom.
+    const wsm::Rect band = wsm::contentBand(s);
+    const int16_t cx = (int16_t)(band.x + band.w / 2), cy = (int16_t)(band.y + band.h / 2 - 18);
+    tft.fillCircle(cx, cy, 22, OS12V_SURFACE2);
+    tft.drawCircle(cx, cy, 22, OS12V_GREEN);
+    tft.drawLine(cx - 9, cy + 1, cx - 3, cy + 7, OS12V_GREEN);
+    tft.drawLine(cx - 9, cy + 2, cx - 3, cy + 8, OS12V_GREEN);
+    tft.drawLine(cx - 3, cy + 7, cx + 10, cy - 7, OS12V_GREEN);
+    tft.drawLine(cx - 3, cy + 8, cx + 10, cy - 6, OS12V_GREEN);
+    uiDrawFit("Nothing is waiting for you", cx, (int16_t)(cy + 42), (int16_t)(band.w - 32), FONT_BODY, MC_DATUM, OS12V_TEXT, OS12V_BG);
+    uiDrawFit("Local AI's approvals show here.", cx, (int16_t)(cy + 64), (int16_t)(band.w - 32), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_BG);
+    uiBottomNav(2, nullptr);
+    wtDrawBanner(s);
+    hubMarkFrameDirty();
+    g_dirty = false;
+    return;
+  }
+  const wsm::Rect st = wtl::approvalStatusRect(s);
+  const char* status = e.approvalStatus[0] ? e.approvalStatus
+                     : (e.approvalsBusy && !e.approvalSeq) ? "Asking Local AI..."
+                     : n ? (g_wtApprovalArmed >= 0 ? "Tap again to confirm." : "Approve or Reject asks you to tap again.")
+                     : "Nothing is waiting for you.";
+  uiDrawFit(status, (int16_t)(st.x + st.w / 2), (int16_t)(st.y + st.h / 2), st.w, FONT_SMALL, MC_DATUM, n ? OS12V_MUTED : OS12V_GREEN, OS12V_BG);
+  uiBottomNav(2, nullptr);
+  wtDrawBanner(s);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+// 12.6: opens the latest picture (the gallery's first) on the Local AI tab.
+static void wtOpenImage() {
+  workshopLocalAiFeedShowImage(0);
+  g_wtAiOverlay = 2;
+  g_wtImageDrawnKey = kWtImageRedraw;
+  setPage(SCREEN_HUB_WORKSHOP);
+}
+
 static void wtDrawWorkshop(bool full) {
   const wsm::Screen s = wsScreen();
+  wtPollMessage();
   if (g_wtAiOverlay == 1) { wtDrawAsk(s); return; }
   if (g_wtAiOverlay == 2) { wtDrawImage(s, full); return; }
+  if (g_wtAiOverlay == 3) { wtDrawApprovals(s); return; }
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
   const wtl::ViewSpec& v = wtl::view(id);
@@ -1251,6 +1439,7 @@ static void wtDrawWorkshop(bool full) {
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * g_wtWorkshopScroll / maxS), 2, thumb, OS12V_MUTED);
   }
   uiBottomNav(2, nullptr);
+  wtDrawBanner(s);  // 12.6
   hubMarkFrameDirty();
   g_dirty = false;
 }
@@ -1286,13 +1475,19 @@ static bool wtShowPrinterView(const char* name) {
     g_dirty = true;
     return true;
   }
-  // 12.4.2: "localai-ask" opens the Ask overlay, "localai-ask-needs" (-running, -health) also asks, and
-  // "localai-image" opens the latest image, so captures can check them without a touch.
+  // 12.4.2: "localai-ask" opens the Ask overlay, "localai-ask-needs" (-running, -health; 12.6: -today, -next,
+  // -weather) also asks, "localai-image[-<n>]" opens a picture and (12.6) "localai-approvals" the approvals, so
+  // captures can check them without a touch.
   if (name && strncmp(name, "localai-", 8) == 0) {
-    if (strcmp(name, "localai-image") == 0) {
-      workshopLocalAiFeedFetchImage();
+    if (strncmp(name, "localai-image", 13) == 0) {  // 12.6: "localai-image-3" opens the gallery's fourth picture
+      const int index = name[13] == '-' ? atoi(name + 14) : 0;
+      if ((name[13] && name[13] != '-') || index < 0 || index >= workshop::localai::kMaxImages) return false;
+      workshopLocalAiFeedShowImage((uint8_t)index);
       g_wtAiOverlay = 2;
       g_wtImageDrawnKey = kWtImageRedraw;
+    } else if (strcmp(name, "localai-approvals") == 0) {  // 12.6
+      workshopLocalAiFeedRefreshApprovals();
+      g_wtAiOverlay = 3;
     } else if (strncmp(name, "localai-ask", 11) == 0) {
       if (name[11] == '-' && !workshopLocalAiFeedAsk(name + 12)) return false;
       if (name[11] && name[11] != '-') return false;
@@ -1330,6 +1525,7 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     return true;
   }
   if (g_wtBootPreview) { g_wtBootPreview = 0; g_dirty = true; return true; }  // a tap ends the splash preview
+  if (wtBannerTouch(x, y)) return true;  // 12.6
   g_ambientActive = false;
   const WtPrint w = wtPrint();
   if (wtHomeIdle(w)) {
@@ -1412,6 +1608,7 @@ static bool wtStopHoldConsume() {
 
 static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress) {
   const bool stopHeld = wtStopHoldConsume();
+  if (wtBannerTouch(x, y)) return true;  // 12.6
   const wsm::Screen s = wsScreen();
   const wtl::View id = wtPrinterView();
   const wtl::ViewSpec& v = wtl::view(id);
@@ -1496,10 +1693,43 @@ static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress) {
 
 // 12.4.2: the Ask overlay's tab bar, Done and question buttons; a tap anywhere closes the picture.
 static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {
-  if (g_wtAiOverlay == 2) { g_wtAiOverlay = 0; wsClick(); return true; }
+  if (g_wtAiOverlay == 2) {
+    // 12.6: the gallery: the left or right third goes to the previous or next picture; the middle closes it.
+    const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+    if (e.imageCount > 1 && !e.imageBusy && (x < s.w / 3 || x > s.w * 2 / 3)) {
+      const uint8_t next = (uint8_t)((e.imageIndex + (x > s.w / 2 ? 1 : e.imageCount - 1)) % e.imageCount);
+      if (workshopLocalAiFeedShowImage(next)) { g_wtImageDrawnKey = kWtImageRedraw; wsClick(); }
+      return true;
+    }
+    g_wtAiOverlay = 0;
+    wsClick();
+    return true;
+  }
   for (uint8_t i = 0; i < wsm::kTabCount; ++i)
     if (wsm::tabTouchRect(s, i).contains(x, y)) { wtTab(i); return true; }
   if (wtl::askDoneTouch(s).contains(x, y)) { g_wtAiOverlay = 0; wsClick(); return true; }
+  if (g_wtAiOverlay == 3) {  // 12.6: approvals, each decided with a second tap
+    workshop::localai::Approval list[workshop::localai::kMaxApprovals];
+    const uint8_t n = workshopLocalAiFeedApprovals(list, workshop::localai::kMaxApprovals);
+    for (uint8_t i = 0; i < n && i < wtl::kApprovalRows; ++i) {
+      const bool onA = wtl::approvalApproveRect(s, i).contains(x, y), onR = wtl::approvalRejectRect(s, i).contains(x, y);
+      if (!onA && !onR) continue;
+      if (!list[i].decidable) { wsToast("Decide this one on your phone"); return true; }
+      const int8_t which = (int8_t)(i * 2 + (onA ? 1 : 0));
+      if (g_wtApprovalArmed == which && millis() - g_wtApprovalArmedAt <= 4000UL) {
+        g_wtApprovalArmed = -1;
+        if (workshopLocalAiFeedDecide(list[i].id, onA)) wsClick();
+        else wsToast("Local AI is busy; try again");
+      } else {
+        g_wtApprovalArmed = which;
+        g_wtApprovalArmedAt = millis();
+        wsClick();
+      }
+      g_dirty = true;
+      return true;
+    }
+    return true;
+  }
   for (uint8_t i = 0; i < wtl::kAskCount; ++i) {
     if (!wtl::askButtonRect(s, i).contains(x, y)) continue;
     if (workshopLocalAiFeedAsk(kWtAskIds[i])) wsClick();
@@ -1512,6 +1742,7 @@ static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {
 
 static bool wtWorkshopTouch(int16_t x, int16_t y) {
   const wsm::Screen s = wsScreen();
+  if (wtBannerTouch(x, y)) return true;  // 12.6
   if (g_wtAiOverlay) return wtAiOverlayTouch(s, x, y);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
@@ -1539,7 +1770,7 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
     // a watchdog finding -> is everything OK). Without cards, the row says why; Ask can't help then.
     const workshop::localai::Card c = wtAiCard(wtl::headIndex(v, h.index, aiCount));
     if (!strcmp(c.kind, "status")) { wsToast(c.text); return true; }
-    const char* q = wtAiQuestionFor(c.kind);
+    const char* q = workshop::localai::askFor(c);  // 12.6: the question Local AI gave the card
     if (q) workshopLocalAiFeedAsk(q);
     g_wtAiOverlay = 1;
     wsClick();
@@ -1578,9 +1809,13 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
       wsClick();
       return true;
     case wtl::ItemId::WsImage:
-      workshopLocalAiFeedFetchImage();  // a fresh copy each time (false while one is already coming)
-      g_wtAiOverlay = 2;
-      g_wtImageDrawnKey = kWtImageRedraw;
+      wtOpenImage();  // the newest; instant when it was fetched in the background
+      wsClick();
+      return true;
+    case wtl::ItemId::WsApprovals:  // 12.6
+      workshopLocalAiFeedRefreshApprovals();
+      g_wtApprovalArmed = -1;
+      g_wtAiOverlay = 3;
       wsClick();
       return true;
     default:
@@ -1597,6 +1832,8 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
 // ---------------------------------------------------------------------------
 static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   const ScreenState cur = getScreenState();
+  if ((cur == SCREEN_HUB_HOME || cur == SCREEN_HUB_PRINTER || cur == SCREEN_HUB_WORKSHOP) && wtBannerShown() &&
+      wtl::bannerRect(wsScreen()).contains(x, y)) { out = wtl::bannerRect(wsScreen()); return true; }  // 12.6
   if (cur == SCREEN_HUB_MORE || cur == SCREEN_HUB_SYSTEM || cur == SCREEN_HUB_CUSTOM) return wsMorePressRect(x, y, out);
   const wsm::Screen s = wsScreen();
   wtl::View id = wtl::View::Home;
@@ -1615,6 +1852,16 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
     }
   } else if (cur == SCREEN_HUB_WORKSHOP) {
     if (g_wtAiOverlay == 2) return false;  // the picture: no targets, a tap anywhere closes it
+    if (g_wtAiOverlay == 3) {  // 12.6: approvals: Done, the buttons and the tabs
+      for (uint8_t i = 0; i < wtl::kApprovalRows; ++i) {
+        if (wtl::approvalApproveRect(s, i).contains(x, y)) { out = wtl::approvalApproveRect(s, i); return true; }
+        if (wtl::approvalRejectRect(s, i).contains(x, y)) { out = wtl::approvalRejectRect(s, i); return true; }
+      }
+      if (wtl::askDoneTouch(s).contains(x, y)) { out = wtl::askDoneRect(s); return true; }
+      for (uint8_t i = 0; i < wsm::kTabCount; ++i)
+        if (wsm::tabTouchRect(s, i).contains(x, y)) { out = wsm::tabRect(s, i); return true; }
+      return false;
+    }
     if (g_wtAiOverlay == 1) {
       for (uint8_t i = 0; i < wtl::kAskCount; ++i)
         if (wtl::askButtonRect(s, i).contains(x, y)) { out = wtl::askButtonRect(s, i); return true; }

@@ -29,6 +29,9 @@ struct Card {
   char title[kTitleLen];
   char text[kTextLen];
   Tone tone;
+  char id[32];    // 12.6 (feed v2): the same while the card means the same thing
+  char ask[10];   // the question a tap asks ("" for none)
+  uint32_t at;    // epoch seconds, 0 when not known
 };
 
 inline Tone toneFrom(const char* s) {
@@ -42,7 +45,8 @@ inline Tone toneFrom(const char* s) {
 
 // Cards the calm screen can draw: text only (the image card needs a picture this screen does not have room for).
 inline bool shownKind(const char* kind) {
-  return kind && (!strcmp(kind, "needs") || !strcmp(kind, "watch") || !strcmp(kind, "running") || !strcmp(kind, "weather"));
+  return kind && (!strcmp(kind, "needs") || !strcmp(kind, "watch") || !strcmp(kind, "running") || !strcmp(kind, "weather") ||
+                  !strcmp(kind, "done") || !strcmp(kind, "disk"));  // 12.6: finished work and the fullest disk
 }
 
 // Wait before the next request: a minute after an answer; after failures 2, 4, 8 minutes, then 10.
@@ -108,8 +112,60 @@ inline bool validTlsName(const char* s) {
 // 12.4.2: the Local AI tab's ask buttons (GET /api/display/ask?q=...). Local AI answers in at most 200 characters.
 static const size_t kAnswerLen = 208;
 inline bool validQuestion(const char* q) {
-  return q && (!strcmp(q, "needs") || !strcmp(q, "running") || !strcmp(q, "health"));
+  return q && (!strcmp(q, "needs") || !strcmp(q, "running") || !strcmp(q, "health") ||
+               !strcmp(q, "today") || !strcmp(q, "next") || !strcmp(q, "weather"));  // 12.6
 }
+
+// 12.6: the question a tap on a card asks: the card's own (feed v2), else by its kind; nullptr for none.
+inline const char* askFor(const Card& c) {
+  if (validQuestion(c.ask)) return c.ask;
+  if (!strcmp(c.kind, "needs")) return "needs";
+  if (!strcmp(c.kind, "running")) return "running";
+  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk")) return "health";
+  if (!strcmp(c.kind, "done")) return "today";
+  if (!strcmp(c.kind, "weather")) return "weather";
+  return nullptr;
+}
+
+// 12.6: messages Local AI leaves for the display (feed v2 `messages`): a banner, maybe a chime, maybe one action.
+static const uint8_t kMaxMessages = 4;
+static const size_t kMessageTextLen = 124;
+enum class Action : uint8_t { None = 0, Timer, Show };
+struct Message {
+  uint64_t seq;   // only grows (Local AI's milliseconds)
+  char title[kTitleLen];
+  char text[kMessageTextLen];
+  Tone tone;
+  bool chime;
+  Action action;
+  uint16_t minutes;  // Timer
+  char page[10];     // Show: localai, image, camera, printer
+};
+inline bool validPage(const char* p) {
+  return p && (!strcmp(p, "localai") || !strcmp(p, "image") || !strcmp(p, "camera") || !strcmp(p, "printer"));
+}
+// Whether a message is new enough to show: newer than the last shown, and (just after a restart, when nothing has been
+// shown yet) made in the last 2 minutes, so a restart doesn't replay a quarter of an hour of banners.
+inline bool messageIsNew(uint64_t seq, uint64_t lastShown, uint32_t atEpoch, uint32_t nowEpoch) {
+  if (seq <= lastShown) return false;
+  if (lastShown) return true;
+  return atEpoch && nowEpoch && nowEpoch >= atEpoch && nowEpoch - atEpoch <= 120;
+}
+
+// 12.6: approvals the display lists, and may decide when Local AI says so.
+static const uint8_t kMaxApprovals = 4;
+struct Approval {
+  char id[40];
+  char title[64];
+  char risk[8];
+  bool decidable;
+};
+
+// 12.6: the last 6 pictures (feed v2 `images`).
+static const uint8_t kMaxImages = 6;
+// 12.6: the display's heartbeat to Local AI, and how long a long poll may wait.
+static const uint32_t kHeartbeatMs = 300000UL;
+static const uint32_t kEventsHoldMs = 30000UL;
 
 // 12.4.2: the latest image. The display fetches only Local AI's own image route, as a JPEG of at most this size.
 static const size_t kMaxImageBytes = 600UL * 1024UL;
