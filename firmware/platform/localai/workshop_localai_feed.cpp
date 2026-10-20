@@ -31,6 +31,8 @@
 #include <cstring>
 #include <ctime>
 
+#include <esp_heap_caps.h>
+#include <esp_system.h>
 #include <nvs.h>
 
 #if __has_include("smart_home_build.h")
@@ -505,6 +507,9 @@ void runHeartbeat() {
     beat["rssi"] = WiFi.RSSI();
     beat["heapFree"] = ESP.getFreeHeap();
     beat["psramFree"] = ESP.getFreePsram();
+    beat["heapMin"] = ESP.getMinFreeHeap();
+    beat["heapLargest"] = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    beat["resetReason"] = (int)esp_reset_reason();  // why it last started (esp_reset_reason_t)
     char body[256];
     serializeJson(beat, body, sizeof(body));
     JsonDocument doc;
