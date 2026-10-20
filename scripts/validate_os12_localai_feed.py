@@ -76,6 +76,8 @@ def validate(repo: Path) -> None:
          "waits for the answer before reading it (12.3.11: a read straight away gave HTTP 0)")
     need(fetch, "X-LocalAI-Display-Key: %s", "the display key signs the request in")
     forbid(feed, "setInsecure", "certificate checks are never skipped")
+    need(feed, 'LittleFS.rename("/localai.tmp", kSettingsPath)', "settings saved whole (temp file, then rename)")
+    forbid(feed, "Preferences", "settings are not kept in NVS (it is nearly full on the WS350)")
     need(block(feed, "void fetchTask(void*)"), "lai::nextDelayMs(g_snap.failures)", "backs off while Local AI doesn't answer")
     need(block(feed, "void fetchTask(void*)"), "generation == g_generation", "cards fetched under old settings are dropped")
     calm = block(hub, "static void wtDrawCalm(const WtPrint& w)")
