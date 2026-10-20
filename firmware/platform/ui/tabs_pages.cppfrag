@@ -1360,6 +1360,24 @@ static void wtDrawApprovals(const wsm::Screen& s) {
       uiDrawFit(list[i].decidable ? "..." : "On your phone", (int16_t)(r.right() - 8), (int16_t)(r.y + r.h / 2), 120, FONT_SMALL, MR_DATUM, OS12V_MUTED, OS12V_BG);
     }
   }
+  if (!n && !(e.approvalsBusy && !e.approvalSeq) && !e.approvalStatus[0]) {
+    // Nothing waits: a calm empty state in the middle, not a lone line at the bottom.
+    const wsm::Rect band = wsm::contentBand(s);
+    const int16_t cx = (int16_t)(band.x + band.w / 2), cy = (int16_t)(band.y + band.h / 2 - 18);
+    tft.fillCircle(cx, cy, 22, OS12V_SURFACE2);
+    tft.drawCircle(cx, cy, 22, OS12V_GREEN);
+    tft.drawLine(cx - 9, cy + 1, cx - 3, cy + 7, OS12V_GREEN);
+    tft.drawLine(cx - 9, cy + 2, cx - 3, cy + 8, OS12V_GREEN);
+    tft.drawLine(cx - 3, cy + 7, cx + 10, cy - 7, OS12V_GREEN);
+    tft.drawLine(cx - 3, cy + 8, cx + 10, cy - 6, OS12V_GREEN);
+    uiDrawFit("Nothing is waiting for you", cx, (int16_t)(cy + 42), (int16_t)(band.w - 32), FONT_BODY, MC_DATUM, OS12V_TEXT, OS12V_BG);
+    uiDrawFit("Local AI's approvals show here.", cx, (int16_t)(cy + 64), (int16_t)(band.w - 32), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_BG);
+    uiBottomNav(2, nullptr);
+    wtDrawBanner(s);
+    hubMarkFrameDirty();
+    g_dirty = false;
+    return;
+  }
   const wsm::Rect st = wtl::approvalStatusRect(s);
   const char* status = e.approvalStatus[0] ? e.approvalStatus
                      : (e.approvalsBusy && !e.approvalSeq) ? "Asking Local AI..."
