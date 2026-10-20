@@ -1673,6 +1673,10 @@ static void wsDrawScrollbar(const wsm::Screen& s, const wsm::PageSpec& p) {
   tft.fillRect(s.w - 4, y, 2, thumb, OS12V_MUTED);
 }
 
+// 12.4.5: the X2D camera build says why it is still waiting (no picture from the bridge, or no bridge); other
+// builds don't define it.
+extern "C" const char* workshop_x2d_wait_hint(void) __attribute__((weak));
+
 // Video area when no video is running (and in framebuffer captures).
 static void wsDrawVideoIdle(const wsm::Screen& s) {
   const wsm::Rect v = wsm::videoRect(s, wsm::PageId::VideoTest, g_wsCameraMode);
@@ -1683,6 +1687,10 @@ static void wsDrawVideoIdle(const wsm::Screen& s) {
   if (g_wsCameraMode) {
     headline = running ? "Camera on" : (g_wsVideoStartFailed ? "Camera not available" : "Camera is off");
     hint = running ? "Waiting for the next frame." : "The printer needs LAN mode and its access code.";
+    if (running && workshop_x2d_wait_hint) {
+      const char* why = workshop_x2d_wait_hint();
+      if (why) { headline = "No picture yet"; hint = why; }
+    }
   }
   uiDrawFit(headline, v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
   uiDrawFit(hint, v.x + v.w / 2, v.y + v.h / 2 + 14, v.w - 32, FONT_SMALL, MC_DATUM, OS12V_MUTED, TFT_BLACK);

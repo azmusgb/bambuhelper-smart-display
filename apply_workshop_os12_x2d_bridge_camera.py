@@ -160,12 +160,15 @@ static uint32_t gX2dPublishedSequence = 0U;
 // publishing, so a pause/stop/reopen can never surface an older session's frame.
 static volatile bool gX2dFetchEnabled = false;
 static volatile uint32_t gX2dFetchGeneration = 0U;
+// 12.4.5: the bridge's last answer (HTTP status; -1 no answer, 0 none yet), so the viewer can say why it waits.
+static volatile int gX2dLastHttpStatus = 0;
 
 static void x2dSetFetchEnabled(bool enabled, bool clearPublished) {
   if (!gX2dFrameMutex) return;
   xSemaphoreTake(gX2dFrameMutex, portMAX_DELAY);
   ++gX2dFetchGeneration;
   gX2dFetchEnabled = enabled;
+  if (enabled) gX2dLastHttpStatus = 0;
   if (clearPublished) gX2dPublishedBytes = 0U;
   xSemaphoreGive(gX2dFrameMutex);
 }
@@ -178,10 +181,11 @@ static size_t x2dFetchOnce(uint8_t* dest) {
   http.setConnectTimeout(kBridgeConnectTimeoutMs);
   http.setTimeout(kBridgeReadTimeoutMs);
   http.setReuse(false);
-  if (!http.begin(WORKSHOP_X2D_BRIDGE_URL)) return 0U;
+  if (!http.begin(WORKSHOP_X2D_BRIDGE_URL)) { gX2dLastHttpStatus = -1; return 0U; }
   http.addHeader("Cache-Control", "no-cache");
 
   const int status = http.GET();
+  gX2dLastHttpStatus = status > 0 ? status : -1;
   const int contentLength = http.getSize();
   size_t received = 0U;
   if (status == HTTP_CODE_OK && contentLength > 4 &&
@@ -211,6 +215,17 @@ static size_t x2dFetchOnce(uint8_t* dest) {
     return 0U;
   }
   return received;
+}
+
+// 12.4.5: why the camera page is still waiting, for the viewer (smart_hub.cpp declares it weak). nullptr once a frame
+// has come, or before the bridge has answered.
+extern "C" const char* workshop_x2d_wait_hint(void) {
+  if (gX2dPublishedBytes) return nullptr;
+  const int status = gX2dLastHttpStatus;
+  if (status == 503) return "No picture: open Live View in Bambu Studio on the Mac.";
+  if (status < 0) return "The Mac's camera bridge isn't answering. Is the Mac awake?";
+  if (status > 0 && status != 200) return "The camera bridge answered with an error.";
+  return nullptr;
 }
 
 static void x2dFetchWorker(void*) {
