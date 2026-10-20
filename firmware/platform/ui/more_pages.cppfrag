@@ -1689,7 +1689,7 @@ static void wsDrawVideoIdle(const wsm::Screen& s) {
     hint = running ? "Waiting for the next frame." : "The printer needs LAN mode and its access code.";
     if (running && workshop_x2d_wait_hint) {
       const char* why = workshop_x2d_wait_hint();
-      if (why) hint = why;
+      if (why) { headline = "No picture yet"; hint = why; }
     }
   }
   uiDrawFit(headline, v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
