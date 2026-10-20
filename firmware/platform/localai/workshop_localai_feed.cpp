@@ -186,23 +186,30 @@ bool downloadImage(const char* path, char* error, size_t errorLen) {
     char type[40];
     if (!openGet(client, path, "image/jpeg", contentLength, type, sizeof(type), error, errorLen)) return false;
     if (strncmp(type, "image/jpeg", 10) != 0) { copyText(error, errorLen, "Local AI sent a picture the display can't draw."); client.stop(); return false; }
-    if (!contentLength || contentLength > lai::kMaxImageBytes) { copyText(error, errorLen, "The picture is too large for the display."); client.stop(); return false; }
+    // Caddy answers HTTP/1.0 without a length (the body ends when the connection closes): then read to the end.
+    if (contentLength > lai::kMaxImageBytes) { copyText(error, errorLen, "The picture is too large for the display."); client.stop(); return false; }
+    const size_t limit = contentLength ? contentLength : lai::kMaxImageBytes;
     std::uint32_t lastByteAt = millis();
     size_t got = 0;
-    while (got < contentLength && millis() - lastByteAt < 10000UL) {
+    bool tooLarge = false;
+    while (millis() - lastByteAt < 10000UL) {
+        if (contentLength && got >= contentLength) break;
         const int avail = client.available();
         if (avail <= 0) {
             if (!client.connected()) break;
             delay(5);
             continue;
         }
-        const size_t want = contentLength - got < (size_t)avail ? contentLength - got : (size_t)avail;
+        if (got >= limit) { tooLarge = true; break; }
+        const size_t want = limit - got < (size_t)avail ? limit - got : (size_t)avail;
         const int n = client.read(g_image + got, want);
         if (n > 0) { got += (size_t)n; lastByteAt = millis(); }
     }
     client.stop();
+    if (tooLarge) { copyText(error, errorLen, "The picture is too large for the display."); return false; }
     std::uint16_t w = 0, h = 0;
-    if (got != contentLength) { copyText(error, errorLen, "The picture didn't finish downloading."); return false; }
+    // A whole JPEG ends with EOI (FF D9): without a length this is how a cut-off download shows.
+    if (got < 4 || (contentLength && got != contentLength) || g_image[got - 2] != 0xFF || g_image[got - 1] != 0xD9) { copyText(error, errorLen, "The picture didn't finish downloading."); return false; }
     if (!lai::jpegSize(g_image, got, w, h)) { copyText(error, errorLen, "The picture is not a JPEG the display can draw."); return false; }
     g_imageLen = got;
     return true;

@@ -83,6 +83,7 @@ def validate(repo: Path) -> None:
     need(feed, "if (!lai::validQuestion(question)) return false;", "only the three questions are asked")
     image = block(feed, "bool downloadImage(const char* path, char* error, size_t errorLen)")
     need(image, "contentLength > lai::kMaxImageBytes", "the picture is size-capped")
+    need(image, "if (got >= limit) { tooLarge = true; break; }", "a picture without a length is capped too")
     need(image, 'strncmp(type, "image/jpeg", 10)', "only JPEG is downloaded")
     need(image, "lai::jpegSize(g_image, got, w, h)", "a baseline JPEG the display can draw")
     need(feed, 'lai::validImagePath(c["imageUrl"] | "")', "only Local AI's own image route is fetched")
