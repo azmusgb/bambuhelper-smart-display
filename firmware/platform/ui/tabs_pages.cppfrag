@@ -680,7 +680,7 @@ static void wtHomePrinterRow(const WtPrint& w, WsRowView& v) {
   const char* name = w.p && w.p->config.name[0] ? w.p->config.name : "Printer";
   char at[24];
   if (w.finished && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) snprintf(v.value, sizeof(v.value), "%s · Finished %s", name, at);
-  else snprintf(v.value, sizeof(v.value), "%s · Ready", name);  // 12.6: the last result, once the big card has gone
+  else snprintf(v.value, sizeof(v.value), w.finished ? "%s · Finished" : "%s · Ready", name);  // the chip says Finished too  // 12.6: the last result, once the big card has gone
   v.valueColor = OS12V_GREEN;
 }
 
