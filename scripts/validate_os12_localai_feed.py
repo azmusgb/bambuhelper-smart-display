@@ -72,6 +72,8 @@ def validate(repo: Path) -> None:
     fetch = block(feed, "bool fetch(Card* cards, std::uint8_t& count, char* error, size_t errorLen)")
     need(fetch, "client.connect(ip, 443, name, ca, nullptr, nullptr)", "TLS to Local AI's address, pinned to its CA and certificate name")
     need(fetch, "GET /api/display/feed HTTP/1.0", "one HTTP/1.0 request (no chunked body)")
+    need(fetch, "while (!client.available() && client.connected() && millis() - sentAt < 8000UL) delay(10);",
+         "waits for the answer before reading it (12.3.11: a read straight away gave HTTP 0)")
     need(fetch, "X-LocalAI-Display-Key: %s", "the display key signs the request in")
     forbid(feed, "setInsecure", "certificate checks are never skipped")
     need(block(feed, "void fetchTask(void*)"), "lai::nextDelayMs(g_snap.failures)", "backs off while Local AI doesn't answer")
