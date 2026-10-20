@@ -56,7 +56,7 @@ static void bsSparkle(lgfx::LovyanGFX& g, int x, int y, int s, uint16_t c) {
 }
 
 static void bsFont(lgfx::LovyanGFX& g, FontID id, bool panelCache) {
-  if (panelCache) setFont(g, id);  // the hub framebuffer: setFont() keeps its cache right
+  if (panelCache) { setFont(g, FONT_NONE); setFont(g, id); }  // the hub framebuffer: reload, past setFont()'s cache
   else loadFontInto(g, id);        // the splash sprite: a target setFont() doesn't track
 }
 
@@ -151,7 +151,7 @@ static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
     memcpy(shown, kName, n);
     shown[n] = 0;
     g.setTextDatum(ML_DATUM);
-    g.setTextColor(kBsText, kBsBg);
+    g.setTextColor(kBsText);  // no background box: the glow shows through
     g.drawString(shown, cx - full / 2, nameY);
     if (n < sizeof(kName) - 1) g.fillRect(cx - full / 2 + g.textWidth(shown) + 2, nameY - 14, 3, 28, kBsAccent);  // the cursor
     g.setTextSize(1.0f);
@@ -160,7 +160,7 @@ static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
   g.setTextDatum(MC_DATUM);
   const float sub = bsPhase(t, 1600, 2000);
   if (sub > 0.0f) {
-    g.setTextColor(bsLerp(kBsBg, kBsMuted, sub), kBsBg);
+    g.setTextColor(bsLerp(kBsBg, kBsMuted, sub));
     g.drawString("Local AI  \xC2\xB7  Printer  \xC2\xB7  Workshop", cx, nameY + (landscape ? 30 : 34));
   }
 
@@ -182,11 +182,11 @@ static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
   } else {
     snprintf(status, sizeof(status), "Starting...");
   }
-  g.setTextColor(statusColor, kBsBg);
+  g.setTextColor(statusColor);
   g.drawString(status, cx, barY + 18);
 
   // Corners: the device and the release.
-  g.setTextColor(kBsLine, kBsBg);
+  g.setTextColor(kBsLine);
   g.setTextDatum(BL_DATUM);
   g.drawString("WS350", 10, sh - 8);
   g.setTextDatum(BR_DATUM);
