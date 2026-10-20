@@ -342,8 +342,47 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
   if (detail[0]) wsDrawWrapped(detail, x, r.y + 70, textW, 22, 2, FONT_BODY, OS12V_MUTED, bg);
 }
 
-// Home's bottom row: the workshop timer while it runs, otherwise the
-// filament inventory summary. Opens Workshop.
+// ---------------------------------------------------------------------------
+// Local AI (12.4.0): its cards lead the third tab, take Home's bottom row and
+// the calm screen's top card. One place decides what to say with no cards.
+// ---------------------------------------------------------------------------
+static uint8_t wtAiCount() {
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  return workshop::localai::fresh(millis(), ai.lastSuccessAtMs) ? ai.count : 0;
+}
+
+// Card `i` when there are fresh cards; otherwise one card saying why there are none.
+static workshop::localai::Card wtAiCard(uint8_t i) {
+  using workshop::localai::Tone;
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  workshop::localai::Card c{};
+  if (workshop::localai::fresh(millis(), ai.lastSuccessAtMs) && ai.count) return ai.cards[i < ai.count ? i : 0];
+  strlcpy(c.kind, "status", sizeof(c.kind));
+  c.tone = Tone::Info;
+  if (!ai.configured) { strlcpy(c.title, "Not set up", sizeof(c.title)); strlcpy(c.text, "Connect it from the Mac (docs/LOCALAI_CARDS.md)", sizeof(c.text)); }
+  else if (ai.lastSuccessAtMs == 0) { strlcpy(c.title, "Connecting", sizeof(c.title)); strlcpy(c.text, ai.status, sizeof(c.text)); }
+  else { strlcpy(c.title, "Not answering", sizeof(c.title)); strlcpy(c.text, ai.status, sizeof(c.text)); c.tone = Tone::Warning; }
+  return c;
+}
+
+static uint16_t wtAiToneColor(workshop::localai::Tone t) {
+  using workshop::localai::Tone;
+  return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : t == Tone::Busy ? OS12V_ACCENT : OS12V_MUTED;
+}
+
+// One Local AI card as a row: a dot in its tone, the title, then the line (display only).
+static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg) {
+  const int16_t mid = (int16_t)(row.y + row.h / 2), x = (int16_t)(row.x + 14);
+  tft.fillCircle(x + 5, mid, 5, wtAiToneColor(card.tone));
+  setFont(tft, FONT_BODY);
+  const int16_t titleW = (int16_t)(tft.textWidth(card.title) + 12);
+  uiDrawFit(card.title, (int16_t)(x + 20), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, bg);
+  const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(row.right() - 14 - textX);
+  if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
+}
+
+// Home's bottom row: the workshop timer while it runs, otherwise Local AI's
+// most important card (12.4.0). Opens the Local AI tab.
 static const char* wtHomeExtra(WsRowView& v) {
   wsView(v);
   if (g_workshopTimerDone) {
@@ -357,30 +396,13 @@ static const char* wtHomeExtra(WsRowView& v) {
     v.valueColor = OS12V_ACCENT;
     return "Timer";
   }
-  const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
-  using workshop::platform::Freshness;
-  if (!inv.credentialConfigured) {
-    // 12.3.9: an optional feature that is not set up is not a warning.
-    strlcpy(v.value, "Not set up", sizeof(v.value));
-    v.valueColor = OS12V_MUTED;
-  } else if (inv.busy) {
-    strlcpy(v.value, "Refreshing", sizeof(v.value));
-  } else if (!inv.state.available) {
-    strlcpy(v.value, "Unavailable", sizeof(v.value));
-    v.valueColor = OS12V_AMBER;
-  } else if (inv.state.freshness == Freshness::Conflicting) {
-    strlcpy(v.value, "Needs review", sizeof(v.value));
-    v.valueColor = OS12V_RED;
-  } else if (inv.state.freshness != Freshness::Fresh) {
-    strlcpy(v.value, "Out of date", sizeof(v.value));
-    v.valueColor = OS12V_AMBER;
-  } else {
-    snprintf(v.value, sizeof(v.value), "%u spools · %u loaded · %s", (unsigned)inv.state.spoolCount,
-             (unsigned)inv.state.loadedCount, hubOs12WorkshopReadinessLabel(inv.state.readiness));
-    const uint16_t c = hubOs12WorkshopReadinessColor(inv.state.readiness);
-    v.valueColor = c == C10_GREEN ? OS12V_GREEN : (c == C10_RED ? OS12V_RED : (c == C10_ORANGE ? OS12V_AMBER : OS12V_TEXT));
-  }
-  return "Filament";
+  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab).
+  const workshop::localai::Card c = wtAiCard(0);
+  strlcpy(v.value, c.text, sizeof(v.value));
+  v.valueColor = c.tone == workshop::localai::Tone::Info || c.tone == workshop::localai::Tone::Ok ? OS12V_MUTED : wtAiToneColor(c.tone);
+  static char label[workshop::localai::kTitleLen];
+  strlcpy(label, c.title, sizeof(label));
+  return label;
 }
 
 // ---------------------------------------------------------------------------
@@ -440,18 +462,30 @@ static void wtDrawCalmAiCard(const wsm::Rect& r, const workshop::localai::Card& 
                      : card.tone == Tone::Ok ? OS12V_GREEN : OS12V_ACCENT;
   const int16_t mid = (int16_t)(r.y + r.h / 2), x = (int16_t)(surface.x + 16);
   tft.fillCircle(x + 5, mid, 5, dot);
-  setFont(tft, FONT_BODY);
+  // 12.4.0: the title in 19 px, as large as the printer's line (Local AI leads this screen).
+  setFont(tft, FONT_LARGE);
   const int16_t titleW = (int16_t)(tft.textWidth(card.title) + 12);
-  uiDrawFit(card.title, (int16_t)(x + 20), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_SURFACE);
+  uiDrawFit(card.title, (int16_t)(x + 20), mid, titleW, FONT_LARGE, ML_DATUM, OS12V_TEXT, OS12V_SURFACE);
   const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(surface.right() - 14 - textX);
   if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, OS12V_SURFACE);
 }
 
 static void wtDrawCalm(const WtPrint& w) {
   const wsm::Screen s = wsScreen();
-  // 12.3.10: one Local AI card under the status line while Local AI's cards are fresh (workshop_localai_feed).
+  // 12.4.0: Local AI leads. Its card takes the first slot under the date; the printer's line is the second slot,
+  // and only while the printer is doing something (otherwise a second Local AI card, when there is one).
   const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  const bool aiShown = ai.count > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  const bool aiFresh = ai.count > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  char doneAt[24], status[64];
+  uint16_t dot = OS12V_GREEN;
+  const wtl::CalmStatus calm = wtCalmStatus(w, doneAt, sizeof(doneAt), dot);
+  const bool printerBusy = calm.state != wtl::CalmState::Idle && calm.state != wtl::CalmState::NoPrinter &&
+                           calm.state != wtl::CalmState::Offline;
+  const uint8_t rot = workshop::localai::rotationIndex(millis(), ai.count);
+  // Without Local AI set up the screen is as before: the printer's line alone.
+  const bool aiFirst = ai.configured;
+  const bool secondAi = aiFirst && !printerBusy && aiFresh && ai.count > 1;
+  const bool aiShown = aiFirst && (printerBusy || secondAi);  // two slots
   const wtl::CalmLayout c = wtl::calmLayout(s, aiShown);
   tft.fillScreen(OS12V_BG);
 
@@ -491,10 +525,12 @@ static void wtDrawCalm(const WtPrint& w) {
             OS12V_MUTED, OS12V_BG);
 
   // One calm status line on a card: a dot in the state colour and plain words.
-  char doneAt[24], status[64];
-  uint16_t dot = OS12V_GREEN;
-  wtl::calmStatusText(status, sizeof(status), wtCalmStatus(w, doneAt, sizeof(doneAt), dot));
-  const wsm::Rect card = wsm::rowSurface(c.status);
+  wtl::calmStatusText(status, sizeof(status), calm);
+  if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));
+  if (aiFirst && !printerBusy) {
+    if (secondAi) wtDrawCalmAiCard(c.ai, wtAiCard((uint8_t)((rot + 1) % ai.count)));
+  } else {
+  const wsm::Rect card = wsm::rowSurface(aiFirst ? c.ai : c.status);
   tft.fillRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_SURFACE2);
   tft.drawRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_LINE);
   const int16_t maxW = (int16_t)(card.w - 32 - 20);
@@ -506,9 +542,9 @@ static void wtDrawCalm(const WtPrint& w) {
   const int16_t left = (int16_t)(card.x + (card.w - (20 + textW)) / 2), mid = (int16_t)(card.y + card.h / 2);
   tft.fillCircle(left + 5, mid, 5, dot);
   uiDrawFit(status, (int16_t)(left + 20), mid, maxW, statusFont, ML_DATUM, OS12V_TEXT, OS12V_SURFACE2);
+  }
 
   // The only thing to do here: wake. No tab bar, no other targets.
-  if (aiShown) wtDrawCalmAiCard(c.ai, ai.cards[workshop::localai::rotationIndex(millis(), ai.count)]);
 
   uiDrawFit("Tap anywhere to wake", (int16_t)(c.hint.x + c.hint.w / 2), (int16_t)(c.hint.y + c.hint.h / 2), (int16_t)(c.hint.w - 32),
             FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_BG);
@@ -1006,8 +1042,9 @@ static void wtDrawWorkshop(bool full) {
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
   const wtl::ViewSpec& v = wtl::view(id);
-  g_wtWorkshopScroll = wtl::clampScroll(s, v, 0, g_wtWorkshopScroll);
-  const uint8_t maxS = wtl::maxScroll(s, v, 0);
+  const uint8_t aiCount = wtAiCount();  // 12.4.0: Local AI's cards lead the tab
+  g_wtWorkshopScroll = wtl::clampScroll(s, v, aiCount, g_wtWorkshopScroll);
+  const uint8_t maxS = wtl::maxScroll(s, v, aiCount);
   const bool scrollButtons = maxS > 0;
   const char* chip = nullptr;
   uint16_t chipColor = OS12V_MUTED;
@@ -1015,16 +1052,24 @@ static void wtDrawWorkshop(bool full) {
   else if (g_workshopTimerDone) { chip = "Timer done"; chipColor = OS12V_AMBER; }
   tft.fillScreen(OS12V_BG);
   wtDrawHeader(s, v.title, chip, chipColor, scrollButtons, g_wtWorkshopScroll, maxS);
-  for (uint8_t i = 0; i < v.itemCount; ++i) {
-    const wsm::Rect r = wtl::itemRect(s, v, 0, g_wtWorkshopScroll, i);
+  const uint8_t items = wtl::itemCount(v, aiCount);
+  for (uint8_t i = 0; i < items; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, aiCount, g_wtWorkshopScroll, i);
     if (r.empty()) continue;
+    const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
+    if (it.id == wtl::ItemId::WsAiCard) {
+      // Read-only, drawn flat like other information rows, with a hairline under it.
+      tft.drawFastHLine(r.x + 12, r.bottom() - 1, r.w - 24, OS12V_LINE);
+      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_BG);
+      continue;
+    }
     WsRowView row;
-    wtWorkshopRow(v.items[i].id, inv, row);
-    wsDrawRowBody(s, v.items[i].rowKind, v.items[i].label, row, r);
+    wtWorkshopRow(it.id, inv, row);
+    wsDrawRowBody(s, it.rowKind, it.label, row, r);
   }
   if (scrollButtons) {
     const int16_t top = wsm::slotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);
-    const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / v.itemCount);
+    const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / items);
     tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * g_wtWorkshopScroll / maxS), 2, thumb, OS12V_MUTED);
   }
@@ -1214,23 +1259,25 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
   const wtl::ViewSpec& v = wtl::view(id);
-  const wtl::Hit h = wtl::hitTest(s, id, 0, g_wtWorkshopScroll, x, y);
+  const uint8_t aiCount = wtAiCount();
+  const wtl::Hit h = wtl::hitTest(s, id, aiCount, g_wtWorkshopScroll, x, y);
   switch (h.kind) {
     case wtl::HitKind::Tab:
       wtTab(h.index);
       return true;
     case wtl::HitKind::ScrollUp:
-      if (g_wtWorkshopScroll > 0) { g_wtWorkshopScroll = wtl::clampScroll(s, v, 0, (int)g_wtWorkshopScroll - wsm::scrollStep(s)); wsClick(); }
+      if (g_wtWorkshopScroll > 0) { g_wtWorkshopScroll = wtl::clampScroll(s, v, aiCount, (int)g_wtWorkshopScroll - wsm::scrollStep(s)); wsClick(); }
       return true;
     case wtl::HitKind::ScrollDown:
-      if (g_wtWorkshopScroll < wtl::maxScroll(s, v, 0)) { g_wtWorkshopScroll = wtl::clampScroll(s, v, 0, (int)g_wtWorkshopScroll + wsm::scrollStep(s)); wsClick(); }
+      if (g_wtWorkshopScroll < wtl::maxScroll(s, v, aiCount)) { g_wtWorkshopScroll = wtl::clampScroll(s, v, aiCount, (int)g_wtWorkshopScroll + wsm::scrollStep(s)); wsClick(); }
       return true;
     case wtl::HitKind::Item:
       break;
     default:
       return true;
   }
-  const wtl::ItemSpec& it = v.items[h.index];
+  const wtl::ItemSpec& it = wtl::item(v, h.index, aiCount);
+  if (it.id == wtl::ItemId::WsAiCard) return true;  // Local AI cards are read-only
   WsRowView row;
   wtWorkshopRow(it.id, inv, row);
   if (!row.enabled || it.rowKind == wsm::RowKind::Info) {
@@ -1291,6 +1338,7 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   } else if (cur == SCREEN_HUB_WORKSHOP) {
     id = workshopInventorySnapshot().credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
     scroll = g_wtWorkshopScroll;
+    count = wtAiCount();
   } else {
     return false;
   }
@@ -1310,7 +1358,7 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
       if (h.index == wtl::segmentOf(id)) return false;  // already selected
       break;
     case wtl::HitKind::Item: {
-      const wtl::ItemSpec& it = wtl::item(v, h.index);
+      const wtl::ItemSpec& it = wtl::item(v, h.index, count);
       if (!wtl::itemInteractive(it) || it.kind == wtl::ItemKind::Hold) return false;
       if (id == wtl::View::PrinterControl) {
         const WtControls c = wtControls(w);
