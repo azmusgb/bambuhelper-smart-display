@@ -6,6 +6,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,6 +131,54 @@ class SupervisorTests(unittest.TestCase):
         latest = bridge.LatestFrame()
         latest.update(self.JPEG)
         self.assertIsNone(bridge.needs_restart(FakePipeline(True), latest, 0.0, bridge.STALL_SECONDS + 5))
+
+
+class RtspSourceTests(unittest.TestCase):
+    """--rtsp-url-file: the printer's LAN stream read by FFmpeg alone (the Raspberry Pi bridge)."""
+
+    URL = "rtsps://bblp:abcd1234@10.0.0.136:322/streaming/live/1"
+
+    def pipeline(self, folder: Path, ffmpeg: str = "ffmpeg", text: str = URL, mode: int = 0o600):
+        url = folder / "rtsp-url"
+        url.write_text(text + "\n", encoding="utf-8")
+        url.chmod(mode)
+        return bridge.CameraPipeline(bridge.LatestFrame(), folder, folder, folder / "url.txt", ffmpeg, 5, 384, rtsp_url_file=url)
+
+    def test_owner_only_file_with_one_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self.pipeline(folder).validate()  # no Studio files needed
+            with self.assertRaisesRegex(RuntimeError, "owner only"):
+                self.pipeline(folder, mode=0o644).validate()
+            with self.assertRaisesRegex(RuntimeError, "one rtsps:// URL"):
+                self.pipeline(folder, text="http://10.0.0.136/").validate()
+
+    def test_access_code_never_logged(self) -> None:
+        line = b"[tls] rtsps://bblp:abcd1234@10.0.0.136:322/streaming/live/1: Connection refused\n"
+        self.assertNotIn(b"abcd1234", bridge.redact(line))
+        self.assertIn(b"rtsps://***@10.0.0.136:322", bridge.redact(line))
+
+    def test_ffmpeg_alone_produces_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            fake = folder / "ffmpeg"
+            fake.write_text("#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/args\"\n"
+                            "printf '\\377\\330one\\377\\331'\nsleep 2\n", encoding="utf-8")
+            fake.chmod(0o755)
+            p = self.pipeline(folder, ffmpeg=str(fake))
+            p.start()
+            try:
+                for _ in range(50):
+                    if p.latest.snapshot()[0]:
+                        break
+                    time.sleep(0.05)
+                self.assertEqual(p.latest.snapshot()[0], b"\xff\xd8one\xff\xd9")
+                self.assertTrue(p.running())
+                args = (folder / "args").read_text(encoding="utf-8")
+                self.assertIn("-rtsp_transport tcp", args)
+                self.assertIn("-i " + self.URL, args)
+            finally:
+                p.stop()
 
 
 class BridgeUrlTests(unittest.TestCase):

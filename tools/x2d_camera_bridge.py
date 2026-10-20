@@ -8,6 +8,11 @@ the latest complete JPEG in memory. The WS350 polls a fixed endpoint such as:
 
     http://<mac-lan-ip>:8091/x2d/frame.jpg
 
+Or, with ``--rtsp-url-file`` (for an always-on Linux box such as a Raspberry Pi),
+FFmpeg reads the printer's own LAN stream, ``rtsps://bblp:<access code>@<printer>:322/streaming/live/1``,
+which needs "LAN Only Liveview" turned on at the printer. No Studio, no cloud.
+The URL file holds the access code, so it must be readable by its owner only.
+
 No Bambu URL, access code, UID, or printer identifier is returned by the HTTP
 server. This is an experimental physical-test bridge, not a public Internet
 service. Bind it only on a trusted LAN/VPN.
@@ -17,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -35,6 +41,20 @@ MAX_JPEG_BYTES = 384 * 1024
 # A pipeline that has exited, or produced no frame for this long, is restarted.
 STALL_SECONDS = 15.0
 RESTART_BACKOFF_SECONDS = (2.0, 5.0, 15.0, 30.0, 60.0)
+
+
+_CREDENTIALS = re.compile(rb"(rtsps?://)[^/@\s]*@")
+
+
+def redact(line: bytes) -> bytes:
+    """FFmpeg names its input in errors; never let the access code reach a log."""
+    return _CREDENTIALS.sub(rb"\1***@", line)
+
+
+def _forward_redacted(stream) -> None:
+    for line in iter(stream.readline, b""):
+        sys.stderr.buffer.write(redact(line))
+        sys.stderr.flush()
 
 
 class LatestFrame:
@@ -72,6 +92,7 @@ class CameraPipeline:
         ffmpeg: str,
         fps: int,
         width: int,
+        rtsp_url_file: Optional[Path] = None,
     ) -> None:
         self.latest = latest
         self.camera_root = camera_root
@@ -80,6 +101,7 @@ class CameraPipeline:
         self.ffmpeg = ffmpeg
         self.fps = fps
         self.width = width
+        self.rtsp_url_file = rtsp_url_file
         self.source: Optional[subprocess.Popen[bytes]] = None
         self.encoder: Optional[subprocess.Popen[bytes]] = None
         self.thread: Optional[threading.Thread] = None
@@ -87,7 +109,27 @@ class CameraPipeline:
         self.last_error: Optional[str] = None
         self.restarts = 0
 
+    def rtsp_url(self) -> str:
+        """The printer's LAN stream URL from --rtsp-url-file (owner-only, rtsps:// or rtsp://)."""
+        assert self.rtsp_url_file is not None
+        path = self.rtsp_url_file
+        if not path.is_file():
+            raise RuntimeError(f"missing RTSP URL file: {path}")
+        if path.stat().st_mode & 0o077:
+            raise RuntimeError(f"{path} must be readable by its owner only (chmod 600): it holds the access code")
+        url = path.read_text(encoding="utf-8").strip()
+        if not url.startswith(("rtsps://", "rtsp://")) or any(c.isspace() for c in url):
+            raise RuntimeError(f"{path} must hold one rtsps:// URL")
+        return url
+
     def validate(self) -> None:
+        if self.fps < 1 or self.fps > 10:
+            raise RuntimeError("--fps must be between 1 and 10")
+        if self.width < 160 or self.width > 480 or self.width % 2:
+            raise RuntimeError("--width must be an even value from 160 through 480")
+        if self.rtsp_url_file is not None:
+            self.rtsp_url()
+            return
         source = self.camera_root / "bambu_source"
         dylib = self.plugin_root / "libBambuSource.dylib"
         for path, label in (
@@ -97,43 +139,37 @@ class CameraPipeline:
         ):
             if not path.is_file():
                 raise RuntimeError(f"missing {label}: {path}")
-        if self.fps < 1 or self.fps > 10:
-            raise RuntimeError("--fps must be between 1 and 10")
-        if self.width < 160 or self.width > 480 or self.width % 2:
-            raise RuntimeError("--width must be an even value from 160 through 480")
+
+    def encoder_args(self, input_args: list[str]) -> list[str]:
+        return [
+            self.ffmpeg, "-hide_banner", "-loglevel", "warning", *input_args, "-an",
+            "-vf", f"fps={self.fps},scale={self.width}:-2:flags=fast_bilinear",
+            "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
+        ]
 
     def start(self) -> None:
         self.validate()
         self.stop_event = threading.Event()
+        if self.rtsp_url_file is not None:
+            # One FFmpeg reads the printer's stream over TCP (the printer's certificate is self-signed).
+            self.source = None
+            self.encoder = subprocess.Popen(
+                self.encoder_args(["-rtsp_transport", "tcp", "-timeout", "10000000", "-i", self.rtsp_url()]),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+            threading.Thread(target=_forward_redacted, args=(self.encoder.stderr,), name="x2d-ffmpeg-log", daemon=True).start()
+            self.thread = threading.Thread(target=self._read_frames, name="x2d-jpeg-reader", daemon=True)
+            self.thread.start()
+            return
         source_path = self.camera_root / "bambu_source"
         encoded_path = quote(str(self.url_file.resolve()), safe="/")
         camera_uri = f"bambu:///camera/{encoded_path}"
 
         source_cmd = [str(source_path), camera_uri]
-        ffmpeg_cmd = [
-            self.ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "warning",
-            "-fflags",
-            "+genpts",
-            "-f",
-            "h264",
-            "-r",
-            "30",
-            "-i",
-            "pipe:0",
-            "-an",
-            "-vf",
-            f"fps={self.fps},scale={self.width}:-2:flags=fast_bilinear",
-            "-c:v",
-            "mjpeg",
-            "-q:v",
-            "5",
-            "-f",
-            "image2pipe",
-            "pipe:1",
-        ]
+        ffmpeg_cmd = self.encoder_args(["-fflags", "+genpts", "-f", "h264", "-r", "30", "-i", "pipe:0"])
 
         self.source = subprocess.Popen(
             source_cmd,
@@ -214,7 +250,7 @@ class CameraPipeline:
     def running(self) -> bool:
         """True while both processes and the frame reader are alive."""
         return (
-            self.source is not None and self.source.poll() is None
+            (self.rtsp_url_file is not None or (self.source is not None and self.source.poll() is None))
             and self.encoder is not None and self.encoder.poll() is None
             and self.thread is not None and self.thread.is_alive()
         )
@@ -351,6 +387,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera-root", type=Path, default=DEFAULT_CAMERA_ROOT)
     parser.add_argument("--plugin-root", type=Path, default=DEFAULT_PLUGIN_ROOT)
     parser.add_argument("--url-file", type=Path, default=DEFAULT_URL_FILE)
+    parser.add_argument("--rtsp-url-file", type=Path, default=None,
+                        help="read the printer's LAN stream (rtsps://bblp:<code>@<ip>:322/streaming/live/1) from this "
+                             "owner-only file instead of Bambu Studio's helper")
     return parser.parse_args()
 
 
@@ -365,6 +404,7 @@ def main() -> int:
         ffmpeg=args.ffmpeg,
         fps=args.fps,
         width=args.width,
+        rtsp_url_file=args.rtsp_url_file.expanduser() if args.rtsp_url_file else None,
     )
     pipeline.start()
     server = BridgeServer((args.bind, args.port), latest, pipeline)
