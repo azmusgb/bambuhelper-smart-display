@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Validate the 12.3.10 Local AI cards in a reconstructed WS350 tree (apply_workshop_os12_localai_feed.py).
+
+Checks the host smoke test, that the service is started and polled, that the portal routes exist once and never
+send the key or CA back, that the fetch pins Local AI's CA and certificate name and backs off, and that the calm
+screen draws the card only from fresh cards and stays one wake target.
+"""
+from __future__ import annotations
+
+import argparse
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+TEST = ROOT / "tests/workshop_os12_localai_feed_smoke.cpp"
+
+
+class ValidationError(Exception):
+    pass
+
+
+def need(text: str, needle: str, label: str) -> None:
+    if needle not in text:
+        raise ValidationError(f"missing: {label} ({needle!r})")
+
+
+def forbid(text: str, needle: str, label: str) -> None:
+    if needle in text:
+        raise ValidationError(f"forbidden: {label} ({needle!r})")
+
+
+def block(text: str, signature: str) -> str:
+    start = text.find(signature)
+    if start < 0:
+        raise ValidationError(f"missing function: {signature}")
+    depth, i = 0, text.find("{", start)
+    while i < len(text):
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        if depth == 0:
+            return text[start:i + 1]
+        i += 1
+    raise ValidationError(f"unterminated function: {signature}")
+
+
+def smoke() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        binary = Path(td) / "localai-feed-smoke"
+        subprocess.run(["c++", "-std=c++11", "-O1", "-Wall", "-Wextra", "-Werror", "-pedantic", "-o", str(binary), str(TEST)], check=True)
+        out = subprocess.run([str(binary)], check=False, capture_output=True, text=True)
+        if out.returncode != 0:
+            raise ValidationError("localai feed smoke test failed:\n" + out.stdout)
+
+
+def validate(repo: Path) -> None:
+    smoke()
+    for rel in ("include/workshop_localai_feed_core.hpp", "include/workshop_localai_feed.h", "src/workshop_localai_feed.cpp"):
+        if not (repo / rel).is_file():
+            raise ValidationError(f"missing {rel}")
+    main = (repo / "src/main.cpp").read_text(encoding="utf-8")
+    web = (repo / "src/web_server.cpp").read_text(encoding="utf-8")
+    hub = (repo / "src/smart_hub.cpp").read_text(encoding="utf-8")
+    feed = (repo / "src/workshop_localai_feed.cpp").read_text(encoding="utf-8")
+    need(main, "workshopLocalAiFeedBegin();", "service started")
+    need(main, "workshopLocalAiFeedLoop();", "service polled")
+    for route in ('SECURE_GET("/os12/localai/status"', 'SECURE_POST("/os12/localai/config"', 'SECURE_POST("/os12/localai/clear"'):
+        if web.count(route) != 1:
+            raise ValidationError(f"route must be registered once: {route}")
+    status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200)")
+    for secret in ('doc["key"]', 'doc["ca"]', "g_key", "caPem"):
+        forbid(status, secret, "the status route never sends the key or CA")
+    fetch = block(feed, "bool fetch(Card* cards, std::uint8_t& count, char* error, size_t errorLen)")
+    need(fetch, "client.connect(ip, 443, name, ca, nullptr, nullptr)", "TLS to Local AI's address, pinned to its CA and certificate name")
+    need(fetch, "GET /api/display/feed HTTP/1.0", "one HTTP/1.0 request (no chunked body)")
+    need(fetch, "X-LocalAI-Display-Key: %s", "the display key signs the request in")
+    forbid(feed, "setInsecure", "certificate checks are never skipped")
+    need(block(feed, "void fetchTask(void*)"), "lai::nextDelayMs(g_snap.failures)", "backs off while Local AI doesn't answer")
+    need(block(feed, "void fetchTask(void*)"), "generation == g_generation", "cards fetched under old settings are dropped")
+    calm = block(hub, "static void wtDrawCalm(const WtPrint& w)")
+    need(calm, "workshop::localai::fresh(millis(), ai.lastSuccessAtMs)", "only fresh cards are shown")
+    need(calm, "wtl::calmLayout(s, aiShown)", "layout makes room only when a card is shown")
+    card = block(hub, "static void wtDrawCalmAiCard(const wsm::Rect& r, const workshop::localai::Card& card)")
+    for control in ("uiBottomNav(", "wsDrawRowBody(", "hubV1125Action(", "wsDrawChevronRight("):
+        forbid(card, control, "the card is display only")
+    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card)")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", required=True)
+    args = parser.parse_args()
+    try:
+        validate(Path(args.repo).resolve())
+    except (ValidationError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"FAIL: {exc}") from exc
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

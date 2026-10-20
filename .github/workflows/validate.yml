@@ -89,6 +89,8 @@ jobs:
           /tmp/workshop-os12-tests/more-layout-smoke
           g++ -std=c++11 -O1 -Wall -Wextra -Werror -pedantic tests/workshop_os12_tabs_layout_smoke.cpp -o /tmp/workshop-os12-tests/tabs-layout-smoke
           /tmp/workshop-os12-tests/tabs-layout-smoke
+          g++ -std=c++11 -O1 -Wall -Wextra -Werror -pedantic tests/workshop_os12_localai_feed_smoke.cpp -o /tmp/workshop-os12-tests/localai-feed-smoke
+          /tmp/workshop-os12-tests/localai-feed-smoke
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_rapid_reset_smoke.cpp -o /tmp/workshop-os12-tests/rapid-reset-smoke
           /tmp/workshop-os12-tests/rapid-reset-smoke
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_frame_diff_smoke.cpp -o /tmp/workshop-os12-tests/frame-diff-smoke

@@ -429,9 +429,30 @@ static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneL
   return c;
 }
 
+// One Local AI card on the calm screen: a dot in the card's tone, its title, then its line. Display only; the whole
+// calm screen stays one wake target.
+static void wtDrawCalmAiCard(const wsm::Rect& r, const workshop::localai::Card& card) {
+  using workshop::localai::Tone;
+  const wsm::Rect surface = wsm::rowSurface(r);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_LINE);
+  const uint16_t dot = card.tone == Tone::Attention ? OS12V_RED : card.tone == Tone::Warning ? OS12V_AMBER
+                     : card.tone == Tone::Ok ? OS12V_GREEN : OS12V_ACCENT;
+  const int16_t mid = (int16_t)(r.y + r.h / 2), x = (int16_t)(surface.x + 16);
+  tft.fillCircle(x + 5, mid, 5, dot);
+  setFont(tft, FONT_BODY);
+  const int16_t titleW = (int16_t)(tft.textWidth(card.title) + 12);
+  uiDrawFit(card.title, (int16_t)(x + 20), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_SURFACE);
+  const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(surface.right() - 14 - textX);
+  if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, OS12V_SURFACE);
+}
+
 static void wtDrawCalm(const WtPrint& w) {
   const wsm::Screen s = wsScreen();
-  const wtl::CalmLayout c = wtl::calmLayout(s);
+  // 12.3.10: one Local AI card under the status line while Local AI's cards are fresh (workshop_localai_feed).
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const bool aiShown = ai.count > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  const wtl::CalmLayout c = wtl::calmLayout(s, aiShown);
   tft.fillScreen(OS12V_BG);
 
   // Clock in the display's time zone, 12 or 24 h as set in Time & locale.
@@ -487,6 +508,8 @@ static void wtDrawCalm(const WtPrint& w) {
   uiDrawFit(status, (int16_t)(left + 20), mid, maxW, statusFont, ML_DATUM, OS12V_TEXT, OS12V_SURFACE2);
 
   // The only thing to do here: wake. No tab bar, no other targets.
+  if (aiShown) wtDrawCalmAiCard(c.ai, ai.cards[workshop::localai::rotationIndex(millis(), ai.count)]);
+
   uiDrawFit("Tap anywhere to wake", (int16_t)(c.hint.x + c.hint.w / 2), (int16_t)(c.hint.y + c.hint.h / 2), (int16_t)(c.hint.w - 32),
             FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_BG);
   hubMarkFrameDirty();
