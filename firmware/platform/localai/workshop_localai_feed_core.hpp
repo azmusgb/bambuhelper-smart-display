@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 namespace workshop {
@@ -150,6 +151,20 @@ inline float fitScale(uint16_t w, uint16_t h, int areaW, int areaH) {
   const float sh = (float)areaH / (float)h;
   if (sh < s) s = sh;
   return s > 1.0f ? 1.0f : s;
+}
+
+// 12.4.3: how long ago, for the latest image: "just now", "12 min ago", "3 h ago", "yesterday", "4 days ago".
+// Empty when either time is unknown (0) or the clock is behind.
+inline void agoText(char* out, size_t len, uint32_t nowEpoch, uint32_t atEpoch) {
+  if (!out || !len) return;
+  out[0] = 0;
+  if (!nowEpoch || !atEpoch || nowEpoch + 120 < atEpoch) return;
+  const uint32_t s = nowEpoch > atEpoch ? nowEpoch - atEpoch : 0;
+  if (s < 90) snprintf(out, len, "just now");
+  else if (s < 3600) snprintf(out, len, "%lu min ago", (unsigned long)((s + 30) / 60));
+  else if (s < 86400) snprintf(out, len, "%lu h ago", (unsigned long)(s / 3600));
+  else if (s < 2 * 86400) snprintf(out, len, "yesterday");
+  else snprintf(out, len, "%lu days ago", (unsigned long)(s / 86400));
 }
 
 }  // namespace localai

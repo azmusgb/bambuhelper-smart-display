@@ -3,6 +3,7 @@
 #include "../firmware/platform/localai/workshop_localai_feed_core.hpp"
 
 #include <cstdio>
+#include <cstring>
 
 using namespace workshop::localai;
 static int failures = 0, checks = 0;
@@ -55,6 +56,18 @@ int main() {
   CHECK(fitScale(1920, 1080, 480, 292) == 0.25f, "fit by width");
   CHECK(fitScale(200, 100, 480, 292) == 1.0f && fitScale(0, 10, 480, 292) == 0.0f, "never upscaled; no size, no scale");
 
+  {
+    char t[24];
+    const uint32_t now = 1792500000UL;
+    agoText(t, sizeof(t), now, now - 30); CHECK(!strcmp(t, "just now"), "just now");
+    agoText(t, sizeof(t), now, now - 12 * 60); CHECK(!strcmp(t, "12 min ago"), "minutes");
+    agoText(t, sizeof(t), now, now - 3 * 3600 - 5); CHECK(!strcmp(t, "3 h ago"), "hours");
+    agoText(t, sizeof(t), now, now - 30 * 3600); CHECK(!strcmp(t, "yesterday"), "yesterday");
+    agoText(t, sizeof(t), now, now - 4 * 86400); CHECK(!strcmp(t, "4 days ago"), "days");
+    agoText(t, sizeof(t), now, 0); CHECK(!t[0], "unknown time: nothing");
+    agoText(t, sizeof(t), 0, now); CHECK(!t[0], "clock not set: nothing");
+    agoText(t, sizeof(t), now, now + 3600); CHECK(!t[0], "made in the future: nothing");
+  }
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }

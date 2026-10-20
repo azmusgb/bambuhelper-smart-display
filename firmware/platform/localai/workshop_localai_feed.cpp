@@ -49,6 +49,7 @@ WorkshopLocalAiExtras g_extras;
 char g_askPending[12] = {};        // a question waiting for the task
 bool g_imagePending = false;
 char g_imagePath[lai::kImagePathLen] = {};  // the feed's latest image (validImagePath)
+char g_imageLoaded[lai::kImagePathLen] = {};  // the one in g_image (12.4.3: not downloaded again)
 std::uint8_t* g_image = nullptr;   // PSRAM, kMaxImageBytes
 std::size_t g_imageLen = 0;
 
@@ -130,9 +131,11 @@ bool openGet(WiFiClientSecure& client, const char* path, const char* accept, siz
     return true;
 }
 
-bool fetch(Card* cards, std::uint8_t& count, char* imagePath, char* imageTitle, char* imageText, char* error, size_t errorLen) {
+bool fetch(Card* cards, std::uint8_t& count, char* imagePath, char* imageTitle, char* imageText, std::uint32_t& imageAt,
+           char* error, size_t errorLen) {
     count = 0;
     imagePath[0] = imageTitle[0] = imageText[0] = 0;
+    imageAt = 0;
     WiFiClientSecure client;
     size_t contentLength = 0;
     if (!openGet(client, "/api/display/feed", "application/json", contentLength, nullptr, 0, error, errorLen)) return false;
@@ -148,6 +151,7 @@ bool fetch(Card* cards, std::uint8_t& count, char* imagePath, char* imageTitle, 
             copyText(imagePath, lai::kImagePathLen, c["imageUrl"] | "");
             copyText(imageTitle, lai::kTitleLen, c["title"] | "");
             copyText(imageText, lai::kTextLen, c["text"] | "");
+            imageAt = c["at"] | 0U;
             continue;
         }
         if (!lai::shownKind(kind) || count >= lai::kMaxCards) continue;
@@ -246,6 +250,7 @@ void fetchTask(void* arg) {
         const bool ok = path[0] && downloadImage(path, error, sizeof(error));
         if (!path[0]) copyText(error, sizeof(error), "Local AI has no image yet.");
         portENTER_CRITICAL(&g_mux);
+        copyText(g_imageLoaded, sizeof(g_imageLoaded), ok ? path : "");
         g_extras.imageReady = ok;
         copyText(g_extras.imageStatus, sizeof(g_extras.imageStatus), ok ? "" : error);
         ++g_extras.imageSeq;
@@ -256,8 +261,9 @@ void fetchTask(void* arg) {
     }
     static Card cards[lai::kMaxCards];
     static char imagePath[lai::kImagePathLen], imageTitle[lai::kTitleLen], imageText[lai::kTextLen];
+    std::uint32_t imageAt = 0;
     std::uint8_t count = 0;
-    const bool ok = fetch(cards, count, imagePath, imageTitle, imageText, error, sizeof(error));
+    const bool ok = fetch(cards, count, imagePath, imageTitle, imageText, imageAt, error, sizeof(error));
     const std::uint32_t now = millis();
     portENTER_CRITICAL(&g_mux);
     if (generation == g_generation) {  // never publish cards fetched under settings that changed meanwhile
@@ -272,6 +278,13 @@ void fetchTask(void* arg) {
             g_extras.hasImage = imagePath[0] != 0;
             copyText(g_extras.imageTitle, sizeof(g_extras.imageTitle), imageTitle);
             copyText(g_extras.imageText, sizeof(g_extras.imageText), imageText);
+            g_extras.imageAt = imageAt;
+            // 12.4.3: a new picture is fetched now, in the background, so opening it is instant.
+            if (imagePath[0] && strcmp(imagePath, g_imageLoaded) != 0 && !g_extras.imageBusy) {
+                g_imagePending = true;
+                g_extras.imageBusy = true;
+                g_extras.imageStatus[0] = 0;
+            }
         } else {
             if (g_snap.failures < 8) ++g_snap.failures;
             copyText(g_snap.status, sizeof(g_snap.status), error);
@@ -385,8 +398,9 @@ void workshopLocalAiFeedClear() {
     ++g_generation;
     g_snap = WorkshopLocalAiFeedSnapshot{};
     copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are not set up.");
-    g_imagePath[0] = 0;
+    g_imagePath[0] = g_imageLoaded[0] = 0;
     g_extras.hasImage = false;
+    g_extras.imageReady = false;
     portEXIT_CRITICAL(&g_mux);
 }
 
@@ -406,6 +420,10 @@ bool workshopLocalAiFeedAsk(const char* question) {
 
 bool workshopLocalAiFeedFetchImage() {
     portENTER_CRITICAL(&g_mux);
+    if (g_extras.imageReady && !g_extras.imageBusy && !strcmp(g_imagePath, g_imageLoaded)) {  // already here
+        portEXIT_CRITICAL(&g_mux);
+        return true;
+    }
     const bool ok = g_snap.configured && g_extras.hasImage && !g_extras.imageBusy;
     if (ok) {
         g_imagePending = true;
