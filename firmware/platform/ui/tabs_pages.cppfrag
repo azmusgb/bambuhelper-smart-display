@@ -552,10 +552,58 @@ static void wtDrawCalm(const WtPrint& w) {
   g_dirty = false;
 }
 
+// 12.4.1: Home keeps the big print card for a print that is running, finished or failed (or an error); otherwise
+// it is Local AI's cards, a printer row and the timer.
+static bool wtHomeIdle(const WtPrint& w) {
+  return !(w.configured && w.online && (w.active || w.finished || w.failed || w.alerts));
+}
+
+static uint8_t g_wtHomeScroll = 0;
+static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v);  // Local AI tab rows (below)
+
+// The printer's row on idle Home: one line of state, opening Printer (or Local Portal before one is set up).
+static void wtHomePrinterRow(const WtPrint& w, WsRowView& v) {
+  wsView(v);
+  if (!w.configured) { strlcpy(v.value, "Not set up", sizeof(v.value)); v.valueColor = OS12V_MUTED; return; }
+  if (!w.online) { strlcpy(v.value, "Offline", sizeof(v.value)); v.valueColor = OS12V_AMBER; return; }
+  snprintf(v.value, sizeof(v.value), "%s · Ready", w.p && w.p->config.name[0] ? w.p->config.name : "Printer");
+  v.valueColor = OS12V_GREEN;
+}
+
+static void wtDrawHomeIdle(const WtPrint& w) {
+  const wsm::Screen s = wsScreen();
+  const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);
+  const uint8_t aiCount = wtAiCount();
+  g_wtHomeScroll = wtl::clampScroll(s, v, aiCount, g_wtHomeScroll);
+  const uint8_t maxS = wtl::maxScroll(s, v, aiCount);
+  tft.fillScreen(OS12V_BG);
+  wtDrawHeader(s, v.title, w.chip, w.color, maxS > 0, g_wtHomeScroll, maxS);
+  const uint8_t items = wtl::itemCount(v, aiCount);
+  const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
+  for (uint8_t i = 0; i < items; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, aiCount, g_wtHomeScroll, i);
+    if (r.empty()) continue;
+    const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
+    WsRowView row;
+    if (it.id == wtl::ItemId::HomeAi) {
+      tft.drawFastHLine(r.x + 12, r.bottom() - 1, r.w - 24, OS12V_LINE);
+      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_BG);
+      continue;
+    }
+    if (it.id == wtl::ItemId::HomePrinterRow) wtHomePrinterRow(w, row);
+    else wtWorkshopRow(it.id, inv, row);
+    wsDrawRowBody(s, it.rowKind, it.label, row, r);
+  }
+  uiBottomNav(0, nullptr);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
 static void wtDrawHome(bool full) {
   (void)full;
   const WtPrint w = wtPrint();
   if (wtCalmShown()) { wtDrawCalm(w); return; }
+  if (wtHomeIdle(w)) { wtDrawHomeIdle(w); return; }
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::Home);
   tft.fillScreen(OS12V_BG);
@@ -1121,6 +1169,36 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     return true;
   }
   g_ambientActive = false;
+  const WtPrint w = wtPrint();
+  if (wtHomeIdle(w)) {
+    const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);
+    const uint8_t aiCount = wtAiCount();
+    const wtl::Hit hi = wtl::hitTest(s, wtl::View::HomeIdle, aiCount, g_wtHomeScroll, x, y);
+    switch (hi.kind) {
+      case wtl::HitKind::Tab: wtTab(hi.index); return true;
+      case wtl::HitKind::ScrollUp:
+        if (g_wtHomeScroll > 0) { g_wtHomeScroll = wtl::clampScroll(s, v, aiCount, (int)g_wtHomeScroll - wsm::scrollStep(s)); wsClick(); }
+        return true;
+      case wtl::HitKind::ScrollDown:
+        if (g_wtHomeScroll < wtl::maxScroll(s, v, aiCount)) { g_wtHomeScroll = wtl::clampScroll(s, v, aiCount, (int)g_wtHomeScroll + wsm::scrollStep(s)); wsClick(); }
+        return true;
+      case wtl::HitKind::Item: break;
+      default: return true;
+    }
+    const wtl::ItemId id = wtl::item(v, hi.index, aiCount).id;
+    if (id == wtl::ItemId::HomeAi) { setPage(SCREEN_HUB_WORKSHOP); wsClick(); }  // the full list is on the Local AI tab
+    else if (id == wtl::ItemId::HomePrinterRow) {
+      if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
+      else wsOpenFrom(wsm::PageId::LocalPortal, 0);
+      wsClick();
+    } else if (id == wtl::ItemId::WsTimer) {
+      if (g_workshopTimerDone || workshopTimerActive()) clearWorkshopTimer();
+      else startWorkshopTimer(wtTimerLength());
+      wsClick();
+    }
+    g_dirty = true;
+    return true;
+  }
   const wtl::Hit h = wtl::hitTest(s, wtl::View::Home, 0, 0, x, y);
   if (h.kind == wtl::HitKind::Tab) { wtTab(h.index); return true; }
   if (h.kind != wtl::HitKind::Item) return true;
@@ -1327,6 +1405,7 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   const WtPrint w = wtPrint();
   if (cur == SCREEN_HUB_HOME) {
     if (wtCalmShown()) return false;
+    if (wtHomeIdle(w)) { id = wtl::View::HomeIdle; count = wtAiCount(); scroll = g_wtHomeScroll; }
   } else if (cur == SCREEN_HUB_PRINTER) {
     id = wtPrinterView();
     if (id == wtl::View::PrinterAms) {

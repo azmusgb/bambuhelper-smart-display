@@ -114,7 +114,8 @@ void checkTree(const char* o) {
     check(v.itemCount > 0, "view has items", v.title);
     check(!v.repeat || v.list, "repeating views are lists", v.title);
     check(!v.headRepeat || (v.list && !v.repeat), "head-repeating views are lists, and not also repeating", v.title);
-    if (v.headRepeat) check(v.items[0].id == ItemId::WsAiCard && v.tab == Tab::Workshop, "Local AI cards lead the third tab", v.title);
+    if (v.headRepeat) check((v.items[0].id == ItemId::WsAiCard && v.tab == Tab::Workshop) || (v.items[0].id == ItemId::HomeAi && v.tab == Tab::Home),
+                            "Local AI cards lead the third tab and idle Home", v.title);
     check(v.segments == (v.tab == Tab::Printer), "only Printer has segments", v.title);
     for (uint8_t j = 0; j < v.itemCount; ++j) {
       const ItemSpec& it = v.items[j];
@@ -129,6 +130,15 @@ void checkTree(const char* o) {
     check(itemCount(w, 0) == w.itemCount && itemCount(w, 3) == w.itemCount + 2 && itemCount(w, 99) == w.itemCount + kMaxAiRows - 1, "Local AI rows: at least one, at most six", o);
     check(item(w, 2, 3).id == ItemId::WsAiCard && item(w, 3, 3).id == w.items[1].id && item(w, itemCount(w, 3) - 1, 3).id == w.items[w.itemCount - 1].id, "cards, then the tools in order", o);
     check(headIndex(w, 2, 3) == 2 && headIndex(w, 3, 3) == 0, "card index", o);
+  }
+  // 12.4.1 idle Home: Local AI's cards, then the printer row and the timer; no print card.
+  {
+    const ViewSpec& h = view(View::HomeIdle);
+    check(h.tab == Tab::Home && h.headRepeat && h.list, "idle Home is a Home list led by Local AI", o);
+    bool card = false;
+    for (uint8_t j = 0; j < h.itemCount; ++j) card = card || h.items[j].kind == ItemKind::Card;
+    check(!card, "idle Home has no print card", o);
+    check(item(h, 1, 2).id == ItemId::HomeAi && item(h, 2, 2).id == ItemId::HomePrinterRow, "two cards, then the printer row", o);
   }
   // Stop exists exactly once, as the hold item on Control, after Pause.
   int holds = 0, primaries = 0;
