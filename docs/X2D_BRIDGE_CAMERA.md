@@ -93,6 +93,24 @@ bash tools/install_x2d_bridge_agent.sh --uninstall
 - It runs the bridge from this working copy, so checking out another branch changes the code it runs after the next restart.
 - Bambu Studio's live view still has to be open for frames. The bridge reconnects by itself when it reopens.
 
+### Or: on the Raspberry Pi, from the printer's LAN stream
+
+The Mac bridge needs Bambu Studio and only gets frames while the printer's cloud tunnel is up (Studio's Live View
+open); `IOTC_ER_DEVICE_OFFLINE` (-90) means it isn't. The Pi bridge skips Studio and the cloud: FFmpeg reads the
+printer's own stream, `rtsps://bblp:<access code>@<printer>:322/streaming/live/1`, and the bridge serves the same
+`/x2d/frame.jpg` on the Pi's port 8091. It keeps running when the Mac sleeps.
+
+1. At the printer's touchscreen, turn on **LAN Only Liveview** (in some firmware, "Local RTSP stream"). Port 322
+   answers only after this.
+2. From the Mac: `bash tools/install_x2d_bridge_pi.sh` (ffmpeg, the system user `x2dbridge`, the systemd unit
+   `x2d-camera-bridge`; it idles until step 3).
+3. `bash tools/install_x2d_bridge_pi.sh --set-code` asks for the 8-character access code shown on the printer and
+   saves the URL on the Pi in `/etc/x2d-bridge/rtsp-url` (mode 600). The bridge refuses a file anyone else can read,
+   and removes the code from FFmpeg's log lines.
+4. Build the display with `X2D_BRIDGE_URL=http://10.0.0.30:8091/x2d/frame.jpg` and install it.
+
+`--status` and `--uninstall` do what they say.
+
 ## 2. Validate the bridge
 
 ```bash
