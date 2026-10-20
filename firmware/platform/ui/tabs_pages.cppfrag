@@ -1134,7 +1134,9 @@ static void wtDrawAsk(const wsm::Screen& s) {
 // 1024 px JPEG takes about a second, so it is drawn again only when the download changes (or on a change of screen,
 // a capture, or a redraw request at most every 3 s).
 static void wtDrawImage(const wsm::Screen& s, bool full) {
-  const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+  WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+  // Opened before the first cards came (just after a restart): ask for the picture once they have.
+  if (!e.imageBusy && !e.imageReady && !e.imageStatus[0] && e.hasImage && workshopLocalAiFeedFetchImage()) e = workshopLocalAiFeedExtras();
   const uint32_t key = e.imageBusy ? kWtImageRedraw - 1 : e.imageSeq;
   const uint32_t now = millis();
   if (!full && key == g_wtImageDrawnKey && !(g_dirty && now - g_wtImageDrawnAt > 3000UL)) return;
