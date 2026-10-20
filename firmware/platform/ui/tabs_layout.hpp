@@ -52,6 +52,7 @@ enum class View : uint8_t {
   PrinterControl,
   WorkshopSetup,      // Filament Inventory not connected
   WorkshopInventory,  // Filament Inventory connected
+  HomeIdle,           // 12.4.1: Home while the printer has nothing to show (no big print card)
   Count
 };
 
@@ -68,7 +69,7 @@ enum class ItemKind : uint8_t {
 enum class ItemId : uint8_t {
   None = 0,
   // Home
-  HomeCard, HomeTemps, HomeExtra,
+  HomeCard, HomeTemps, HomeExtra, HomeAi, HomePrinterRow,
   // Printer > Status
   PrinterCard, PrinterTemps, PrinterDetail,
   // Printer > AMS (one row per tray, repeated)
@@ -150,6 +151,14 @@ static const ItemSpec kWorkshopInventoryItems[] = {
   {ItemId::WsNote, ItemKind::Row, RowKind::Info, false, "Note"},
 };
 
+// 12.4.1: Home while the printer is idle, offline or not set up: Local AI's cards, then one row for the printer
+// and the workshop timer. The big print card is only for a print that is running, finished or failed.
+static const ItemSpec kHomeIdleItems[] = {
+  {ItemId::HomeAi, ItemKind::Row, RowKind::Info, false, "Local AI"},
+  {ItemId::HomePrinterRow, ItemKind::Row, RowKind::Nav, false, "Printer"},
+  {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
+};
+
 static const ViewSpec kViews[] = {
   {View::Home, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeItems), false},
   {View::PrinterStatus, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterStatusItems), false},
@@ -157,6 +166,7 @@ static const ViewSpec kViews[] = {
   {View::PrinterControl, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterControlItems), false},
   {View::WorkshopSetup, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopSetupItems), true},
   {View::WorkshopInventory, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopInventoryItems), true},
+  {View::HomeIdle, Tab::Home, false, true, false, "Home", WT_ITEMS(kHomeIdleItems), true},
 };
 
 #undef WT_ITEMS
