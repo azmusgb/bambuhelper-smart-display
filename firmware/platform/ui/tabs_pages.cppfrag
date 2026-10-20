@@ -1555,6 +1555,13 @@ static bool wtShowPrinterView(const char* name) {
       if (name[12] == '-') strlcpy(g_wtPairCode, name + 13, sizeof(g_wtPairCode));
       for (const char* c = g_wtPairCode; *c; ++c) if (*c < '0' || *c > '9') { g_wtPairCode[0] = 0; return false; }
       g_wtAiOverlay = 4;
+      // "localai-pair-123456-go" also presses Pair (the signed-in portal's test of the whole pairing).
+      if (strlen(g_wtPairCode) == 6 && !strcmp(name + 19, "-go")) {
+        char address[16];
+        wtPairAddress(address, sizeof(address));
+        if (!workshopLocalAiFeedPair(address, g_wtPairCode)) return false;
+        g_wtPairCode[0] = 0;
+      }
     } else if (strcmp(name, "localai-approvals") == 0) {  // 12.6
       workshopLocalAiFeedRefreshApprovals();
       g_wtAiOverlay = 3;
