@@ -76,7 +76,7 @@ enum class ItemId : uint8_t {
   // Printer > Control
   ControlPrimary, ControlLight, ControlPower, ControlStop,
   // Workshop
-  WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
+  WsAiCard, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
   WsTimer, WsTimerLength, WsNote,
   Count
 };
@@ -98,14 +98,16 @@ struct ViewSpec {
   const char* title;
   const ItemSpec* items;
   uint8_t itemCount;
+  bool headRepeat;  // 12.4.0: items[0] repeated for a runtime count (at least once), then items[1..] (Local AI cards)
 };
 
 #define WT_ITEMS(name) name, static_cast<uint8_t>(sizeof(name) / sizeof(name[0]))
 
+// 12.4.0: Local AI first, then the printer.
 static const ItemSpec kHomeItems[] = {
+  {ItemId::HomeExtra, ItemKind::Row, RowKind::Nav, false, "Local AI"},  // the workshop timer while it runs
   {ItemId::HomeCard, ItemKind::Card, RowKind::Info, true, "Print"},
   {ItemId::HomeTemps, ItemKind::Temps, RowKind::Info, false, "Temperatures"},
-  {ItemId::HomeExtra, ItemKind::Row, RowKind::Nav, false, "Filament"},
 };
 
 static const ItemSpec kPrinterStatusItems[] = {
@@ -125,7 +127,10 @@ static const ItemSpec kPrinterControlItems[] = {
   {ItemId::ControlStop, ItemKind::Hold, RowKind::Action, false, "Stop print"},
 };
 
+// 12.4.0: the third tab is Local AI. Its cards come first (one row each, at least one: All clear or why there
+// are none), then the workshop tools that used to be the whole tab.
 static const ItemSpec kWorkshopSetupItems[] = {
+  {ItemId::WsAiCard, ItemKind::Row, RowKind::Info, false, "Local AI"},
   {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
   {ItemId::WsHowTo, ItemKind::Row, RowKind::Info, false, "How to connect"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
@@ -134,6 +139,7 @@ static const ItemSpec kWorkshopSetupItems[] = {
 };
 
 static const ItemSpec kWorkshopInventoryItems[] = {
+  {ItemId::WsAiCard, ItemKind::Row, RowKind::Info, false, "Local AI"},
   {ItemId::WsInventory, ItemKind::Row, RowKind::Action, false, "Filament inventory"},
   {ItemId::WsReadiness, ItemKind::Row, RowKind::Info, false, "Print readiness"},
   {ItemId::WsLoaded, ItemKind::Row, RowKind::Info, false, "Loaded spools"},
@@ -145,12 +151,12 @@ static const ItemSpec kWorkshopInventoryItems[] = {
 };
 
 static const ViewSpec kViews[] = {
-  {View::Home, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeItems)},
-  {View::PrinterStatus, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterStatusItems)},
-  {View::PrinterAms, Tab::Printer, true, true, true, "Printer", WT_ITEMS(kPrinterAmsItems)},
-  {View::PrinterControl, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterControlItems)},
-  {View::WorkshopSetup, Tab::Workshop, false, true, false, "Workshop", WT_ITEMS(kWorkshopSetupItems)},
-  {View::WorkshopInventory, Tab::Workshop, false, true, false, "Workshop", WT_ITEMS(kWorkshopInventoryItems)},
+  {View::Home, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeItems), false},
+  {View::PrinterStatus, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterStatusItems), false},
+  {View::PrinterAms, Tab::Printer, true, true, true, "Printer", WT_ITEMS(kPrinterAmsItems), false},
+  {View::PrinterControl, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterControlItems), false},
+  {View::WorkshopSetup, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopSetupItems), true},
+  {View::WorkshopInventory, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopInventoryItems), true},
 };
 
 #undef WT_ITEMS
@@ -163,15 +169,35 @@ inline const ViewSpec& view(View id) {
   return kViews[i < kViewCount ? i : 0];
 }
 
+// The most Local AI cards the tab lists (Local AI sends at most six; the image card is not shown).
+static const uint8_t kMaxAiRows = 6;
+
+// Rows a head-repeating view gives its first item: the runtime count, at least one, at most kMaxAiRows.
+inline uint8_t headRows(uint8_t runtimeCount) {
+  return runtimeCount == 0 ? 1 : (runtimeCount > kMaxAiRows ? kMaxAiRows : runtimeCount);
+}
+
 // Number of items shown. Repeating views take the runtime count.
 inline uint8_t itemCount(const ViewSpec& v, uint8_t runtimeCount) {
+  if (v.headRepeat) return static_cast<uint8_t>(headRows(runtimeCount) + v.itemCount - 1);
   if (!v.repeat) return v.itemCount;
   return runtimeCount > kMaxAmsRows ? kMaxAmsRows : runtimeCount;
 }
 
-inline const ItemSpec& item(const ViewSpec& v, uint8_t i) {
+inline const ItemSpec& item(const ViewSpec& v, uint8_t i, uint8_t runtimeCount = 0) {
+  if (v.headRepeat) {
+    const uint8_t heads = headRows(runtimeCount);
+    if (i < heads) return v.items[0];
+    const uint8_t k = static_cast<uint8_t>(i - heads + 1);
+    return v.items[k < v.itemCount ? k : 0];
+  }
   if (v.repeat || i >= v.itemCount) return v.items[0];
   return v.items[i];
+}
+
+// For a head-repeating view: which of the runtime rows item i is (0 for the first).
+inline uint8_t headIndex(const ViewSpec& v, uint8_t i, uint8_t runtimeCount) {
+  return v.headRepeat && i < headRows(runtimeCount) ? i : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +246,8 @@ inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t 
   if (!v.list) scroll = 0;
   if (i < scroll) return makeRect(0, 0, 0, 0);
   int slot = firstSlot(v);
-  for (uint8_t j = scroll; j < i; ++j) slot += itemSlots(s, v, item(v, j));
-  const int span = itemSlots(s, v, item(v, i));
+  for (uint8_t j = scroll; j < i; ++j) slot += itemSlots(s, v, item(v, j, runtimeCount));
+  const int span = itemSlots(s, v, item(v, i, runtimeCount));
   if (slot + span > more::visibleRows(s)) return makeRect(0, 0, 0, 0);
   const Rect top = more::slotRect(s, static_cast<uint8_t>(slot));
   return makeRect(top.x, top.y, top.w, span * more::kRowH);
@@ -405,7 +431,7 @@ inline Hit hitTest(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, int 
   for (uint8_t i = 0; i < n; ++i) {
     const Rect r = itemRect(s, v, runtimeCount, scroll, i);
     if (!r.contains(x, y)) continue;
-    const ItemSpec& it = item(v, i);
+    const ItemSpec& it = item(v, i, runtimeCount);
     switch (it.kind) {
       case ItemKind::Card:
         return it.tappable ? makeHit(HitKind::Item, i, Part::Whole) : makeHit(HitKind::None, i, Part::Whole);
@@ -456,7 +482,7 @@ inline Rect hitRect(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, con
     case HitKind::Item: {
       const Rect r = itemRect(s, v, runtimeCount, scroll, h.index);
       if (r.empty()) return r;
-      const ItemSpec& it = item(v, h.index);
+      const ItemSpec& it = item(v, h.index, runtimeCount);
       if (it.kind == ItemKind::Hold) return holdTouchRect(s, r);
       if (it.kind == ItemKind::Row && it.rowKind == RowKind::Stepper) return more::partTouchRect(s, r, it.rowKind, h.part);
       return r;
@@ -472,7 +498,7 @@ inline Rect holdItemTouch(Screen s, View id, uint8_t runtimeCount, uint8_t scrol
   const ViewSpec& v = view(id);
   const uint8_t n = itemCount(v, runtimeCount);
   for (uint8_t i = 0; i < n; ++i) {
-    const ItemSpec& it = item(v, i);
+    const ItemSpec& it = item(v, i, runtimeCount);
     if (it.id != which || it.kind != ItemKind::Hold) continue;
     const Rect r = itemRect(s, v, runtimeCount, scroll, i);
     if (r.empty()) return r;

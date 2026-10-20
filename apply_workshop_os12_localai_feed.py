@@ -74,6 +74,25 @@ static void handleWorkshopLocalAiClear() {
   sendWorkshopLocalAiStatus();
 }
 '''
+# 12.4.0: the third tab is Local AI (its cards, then the workshop tools). /hub/views keeps the "workshop" id.
+TAB_LABELS_OLD = 'static const char* labels[4]={"Home","Printer","Workshop","More"};'
+TAB_LABELS_NEW = 'static const char* labels[4]={"Home","Printer","Local AI","More"};'
+TAB_ICON_OLD = "hubV1125TabIcon(i,cx,r.y+16,fg);"
+TAB_ICON_NEW = "if(i==2)wtDrawAiTabIcon(cx,r.y+16,fg);else hubV1125TabIcon(i,cx,r.y+16,fg);"
+TAB_ICON_FN_ANCHOR = "static void uiBottomNav(uint8_t active,const char* nextPage) {"
+TAB_ICON_FN = """// 12.4.0 Local AI tab icon: a four-point sparkle with a small one beside it.
+static void wtDrawAiTabIcon(int16_t cx, int16_t cy, uint16_t c) {
+  tft.fillTriangle(cx - 2, cy, cx + 2, cy, cx, cy - 9, c);
+  tft.fillTriangle(cx - 2, cy, cx + 2, cy, cx, cy + 9, c);
+  tft.fillTriangle(cx, cy - 2, cx, cy + 2, cx - 9, cy, c);
+  tft.fillTriangle(cx, cy - 2, cx, cy + 2, cx + 9, cy, c);
+  tft.fillCircle(cx + 9, cy - 7, 2, c);
+}
+
+"""
+CATALOG_OLD = '{"id":"workshop","label":"Workshop","group":"Primary"}'
+CATALOG_NEW = '{"id":"workshop","label":"Local AI","group":"Primary"}'
+
 ROUTES = '''  SECURE_GET("/os12/localai/status", handleWorkshopLocalAiStatus);
   SECURE_POST("/os12/localai/config", handleWorkshopLocalAiConfig);
   SECURE_POST("/os12/localai/clear", handleWorkshopLocalAiClear);
@@ -108,7 +127,13 @@ def apply(repo: Path, source_root: Path) -> None:
     hub = load("src/smart_hub.cpp")
     if "wtDrawCalmAiCard(" not in hub:
         raise PatchError("the tabs overhaul with the 12.3.10 calm screen must be applied first")
-    staged[repo / "src/smart_hub.cpp"] = insert_after_once(hub, '#include "workshop_tabs_layout.hpp"\n', INCLUDE, "smart_hub include")
+    hub = insert_after_once(hub, '#include "workshop_tabs_layout.hpp"\n', INCLUDE, "smart_hub include")
+    if TAB_LABELS_NEW not in hub:
+        if hub.count(TAB_LABELS_OLD) != 1 or hub.count(TAB_ICON_OLD) != 1 or hub.count(TAB_ICON_FN_ANCHOR) != 1:
+            raise PatchError("tab bar anchors missing/non-unique")
+        hub = hub.replace(TAB_LABELS_OLD, TAB_LABELS_NEW, 1).replace(TAB_ICON_OLD, TAB_ICON_NEW, 1)
+        hub = hub.replace(TAB_ICON_FN_ANCHOR, TAB_ICON_FN + TAB_ICON_FN_ANCHOR, 1)
+    staged[repo / "src/smart_hub.cpp"] = hub
 
     main = load("src/main.cpp")
     main = insert_after_once(main, '#include "workshop_inventory_service.h"\n', INCLUDE, "main include")
@@ -124,6 +149,10 @@ def apply(repo: Path, source_root: Path) -> None:
             raise PatchError("web server init anchor missing/non-unique")
         web = web.replace(marker, HANDLERS + "\n" + marker, 1)
     web = insert_after_once(web, '  SECURE_POST("/os12/media/stop", handleWorkshopMediaStop);\n', ROUTES, "feed routes")
+    if CATALOG_NEW not in web:
+        if web.count(CATALOG_OLD) != 1:
+            raise PatchError("catalog workshop entry missing/non-unique")
+        web = web.replace(CATALOG_OLD, CATALOG_NEW, 1)
     staged[repo / "src/web_server.cpp"] = web
 
     for path, text in staged.items():

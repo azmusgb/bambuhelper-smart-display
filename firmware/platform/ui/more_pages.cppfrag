@@ -178,7 +178,7 @@ static void wsOpenCamera(uint8_t tab) {
 static uint8_t wsNavTab() { return g_wsReturnTab >= 0 ? (uint8_t)g_wsReturnTab : 3; }
 
 static const char* wsReturnLabel(uint8_t tab) {
-  static const char* kNames[3] = {"Home", "Printer", "Workshop"};
+  static const char* kNames[3] = {"Home", "Printer", "Local AI"};  // 12.4.0: the third tab is Local AI
   return kNames[tab < 3 ? tab : 0];
 }
 

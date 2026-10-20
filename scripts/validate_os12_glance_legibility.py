@@ -106,7 +106,8 @@ def validate_rows(hub: str) -> None:
     if hub.count('"%u°C"') < 4:
         raise ValidationError("cooldown and gauge scales must say °C")
     extra = block(hub, "static const char* wtHomeExtra(WsRowView& v)")
-    need(extra, 'strlcpy(v.value, "Not set up", sizeof(v.value));', "Home filament row: not set up")
+    # 12.4.0: Home's bottom row is Local AI's top card (filament moved to the Local AI tab).
+    need(extra, "wtAiCard(0)", "Home's bottom row shows Local AI")
     forbid(extra, "Not connected · set up in Workshop", "the 12.3.8 amber set-up line")
     stop = block(hub, "static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtControls& c)")
     forbid(stop, "OS12V_AMBER", "the Stop hint in amber")

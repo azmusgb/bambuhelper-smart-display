@@ -77,7 +77,7 @@ Rect drawnTarget(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, const H
   if (h.kind == HitKind::ScrollDown) return more::scrollDownRect(s);
   if (h.kind != HitKind::Item) return makeRect(0, 0, 0, 0);
   const Rect r = itemRect(s, v, n, scroll, h.index);
-  const ItemSpec& it = item(v, h.index);
+  const ItemSpec& it = item(v, h.index, n);
   if (it.kind == ItemKind::Hold) return holdTouchRect(s, r);
   if (it.kind == ItemKind::Row && it.rowKind == RowKind::Stepper) return more::partTouchRect(s, r, it.rowKind, h.part);
   return r;  // cards, primary buttons and rows are drawn over their whole rect
@@ -113,6 +113,8 @@ void checkTree(const char* o) {
     check(static_cast<uint8_t>(v.id) == i, "view table in id order", v.title, i);
     check(v.itemCount > 0, "view has items", v.title);
     check(!v.repeat || v.list, "repeating views are lists", v.title);
+    check(!v.headRepeat || (v.list && !v.repeat), "head-repeating views are lists, and not also repeating", v.title);
+    if (v.headRepeat) check(v.items[0].id == ItemId::WsAiCard && v.tab == Tab::Workshop, "Local AI cards lead the third tab", v.title);
     check(v.segments == (v.tab == Tab::Printer), "only Printer has segments", v.title);
     for (uint8_t j = 0; j < v.itemCount; ++j) {
       const ItemSpec& it = v.items[j];
@@ -120,6 +122,13 @@ void checkTree(const char* o) {
       if (v.list) check(it.kind == ItemKind::Row, "lists hold rows only", it.label);
       if (it.kind == ItemKind::Card && it.tappable) check(v.id == View::Home, "only the Home card is a button", it.label);
     }
+  }
+  // Head-repeat mapping: n cards, then the tools in order.
+  {
+    const ViewSpec& w = view(View::WorkshopSetup);
+    check(itemCount(w, 0) == w.itemCount && itemCount(w, 3) == w.itemCount + 2 && itemCount(w, 99) == w.itemCount + kMaxAiRows - 1, "Local AI rows: at least one, at most six", o);
+    check(item(w, 2, 3).id == ItemId::WsAiCard && item(w, 3, 3).id == w.items[1].id && item(w, itemCount(w, 3) - 1, 3).id == w.items[w.itemCount - 1].id, "cards, then the tools in order", o);
+    check(headIndex(w, 2, 3) == 2 && headIndex(w, 3, 3) == 0, "card index", o);
   }
   // Stop exists exactly once, as the hold item on Control, after Pause.
   int holds = 0, primaries = 0;
@@ -149,7 +158,7 @@ void checkTree(const char* o) {
 }
 
 void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i, const Rect& r, const char* o, int& controls) {
-  const ItemSpec& it = item(v, i);
+  const ItemSpec& it = item(v, i, n);
   char where[112];
   snprintf(where, sizeof(where), "%s / %s / %s / n=%u scroll=%u", o, v.title, it.label, (unsigned)n, (unsigned)scroll);
   check(r.h >= kMinTouch && r.h % more::kRowH == 0, "item is whole 44 px slots", where, r.h);
@@ -392,8 +401,8 @@ void checkInteractive() {
   }
   check(!itemInteractive(view(View::PrinterAms).items[0]), "AMS trays are read-only", "AMS");
   check(!itemInteractive(view(View::PrinterStatus).items[0]), "Printer status card is read-only", "Printer");
-  check(itemInteractive(view(View::Home).items[0]), "Home card opens Printer", "Home");
-  check(itemInteractive(view(View::Home).items[2]), "Home Filament row opens Workshop", "Home");
+  check(itemInteractive(view(View::Home).items[0]) && view(View::Home).items[0].id == ItemId::HomeExtra, "Home leads with the Local AI row, which opens the Local AI tab", "Home");
+  check(itemInteractive(view(View::Home).items[1]) && view(View::Home).items[1].id == ItemId::HomeCard, "Home card opens Printer", "Home");
 }
 
 // 12.3.9 running-print card: every part inside the card, apart, big enough.
@@ -401,7 +410,9 @@ void checkPrintCard(Screen s, const char* o) {
   const struct { View view; bool home; } cards[2] = {{View::Home, true}, {View::PrinterStatus, false}};
   for (int k = 0; k < 2; ++k) {
     const ViewSpec& v = view(cards[k].view);
-    const Rect card = itemRect(s, v, 0, 0, 0);
+    uint8_t cardIndex = 0;  // 12.4.0: Home's card follows its Local AI row
+    for (uint8_t j = 0; j < v.itemCount; ++j) if (v.items[j].kind == ItemKind::Card) { cardIndex = j; break; }
+    const Rect card = itemRect(s, v, 0, 0, cardIndex);
     const Rect surface = more::rowSurface(card);
     const PrintCardLayout c = printCardLayout(s, card, cards[k].home);
     char where[64];
@@ -466,6 +477,9 @@ int main() {
       const ViewSpec& v = kViews[i];
       if (v.repeat) {
         for (uint8_t n = 0; n <= kMaxAmsRows; ++n) checkView(screens[k], v, n, names[k], controls[k]);
+      } else if (v.headRepeat) {
+        // 12.4.0 Local AI tab: 0 cards (one "why not" row) up to more than the most it lists.
+        for (uint8_t n = 0; n <= kMaxAiRows + 2; ++n) checkView(screens[k], v, n, names[k], controls[k]);
       } else {
         checkView(screens[k], v, 0, names[k], controls[k]);
       }

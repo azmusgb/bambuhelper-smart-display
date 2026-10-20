@@ -115,7 +115,7 @@ def validate_home(hub: str, fragment: str) -> None:
     # Honest empty states.
     need(card, '"No printer set up"', "no-printer state")
     need(card, '"Printer offline"', "offline state")
-    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), '"Not set up"', "inventory empty state")
+    need(block(hub, "static workshop::localai::Card wtAiCard(uint8_t i)"), '"Not set up"', "Local AI empty state (12.4.0)")
     # Empty values draw nothing (the WS350 font shows the fitter's em dash as "|").
     need(block(hub, "static void wtTextOn("), "if (!wsm::drawsValueText(text)) return;", "empty card text draws nothing")
     need(block(hub, "static void wtText("), "wtTextOn(", "card text goes through the empty-value guard")

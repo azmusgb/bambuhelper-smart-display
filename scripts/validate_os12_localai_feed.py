@@ -86,6 +86,12 @@ def validate(repo: Path) -> None:
     card = block(hub, "static void wtDrawCalmAiCard(const wsm::Rect& r, const workshop::localai::Card& card)")
     for control in ("uiBottomNav(", "wsDrawRowBody(", "hubV1125Action(", "wsDrawChevronRight("):
         forbid(card, control, "the card is display only")
+    # 12.4.0: Local AI is the third tab, leads the calm screen and takes Home's bottom row.
+    need(hub, 'labels[4]={"Home","Printer","Local AI","More"}', "the third tab is Local AI")
+    need(web, '{"id":"workshop","label":"Local AI"', "the catalog names the third tab Local AI")
+    need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));", "Local AI's card leads the calm screen")
+    need(calm, "printerBusy", "the printer's line only while it is doing something")
+    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtAiCard(0)", "Home's bottom row is Local AI")
     print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card)")
 
 
