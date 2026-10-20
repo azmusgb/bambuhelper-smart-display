@@ -1229,7 +1229,7 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
       break;
     case wtl::ItemId::WsAsk:
       if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
-      strlcpy(v.value, "Needs, running, health", sizeof(v.value));
+      strlcpy(v.value, "Needs · today · weather…", sizeof(v.value));
       break;
     case wtl::ItemId::WsImage: {
       const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
