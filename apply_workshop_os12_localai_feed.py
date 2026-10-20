@@ -121,7 +121,7 @@ ROUTES = '''  SECURE_GET("/os12/localai/status", handleWorkshopLocalAiStatus);
 '''
 
 # 12.7: a Local AI panel in the Local Portal, beside the other Local AI keys: the link's state, pairing and unpairing.
-PORTAL_ANCHOR = '  <section class="os12-integration os12-code-token" aria-labelledby="codeTokenTitle">'
+PORTAL_ANCHOR = '  <section class="os12-integration" aria-labelledby="fiDeviceFeedTitle">'
 PORTAL_PANEL = '''  <section class="os12-integration os12-localai-link" aria-labelledby="localAiLinkTitle"><small>LOCAL AI</small><h3 id="localAiLinkTitle">Local AI on the display</h3><p>Local AI's cards, answers, pictures, messages and approvals come to the display over this link. To connect, open Local AI's Services, Workshop display, Pair display, and type its 6-digit code here or on the display (Local AI tab, Local AI connection).</p><div class="os12-contract-row"><span>Connection</span><strong id="localAiLinkState">Checking…</strong></div><div class="os12-contract-row"><span>Local AI</span><strong id="localAiLinkAddress">—</strong></div><div class="os12-contract-row"><span>Cards</span><strong id="localAiLinkCards">—</strong></div><div class="os12-contract-row"><span>Pictures · approvals</span><strong id="localAiLinkMore">—</strong></div><form class="os12-feed-actions" onsubmit="pairLocalAi(event)"><input id="localAiPairAddress" class="form-control" inputmode="decimal" autocomplete="off" placeholder="10.0.0.21" aria-label="Local AI address" style="max-width:10rem"><input id="localAiPairCode" class="form-control" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" aria-label="Pairing code" style="max-width:9rem"><button type="submit" class="btn btn-primary btn-sm" id="localAiPairButton">Pair</button><button type="button" class="btn btn-danger btn-sm" onclick="unpairLocalAi()">Unpair</button></form><p class="small text-dim" id="localAiLinkStatus" role="status" aria-live="polite"></p></section>
 '''
 PORTAL_JS = r'''
@@ -239,7 +239,7 @@ def apply(repo: Path, source_root: Path) -> None:
     pages = load("include/web_pages.h")
     if 'id="localAiLinkTitle"' not in pages:
         if pages.count(PORTAL_ANCHOR) != 1:
-            raise PatchError("Local Portal anchor (sign-in code access panel) missing/non-unique")
+            raise PatchError("Local Portal anchor (Filament Inventory feed panel) missing/non-unique")
         pages = pages.replace(PORTAL_ANCHOR, PORTAL_PANEL + PORTAL_ANCHOR, 1)
     staged[repo / "include/web_pages.h"] = pages
     app_js = load("web/app.js")
