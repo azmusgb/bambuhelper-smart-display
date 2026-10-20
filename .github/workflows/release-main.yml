@@ -45,10 +45,11 @@ jobs:
           import hashlib, json
           from pathlib import Path
           r = json.loads(Path('release.json').read_text())
-          assert r['release'] == 'production-workshop-os-12.4.4'
+          assert r['release'] == 'production-workshop-os-12.7.1'
           assert r['board']['id'] == 'ws_lcd_350'
-          assert set(r['profiles']) == {'workshop-os-12.4.4', 'workshop-os-v11.19.1', 'smart-home-v7.2'}
-          assert r['profiles']['workshop-os-12.4.4']['recommended'] is True
+          assert set(r['profiles']) == {'workshop-os-12.7.1', 'workshop-os-12.4.4', 'workshop-os-v11.19.1', 'smart-home-v7.2'}
+          assert r['profiles']['workshop-os-12.7.1']['recommended'] is True
+          assert r['profiles']['workshop-os-12.4.4']['recommended'] is False
           assert r['profiles']['workshop-os-v11.19.1']['recommended'] is False
           assert r['profiles']['smart-home-v7.2']['recommended'] is False
           for pid, p in r['profiles'].items():
@@ -67,7 +68,7 @@ jobs:
           stable = d['channels']['stable']
           assert stable['status'] == 'published'
           assert stable['release'] == r['release']
-          static = r['profiles']['workshop-os-12.4.4']
+          static = r['profiles']['workshop-os-12.7.1']
           assert stable['ota']['path'] == static['otaFile']
           assert stable['ota']['size'] == static['otaSize']
           assert stable['ota']['sha256'] == static['otaSha256']
@@ -95,14 +96,14 @@ jobs:
           assert d['rules']['verifySha256BeforeInstall'] is True
           assert d['rules']['fullFlashRequiresRecoveryFlow'] is True
 
-          assert len(list(Path('firmware').glob('*.bin'))) == 6
-          assert len(list((Path('dist') / 'firmware').glob('*.bin'))) == 6
+          assert len(list(Path('firmware').glob('*.bin'))) == 8
+          assert len(list((Path('dist') / 'firmware').glob('*.bin'))) == 8
           print('Accepted static installer + device update manifest integrity: PASS')
           PY
-          grep -Fq "EXPECTED_RELEASE='production-workshop-os-12.4.4'" app.js
-          grep -Fq "selectedProfile='workshop-os-12.4.4'" app.js
-          grep -Fq 'Workshop OS 12.4.4 — recommended' index.html
-          grep -Fq 'Workshop OS v11.19.1 — rollback' index.html
+          grep -Fq "EXPECTED_RELEASE='production-workshop-os-12.7.1'" app.js
+          grep -Fq "selectedProfile='workshop-os-12.7.1'" app.js
+          grep -Fq 'Workshop OS 12.7.1 — recommended' index.html
+          grep -Fq 'Workshop OS 12.4.4 — rollback' index.html
           grep -Fq 'Smart Home v7.2 — older rollback' index.html
-          grep -Fq 'Workshop OS 12.4.4 OTA' index.html
-          echo 'Workshop OS 12.4.4 static portal contract: PASS'
+          grep -Fq 'Workshop OS 12.7.1 OTA' index.html
+          echo 'Workshop OS 12.7.1 static portal contract: PASS'

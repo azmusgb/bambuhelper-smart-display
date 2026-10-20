@@ -7,20 +7,20 @@
   "channels": {
     "stable": {
       "status": "published",
-      "release": "production-workshop-os-12.4.4",
-      "version": "12.4.4",
-      "label": "Workshop OS 12.4.4",
+      "release": "production-workshop-os-12.7.1",
+      "version": "12.7.1",
+      "label": "Workshop OS 12.7.1",
       "acceptance": "unattended-device-acceptance-owner-waived-interactive-retest",
-      "sourceCommit": "1468a7d52e3bd95735cda3783bee544df43cfc5a",
+      "sourceCommit": "06a49e10acb938468751ec206efb3a53eacbd8f6",
       "ota": {
-        "path": "firmware/Workshop-OS-12.4.4-ws_lcd_350-OTA.bin",
-        "size": 2477872,
-        "sha256": "bbaf81e46a19670e53cc34b35c179c85fce261ade3cd0fa713074aab51682c3f"
+        "path": "firmware/Workshop-OS-12.7.1-ws_lcd_350-OTA.bin",
+        "size": 2503536,
+        "sha256": "cb0ea61e8ed66d3c69df4143e6c9d3b0aff0093f001235cf6735ceac40708741"
       },
       "fullFlash": {
-        "path": "firmware/Workshop-OS-12.4.4-ws_lcd_350-Full.bin",
-        "size": 2543408,
-        "sha256": "35a013a79449881c69aa53a3a6034a8ba81caa55902c9332e470876cd4050ec6",
+        "path": "firmware/Workshop-OS-12.7.1-ws_lcd_350-Full.bin",
+        "size": 2569072,
+        "sha256": "744b634ebf53c3ecefb037e1948e24d1eb0be9034ea95579d9830015e8fa43e6",
         "flashOffset": "0x0",
         "deviceInstallAllowed": false
       }
