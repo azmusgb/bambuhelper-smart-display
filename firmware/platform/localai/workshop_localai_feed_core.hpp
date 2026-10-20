@@ -174,7 +174,9 @@ static const size_t kMaxImageBytes = 600UL * 1024UL;
 static const size_t kImagePathLen = 256;
 inline bool validImagePath(const char* p) {
   static const char kPrefix[] = "/api/images/view?";
-  if (!p || strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 || strlen(p) >= kImagePathLen) return false;
+  static const char kPoster[] = "/api/display/poster?";  // 12.8: what Plex on the Pi is playing, through Local AI
+  if (!p || strlen(p) >= kImagePathLen) return false;
+  if (strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 && strncmp(p, kPoster, sizeof(kPoster) - 1) != 0) return false;
   for (const char* c = p; *c; ++c)
     if ((unsigned char)*c <= ' ' || (unsigned char)*c >= 127) return false;  // one request line: no spaces or CR/LF
   return true;

@@ -1875,6 +1875,7 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
     // 12.4.3: a card opens Ask with its question asked (Needs you -> what needs me, Working on -> what's running,
     // a watchdog finding -> is everything OK). Without cards, the row says why; Ask can't help then.
     const workshop::localai::Card c = wtAiCard(wtl::headIndex(v, h.index, aiCount));
+    if (!strcmp(c.kind, "playing") && workshopLocalAiFeedExtras().hasImage) { wtOpenImage(); wsClick(); return true; }  // 12.8: its poster
     if (!strcmp(c.kind, "status")) {
       if (!workshopLocalAiFeedSnapshot().configured) { wtOpenPair(); wsClick(); return true; }  // 12.7: not set up: pair
       wsToast(c.text);
