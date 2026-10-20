@@ -26,7 +26,13 @@ The cards are display only: tapping anywhere still just wakes the screen.
 
 ## Set up (once)
 
-On the Mac:
+**Since 12.7: pair.** In Local AI, open **Services › Workshop display › Pair display**; it shows a 6-digit code for
+10 minutes. Type it on the display (**Local AI tab › Local AI connection**) or in the Local Portal (**More › Local AI
+on the display**). The display reads Local AI's CA over plain HTTP, sends the code over HTTPS pinned to it, and saves
+the new display key with the CA. Pairing again replaces the key (the old one stops working at once); **Unpair** in the
+portal forgets it on the display.
+
+The Mac way, from before pairing, still works. On the Mac:
 
 1. In the LocalAI repo, run `host/workshop-display/set-key.sh`. It makes the display key in the Mac's login Keychain
    (`localai-display-key`) and registers its fingerprint with Local AI.
