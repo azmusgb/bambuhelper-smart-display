@@ -74,8 +74,7 @@ bool fetch(Card* cards, std::uint8_t& count, char* error, size_t errorLen) {
     IPAddress ip;
     if (!ip.fromString(address)) { copyText(error, errorLen, "Local AI's address is not valid."); return false; }
     WiFiClientSecure client;
-    client.setTimeout(8);  // seconds
-    client.setHandshakeTimeout(10);
+    client.setHandshakeTimeout(10);  // seconds
     if (!client.connect(ip, 443, name, ca, nullptr, nullptr)) {
         copyText(error, errorLen, "Local AI isn't answering, or its certificate didn't match.");
         memset(key, 0, sizeof(key));
@@ -85,6 +84,9 @@ bool fetch(Card* cards, std::uint8_t& count, char* error, size_t errorLen) {
                   "Accept: application/json\r\nX-LocalAI-Display-Key: %s\r\nConnection: close\r\n\r\n", name, key);
     memset(key, 0, sizeof(key));
 
+    // Wait for the first bytes of the answer (Stream reads give up after 1 s; Local AI may take longer to start).
+    const std::uint32_t sentAt = millis();
+    while (!client.available() && client.connected() && millis() - sentAt < 8000UL) delay(10);
     const String statusLine = client.readStringUntil('\n');
     int code = 0;
     if (statusLine.startsWith("HTTP/1.")) code = statusLine.substring(9, 12).toInt();
