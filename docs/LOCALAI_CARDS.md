@@ -66,6 +66,27 @@ The status route never sends the key or the CA back.
 
 For captures, `/hub/show calm` opens the calm screen when it is turned on.
 
+### 12.6: Local AI feed v2 on the display
+
+- **Live.** While nothing else waits, the display keeps a long poll open (`GET /api/display/events`, 30 s); news (a new
+  card, a message) comes in about 2 s. A question, a picture or an approval interrupts it at once. With an older Local
+  AI it falls back to the minute poll.
+- **Messages.** Local AI's messages (`POST /api/display/notify`, and the notification kinds picked in
+  `/api/display/alerts`) show as a banner over the header for 12 s (20 s when it needs you), with a chime when asked;
+  they wake the calm screen. A tap does the message's action: start the workshop timer, or open the Local AI tab, the
+  latest picture, the camera or the printer.
+- **Cards** carry the question a tap asks; finished work (`done`) and the fullest disk (`disk`) are new kinds.
+- **Ask** has six questions: Needs me?, Running?, All OK?, Today?, Next?, Weather?.
+- **Gallery.** Latest image shows the last 6 pictures: tap the left or right edge for the previous or next one.
+- **Approvals.** A row on the Local AI tab opens what waits. Approve and Reject show only where Local AI allows it from
+  the display (low risk by default; never code changes or deploys) and need a second tap within 4 s.
+- **Heartbeat.** Every 5 minutes the display tells Local AI its version, uptime, Wi-Fi and memory (`GET /api/watch`).
+- **Home after a print.** A finished print keeps the big card for 30 minutes, then Home goes back to Local AI with
+  "X2D · Finished 9:33 AM" on the printer row.
+
+Captures: `/hub/show localai-ask-<needs|running|health|today|next|weather>`, `localai-image[-<0-5>]`,
+`localai-approvals`.
+
 ## Code
 
 - `firmware/platform/localai/workshop_localai_feed_core.hpp`: the rules. Host-tested by
