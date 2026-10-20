@@ -14,10 +14,10 @@
     "acceptanceEvidence": "Exact-head CI + healthy WS350 read-only interrogation + complete 29-view credential-safe framebuffer capture"
   },
   "download": {
-    "channel": "production-workshop-os-v11.19.1",
-    "version": "11.19.1",
-    "rollbackVersion": "7.2",
-    "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
+    "channel": "production-workshop-os-12.4.4",
+    "version": "12.4.4",
+    "rollbackVersion": "11.19.1",
+    "note": "The installer and the device's Stable channel offer Workshop OS 12.4.4: the exact CI image of main 1468a7d, installed on the WS350 by OTA and passed by accept_os12_unattended.py on 20 Oct 2026 (the owner waived the interactive re-test). Workshop OS v11.19.1 is the immediate rollback; Smart Home v7.2 stays as the older one."
   },
   "candidate": {
     "version": "12.3.9",

@@ -191,8 +191,9 @@ def main() -> int:
     manifest = json.loads((source_root / "releases" / "device-update.json").read_text(encoding="utf-8"))
     stable = manifest["channels"]["stable"]
     candidate = manifest["channels"]["candidate"]
-    if stable["release"] != "production-workshop-os-v11.19.1":
-        raise SystemExit("stable channel changed during UI13 source work")
+    # Stable moved on to OS12 (12.4.4, 20 Oct 2026); this lineage only guards the published candidate below.
+    if not stable["release"].startswith("production-workshop-os-"):
+        raise SystemExit("stable channel must stay a production Workshop OS release")
     if candidate["release"] != "workshop-os-v11.26-ui11-cupertino" or candidate["version"] != "11.26":
         raise SystemExit("UI13 source work changed the published candidate")
     if candidate["ota"]["sha256"] != "ed96f780b58af2fd353f45a4df442abd27d5065c520dff757c346abddeac8fc2":
