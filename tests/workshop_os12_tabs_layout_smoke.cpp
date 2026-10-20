@@ -470,6 +470,21 @@ void checkDoneAt() {
 
 }  // namespace
 
+// 12.4.2: the Local AI tab's Ask overlay keeps its buttons and answer apart, inside the content area and clear of
+// the tab bar; Done is a full-height target in the header; the image fills the screen above its caption.
+void checkAiOverlays(Screen s, const char* o) {
+  check(askDoneTouch(s).contains(askDoneRect(s).x + 2, askDoneRect(s).y + 2) && askDoneTouch(s).h >= kMinTouch && inside(askDoneRect(s), askDoneTouch(s)),
+        "Done is in its touch area", o);
+  for (uint8_t i = 0; i < kAskCount; ++i) {
+    const Rect b = askButtonRect(s, i);
+    check(b.h >= kMinTouch && b.w >= 80 && inside(b, more::contentBand(s)), "ask button inside the content area", o, i);
+    if (i) check(askButtonRect(s, i - 1).right() < b.x, "ask buttons apart", o, i);
+    check(b.bottom() < askAnswerRect(s).y, "buttons above the answer", o, i);
+  }
+  check(inside(askAnswerRect(s), more::contentBand(s)) && askAnswerRect(s).h >= 120, "answer card fits four lines, above the tab bar", o, askAnswerRect(s).h);
+  check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
+}
+
 int main() {
   const Screen screens[2] = {more::makeScreen(480, 320), more::makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
@@ -483,6 +498,7 @@ int main() {
     checkStop(screens[k], names[k]);
     checkCalm(screens[k], names[k]);
     checkPrintCard(screens[k], names[k]);
+    checkAiOverlays(screens[k], names[k]);
     for (uint8_t i = 0; i < kViewCount; ++i) {
       const ViewSpec& v = kViews[i];
       if (v.repeat) {

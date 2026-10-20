@@ -77,7 +77,7 @@ enum class ItemId : uint8_t {
   // Printer > Control
   ControlPrimary, ControlLight, ControlPower, ControlStop,
   // Workshop
-  WsAiCard, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
+  WsAiCard, WsAsk, WsImage, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
   WsTimer, WsTimerLength, WsNote,
   Count
 };
@@ -132,6 +132,8 @@ static const ItemSpec kPrinterControlItems[] = {
 // are none), then the workshop tools that used to be the whole tab.
 static const ItemSpec kWorkshopSetupItems[] = {
   {ItemId::WsAiCard, ItemKind::Row, RowKind::Info, false, "Local AI"},
+  {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
+  {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
   {ItemId::WsHowTo, ItemKind::Row, RowKind::Info, false, "How to connect"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
@@ -141,6 +143,8 @@ static const ItemSpec kWorkshopSetupItems[] = {
 
 static const ItemSpec kWorkshopInventoryItems[] = {
   {ItemId::WsAiCard, ItemKind::Row, RowKind::Info, false, "Local AI"},
+  {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
+  {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsInventory, ItemKind::Row, RowKind::Action, false, "Filament inventory"},
   {ItemId::WsReadiness, ItemKind::Row, RowKind::Info, false, "Print readiness"},
   {ItemId::WsLoaded, ItemKind::Row, RowKind::Info, false, "Loaded spools"},
@@ -523,6 +527,27 @@ inline Rect holdItemTouch(Screen s, View id, uint8_t runtimeCount, uint8_t scrol
 
 inline Rect promptCancelRect(Screen s) { return more::dialogCancelRect(s); }
 inline Rect promptAllowRect(Screen s) { return more::dialogConfirmRect(s); }
+
+// ---------------------------------------------------------------------------
+// 12.4.2: Local AI tab overlays. Ask: the header with Done in the chip's place,
+// three question buttons, the answer card under them, the tab bar. Latest
+// image: the picture over the whole screen with a caption strip; a tap closes.
+// ---------------------------------------------------------------------------
+
+static const uint8_t kAskCount = 3;
+inline Rect askDoneRect(Screen s) { return more::chipRect(s); }
+inline Rect askDoneTouch(Screen s) { return makeRect(s.w - 124, 0, 124, more::kHeaderH); }
+inline Rect askButtonRect(Screen s, uint8_t i) {
+  const int gap = 8, w = (s.w - 2 * more::kMarginX - gap * (kAskCount - 1)) / kAskCount;
+  return makeRect(more::kMarginX + i * (w + gap), more::kHeaderH + 8, w, 48);
+}
+inline Rect askAnswerRect(Screen s) {
+  const int top = more::kHeaderH + 8 + 48 + 10;
+  return makeRect(more::kMarginX, top, s.w - 2 * more::kMarginX, s.h - more::kTabH - 6 - top);
+}
+static const int16_t kImageCaptionH = 30;
+inline Rect imageArea(Screen s) { return makeRect(0, 0, s.w, s.h - kImageCaptionH); }
+inline Rect imageCaption(Screen s) { return makeRect(0, s.h - kImageCaptionH, s.w, kImageCaptionH); }
 
 // ---------------------------------------------------------------------------
 // Clock text for "done at" (ETA): minutes from now in local time.

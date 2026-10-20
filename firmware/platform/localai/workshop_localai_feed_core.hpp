@@ -104,5 +104,53 @@ inline bool validTlsName(const char* s) {
   return dot;
 }
 
+// 12.4.2: the Local AI tab's ask buttons (GET /api/display/ask?q=...). Local AI answers in at most 200 characters.
+static const size_t kAnswerLen = 208;
+inline bool validQuestion(const char* q) {
+  return q && (!strcmp(q, "needs") || !strcmp(q, "running") || !strcmp(q, "health"));
+}
+
+// 12.4.2: the latest image. The display fetches only Local AI's own image route, as a JPEG of at most this size.
+static const size_t kMaxImageBytes = 600UL * 1024UL;
+static const size_t kImagePathLen = 256;
+inline bool validImagePath(const char* p) {
+  static const char kPrefix[] = "/api/images/view?";
+  if (!p || strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 || strlen(p) >= kImagePathLen) return false;
+  for (const char* c = p; *c; ++c)
+    if ((unsigned char)*c <= ' ' || (unsigned char)*c >= 127) return false;  // one request line: no spaces or CR/LF
+  return true;
+}
+
+// A baseline JPEG's size, from its SOF0 marker (progressive SOF2 is refused: the display's decoder can't draw it).
+inline bool jpegSize(const uint8_t* d, size_t n, uint16_t& w, uint16_t& h) {
+  if (!d || n < 4 || d[0] != 0xFF || d[1] != 0xD8) return false;
+  size_t i = 2;
+  while (i + 4 <= n) {
+    if (d[i] != 0xFF) return false;
+    const uint8_t m = d[i + 1];
+    if (m == 0xFF) { ++i; continue; }  // fill byte
+    const size_t len = ((size_t)d[i + 2] << 8) | d[i + 3];
+    if (len < 2) return false;
+    if (m == 0xC0 || m == 0xC1) {
+      if (i + 9 > n) return false;
+      h = (uint16_t)((d[i + 5] << 8) | d[i + 6]);
+      w = (uint16_t)((d[i + 7] << 8) | d[i + 8]);
+      return w && h;
+    }
+    if (m == 0xC2 || m == 0xDA || m == 0xD9) return false;  // progressive, or image data before any SOF
+    i += 2 + len;
+  }
+  return false;
+}
+
+// The scale that fits a w x h picture in areaW x areaH, never above 1 (a small picture is not blown up).
+inline float fitScale(uint16_t w, uint16_t h, int areaW, int areaH) {
+  if (!w || !h || areaW <= 0 || areaH <= 0) return 0.0f;
+  float s = (float)areaW / (float)w;
+  const float sh = (float)areaH / (float)h;
+  if (sh < s) s = sh;
+  return s > 1.0f ? 1.0f : s;
+}
+
 }  // namespace localai
 }  // namespace workshop

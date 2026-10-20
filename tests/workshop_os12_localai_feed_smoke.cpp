@@ -36,6 +36,25 @@ int main() {
   CHECK(validTlsName("localai.home.arpa"), "the certificate name");
   CHECK(!validTlsName("localhost") && !validTlsName("LocalAI.home.arpa") && !validTlsName("a b.c") && !validTlsName(".x.y") && !validTlsName(""), "names refused");
 
+  // 12.4.2: ask buttons and the latest image.
+  CHECK(validQuestion("needs") && validQuestion("running") && validQuestion("health"), "the three questions");
+  CHECK(!validQuestion("weather") && !validQuestion("") && !validQuestion(nullptr), "other questions refused");
+  CHECK(validImagePath("/api/images/view?filename=a.png&type=output&preview=jpeg%3B80"), "Local AI's image route");
+  CHECK(!validImagePath("/api/display/feed") && !validImagePath("https://x/api/images/view?a=1") && !validImagePath(nullptr), "other paths refused");
+  CHECK(!validImagePath("/api/images/view?a=1 HTTP/1.0\r\nX: y") && !validImagePath("/api/images/view?a=b c"), "no spaces or line breaks");
+  {
+    const uint8_t sof0[] = {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x02, 0x00, 0x04, 0x00, 0x03};
+    uint16_t w = 0, h = 0;
+    CHECK(jpegSize(sof0, sizeof(sof0), w, h) && w == 1024 && h == 512, "baseline size from SOF0 after APP0");
+    const uint8_t sof2[] = {0xFF, 0xD8, 0xFF, 0xC2, 0x00, 0x11, 0x08, 0x02, 0x00, 0x04, 0x00};
+    CHECK(!jpegSize(sof2, sizeof(sof2), w, h), "progressive refused");
+    const uint8_t png[] = {0x89, 'P', 'N', 'G', 0, 0, 0, 0};
+    CHECK(!jpegSize(png, sizeof(png), w, h) && !jpegSize(sof0, 12, w, h), "not a JPEG, or cut short");
+  }
+  CHECK(fitScale(1024, 1024, 480, 292) > 0.285f && fitScale(1024, 1024, 480, 292) < 0.286f, "fit by height");
+  CHECK(fitScale(1920, 1080, 480, 292) == 0.25f, "fit by width");
+  CHECK(fitScale(200, 100, 480, 292) == 1.0f && fitScale(0, 10, 480, 292) == 0.0f, "never upscaled; no size, no scale");
+
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }
