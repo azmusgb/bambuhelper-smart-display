@@ -8,6 +8,9 @@
 // 12.3.6: the tab bar's touch zone keeps a guard band below the content, the
 // pressed-highlight rectangle (hitRect) always contains the point that hit
 // it, and only interactive, enabled rows are drawn raised.
+// 12.3.9: Printer > Camera (the Video page in camera mode) has no control
+// row: its picture runs from the header to the tab bar, Pause is a header
+// button, and a full-screen scan proves only the tabs, Back and Pause react.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_more_layout_smoke.cpp -o /tmp/more-layout-smoke
 
@@ -326,6 +329,77 @@ void checkRowStyle() {
   }
 }
 
+// Printer > Camera (12.3.9): the picture gets the whole content band, Pause
+// sits in the header, and nothing else reacts.
+void checkCamera(Screen s, const char* o, int& controls) {
+  const PageId id = PageId::VideoTest;
+  const Rect video = cameraVideoRect(s), oldVideo = videoRect(s, id);
+  const Rect pause = cameraPauseRect(s), pauseDrawn = cameraPauseDrawRect(s), title = cameraTitleRect(s);
+  check(inside(video, contentBand(s)), "camera picture inside the content band", o);
+  check(video.y == kHeaderH && video.bottom() == tabBand(s).y && video.w == s.w, "camera picture from header to tab bar", o,
+        video.y, video.bottom());
+  check(video.h >= oldVideo.h + kRowH, "camera picture gains the control row", o, video.h, oldVideo.h);
+  check(!intersects(video, tabBand(s)) && !intersects(video, headerBand(s)), "camera picture clear of header and tab bar", o);
+  // A 16:9 frame fitted into each area: the camera one is larger.
+  const int oldW = oldVideo.h * 16 / 9 < oldVideo.w ? oldVideo.h * 16 / 9 : oldVideo.w;
+  const int newW = video.h * 16 / 9 < video.w ? video.h * 16 / 9 : video.w;
+  check(s.landscape() ? newW > oldW : newW >= oldW, "a 16:9 frame shows larger on the camera page", o, oldW, newW);
+  if (s.landscape()) check(video.w == 480 && video.h == 222 && newW == 394, "landscape camera picture 480x222", o, video.h, newW);
+  check(videoRect(s, id, true).y == video.y && videoRect(s, id, true).h == video.h, "videoRect(camera) is the camera band", o);
+  check(videoRect(s, id, false).h == oldVideo.h, "videoRect(not camera) keeps the control row", o);
+  check(videoRect(s, PageId::Display, true).h == videoRect(s, PageId::Display).h, "camera mode only changes Video pages", o);
+  check(bigEnough(pause) && inside(pause, headerBand(s)), "camera Pause at least 44x44 in the header", o, pause.w, pause.h);
+  check(inside(pauseDrawn, pause), "camera Pause drawn inside its touch area", o);
+  check(!intersects(pause, backRect(s)) && !intersects(title, pause) && !intersects(title, backRect(s)),
+        "camera header parts apart", o);
+  check(title.w >= 96, "camera title has room", o, title.w);
+  for (int dialog = 0; dialog < 2; ++dialog) {
+    for (uint8_t t = 0; t < kTabCount; ++t) {
+      int xs[5], ys[5];
+      probePoints(tabTouchRect(s, t), xs, ys);
+      for (int i = 0; i < 5; ++i)
+        check(sameHit(hitTest(s, id, 0, dialog != 0, xs[i], ys[i], true), makeHit(HitKind::Tab, t, Part::Whole)),
+              "camera: tab routes", o, xs[i], ys[i]);
+      ++controls;
+      const Rect drawn = tabRect(s, t);
+      for (int gy = drawn.y; gy < drawn.y + kTabGuard; ++gy)
+        check(hitTest(s, id, 0, dialog != 0, drawn.x + drawn.w / 2, gy, true).kind == HitKind::None, "camera: guard band dead", o, gy);
+    }
+    int xs[5], ys[5];
+    probePoints(backRect(s), xs, ys);
+    for (int i = 0; i < 5; ++i)
+      check(sameHit(hitTest(s, id, 0, dialog != 0, xs[i], ys[i], true), makeHit(HitKind::Back, 0, Part::Whole)),
+            "camera: Back routes", o, xs[i], ys[i]);
+    probePoints(pause, xs, ys);
+    for (int i = 0; i < 5; ++i)
+      check(sameHit(hitTest(s, id, 0, dialog != 0, xs[i], ys[i], true),
+                    dialog ? makeHit(HitKind::None, 0, Part::Whole) : makeHit(HitKind::HeaderAction, 0, Part::Whole)),
+            "camera: Pause routes (not under a dialog)", o, xs[i], ys[i]);
+    controls += 2;
+  }
+  // Full-screen scan: only tabs, Back and Pause react; the picture never does.
+  int stray = 0, sx = -1, sy = -1;
+  for (int y = 0; y < s.h; ++y)
+    for (int x = 0; x < s.w; ++x) {
+      const Hit h = hitTest(s, id, 0, false, x, y, true);
+      if (h.kind == HitKind::None) continue;
+      const bool ok = (h.kind == HitKind::Tab || h.kind == HitKind::Back || h.kind == HitKind::HeaderAction) &&
+                      hitRect(s, id, 0, h).contains(x, y) && !video.contains(x, y) &&
+                      (!tabBand(s).contains(x, y) || h.kind == HitKind::Tab);
+      if (!ok) { if (!stray) { sx = x; sy = y; } ++stray; }
+    }
+  check(stray == 0, "camera: every tap lands on a drawn control, none on the picture", o, sx, sy);
+  // Camera mode changes nothing on the other pages.
+  for (uint8_t i = 0; i < kPageCount; ++i) {
+    if (kPages[i].layout == PageLayout::Video) continue;
+    int diff = 0;
+    for (int y = 0; y < s.h; y += 3)
+      for (int x = 0; x < s.w; x += 5)
+        if (!sameHit(hitTest(s, kPages[i].id, 0, false, x, y), hitTest(s, kPages[i].id, 0, false, x, y, true))) ++diff;
+    check(diff == 0, "camera flag ignored on non-video pages", kPages[i].title, diff);
+  }
+}
+
 }  // namespace
 
 void checkValueText() {
@@ -346,6 +420,7 @@ int main() {
     checkPages(screens[i], names[i], controls[i]);
     checkHitRects(screens[i], names[i]);
     checkMediaRows(screens[i], names[i]);
+    checkCamera(screens[i], names[i], controls[i]);
   }
   if (g_failures) {
     printf("more-layout smoke: %d of %d checks failed\n", g_failures, g_checks);
