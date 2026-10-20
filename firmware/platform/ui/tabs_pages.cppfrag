@@ -1043,6 +1043,14 @@ static bool wtShowPrinterView(const char* name) {
   // "printer-camera" opens Printer > Camera, so capture and acceptance
   // scripts can reach it without a touch (it is a page, not a /hub/views id).
   if (name && strcmp(name, "printer-camera") == 0) { wsOpenCamera(1); return true; }
+  // "calm" opens the calm idle screen (when it is turned on), so captures can check it without waiting for idle.
+  if (name && strcmp(name, "calm") == 0) {
+    if (!g_ambientEnabled) return false;
+    setPage(SCREEN_HUB_HOME);
+    g_ambientActive = true;
+    g_dirty = true;
+    return true;
+  }
   wtl::View v = wtl::View::PrinterStatus;
   if (!wtl::printerViewFromId(name, v)) return false;
   g_printerMode = wtl::segmentOf(v);
