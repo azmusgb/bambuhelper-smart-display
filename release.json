@@ -1,6 +1,6 @@
 {
-  "release": "production-workshop-os-v11.19.1",
-  "sourceCommit": "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4",
+  "release": "production-workshop-os-12.4.4",
+  "sourceCommit": "1468a7d52e3bd95735cda3783bee544df43cfc5a",
   "board": {
     "id": "ws_lcd_350",
     "name": "Waveshare ESP32-S3-Touch-LCD-3.5",
@@ -11,9 +11,21 @@
     "psram": "8 MB"
   },
   "profiles": {
-    "workshop-os-v11.19.1": {
-      "label": "Workshop OS v11.19.1 — recommended",
+    "workshop-os-12.4.4": {
+      "label": "Workshop OS 12.4.4 — recommended",
       "recommended": true,
+      "version": "Workshop OS 12.4.4",
+      "file": "firmware/Workshop-OS-12.4.4-ws_lcd_350-Full.bin",
+      "size": 2543408,
+      "sha256": "35a013a79449881c69aa53a3a6034a8ba81caa55902c9332e470876cd4050ec6",
+      "otaFile": "firmware/Workshop-OS-12.4.4-ws_lcd_350-OTA.bin",
+      "otaSize": 2477872,
+      "otaSha256": "bbaf81e46a19670e53cc34b35c179c85fce261ade3cd0fa713074aab51682c3f",
+      "description": "Current Workshop OS: Home, Printer, Local AI and More tabs, Local AI cards, ask buttons and latest image. The OTA image is the exact CI build that passed unattended acceptance on the WS350 (20 Oct 2026). The Full image wraps that same application with the bootloader and partition table for a fresh USB install."
+    },
+    "workshop-os-v11.19.1": {
+      "label": "Workshop OS v11.19.1 (rollback)",
+      "recommended": false,
       "version": "BambuHelper v3.8.1 + Workshop OS v11.19.1 Physical Fit RC2",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-Full.bin",
       "size": 2360944,
@@ -21,10 +33,10 @@
       "otaFile": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-OTA.bin",
       "otaSize": 2295408,
       "otaSha256": "f0fc73b65eb39623b5f8e6f8f7564d844d06021ebcb7887d5fc67a6df9e2073e",
-      "description": "Physically accepted Workshop OS download channel."
+      "description": "Previous installer release, kept as the immediate rollback."
     },
     "smart-home-v7.2": {
-      "label": "Smart Home v7.2 (rollback)",
+      "label": "Smart Home v7.2 (older rollback)",
       "recommended": false,
       "version": "BambuHelper v3.8.1 + Smart Home v7.2 Display Stability",
       "file": "firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.2-validated.bin",
