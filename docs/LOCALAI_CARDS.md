@@ -1,7 +1,7 @@
 # Local AI cards on the calm screen
 
-Since Workshop OS 12.3.10, the calm idle screen shows one card from Local AI under its status line, and a different
-card every 8 seconds:
+Since Workshop OS 12.3.10, the calm idle screen (what the display shows while nobody is using it, printing or not)
+shows one card from Local AI under its print status line, and a different card every 8 seconds:
 
 | Card | When |
 |---|---|
@@ -29,7 +29,8 @@ On the Mac:
    and Local AI's CA (`~/.claude/localai-chat/localai-ca.crt`), then waits for the first card:
    `PASS: 1 card(s): All clear: Nothing needs you right now.`
 
-`--clear` forgets the settings on the display. Settings live in NVS (`ws12-lai`), so updates keep them.
+`--clear` forgets the settings on the display. Since 12.3.12 the settings live in `/localai.json` on LittleFS (the
+flash's spare `spiffs` partition), so restarts and updates keep them. The WS350's NVS has no room for the CA.
 
 ## How it works
 
@@ -72,3 +73,4 @@ Read `GET /os12/localai/status` and look at `status`:
 | "Local AI isn't answering, or its certificate didn't match." | Local AI is down (the watchdog's Mac notice says so), or the CA changed: re-run `configure_localai_feed.py`. |
 | "Local AI turned the display key down (HTTP 401/403)." | Local AI's sign-in is enforced and the key fingerprint is missing: re-run `set-key.sh`, then `configure_localai_feed.py`. |
 | "Waiting for Wi-Fi." | The display is off Wi-Fi. |
+| "Local AI cards are not set up." after a restart | Firmware 12.3.10 or 12.3.11 kept the settings only until a restart: update to 12.3.12, then re-run `configure_localai_feed.py`. |
