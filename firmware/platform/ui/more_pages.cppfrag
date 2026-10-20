@@ -65,6 +65,9 @@ static bool g_wsVideoStartFailed = false;
 // returns to Printer.
 static bool g_wsCameraMode = false;
 static const char kWsCameraSource[] = "printer-camera";
+// 12.3.9: the page is shown as Printer > Camera (no control row; Pause in
+// the header; the picture runs to the tab bar).
+static bool wsCameraView(wsm::PageId id) { return g_wsCameraMode && id == wsm::PageId::VideoTest; }
 
 static bool wsVideoSessionActive() {
   const workshop::media::SessionState s = workshopMediaSnapshot().runtime.session;
@@ -231,7 +234,7 @@ static WsPlug wsPlug() {
 }
 
 static const char* wsPlugReason(const WsPlug& p) {
-  if (!p.mapped) return "No smart plug for this printer";
+  if (!p.mapped) return "No smart plug";
   if (!p.hasAddress) return "Set up in Local Portal";
   if (!p.on) return "Smart plug is off";
   return nullptr;
@@ -369,7 +372,7 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       v.on = buzzerSettings.bedCooldownAlert;
       break;
     case R::CooldownTemp:
-      snprintf(v.value, sizeof(v.value), "%u C", (unsigned)buzzerSettings.bedCooldownThresholdC);
+      snprintf(v.value, sizeof(v.value), "%u°C", (unsigned)buzzerSettings.bedCooldownThresholdC);
       v.valueColor = OS12V_TEXT;
       break;
     case R::PlugPoll:
@@ -661,9 +664,9 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       wsColorText(v.value, sizeof(v.value), hubSelectedGaugeColors()->value);
       v.valueColor = OS12V_TEXT;
       break;
-    case R::NozzleScale: snprintf(v.value, sizeof(v.value), "%u C", (unsigned)dispSettings.nozzleScaleMax); v.valueColor = OS12V_TEXT; break;
-    case R::BedScale: snprintf(v.value, sizeof(v.value), "%u C", (unsigned)dispSettings.bedScaleMax); v.valueColor = OS12V_TEXT; break;
-    case R::ChamberScale: snprintf(v.value, sizeof(v.value), "%u C", (unsigned)dispSettings.chamberScaleMax); v.valueColor = OS12V_TEXT; break;
+    case R::NozzleScale: snprintf(v.value, sizeof(v.value), "%u°C", (unsigned)dispSettings.nozzleScaleMax); v.valueColor = OS12V_TEXT; break;
+    case R::BedScale: snprintf(v.value, sizeof(v.value), "%u°C", (unsigned)dispSettings.bedScaleMax); v.valueColor = OS12V_TEXT; break;
+    case R::ChamberScale: snprintf(v.value, sizeof(v.value), "%u°C", (unsigned)dispSettings.chamberScaleMax); v.valueColor = OS12V_TEXT; break;
     case R::PowerScale: snprintf(v.value, sizeof(v.value), "%u W", (unsigned)dispSettings.powerScaleW); v.valueColor = OS12V_TEXT; break;
     case R::Smoothing: {
       static const char* kModes[] = {"Off", "Slow", "Normal", "Fast"};
@@ -1313,6 +1316,13 @@ static FontID wsFitFont(const char* text, int16_t w, FontID preferred, FontID fa
   return tft.textWidth(text) <= w ? preferred : fallback;
 }
 
+// 12.3.9: row values, reasons and button labels are 14 px when they fit in
+// their slot, 10 px only when they do not (12.3.8 drew all of them in 10 px,
+// too small to read at arm's length).
+static FontID wsValueFont(const char* text, int16_t w) {
+  return (text && text[0]) ? wsFitFont(text, w, FONT_BODY, FONT_SMALL) : FONT_SMALL;
+}
+
 static void wsDrawChevronLeft(int16_t cx, int16_t cy, uint16_t c) {
   tft.drawLine(cx + 3, cy - 6, cx - 3, cy, c);
   tft.drawLine(cx - 3, cy, cx + 3, cy + 6, c);
@@ -1324,6 +1334,8 @@ static void wsDrawChevronRight(int16_t cx, int16_t cy, uint16_t c) {
   tft.drawLine(cx - 3, cy - 5, cx + 2, cy, c);
   tft.drawLine(cx + 2, cy, cx - 3, cy + 5, c);
 }
+
+static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bool primary, uint16_t rowBg);
 
 static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
   const bool scrolls = wsm::pageScrolls(s, p.id);
@@ -1337,15 +1349,23 @@ static void wsDrawHeader(const wsm::Screen& s, const wsm::PageSpec& p) {
   } else {
     tft.fillRoundRect(OS12V_INSET, 12, 4, 20, 2, OS12V_ACCENT);
   }
-  const wsm::Rect title = wsm::titleRect(s, p.level == 0, scrolls);
+  // 12.3.9: Printer > Camera has a Pause button on the right of the header.
+  const bool camera = wsCameraView(p.id);
+  const wsm::Rect title = camera ? wsm::cameraTitleRect(s) : wsm::titleRect(s, p.level == 0, scrolls);
   const int16_t titleX = p.level == 0 ? title.x + 10 : title.x + 6;
   if (wsToastActive()) {
-    uiDrawFit(g_wsToast, titleX, title.y + title.h / 2, title.right() - titleX, FONT_SMALL, ML_DATUM, OS12V_AMBER, OS12V_BG);
+    const int16_t toastW = title.right() - titleX;
+    uiDrawFit(g_wsToast, titleX, title.y + title.h / 2, toastW, wsFitFont(g_wsToast, toastW, FONT_BODY, FONT_SMALL), ML_DATUM,
+              OS12V_AMBER, OS12V_BG);
   } else {
     const char* pageTitle = (g_wsCameraMode && p.id == wsm::PageId::VideoTest) ? "Camera" : p.title;
     uiDrawFit(pageTitle, titleX, title.y + title.h / 2, title.right() - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
   }
-  if (scrolls) {
+  if (camera) {
+    WsRowView v;
+    wsRowView(wsm::RowId::VideoPause, v);
+    wsDrawButton(wsm::cameraPauseDrawRect(s), v.button ? v.button : "Pause", v.enabled, false, OS12V_BG);
+  } else if (scrolls) {
     const uint8_t maxS = wsm::maxScroll(s, p.id);
     const wsm::Rect up = wsm::scrollUpRect(s), down = wsm::scrollDownRect(s);
     const bool canUp = g_wsScroll > 0, canDown = g_wsScroll < maxS;
@@ -1382,7 +1402,7 @@ static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bo
     tft.fillRoundRect(r.x, r.y, r.w, r.h, 10, bg);
     tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, primary ? OS12V_ACCENT : OS12V_LINE);
   }
-  uiDrawFit(label, r.x + r.w / 2, r.y + r.h / 2, r.w - 12, FONT_SMALL, MC_DATUM, fg, bg);
+  uiDrawFit(label, r.x + r.w / 2, r.y + r.h / 2, r.w - 12, wsValueFont(label, r.w - 12), MC_DATUM, fg, bg);
 }
 
 // Every value slot of a row goes through here. An empty value draws nothing
@@ -1434,12 +1454,14 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
     labelW = valueSlot.x - 8 - label.x;
   uiDrawFit(labelText, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
             (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, bg);
-  const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_AMBER;
+  // 12.3.9: a disabled control's reason ("Set up in Local Portal") is not a
+  // warning; amber and red stay for real problems.
+  const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_MUTED;
 
   switch (kind) {
     case wsm::RowKind::Info:
     case wsm::RowKind::Nav:
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
       if (kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
       break;
     case wsm::RowKind::Code:
@@ -1449,7 +1471,7 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
       break;
     case wsm::RowKind::Toggle: {
       const wsm::Rect sw = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
       const bool on = v.enabled && v.on;
       if (!v.enabled) {
         // Disabled: an empty outline, no knob (an "off" switch has a knob).
@@ -1457,7 +1479,9 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
         break;
       }
       tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_SURFACE2);
-      tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_LINE);
+      // 12.3.9: an off switch keeps a visible track (the line colour is
+      // 1.1:1 on the row, so only the knob showed).
+      tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_MUTED);
       const int16_t d = sw.h - 8;
       const int16_t cx = on ? sw.right() - 4 - d / 2 : sw.x + 4 + d / 2;
       tft.fillCircle(cx, sw.y + sw.h / 2, d / 2, on ? OS12V_BG : OS12V_MUTED);
@@ -1468,7 +1492,8 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
       const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
       if (!v.enabled) {
         // Disabled: no "-" / "+"; the reason uses the whole control area.
-        wsDrawRowValue(value, plus.right(), mid, plus.right() - minus.x, FONT_SMALL, MR_DATUM, valueColor, bg);
+        wsDrawRowValue(value, plus.right(), mid, plus.right() - minus.x, wsValueFont(value, plus.right() - minus.x), MR_DATUM,
+                       valueColor, bg);
         break;
       }
       for (uint8_t i = 0; i < 2; ++i) {
@@ -1480,22 +1505,23 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
         if (i == 1) tft.fillRect(cx - 1, cy - 7, 3, 15, OS12V_ACCENT);
       }
       const wsm::Rect valueRect = wsm::stepperValueRect(s, row);
-      wsDrawRowValue(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, FONT_SMALL, MC_DATUM, valueColor, bg);
+      wsDrawRowValue(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, wsValueFont(value, valueRect.w - 4), MC_DATUM,
+                     valueColor, bg);
       break;
     }
     case wsm::RowKind::Action: {
       if (v.meter >= 0 && v.enabled) {
         wsDrawMeter(valueSlot, mid, (uint8_t)v.meter, bg);
         const int16_t textR = valueSlot.right() - (valueSlot.w < 96 ? valueSlot.w : 96) - 6;
-        wsDrawRowValue(value, textR, mid, textR - valueSlot.x, FONT_SMALL, MR_DATUM, valueColor, bg);
+        wsDrawRowValue(value, textR, mid, textR - valueSlot.x, wsValueFont(value, textR - valueSlot.x), MR_DATUM, valueColor, bg);
       } else {
-        wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
+        wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
       }
       wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false, bg);
       break;
     }
     case wsm::RowKind::Action2: {
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, FONT_SMALL, MR_DATUM, valueColor, bg);
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
       wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false, bg);
       wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false, bg);
       break;
@@ -1648,7 +1674,7 @@ static void wsDrawScrollbar(const wsm::Screen& s, const wsm::PageSpec& p) {
 
 // Video area when no video is running (and in framebuffer captures).
 static void wsDrawVideoIdle(const wsm::Screen& s) {
-  const wsm::Rect v = wsm::videoRect(s, wsm::PageId::VideoTest);
+  const wsm::Rect v = wsm::videoRect(s, wsm::PageId::VideoTest, g_wsCameraMode);
   tft.fillRect(v.x, v.y, v.w, v.h, TFT_BLACK);
   const bool running = wsVideoSessionActive();
   const char* headline = running ? "Video playing" : (g_wsVideoStartFailed ? "Video could not start" : "Video is not running");
@@ -1662,6 +1688,7 @@ static void wsDrawVideoIdle(const wsm::Screen& s) {
 }
 
 static void wsDrawVideoControls(const wsm::Screen& s, const wsm::PageSpec& p) {
+  if (wsCameraView(p.id)) return;  // 12.3.9: the camera's Pause is in the header
   for (uint8_t r = 0; r < p.rowCount; ++r) {
     const wsm::Rect row = wsm::rowRect(s, p.id, 0, r);
     if (!row.empty()) wsDrawRow(s, p.rows[r], row);
@@ -1678,7 +1705,7 @@ static void wsMoreDraw(bool full) {
     // only when it changes, straight to the panel (smartHubDraw skips the
     // frame buffer while wsVideoDirect()).
     if (!g_wsVideoChromeDrawn || g_dirty || full) {
-      const wsm::Rect v = wsm::videoRect(s, p.id);
+      const wsm::Rect v = wsm::videoRect(s, p.id, wsCameraView(p.id));
       if (!g_wsVideoAreaCleared) { tft.fillRect(v.x, v.y, v.w, v.h, TFT_BLACK); g_wsVideoAreaCleared = true; }
       tft.fillRect(0, 0, s.w, v.y, OS12V_BG);
       tft.fillRect(0, v.bottom(), s.w, s.h - v.bottom(), OS12V_BG);
@@ -1766,11 +1793,19 @@ static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
   if (g_rotationPreviewMode) return wsRotationPreviewTouch(x, y, longPress);
   const wsm::Screen s = wsScreen();
   const wsm::PageSpec& p = wsm::page(g_wsPage);
-  const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y);
+  const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y, wsCameraView(p.id));
   switch (h.kind) {
     case wsm::HitKind::Tab:
       wsTab(h.index);
       return true;
+    case wsm::HitKind::HeaderAction: {
+      // Printer > Camera: Pause / Resume in the header (12.3.9).
+      WsRowView v;
+      wsRowView(wsm::RowId::VideoPause, v);
+      if (!v.enabled) { if (v.reason) wsToast(v.reason); return true; }
+      wsRowTap(wsm::RowId::VideoPause, wsm::Part::Whole);
+      return true;
+    }
     case wsm::HitKind::Back:
       if (g_wsDialog != WsDialog::None) g_wsDialog = WsDialog::None;
       else if (g_wsReturnTab >= 0 && g_wsCameraMode) wsTab((uint8_t)g_wsReturnTab);
@@ -1890,9 +1925,15 @@ static bool wsMorePressRect(int16_t x, int16_t y, wsm::Rect& out) {
   if (g_rotationPreviewMode) return false;
   const wsm::Screen s = wsScreen();
   const wsm::PageSpec& p = wsm::page(g_wsPage);
-  const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y);
+  const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y, wsCameraView(p.id));
   switch (h.kind) {
     case wsm::HitKind::None: return false;
+    case wsm::HitKind::HeaderAction: {
+      WsRowView v;
+      wsRowView(wsm::RowId::VideoPause, v);
+      if (!v.enabled) return false;
+      break;
+    }
     case wsm::HitKind::ScrollUp: if (g_wsScroll == 0) return false; break;
     case wsm::HitKind::ScrollDown: if (g_wsScroll >= wsm::maxScroll(s, p.id)) return false; break;
     case wsm::HitKind::Row: {

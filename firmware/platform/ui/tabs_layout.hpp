@@ -22,6 +22,11 @@
 // - (12.3.6) the tab bar touch zone keeps the More guard band (tabTouchRect),
 //   only interactive items are drawn raised (itemInteractive), and hitRect()
 //   gives the rectangle the pressed highlight outlines.
+// - (12.3.9) while a print runs, the Home and Printer status cards share one
+//   layout (printCardLayout): the percentage in the 48 px numeric font, time
+//   left and the done-at time beside it, the progress bar, one detail line.
+//   The done-at time is fixed when the printer's estimate changes (DoneAt),
+//   so every screen shows the same time and it does not tick.
 
 #include <stdio.h>
 
@@ -300,6 +305,62 @@ inline Rect holdTouchRect(Screen s, const Rect& row) {
 
 // Card chevron (drawn on tappable cards so the target is visible).
 inline int cardChevronX(const Rect& card) { return card.right() - 16; }
+
+// Print status card while a print runs (12.3.9). Home's card (three slots,
+// tappable, with a chevron) also has the printer and job names on top;
+// Printer > Status (two slots in landscape) has the job name as its detail
+// line. The parts are laid out in an 88 px block (Printer) or a 132 px block
+// (Home), centred in taller cards.
+struct PrintCardLayout {
+  Rect names;    // Home only: printer name (10 px) over the job name (14 px)
+  Rect percent;  // the digits in the 48 px numeric font, then "%"
+  Rect left;     // "12h 53m left" (19 px), or "Paused"
+  Rect doneAt;   // "Done 9:09 AM" (14 px)
+  Rect bar;      // progress bar
+  Rect detail;   // Home: layer, or the first error; Printer: the job name
+};
+
+static const int16_t kPercentW = 116;  // "100" in font 6 (3 x 27 px) and "%" in 19 px
+static const int16_t kPercentH = 40;   // font 6 digits are 36 px above the baseline
+static const int16_t kProgressH = 10;
+
+inline PrintCardLayout printCardLayout(Screen s, const Rect& card, bool home) {
+  (void)s;
+  PrintCardLayout c;
+  const int x = card.x + 18;
+  const int w = card.w - 18 - (home ? 34 : 18);  // Home leaves room for the chevron
+  const int block = home ? 132 : 88;
+  const int y = card.y + (card.h > block ? (card.h - block) / 2 : 0);
+  const int top = home ? 42 : 4;
+  const int colX = x + kPercentW + 8, colW = x + w - colX;
+  c.names = home ? makeRect(x, y + 5, w, 34) : makeRect(0, 0, 0, 0);
+  c.percent = makeRect(x, y + top, kPercentW, kPercentH + 6);
+  c.left = makeRect(colX, y + top + 2, colW, 22);
+  c.doneAt = makeRect(colX, y + top + 26, colW, 18);
+  c.bar = makeRect(x, y + top + kPercentH + 12, w, kProgressH);
+  c.detail = makeRect(x, c.bar.bottom() + 4, w, 16);
+  return c;
+}
+
+// One done-at time for every screen (12.3.9). The printer reports whole
+// minutes left; recomputing now + minutes on every frame made the time jump
+// by a minute whenever the seconds wrapped, and Home and Printer could show
+// different times. The time is fixed when the estimate changes, and again
+// only if it falls more than two minutes behind (a stalled estimate).
+struct DoneAt {
+  uint16_t minutes;  // the estimate the time was fixed for; 0 = none
+  long epoch;        // the fixed done-at time (seconds)
+};
+
+inline long doneAtEpoch(DoneAt& d, uint16_t minutesLeft, long now) {
+  if (!minutesLeft) { d.minutes = 0; d.epoch = 0; return 0; }
+  const long fresh = now + static_cast<long>(minutesLeft) * 60L;
+  if (d.minutes != minutesLeft || d.epoch <= 0 || fresh - d.epoch > 120L || d.epoch - fresh > 120L) {
+    d.minutes = minutesLeft;
+    d.epoch = fresh;
+  }
+  return d.epoch;
+}
 
 // Header: title on the left, chip or scroll buttons on the right (as More).
 inline Rect titleRect(Screen s, bool scrollButtons) { return more::titleRect(s, true, scrollButtons); }

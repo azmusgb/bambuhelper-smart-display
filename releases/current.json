@@ -20,21 +20,21 @@
     "note": "Accepted source is v11.22. The static installer remains intentionally conservative at physically accepted v11.19.1 with Smart Home v7.2 rollback until a separate binary-channel promotion is completed."
   },
   "candidate": {
-    "version": "12.3.8",
-    "branch": "fix/ws350-review-fixes-12-3-8",
-    "name": "Workshop OS 12.3.8 Review Fixes",
-    "purpose": "Fixes confirmed in the review of 12.3.6. Sign-in: POST /login checks the browser's Origin like every other mutation (the sign-in page now sends its own), and the sign-in code key route has its own lock-out that counts only a well-formed wrong wsc_ key, so no web page or LAN client can lock the owner out of sign-in. Touchscreen: Local AI's Allow and Cancel answer only a press that went down on the button at least 500 ms after the prompt appeared, and each Local AI request is refused (409) while the other one's prompt is up. A press acts only on the control it went down on, the touch-down outline follows the finger and is cleared on every path that ends a press. Audio: the unused /audio/mic/echo route is removed, the microphone meter removes the ADC's DC offset, and the recording buffer is never freed while the audio task is using it. Tooling: the stale setup-python check is fixed and runs in CI.",
-    "pullRequest": 197,
+    "version": "12.3.9",
+    "branch": "fix/ws350-glance-legibility-12-3-9",
+    "name": "Workshop OS 12.3.9 Glance and Legibility",
+    "purpose": "Touchscreen fixes from a UX critique of the 12.3.8 device captures, judged at arm's length. While a print runs, Home and Printer > Status show the percentage in a 48 px font with time left and the done-at time beside it, in one layout for both cards. The done-at time is fixed when the printer's estimate changes, so every screen shows the same time and it no longer ticks. Row values, stepper values, button labels and toasts are 14 px when they fit (10 px before), and the calm idle status line is 19 px. A not-set-up reason is grey instead of amber, an off switch keeps a visible outline, the smart-plug reason fits ('No smart plug') and temperatures say °C. Printer > Camera drops its control row: the picture runs from the header to the tab bar (a 16:9 frame at 394x222 instead of 314x177) and Pause/Resume is a header button. Re-test: scripts/accept_os12_retest_12_3_9.py.",
+    "pullRequest": 198,
     "status": "physical-acceptance-required",
     "exactHeadCi": "required",
     "physicalAcceptance": "required"
   },
   "mainState": {
-    "version": "12.3.7",
-    "commit": "fba92a7680ac0de717b5ed8510252d9e9f08f83f",
-    "name": "Workshop OS 12.3.7 Printer Camera",
-    "originatingBranch": "feat/printer-camera-segment",
-    "originatingPullRequest": 195,
+    "version": "12.3.8",
+    "commit": "ffebf46263b367932e479024dca94564c39f3717",
+    "name": "Workshop OS 12.3.8 Review Fixes",
+    "originatingBranch": "fix/ws350-review-fixes-12-3-8",
+    "originatingPullRequest": 197,
     "includedPullRequests": [
       178,
       181,
@@ -51,19 +51,21 @@
       193,
       194,
       195,
-      196
+      196,
+      197
     ],
     "includedPullRequestNotes": {
       "181": "#181's squash also carries #180's 12.3.3 changes (calm idle screen on the tabs design system, Printer segment view ids); #180 itself was closed without merging.",
       "194": "12.3.6 WS350 touch and audio fixes from the 12.3.5 physical walk (main d24347a).",
       "195": "12.3.7 Printer > Camera, merged on top of 12.3.6 (main 5a206a0).",
-      "196": "/hub/show printer-camera opens Printer > Camera (12.3.7 tooling id, main fba92a7)."
+      "196": "/hub/show printer-camera opens Printer > Camera (12.3.7 tooling id, main fba92a7).",
+      "197": "12.3.8 fixes from the 12.3.6 review, merged on top of 12.3.7 (main ffebf46)."
     },
     "status": "merged-unaccepted",
     "exactHeadCi": "passed",
-    "mainArtifact": "os12-ux-ws350-fba92a7680ac0de717b5ed8510252d9e9f08f83f",
-    "mainCiRun": 39338893230,
-    "mainFirmwareSha256": "584a1b1ffb5868be4ada2072e1be4571329c20976177e0dbaaa1aced67c6d583",
+    "mainArtifact": "os12-ux-ws350-ffebf46263b367932e479024dca94564c39f3717",
+    "mainCiRun": 39340041154,
+    "mainFirmwareSha256": "b2e74b607ddf65766354fda59ecf21f0efe488e4a0b7e2705dcc23eee098e8e1",
     "physicalInstall": "not-run",
     "ownerReview": "not-run",
     "unattendedAcceptance": "not-run",
@@ -99,8 +101,8 @@
       "recordedAt": "2026-10-19T17:53:12Z",
       "evidence": "unattended.json and automatic-validation.json (20-view catalog, 19/19 distinct view hashes)"
     },
-    "note": "main fba92a7 is 12.3.7: 12.3.6 (d24347a, #194) plus #195 Printer > Camera (5a206a0) and #196 (/hub/show printer-camera). 12.3.7 has passed exact-head CI; its exact CI image has not been installed, and no review or test of it is recorded here (see deviceNow). The WS350 runs the exact PR #194 CI artifact 5012332 (same source tree as main d24347a; same size, 2,409,376 B, and 102 bytes differ: the embedded source SHA and the image checksum), installed by signed-in OTA. The owner re-tested the 12.3.5 physical failures on it and every item passed. The unattended acceptance script last passed on 12.3.5 main 17108d1, not on 12.3.6 or 12.3.7. Sensory physical acceptance of the whole device and a recovery round-trip have not been recorded, so physical acceptance stays pending and nothing is promoted. testedCandidateCommit/testedFirmwareSha256 name the build that is on the device, for the recovery round-trip.",
-    "deviceNow": "After the 12.3.6 re-test, another session USB-flashed the WS350 with a 12.3.7 development build (5a206a0 plus #196 and the X2D overlays), NVS untouched. That build is not a CI candidate and is not recorded as tested here."
+    "note": "main ffebf46 is 12.3.8: 12.3.7 (fba92a7: 12.3.6 d24347a, #195 Printer > Camera and #196 /hub/show printer-camera) plus #197, the fixes from the 12.3.6 review. 12.3.8 has passed exact-head CI (run 39340041154). Its exact CI image is not recorded as installed here. The installed build recorded here is still the exact PR #194 CI artifact 5012332 (12.3.6, same source tree as main d24347a), on which the owner re-tested the 12.3.5 physical failures and every item passed. The unattended acceptance script last passed on 12.3.5 main 17108d1. Sensory physical acceptance of the whole device and a recovery round-trip have not been recorded, so physical acceptance stays pending and nothing is promoted. testedCandidateCommit/testedFirmwareSha256 name the recorded installed build, for the recovery round-trip.",
+    "deviceNow": "Framebuffer captures taken on 19 Oct 2026 show the WS350 running Workshop OS 12.3.8 (Updates & About). Which 12.3.8 image was installed is not recorded here, so it is not a recorded candidate."
   },
   "validation": {
     "acceptedSource": {

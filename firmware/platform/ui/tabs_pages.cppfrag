@@ -85,8 +85,18 @@ static bool wtClockOf(char* out, size_t len, time_t at) {
   return true;
 }
 
-static bool wtClockIn(char* out, size_t len, uint32_t seconds) {
-  return wtClockOf(out, len, time(nullptr) + (time_t)seconds);
+// 12.3.9: one done-at time for Home, Printer and the calm screen, fixed when
+// the printer's estimate changes (wtl::doneAtEpoch), so the screens agree and
+// the time does not tick. Empty while paused or without an estimate.
+static wtl::DoneAt g_wtDoneAt = {0, 0};
+
+static bool wtDoneAtText(const WtPrint& w, char* out, size_t len) {
+  out[0] = 0;
+  if (!w.s || !w.active || !w.online || w.paused || !w.s->remainingMinutes) return false;
+  const time_t now = time(nullptr);
+  if (now < 1700000000) return false;
+  const long at = wtl::doneAtEpoch(g_wtDoneAt, w.s->remainingMinutes, (long)now);
+  return at > 0 && wtClockOf(out, len, (time_t)at);
 }
 
 // Text with an explicit background; an empty value draws nothing (the text
@@ -145,7 +155,8 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
   const wsm::Rect t = wtl::titleRect(s, scrollButtons);
   const int16_t titleX = t.x + 10;
   if (wsToastActive()) {
-    uiDrawFit(g_wsToast, titleX, t.y + t.h / 2, t.right() - titleX, FONT_SMALL, ML_DATUM, OS12V_AMBER, OS12V_BG);
+    uiDrawFit(g_wsToast, titleX, t.y + t.h / 2, t.right() - titleX, wsFitFont(g_wsToast, t.right() - titleX, FONT_BODY, FONT_SMALL),
+              ML_DATUM, OS12V_AMBER, OS12V_BG);
   } else {
     const int16_t right = (chip && !scrollButtons) ? wsm::chipRect(s).x - 8 : t.right();
     uiDrawFit(title, titleX, t.y + t.h / 2, right - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
@@ -186,6 +197,45 @@ static void wtDrawProgress(int16_t x, int16_t y, int16_t w, uint8_t pct, uint16_
   const int16_t fw = (int16_t)((int32_t)w * pct / 100);
   if (fw >= 10) tft.fillRoundRect(x, y, fw, 10, 5, color);
   else if (fw > 0) tft.fillRect(x + 1, y + 2, fw, 6, color);
+}
+
+// 12.3.9: the percentage in the 48 px numeric font (font 6, digits only),
+// then "%" in 19 px on the digits' baseline.
+static void wtDrawBigPercent(const wsm::Rect& r, uint8_t pct, uint16_t color, uint16_t bg) {
+  char digits[4];
+  snprintf(digits, sizeof(digits), "%u", (unsigned)(pct > 100 ? 100 : pct));
+  // setFont() does not track the numeric fonts: drop to FONT_NONE first so
+  // the next setFont() call loads its font again (as the calm clock does).
+  setFont(tft, FONT_NONE);
+  tft.setTextFont(6);
+  tft.setTextSize(1);
+  const int16_t dw = (int16_t)tft.textWidth(digits);
+  const int16_t y = (int16_t)(r.y + 3);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(color, bg);
+  tft.drawString(digits, r.x, y);
+  // Font 6 digits are 36 px tall from the top of the line.
+  uiDrawFit("%", (int16_t)(r.x + dw + 3), (int16_t)(y + 40), (int16_t)(r.w - dw - 3), FONT_LARGE, BL_DATUM, color, bg);
+}
+
+// 12.3.9: what a card shows while a print runs, on Home and Printer > Status
+// (wtl::printCardLayout): big percentage, time left and the done-at time
+// beside it, the progress bar, and the detail line drawn by the caller.
+static void wtDrawRunningPrint(const wtl::PrintCardLayout& L, const WtPrint& w) {
+  const BambuState& st = *w.s;
+  const uint16_t tone = w.paused ? OS12V_AMBER : OS12V_TEXT;
+  wtDrawBigPercent(L.percent, st.progress, tone, OS12V_SURFACE2);
+  char dur[16], left[24], done[24], line[32];
+  wtDurationText(dur, sizeof(dur), st.remainingMinutes);
+  if (w.paused) strlcpy(left, "Paused", sizeof(left));
+  else if (dur[0]) snprintf(left, sizeof(left), "%s left", dur);
+  else left[0] = 0;
+  wtText(left, L.left.x, L.left.y, L.left.w, wsFitFont(left, L.left.w, FONT_LARGE, FONT_BODY), TL_DATUM, tone);
+  if (wtDoneAtText(w, done, sizeof(done))) {
+    snprintf(line, sizeof(line), "Done %s", done);
+    wtText(line, L.doneAt.x, L.doneAt.y, L.doneAt.w, FONT_BODY, TL_DATUM, OS12V_TEXT);
+  }
+  wtDrawProgress(L.bar.x, L.bar.y, L.bar.w, st.progress, w.paused ? OS12V_AMBER : OS12V_ACCENT);
 }
 
 // Temperatures: one strip of three cells in landscape, three plain rows in
@@ -235,7 +285,6 @@ static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPri
 
 // What the Home card shows; also the text a capture reviewer reads.
 static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
-  (void)s;
   wtDrawCardSurface(r, w.color);
   const int16_t x = r.x + 18, textW = r.w - 18 - 34;
   const uint16_t bg = OS12V_SURFACE2;
@@ -248,35 +297,24 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
     return;
   }
 
-  uiDrawFit(wtPrinterName(w), x, r.y + 10, textW, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
   const BambuState& st = *w.s;
   if (w.active && w.online) {
+    // 12.3.9: percentage in 48 px, time left and the done-at time beside it.
+    const wtl::PrintCardLayout L = wtl::printCardLayout(s, r, true);
+    uiDrawFit(wtPrinterName(w), L.names.x, L.names.y, L.names.w, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
     const char* job = jobDisplayName(st);
-    uiDrawFit(job && job[0] ? job : "Print in progress", x, r.y + 27, textW, FONT_BODY, TL_DATUM, OS12V_TEXT, bg);
-    char pct[8], left[24], dur[16];
-    snprintf(pct, sizeof(pct), "%u%%", (unsigned)st.progress);
-    wtDurationText(dur, sizeof(dur), st.remainingMinutes);
-    if (dur[0]) snprintf(left, sizeof(left), "%s left", dur);
-    else left[0] = 0;
-    uiDrawFit(pct, x, r.y + 50, 110, FONT_XLARGE, TL_DATUM, w.paused ? OS12V_AMBER : OS12V_TEXT, bg);
-    wtText(w.paused ? "Paused" : left, x + textW, r.y + 52, textW - 120, FONT_LARGE, TR_DATUM,
-           w.paused ? OS12V_AMBER : OS12V_TEXT);
-    wtDrawProgress(x, r.y + 86, textW, st.progress, w.paused ? OS12V_AMBER : OS12V_ACCENT);
-    char done[24], line[64];
+    uiDrawFit(job && job[0] ? job : "Print in progress", L.names.x, L.names.y + 15, L.names.w, FONT_BODY, TL_DATUM, OS12V_TEXT, bg);
+    wtDrawRunningPrint(L, w);
+    char line[64];
     line[0] = 0;
-    if (!w.paused && st.remainingMinutes && wtClockIn(done, sizeof(done), (uint32_t)st.remainingMinutes * 60UL))
-      snprintf(line, sizeof(line), "Done %s", done);
-    if (st.totalLayers) {
-      char layer[32];
-      snprintf(layer, sizeof(layer), "Layer %u of %u", (unsigned)st.layerNum, (unsigned)st.totalLayers);
-      if (line[0]) strlcat(line, "  ·  ", sizeof(line));
-      strlcat(line, layer, sizeof(line));
-    }
+    if (st.totalLayers) snprintf(line, sizeof(line), "Layer %u of %u", (unsigned)st.layerNum, (unsigned)st.totalLayers);
     uint16_t lineColor = OS12V_MUTED;
     if (w.alerts) { wtAlertText(w, line, sizeof(line)); lineColor = OS12V_RED; }
-    wtText(line, x, r.y + 106, textW, FONT_BODY, TL_DATUM, lineColor);
+    wtText(line, L.detail.x, L.detail.y, L.detail.w, FONT_BODY, TL_DATUM, lineColor);
     return;
   }
+
+  uiDrawFit(wtPrinterName(w), x, r.y + 10, textW, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
 
   const char* headline = "Ready for the next print";
   uint16_t headColor = OS12V_TEXT;
@@ -322,8 +360,9 @@ static const char* wtHomeExtra(WsRowView& v) {
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   using workshop::platform::Freshness;
   if (!inv.credentialConfigured) {
-    strlcpy(v.value, "Not connected · set up in Workshop", sizeof(v.value));
-    v.valueColor = OS12V_AMBER;
+    // 12.3.9: an optional feature that is not set up is not a warning.
+    strlcpy(v.value, "Not set up", sizeof(v.value));
+    v.valueColor = OS12V_MUTED;
   } else if (inv.busy) {
     strlcpy(v.value, "Refreshing", sizeof(v.value));
   } else if (!inv.state.available) {
@@ -367,8 +406,7 @@ static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneL
     c.state = w.paused ? wtl::CalmState::Paused : wtl::CalmState::Printing;
     c.percent = w.s->progress;
     color = w.paused ? OS12V_AMBER : OS12V_ACCENT;
-    if (!w.paused && w.s->remainingMinutes && !wtClockIn(doneAt, doneLen, (uint32_t)w.s->remainingMinutes * 60UL))
-      doneAt[0] = 0;
+    if (!wtDoneAtText(w, doneAt, doneLen)) doneAt[0] = 0;
   } else if (g_workshopTimerDone) {
     c.state = wtl::CalmState::TimerDone;
     color = OS12V_AMBER;
@@ -439,12 +477,14 @@ static void wtDrawCalm(const WtPrint& w) {
   tft.fillRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_SURFACE2);
   tft.drawRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_LINE);
   const int16_t maxW = (int16_t)(card.w - 32 - 20);
-  setFont(tft, FONT_BODY);
+  // 12.3.9: 19 px when it fits (it is the only print information here).
+  const FontID statusFont = wsFitFont(status, maxW, FONT_LARGE, FONT_BODY);
+  setFont(tft, statusFont);
   int16_t textW = (int16_t)tft.textWidth(status);
   if (textW > maxW) textW = maxW;
   const int16_t left = (int16_t)(card.x + (card.w - (20 + textW)) / 2), mid = (int16_t)(card.y + card.h / 2);
   tft.fillCircle(left + 5, mid, 5, dot);
-  uiDrawFit(status, (int16_t)(left + 20), mid, maxW, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_SURFACE2);
+  uiDrawFit(status, (int16_t)(left + 20), mid, maxW, statusFont, ML_DATUM, OS12V_TEXT, OS12V_SURFACE2);
 
   // The only thing to do here: wake. No tab bar, no other targets.
   uiDrawFit("Tap anywhere to wake", (int16_t)(c.hint.x + c.hint.w / 2), (int16_t)(c.hint.y + c.hint.h / 2), (int16_t)(c.hint.w - 32),
@@ -554,13 +594,14 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
   const int16_t right = row.right() - 12;
   int16_t valueRight = right;
   if (t.inUse) {
-    uiDrawFit("In use", right, mid, 60, FONT_SMALL, MR_DATUM, OS12V_ACCENT, bg);
-    setFont(tft, FONT_SMALL);
+    uiDrawFit("In use", right, mid, 60, FONT_BODY, MR_DATUM, OS12V_ACCENT, bg);
+    setFont(tft, FONT_BODY);
     valueRight = (int16_t)(right - tft.textWidth("In use") - 12);
   }
   const int16_t valueX = labelX + labelW + 8;
   if (valueRight > valueX)
-    uiDrawFit(t.value, valueRight, mid, valueRight - valueX, FONT_SMALL, MR_DATUM, t.present ? OS12V_TEXT : OS12V_MUTED, bg);
+    uiDrawFit(t.value, valueRight, mid, valueRight - valueX, wsValueFont(t.value, valueRight - valueX), MR_DATUM,
+              t.present ? OS12V_TEXT : OS12V_MUTED, bg);
 }
 
 static void wtDrawSegments(const wsm::Screen& s, uint8_t selected) {
@@ -590,7 +631,6 @@ static const char* wtSpeedText(uint8_t speed) {
 }
 
 static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
-  (void)s;
   wtDrawCardSurface(r, w.color);
   const int16_t x = r.x + 18, textW = r.w - 18 - 18;
   const int16_t y = (int16_t)(r.y + (r.h - 88) / 2);  // the 88 px layout, centred in taller cards
@@ -602,23 +642,12 @@ static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const Wt
   }
   const BambuState& st = *w.s;
   if (w.active && w.online) {
-    char pct[8];
-    snprintf(pct, sizeof(pct), "%u%%", (unsigned)st.progress);
-    wtText(w.paused ? "Paused" : "Printing", x, y + 6, textW - 90, FONT_LARGE, TL_DATUM, w.paused ? OS12V_AMBER : OS12V_TEXT);
-    wtText(pct, x + textW, y + 6, 88, FONT_LARGE, TR_DATUM, w.paused ? OS12V_AMBER : OS12V_TEXT);
+    // 12.3.9: the same layout as Home. "Printing" is not repeated (the header
+    // chip says it); the job name is the detail line.
+    const wtl::PrintCardLayout L = wtl::printCardLayout(s, r, false);
+    wtDrawRunningPrint(L, w);
     const char* job = jobDisplayName(st);
-    wtText(job && job[0] ? job : "Print in progress", x, y + 34, textW, FONT_BODY, TL_DATUM, OS12V_MUTED);
-    wtDrawProgress(x, y + 56, textW, st.progress, w.paused ? OS12V_AMBER : OS12V_ACCENT);
-    char dur[16], done[24], line[64];
-    wtDurationText(dur, sizeof(dur), st.remainingMinutes);
-    line[0] = 0;
-    if (dur[0]) snprintf(line, sizeof(line), "%s left", dur);
-    if (!w.paused && st.remainingMinutes && wtClockIn(done, sizeof(done), (uint32_t)st.remainingMinutes * 60UL)) {
-      if (line[0]) strlcat(line, "  ·  ", sizeof(line));
-      strlcat(line, "done ", sizeof(line));
-      strlcat(line, done, sizeof(line));
-    }
-    wtText(line, x, y + 70, textW, FONT_BODY, TL_DATUM, OS12V_TEXT);
+    wtText(job && job[0] ? job : "Print in progress", L.detail.x, L.detail.y, L.detail.w, FONT_BODY, TL_DATUM, OS12V_MUTED);
     return;
   }
   const char* headline = "Ready";
@@ -703,7 +732,7 @@ static WtControls wtControls(const WtPrint& w) {
   c.lightOn = w.s && w.s->lightState == 1;
   c.plug = w.configured ? tasmotaControlPlugForSlot(wsSlot()) : 0xFF;
   c.powerEnabled = c.plug != 0xFF && tasmotaSettings[c.plug].enabled;
-  c.powerReason = !w.configured ? "No printer set up" : (c.plug == 0xFF ? "No smart plug for this printer" : "Smart plug is off");
+  c.powerReason = !w.configured ? "No printer set up" : (c.plug == 0xFF ? "No smart plug" : "Smart plug is off");
   c.stopEnabled = w.online && w.active;
   c.stopReason = !w.online ? offline : "No print running";
   return c;
@@ -734,9 +763,10 @@ static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtContr
   const wsm::Rect b = wtl::holdDrawRect(s, row);
   uiDrawFit("Stop print", row.x + 12, mid, 120, FONT_BODY, ML_DATUM, c.stopEnabled ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
   const int16_t hintX = row.x + 140;
-  if (b.x - 8 > hintX)
-    wtTextOn(c.stopEnabled ? "Hold the button 1 s" : c.stopReason, b.x - 8, mid, b.x - 8 - hintX, FONT_SMALL, MR_DATUM,
-             c.stopEnabled ? OS12V_MUTED : OS12V_AMBER, OS12V_SURFACE);
+  if (b.x - 8 > hintX) {
+    const char* hint = c.stopEnabled ? "Hold the button 1 s" : c.stopReason;
+    wtTextOn(hint, b.x - 8, mid, b.x - 8 - hintX, wsValueFont(hint, b.x - 8 - hintX), MR_DATUM, OS12V_MUTED, OS12V_SURFACE);
+  }
   tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_SURFACE);
   tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, c.stopEnabled ? OS12V_RED : OS12V_LINE);
   if (c.stopEnabled) tft.drawRoundRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2, 9, OS12V_RED);
@@ -870,7 +900,7 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
     case wtl::ItemId::WsInventorySetup:
       if (!workshopPlatformWifiOnline()) { v.enabled = false; v.reason = "Needs Wi-Fi to connect"; break; }
       strlcpy(v.value, "Not connected · set up", sizeof(v.value));
-      v.valueColor = OS12V_AMBER;
+      v.valueColor = OS12V_ACCENT;  // 12.3.9: a way in, not a warning
       break;
     case wtl::ItemId::WsHowTo:
       strlcpy(v.value, "Local Portal > More > Filament Inventory", sizeof(v.value));

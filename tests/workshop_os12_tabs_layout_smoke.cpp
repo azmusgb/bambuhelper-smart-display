@@ -20,6 +20,11 @@
 //   highlight (hitRect) covers every point that hit it, and read-only items
 //   (temperatures, Info rows, the Printer status card, AMS trays) are not
 //   interactive, so they are drawn flat and never highlighted.
+// - (12.3.9) the running-print card layout on Home and Printer > Status: the
+//   48 px percentage, time left, done-at, bar and detail line each fit inside
+//   the card, apart from each other and from Home's chevron; and one done-at
+//   time that holds still while the printer's estimate does, and is the same
+//   for every screen that asks.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_tabs_layout_smoke.cpp -o /tmp/tabs-layout-smoke
 
@@ -379,6 +384,55 @@ void checkInteractive() {
   check(itemInteractive(view(View::Home).items[2]), "Home Filament row opens Workshop", "Home");
 }
 
+// 12.3.9 running-print card: every part inside the card, apart, big enough.
+void checkPrintCard(Screen s, const char* o) {
+  const struct { View view; bool home; } cards[2] = {{View::Home, true}, {View::PrinterStatus, false}};
+  for (int k = 0; k < 2; ++k) {
+    const ViewSpec& v = view(cards[k].view);
+    const Rect card = itemRect(s, v, 0, 0, 0);
+    const Rect surface = more::rowSurface(card);
+    const PrintCardLayout c = printCardLayout(s, card, cards[k].home);
+    char where[64];
+    snprintf(where, sizeof(where), "%s / %s card", o, v.title);
+    const Rect parts[6] = {c.names, c.percent, c.left, c.doneAt, c.bar, c.detail};
+    for (int i = 0; i < 6; ++i) {
+      if (parts[i].empty()) { check(i == 0 && !cards[k].home, "only Printer has no names line", where, i); continue; }
+      check(inside(parts[i], surface), "card part inside the card", where, i, parts[i].bottom());
+      check(!intersects(parts[i], more::tabBand(s)) && !intersects(parts[i], more::headerBand(s)), "card part clear of chrome", where, i);
+      if (cards[k].home) check(parts[i].right() <= cardChevronX(card) - 8, "card part clear of the chevron", where, i);
+      for (int j = i + 1; j < 6; ++j) check(!intersects(parts[i], parts[j]), "card parts do not overlap", where, i, j);
+    }
+    // "100" in font 6 is 3 x 27 px; "%" in 19 px follows it.
+    check(c.percent.w >= 3 * 27 + 3 + 16 && c.percent.h >= kPercentH, "percentage fits 100%", where, c.percent.w, c.percent.h);
+    check(c.left.w >= 120 && c.left.h >= 19, "time left has room", where, c.left.w);
+    check(c.doneAt.w >= 120 && c.doneAt.h >= 14, "done-at has room", where, c.doneAt.w);
+    check(c.left.x > c.percent.right() && c.doneAt.x == c.left.x && c.doneAt.y >= c.left.bottom(), "time left over done-at beside the percentage", where);
+    check(c.bar.w >= 200 && c.bar.h == kProgressH && c.bar.y >= c.percent.bottom(), "progress bar under the numbers", where, c.bar.w);
+    check(c.detail.y >= c.bar.bottom() && c.detail.h >= 14, "detail line under the bar", where);
+  }
+}
+
+// 12.3.9 done-at time: fixed while the estimate holds, the same for every
+// screen, follows a new estimate, resets without one.
+void checkDoneAt() {
+  const long t0 = 1792000000L;  // a whole minute
+  DoneAt d = {0, 0};
+  const long a = doneAtEpoch(d, 773, t0 - 1);      // 8:16:59
+  const long b = doneAtEpoch(d, 773, t0 + 1);      // 8:17:01, same estimate
+  check(a == b, "done-at holds across a seconds wrap", "done-at", (int)(b - a));
+  check(a == t0 - 1 + 773L * 60L, "done-at is now plus the estimate", "done-at");
+  DoneAt other = d;  // a second screen reading the same anchor
+  check(doneAtEpoch(other, 773, t0 + 30) == a, "every screen gets the same time", "done-at");
+  const long c = doneAtEpoch(d, 772, t0 + 60);
+  check(c == t0 + 60 + 772L * 60L, "a new estimate moves the time", "done-at", (int)(c - a));
+  check(doneAtEpoch(d, 772, t0 + 60 + 100) == c, "holds for 100 s on one estimate", "done-at");
+  const long stalled = doneAtEpoch(d, 772, t0 + 60 + 121);
+  check(stalled == t0 + 60 + 121 + 772L * 60L, "a stalled estimate re-fixes after 2 min", "done-at");
+  check(doneAtEpoch(d, 772, t0 - 3600) == t0 - 3600 + 772L * 60L, "a clock step back re-fixes", "done-at");
+  check(doneAtEpoch(d, 0, t0) == 0 && d.minutes == 0 && d.epoch == 0, "no estimate, no time", "done-at");
+  check(doneAtEpoch(d, 5, t0) == t0 + 300, "a fresh estimate after none", "done-at");
+}
+
 }  // namespace
 
 int main() {
@@ -387,11 +441,13 @@ int main() {
   checkTree("tree");
   checkCalmText();
   checkInteractive();
+  checkDoneAt();
   int controls[2] = {0, 0};
   for (int k = 0; k < 2; ++k) {
     checkChrome(screens[k], names[k]);
     checkStop(screens[k], names[k]);
     checkCalm(screens[k], names[k]);
+    checkPrintCard(screens[k], names[k]);
     for (uint8_t i = 0; i < kViewCount; ++i) {
       const ViewSpec& v = kViews[i];
       if (v.repeat) {

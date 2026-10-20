@@ -99,16 +99,23 @@ def validate_home(hub: str, fragment: str) -> None:
     # Plain words, Title Case: no ALL-CAPS card labels.
     for caps in ('"PRINTER"', '"FILAMENT"', '"PRINTING"', '"READY"', '"OFFLINE"', '"ATTENTION"', '"SETUP"'):
         forbid(fragment, caps, "ALL-CAPS label on the tabs")
-    # Big status: percent, time left, done-at clock time and file name.
+    # Big status: percent, time left, done-at clock time and file name
+    # (12.3.9: one running-print layout shared with Printer > Status, the
+    # percentage in the 48 px numeric font, one done-at time).
     card = block(hub, "static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w)")
-    for needle in ("jobDisplayName(st)", "FONT_XLARGE", "wtDurationText(", "wtClockIn(", '"Done %s"', "wtDrawProgress("):
+    for needle in ("jobDisplayName(st)", "wtl::printCardLayout(s, r, true)", "wtDrawRunningPrint(L, w);"):
         need(card, needle, "Home print status")
+    running = block(hub, "static void wtDrawRunningPrint(const wtl::PrintCardLayout& L, const WtPrint& w)")
+    for needle in ("wtDrawBigPercent(", "wtDurationText(", "wtDoneAtText(", '"Done %s"', "wtDrawProgress("):
+        need(running, needle, "Home print status")
+    need(block(hub, "static void wtDrawBigPercent(const wsm::Rect& r, uint8_t pct, uint16_t color, uint16_t bg)"), "tft.setTextFont(6);",
+         "48 px percentage")
     need(block(hub, "static bool wtClockOf(char* out, size_t len, time_t at)"), "netSettings.use24h", "done-at follows the 12/24 h setting")
     need(block(hub, "static bool wtClockOf(char* out, size_t len, time_t at)"), "localtime_r(", "done-at in local time")
     # Honest empty states.
     need(card, '"No printer set up"', "no-printer state")
     need(card, '"Printer offline"', "offline state")
-    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), '"Not connected · set up in Workshop"', "inventory empty state")
+    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), '"Not set up"', "inventory empty state")
     # Empty values draw nothing (the WS350 font shows the fitter's em dash as "|").
     need(block(hub, "static void wtTextOn("), "if (!wsm::drawsValueText(text)) return;", "empty card text draws nothing")
     need(block(hub, "static void wtText("), "wtTextOn(", "card text goes through the empty-value guard")
@@ -140,7 +147,7 @@ def validate_calm(hub: str, fragment: str) -> None:
     status = block(hub, "static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneLen, uint16_t& color)")
     ordered(status, ["wtl::CalmState::Printing", "wtl::CalmState::TimerDone", "wtl::CalmState::TimerRunning", "wtl::CalmState::Offline"],
             "print first, then the timer, then the printer")
-    need(status, "wtClockIn(doneAt, doneLen,", "done time as a clock time")
+    need(status, "wtDoneAtText(w, doneAt, doneLen)", "done time as a clock time (the shared done-at time)")
     # The 12.0 ambient renderer and its helpers are gone.
     for gone in ("drawAmbientHome", "uiSignatureMaterialRail", "uiClockText(", "uiClockDateText("):
         forbid(hub, gone, "12.0 calm screen code")

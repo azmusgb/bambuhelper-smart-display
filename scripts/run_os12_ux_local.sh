@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.8}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.3.9}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -125,6 +125,13 @@ python3 "$ROOT/scripts/validate_os12_touch_audio_fit.py" --repo "$BUILD" --sourc
 # DC-free microphone meter and a gated recording buffer.
 python3 "$ROOT/apply_workshop_os12_review_hardening.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_review_hardening.py" --repo "$BUILD" --source-root "$ROOT"
+# 12.3.9: glanceability and legibility from the 12.3.8 UX critique: a 48 px
+# print percentage with time left and one done-at time beside it on Home and
+# Printer, 14 px row values and toasts, muted not-set-up reasons, and the
+# camera picture from the header to the tab bar. The drawing is in the
+# design-system sources installed above; this layer wires the camera area.
+python3 "$ROOT/apply_workshop_os12_glance_legibility.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_glance_legibility.py" --repo "$BUILD"
 # The finished tree still sends every physical printer command through the
 # OS12 facade, and Stop from exactly one (hold-guarded) place.
 python3 "$ROOT/scripts/validate_os12_control_boundary.py" --repo "$BUILD"

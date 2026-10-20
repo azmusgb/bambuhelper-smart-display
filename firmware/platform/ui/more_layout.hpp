@@ -22,6 +22,10 @@
 //   tappable;
 // - (12.3.6) hitRect() gives the rectangle a hit refers to, for the pressed
 //   highlight drawn on touch-down.
+// - (12.3.9) Printer > Camera (the Video page in camera mode) has no control
+//   row: the picture runs from the header to the tab bar, and Pause/Resume is
+//   a button on the right of the header (cameraVideoRect, cameraPauseRect,
+//   and the camera overloads of hitTest and hitRect).
 
 #include <stddef.h>
 #include <stdint.h>
@@ -621,11 +625,32 @@ inline Rect videoRect(Screen s, PageId id) {
   return makeRect(0, kHeaderH, s.w, first.y - kHeaderH);
 }
 
+// Printer > Camera (12.3.9): the Video page without its control row. The
+// camera picture gets the whole content band (480x222 instead of 480x177 in
+// landscape, so a 16:9 frame shows at 394x222 instead of 314x177), and
+// Pause/Resume moves to the right of the header, where other pages show a
+// status chip or the scroll buttons.
+inline Rect cameraVideoRect(Screen s) { return contentBand(s); }
+inline Rect cameraPauseRect(Screen s) { return makeRect(s.w - 120, 0, 120, kHeaderH); }
+inline Rect cameraPauseDrawRect(Screen s) {
+  const Rect t = cameraPauseRect(s);
+  return makeRect(t.x + 8, 5, t.w - 12, kHeaderH - 10);
+}
+// Title of the camera page: between Back and the Pause button.
+inline Rect cameraTitleRect(Screen s) {
+  const int left = backRect(s).right() + 4;
+  return makeRect(left, 0, cameraPauseRect(s).x - 4 - left, kHeaderH);
+}
+// The video area a page shows: the camera band in camera mode.
+inline Rect videoRect(Screen s, PageId id, bool camera) {
+  return camera && page(id).layout == PageLayout::Video ? cameraVideoRect(s) : videoRect(s, id);
+}
+
 // ---------------------------------------------------------------------------
 // Hit testing
 // ---------------------------------------------------------------------------
 
-enum class HitKind : uint8_t { None = 0, Tab, Back, ScrollUp, ScrollDown, Tile, Row, DialogCancel, DialogConfirm };
+enum class HitKind : uint8_t { None = 0, Tab, Back, ScrollUp, ScrollDown, Tile, Row, DialogCancel, DialogConfirm, HeaderAction };
 
 struct Hit {
   HitKind kind;
@@ -681,6 +706,19 @@ inline Hit hitTest(Screen s, PageId id, uint8_t scroll, bool dialogOpen, int x, 
   return makeHit(HitKind::None, 0, Part::Whole);
 }
 
+// Hit test of a page that may be shown in camera mode (12.3.9). In camera
+// mode a Video page has the tab bar, Back and the header Pause button, and
+// nothing else: the picture is not a target and there is no control row.
+inline Hit hitTest(Screen s, PageId id, uint8_t scroll, bool dialogOpen, int x, int y, bool camera) {
+  if (!camera || page(id).layout != PageLayout::Video) return hitTest(s, id, scroll, dialogOpen, x, y);
+  for (uint8_t i = 0; i < kTabCount; ++i)
+    if (tabTouchRect(s, i).contains(x, y)) return makeHit(HitKind::Tab, i, Part::Whole);
+  if (tabBand(s).contains(x, y)) return makeHit(HitKind::None, 0, Part::Whole);
+  if (backRect(s).contains(x, y)) return makeHit(HitKind::Back, 0, Part::Whole);
+  if (!dialogOpen && cameraPauseRect(s).contains(x, y)) return makeHit(HitKind::HeaderAction, 0, Part::Whole);
+  return makeHit(HitKind::None, 0, Part::Whole);
+}
+
 // Rectangle a hit refers to: what the pressed highlight outlines on
 // touch-down. Empty for HitKind::None. Every point that hitTest routes to a
 // hit lies inside hitRect of that hit.
@@ -693,6 +731,7 @@ inline Rect hitRect(Screen s, PageId id, uint8_t scroll, const Hit& h) {
     case HitKind::Tile: return tileRect(s, h.index);
     case HitKind::DialogCancel: return dialogCancelRect(s);
     case HitKind::DialogConfirm: return dialogConfirmRect(s);
+    case HitKind::HeaderAction: return cameraPauseRect(s);
     case HitKind::Row: {
       const PageSpec& p = page(id);
       if (h.index >= p.rowCount) return makeRect(0, 0, 0, 0);
