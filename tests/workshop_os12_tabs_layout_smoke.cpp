@@ -494,6 +494,13 @@ void checkAiOverlays(Screen s, const char* o) {
     check(inside(approvalRowRect(s, i), more::contentBand(s)), "approval rows above the tab bar", o, i);
   }
   check(approvalStatusRect(s).h >= 16, "room for the status line", o, approvalStatusRect(s).h);
+  // 12.7: the pairing keypad: twelve touch-sized keys, apart, inside the content area, clear of the info panel.
+  for (uint8_t i = 0; i < kPairKeys; ++i) {
+    check(pairKeyRect(s, i).h >= kMinTouch && pairKeyRect(s, i).w >= kMinTouch && inside(pairKeyRect(s, i), more::contentBand(s)), "pair key fits", o, i);
+    check(!intersects(pairKeyRect(s, i), pairInfoRect(s)), "keys clear of the code", o, i);
+    for (uint8_t j = i + 1; j < kPairKeys; ++j) check(!intersects(pairKeyRect(s, i), pairKeyRect(s, j)), "keys apart", o, i * 16 + j);
+  }
+  check(pairInfoRect(s).w >= 200 && pairInfoRect(s).h >= 120 && inside(pairInfoRect(s), more::contentBand(s)), "room for the code and the steps", o, pairInfoRect(s).w, pairInfoRect(s).h);
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 

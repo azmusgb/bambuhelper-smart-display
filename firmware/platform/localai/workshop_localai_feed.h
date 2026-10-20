@@ -42,6 +42,11 @@ struct WorkshopLocalAiExtras {
     bool approvalsBusy{false};
     std::uint32_t approvalSeq{0};   // counts list reads
     char approvalStatus[96]{};
+    // 12.7: pairing from the touchscreen
+    bool pairBusy{false};
+    bool pairOk{false};
+    std::uint32_t pairSeq{0};
+    char pairStatus[96]{};
 };
 
 void workshopLocalAiFeedBegin();
@@ -66,6 +71,11 @@ bool workshopLocalAiFeedTakeMessage(workshop::localai::Message* out);
 bool workshopLocalAiFeedRefreshApprovals();
 std::uint8_t workshopLocalAiFeedApprovals(workshop::localai::Approval* out, std::uint8_t max);
 bool workshopLocalAiFeedDecide(const char* id, bool approve);
+// 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);
+// on success the settings are saved as by the portal. False when the address or code is not acceptable, or busy.
+bool workshopLocalAiFeedPair(const char* address, const char* code);
+// The saved Local AI address ("" when not set up).
+void workshopLocalAiFeedAddress(char* out, std::size_t len);
 // The downloaded JPEG, valid until the next workshopLocalAiFeedFetchImage(); false while one is running.
 bool workshopLocalAiFeedImage(const std::uint8_t** data, std::size_t* len);
 // Free entries in the default NVS partition (32 bytes each), for the portal's status.

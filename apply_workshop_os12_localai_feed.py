@@ -51,6 +51,17 @@ static void sendWorkshopLocalAiStatus(int httpCode = 200) {
     c["title"] = snap.cards[i].title;
     c["text"] = snap.cards[i].text;
   }
+  // 12.7: the Local Portal's Local AI panel (never the key or the CA).
+  const WorkshopLocalAiExtras extras = workshopLocalAiFeedExtras();
+  char address[16];
+  workshopLocalAiFeedAddress(address, sizeof(address));
+  doc["address"] = address;
+  doc["live"] = extras.live;
+  doc["pictures"] = extras.imageCount;
+  doc["approvalsWaiting"] = extras.approvalSeq ? (int)extras.approvalTotal : -1;
+  doc["pairing"] = extras.pairBusy;
+  doc["pairOk"] = extras.pairOk;
+  doc["pairStatus"] = extras.pairSeq ? extras.pairStatus : "";
   String json;
   serializeJson(doc, json);
   server.sendHeader("Cache-Control", "no-store");
@@ -66,6 +77,16 @@ static void handleWorkshopLocalAiConfig() {
   const bool ok = workshopLocalAiFeedConfigure(server.arg("address").c_str(), server.arg("name").c_str(),
                                                server.arg("key").c_str(), server.arg("ca").c_str());
   if (!ok) { sendWorkshopLocalAiStatus(400); return; }  // status says why: invalid settings, or storage full
+  sendWorkshopLocalAiStatus(202);
+}
+
+// 12.7: pair from the Local Portal: address and the 6-digit code Local AI shows (Services › Workshop display).
+static void handleWorkshopLocalAiPair() {
+  if (!server.hasArg("address") || !server.hasArg("code")) { server.send(400, "application/json", "{\"error\":\"address and code are required\"}"); return; }
+  if (!workshopLocalAiFeedPair(server.arg("address").c_str(), server.arg("code").c_str())) {
+    server.send(400, "application/json", "{\"error\":\"Use Local AI's address on this network and its 6-digit code (or wait: pairing is running).\"}");
+    return;
+  }
   sendWorkshopLocalAiStatus(202);
 }
 
@@ -96,6 +117,66 @@ CATALOG_NEW = '{"id":"workshop","label":"Local AI","group":"Primary"}'
 ROUTES = '''  SECURE_GET("/os12/localai/status", handleWorkshopLocalAiStatus);
   SECURE_POST("/os12/localai/config", handleWorkshopLocalAiConfig);
   SECURE_POST("/os12/localai/clear", handleWorkshopLocalAiClear);
+  SECURE_POST("/os12/localai/pair", handleWorkshopLocalAiPair);
+'''
+
+# 12.7: a Local AI panel in the Local Portal, beside the other Local AI keys: the link's state, pairing and unpairing.
+PORTAL_ANCHOR = '  <section class="os12-integration" aria-labelledby="fiDeviceFeedTitle">'
+PORTAL_PANEL = '''  <section class="os12-integration os12-localai-link" aria-labelledby="localAiLinkTitle"><small>LOCAL AI</small><h3 id="localAiLinkTitle">Local AI on the display</h3><p>Local AI's cards, answers, pictures, messages and approvals come to the display over this link. To connect, open Local AI's Services, Workshop display, Pair display, and type its 6-digit code here or on the display (Local AI tab, Local AI connection).</p><div class="os12-contract-row"><span>Connection</span><strong id="localAiLinkState">Checking…</strong></div><div class="os12-contract-row"><span>Local AI</span><strong id="localAiLinkAddress">—</strong></div><div class="os12-contract-row"><span>Cards</span><strong id="localAiLinkCards">—</strong></div><div class="os12-contract-row"><span>Pictures · approvals</span><strong id="localAiLinkMore">—</strong></div><form class="os12-feed-actions" style="align-items:center" onsubmit="pairLocalAi(event)"><input id="localAiPairAddress" type="text" inputmode="decimal" autocomplete="off" placeholder="10.0.0.21" aria-label="Local AI address" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;width:10rem"><input id="localAiPairCode" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" aria-label="Pairing code" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;width:9rem;letter-spacing:.15em"><button type="submit" class="btn btn-primary btn-sm" id="localAiPairButton">Pair</button><button type="button" class="btn btn-danger btn-sm" onclick="unpairLocalAi()">Unpair</button></form><p class="small text-dim" id="localAiLinkStatus" role="status" aria-live="polite"></p></section>
+'''
+PORTAL_JS = r'''
+
+/* Workshop OS 12.7: Local AI on the display (status, pairing, unpairing) */
+async function loadLocalAiLink(){
+  var state=document.getElementById('localAiLinkState');
+  if(!state)return null;
+  try{
+    var r=await fetch('/os12/localai/status',{cache:'no-store',credentials:'same-origin'});
+    if(r.status===401){state.textContent='Sign in required';return null;}
+    var d=await r.json();
+    var fresh=d.lastSuccessAgoS>=0&&d.lastSuccessAgoS<=600;
+    state.textContent=!d.configured?'Not paired':fresh?(d.live?'Connected · live':'Connected'):(d.lastSuccessAgoS<0?'Connecting':'Not answering');
+    document.getElementById('localAiLinkAddress').textContent=d.address||'—';
+    document.getElementById('localAiLinkCards').textContent=d.configured?((d.cards||[]).map(function(c){return c.title;}).join(' · ')||'none')+(d.lastSuccessAgoS>=0?' ('+d.lastSuccessAgoS+' s ago)':''):'—';
+    document.getElementById('localAiLinkMore').textContent=d.configured?(d.pictures||0)+' · '+(d.approvalsWaiting<0?'open the Local AI tab to check':d.approvalsWaiting+' waiting'):'—';
+    var addr=document.getElementById('localAiPairAddress');
+    if(addr&&!addr.value)addr.value=d.address||'10.0.0.21';
+    if(d.pairStatus)document.getElementById('localAiLinkStatus').textContent=d.pairing?'Pairing…':d.pairStatus;
+    return d;
+  }catch(e){state.textContent='Unavailable';return null;}
+}
+async function pairLocalAi(ev){
+  ev.preventDefault();
+  var status=document.getElementById('localAiLinkStatus'),btn=document.getElementById('localAiPairButton');
+  var address=document.getElementById('localAiPairAddress').value.trim(),code=document.getElementById('localAiPairCode').value.trim();
+  if(!/^[0-9]{6}$/.test(code)){status.textContent='The code is 6 digits.';return;}
+  btn.disabled=true;status.textContent='Pairing…';
+  try{
+    var r=await fetch('/os12/localai/pair',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'address='+encodeURIComponent(address)+'&code='+encodeURIComponent(code),credentials:'same-origin'});
+    var d=await r.json().catch(function(){return {};});
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    document.getElementById('localAiPairCode').value='';
+    for(var i=0;i<30;i++){
+      await new Promise(function(res){setTimeout(res,1000);});
+      var s=await loadLocalAiLink();
+      if(s&&!s.pairing){status.textContent=s.pairOk?'Paired with Local AI.':(s.pairStatus||'Pairing failed.');return;}
+    }
+    status.textContent='Still pairing. Check again in a moment.';
+  }catch(e){status.textContent='Could not pair: '+e.message;}
+  finally{btn.disabled=false;}
+}
+async function unpairLocalAi(){
+  var status=document.getElementById('localAiLinkStatus');
+  if(!status||!confirm('Unpair the display from Local AI? Its cards stop until you pair again.'))return;
+  try{
+    var r=await fetch('/os12/localai/clear',{method:'POST',credentials:'same-origin'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    status.textContent='Unpaired. The key is forgotten on the display.';
+  }catch(e){status.textContent='Could not unpair: '+e.message;}
+  loadLocalAiLink();
+}
+setTimeout(loadLocalAiLink,0);
+setInterval(function(){if(!document.hidden)loadLocalAiLink();},10000);
 '''
 
 
@@ -154,6 +235,17 @@ def apply(repo: Path, source_root: Path) -> None:
             raise PatchError("catalog workshop entry missing/non-unique")
         web = web.replace(CATALOG_OLD, CATALOG_NEW, 1)
     staged[repo / "src/web_server.cpp"] = web
+
+    pages = load("include/web_pages.h")
+    if 'id="localAiLinkTitle"' not in pages:
+        if pages.count(PORTAL_ANCHOR) != 1:
+            raise PatchError("Local Portal anchor (Filament Inventory feed panel) missing/non-unique")
+        pages = pages.replace(PORTAL_ANCHOR, PORTAL_PANEL + PORTAL_ANCHOR, 1)
+    staged[repo / "include/web_pages.h"] = pages
+    app_js = load("web/app.js")
+    if "pairLocalAi" not in app_js:
+        app_js = app_js.rstrip("\n") + PORTAL_JS
+    staged[repo / "web/app.js"] = app_js
 
     for path, text in staged.items():
         path.parent.mkdir(parents=True, exist_ok=True)

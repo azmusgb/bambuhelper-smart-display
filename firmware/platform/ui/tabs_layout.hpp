@@ -77,7 +77,7 @@ enum class ItemId : uint8_t {
   // Printer > Control
   ControlPrimary, ControlLight, ControlPower, ControlStop,
   // Workshop
-  WsAiCard, WsAsk, WsImage, WsApprovals, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
+  WsAiCard, WsAsk, WsImage, WsApprovals, WsPair, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
   WsTimer, WsTimerLength, WsNote,
   Count
 };
@@ -135,6 +135,7 @@ static const ItemSpec kWorkshopSetupItems[] = {
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsApprovals, ItemKind::Row, RowKind::Nav, false, "Approvals"},  // 12.6
+  {ItemId::WsPair, ItemKind::Row, RowKind::Nav, false, "Local AI connection"},  // 12.7
   {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
   {ItemId::WsTimerLength, ItemKind::Row, RowKind::Stepper, false, "Timer length"},
@@ -146,6 +147,7 @@ static const ItemSpec kWorkshopInventoryItems[] = {
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsApprovals, ItemKind::Row, RowKind::Nav, false, "Approvals"},  // 12.6
+  {ItemId::WsPair, ItemKind::Row, RowKind::Nav, false, "Local AI connection"},  // 12.7
   {ItemId::WsInventory, ItemKind::Row, RowKind::Action, false, "Filament inventory"},
   {ItemId::WsReadiness, ItemKind::Row, RowKind::Info, false, "Print readiness"},
   {ItemId::WsLoaded, ItemKind::Row, RowKind::Info, false, "Loaded spools"},
@@ -560,6 +562,24 @@ static const uint8_t kApprovalRows = 4;
 inline Rect approvalRowRect(Screen s, uint8_t i) { return makeRect(more::kMarginX, more::kHeaderH + 4 + i * 48, s.w - 2 * more::kMarginX, 48); }
 inline Rect approvalRejectRect(Screen s, uint8_t i) { const Rect r = approvalRowRect(s, i); return makeRect(r.right() - 92, r.y + 2, 88, 44); }
 inline Rect approvalApproveRect(Screen s, uint8_t i) { const Rect r = approvalRowRect(s, i); return makeRect(r.right() - 92 - 8 - 100, r.y + 2, 100, 44); }
+// 12.7: pairing: the code and what to do on one side, a keypad (1-9, delete, 0, Pair) on the other (under it in
+// portrait).
+static const uint8_t kPairKeys = 12;
+inline Rect pairKeypadArea(Screen s) {
+  const int w = 3 * 76 + 2 * 6, h = 4 * 46 + 3 * 6;
+  if (s.landscape()) return makeRect(s.w - more::kMarginX - w, more::kHeaderH + 8, w, h);
+  return makeRect((s.w - w) / 2, s.h - more::kTabH - 8 - h, w, h);
+}
+inline Rect pairKeyRect(Screen s, uint8_t i) {
+  const Rect a = pairKeypadArea(s);
+  return makeRect(a.x + (i % 3) * (76 + 6), a.y + (i / 3) * (46 + 6), 76, 46);
+}
+inline Rect pairInfoRect(Screen s) {
+  const Rect a = pairKeypadArea(s);
+  if (s.landscape()) return makeRect(more::kMarginX, more::kHeaderH + 8, a.x - 12 - more::kMarginX, s.h - more::kTabH - 8 - more::kHeaderH - 8);
+  return makeRect(more::kMarginX, more::kHeaderH + 8, s.w - 2 * more::kMarginX, a.y - 8 - more::kHeaderH - 8);
+}
+
 inline Rect approvalStatusRect(Screen s) {
   const int top = approvalRowRect(s, kApprovalRows - 1).bottom() + 2;
   return makeRect(more::kMarginX, top, s.w - 2 * more::kMarginX, s.h - more::kTabH - top);
