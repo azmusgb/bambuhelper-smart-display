@@ -421,6 +421,8 @@ void checkPrintCard(Screen s, const char* o) {
     check(c.left.x > c.percent.right() && c.doneAt.x == c.left.x && c.doneAt.y >= c.left.bottom(), "time left over done-at beside the percentage", where);
     check(c.bar.w >= 200 && c.bar.h == kProgressH && c.bar.y >= c.percent.bottom(), "progress bar under the numbers", where, c.bar.w);
     check(c.detail.y >= c.bar.bottom() && c.detail.h >= 14, "detail line under the bar", where);
+    // The detail line's glyphs reach about 4 px below its box: leave that much inside the card's border.
+    check(c.detail.bottom() + 4 <= surface.bottom() - 1, "detail line's glyphs clear the card border", where, c.detail.bottom(), surface.bottom());
   }
 }
 

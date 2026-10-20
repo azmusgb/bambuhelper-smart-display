@@ -346,7 +346,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bind", default="0.0.0.0", help="HTTP bind address; default 0.0.0.0")
     parser.add_argument("--port", type=int, default=8091, help="HTTP port; default 8091")
     parser.add_argument("--fps", type=int, default=5, help="JPEG production rate, 1-10; default 5")
-    parser.add_argument("--width", type=int, default=320, help="JPEG width, even 160-480; default 320 (the WS350 viewer size)")
+    parser.add_argument("--width", type=int, default=384, help="JPEG width, even 160-480; default 384 (fills the WS350 12.3.9+ camera page)")
     parser.add_argument("--ffmpeg", default="ffmpeg", help="FFmpeg executable; default PATH ffmpeg")
     parser.add_argument("--camera-root", type=Path, default=DEFAULT_CAMERA_ROOT)
     parser.add_argument("--plugin-root", type=Path, default=DEFAULT_PLUGIN_ROOT)

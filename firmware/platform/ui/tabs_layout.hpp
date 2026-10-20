@@ -331,14 +331,16 @@ inline PrintCardLayout printCardLayout(Screen s, const Rect& card, bool home) {
   const int w = card.w - 18 - (home ? 34 : 18);  // Home leaves room for the chevron
   const int block = home ? 132 : 88;
   const int y = card.y + (card.h > block ? (card.h - block) / 2 : 0);
-  const int top = home ? 42 : 4;
+  // Printer's card is only 88 px: tighter gaps there keep the 14 px detail line's glyphs (which reach a few px
+  // below its 16 px box) off the card's bottom border.
+  const int top = home ? 42 : 2;
   const int colX = x + kPercentW + 8, colW = x + w - colX;
   c.names = home ? makeRect(x, y + 5, w, 34) : makeRect(0, 0, 0, 0);
   c.percent = makeRect(x, y + top, kPercentW, kPercentH + 6);
   c.left = makeRect(colX, y + top + 2, colW, 22);
   c.doneAt = makeRect(colX, y + top + 26, colW, 18);
-  c.bar = makeRect(x, y + top + kPercentH + 12, w, kProgressH);
-  c.detail = makeRect(x, c.bar.bottom() + 4, w, 16);
+  c.bar = makeRect(x, y + top + kPercentH + (home ? 12 : 10), w, kProgressH);
+  c.detail = makeRect(x, c.bar.bottom() + (home ? 4 : 2), w, 16);
   return c;
 }
 
