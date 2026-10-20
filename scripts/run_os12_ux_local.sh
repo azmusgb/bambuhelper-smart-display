@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.4.5}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.5.0}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 cd "$ROOT"
@@ -116,6 +116,8 @@ python3 "$ROOT/scripts/validate_os12_tabs_overhaul.py" --repo "$BUILD"
 # 12.3.10 Local AI cards on the calm idle screen (GET /api/display/feed over pinned TLS).
 python3 "$ROOT/apply_workshop_os12_localai_feed.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_localai_feed.py" --repo "$BUILD"
+# 12.5: the animated boot splash on the LocalAI palette (printed hexagon, sparkle, boot bar, Wi-Fi line).
+python3 "$ROOT/apply_workshop_os12_boot_splash.py" --repo "$BUILD" --source-root "$ROOT" --apply
 # 12.3.6: WS350 touch and audio fixes from the 12.3.5 physical acceptance:
 # changed-row pushes, immediate redraw, pressed highlight; no codec power
 # cycling, microphone capture in the audio task, mono DC-free playback and a
