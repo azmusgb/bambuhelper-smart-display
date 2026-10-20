@@ -478,10 +478,22 @@ void checkAiOverlays(Screen s, const char* o) {
   for (uint8_t i = 0; i < kAskCount; ++i) {
     const Rect b = askButtonRect(s, i);
     check(b.h >= kMinTouch && b.w >= 80 && inside(b, more::contentBand(s)), "ask button inside the content area", o, i);
-    if (i) check(askButtonRect(s, i - 1).right() < b.x, "ask buttons apart", o, i);
+    if (i % kAskColumns) check(askButtonRect(s, i - 1).right() < b.x, "ask buttons apart", o, i);
     check(b.bottom() < askAnswerRect(s).y, "buttons above the answer", o, i);
   }
-  check(inside(askAnswerRect(s), more::contentBand(s)) && askAnswerRect(s).h >= 120, "answer card fits four lines, above the tab bar", o, askAnswerRect(s).h);
+  check(inside(askAnswerRect(s), more::contentBand(s)) && askAnswerRect(s).h >= 96, "answer card fits a question and three lines, above the tab bar", o, askAnswerRect(s).h);
+  for (uint8_t i = 0; i < kAskCount; ++i)
+    for (uint8_t j = i + 1; j < kAskCount; ++j)
+      check(!intersects(askButtonRect(s, i), askButtonRect(s, j)), "ask buttons never overlap", o, i * 10 + j);
+  // 12.6: the banner covers the header and fits the screen; approval rows and buttons fit, apart, above the tab bar.
+  check(bannerRect(s).y >= 0 && bannerRect(s).right() <= s.w && bannerRect(s).h >= kMinTouch, "banner is a touch target on the screen", o);
+  for (uint8_t i = 0; i < kApprovalRows; ++i) {
+    const Rect a = approvalApproveRect(s, i), r = approvalRejectRect(s, i);
+    check(inside(a, approvalRowRect(s, i)) && inside(r, approvalRowRect(s, i)) && a.right() < r.x, "Approve then Reject inside the row", o, i);
+    check(a.h >= kMinTouch && r.h >= kMinTouch && a.x > s.w / 3, "approval buttons are touch-sized, right of the title", o, i);
+    check(inside(approvalRowRect(s, i), more::contentBand(s)), "approval rows above the tab bar", o, i);
+  }
+  check(approvalStatusRect(s).h >= 16, "room for the status line", o, approvalStatusRect(s).h);
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 

@@ -77,7 +77,7 @@ enum class ItemId : uint8_t {
   // Printer > Control
   ControlPrimary, ControlLight, ControlPower, ControlStop,
   // Workshop
-  WsAiCard, WsAsk, WsImage, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
+  WsAiCard, WsAsk, WsImage, WsApprovals, WsInventorySetup, WsHowTo, WsInventory, WsReadiness, WsLoaded, WsReview, WsManage,
   WsTimer, WsTimerLength, WsNote,
   Count
 };
@@ -134,6 +134,7 @@ static const ItemSpec kWorkshopSetupItems[] = {
   {ItemId::WsAiCard, ItemKind::Row, RowKind::Nav, false, "Local AI"},  // 12.4.3: a tap asks about it
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
+  {ItemId::WsApprovals, ItemKind::Row, RowKind::Nav, false, "Approvals"},  // 12.6
   {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
   {ItemId::WsTimerLength, ItemKind::Row, RowKind::Stepper, false, "Timer length"},
@@ -144,6 +145,7 @@ static const ItemSpec kWorkshopInventoryItems[] = {
   {ItemId::WsAiCard, ItemKind::Row, RowKind::Nav, false, "Local AI"},  // 12.4.3: a tap asks about it
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
+  {ItemId::WsApprovals, ItemKind::Row, RowKind::Nav, false, "Approvals"},  // 12.6
   {ItemId::WsInventory, ItemKind::Row, RowKind::Action, false, "Filament inventory"},
   {ItemId::WsReadiness, ItemKind::Row, RowKind::Info, false, "Print readiness"},
   {ItemId::WsLoaded, ItemKind::Row, RowKind::Info, false, "Loaded spools"},
@@ -533,16 +535,34 @@ inline Rect promptAllowRect(Screen s) { return more::dialogConfirmRect(s); }
 // image: the picture over the whole screen with a caption strip; a tap closes.
 // ---------------------------------------------------------------------------
 
-static const uint8_t kAskCount = 3;
+// 12.6: six questions, two rows of three.
+static const uint8_t kAskCount = 6;
+static const uint8_t kAskColumns = 3;
+static const int kAskButtonH = 44;
 inline Rect askDoneRect(Screen s) { return more::chipRect(s); }
 inline Rect askDoneTouch(Screen s) { return makeRect(s.w - 124, 0, 124, more::kHeaderH); }
 inline Rect askButtonRect(Screen s, uint8_t i) {
-  const int gap = 8, w = (s.w - 2 * more::kMarginX - gap * (kAskCount - 1)) / kAskCount;
-  return makeRect(more::kMarginX + i * (w + gap), more::kHeaderH + 8, w, 48);
+  const int gap = 8, w = (s.w - 2 * more::kMarginX - gap * (kAskColumns - 1)) / kAskColumns;
+  const int col = i % kAskColumns, row = i / kAskColumns;
+  return makeRect(more::kMarginX + col * (w + gap), more::kHeaderH + 6 + row * (kAskButtonH + 6), w, kAskButtonH);
 }
 inline Rect askAnswerRect(Screen s) {
-  const int top = more::kHeaderH + 8 + 48 + 10;
+  const int top = askButtonRect(s, kAskCount - 1).bottom() + 8;
   return makeRect(more::kMarginX, top, s.w - 2 * more::kMarginX, s.h - more::kTabH - 6 - top);
+}
+
+// 12.6: a message from Local AI, over the header: a tap does its action.
+inline Rect bannerRect(Screen s) { return makeRect(more::kMarginX, 4, s.w - 2 * more::kMarginX, 56); }
+
+// 12.6: Approvals: the header with Done, up to four rows, each with Approve and Reject when Local AI allows it here,
+// and a status line under them.
+static const uint8_t kApprovalRows = 4;
+inline Rect approvalRowRect(Screen s, uint8_t i) { return makeRect(more::kMarginX, more::kHeaderH + 4 + i * 48, s.w - 2 * more::kMarginX, 48); }
+inline Rect approvalRejectRect(Screen s, uint8_t i) { const Rect r = approvalRowRect(s, i); return makeRect(r.right() - 92, r.y + 2, 88, 44); }
+inline Rect approvalApproveRect(Screen s, uint8_t i) { const Rect r = approvalRowRect(s, i); return makeRect(r.right() - 92 - 8 - 100, r.y + 2, 100, 44); }
+inline Rect approvalStatusRect(Screen s) {
+  const int top = approvalRowRect(s, kApprovalRows - 1).bottom() + 2;
+  return makeRect(more::kMarginX, top, s.w - 2 * more::kMarginX, s.h - more::kTabH - top);
 }
 static const int16_t kImageCaptionH = 30;
 inline Rect imageArea(Screen s) { return makeRect(0, 0, s.w, s.h - kImageCaptionH); }

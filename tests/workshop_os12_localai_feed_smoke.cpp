@@ -39,7 +39,7 @@ int main() {
 
   // 12.4.2: ask buttons and the latest image.
   CHECK(validQuestion("needs") && validQuestion("running") && validQuestion("health"), "the three questions");
-  CHECK(!validQuestion("weather") && !validQuestion("") && !validQuestion(nullptr), "other questions refused");
+  CHECK(!validQuestion("delete") && !validQuestion("") && !validQuestion(nullptr), "other questions refused");
   CHECK(validImagePath("/api/images/view?filename=a.png&type=output&preview=jpeg%3B80"), "Local AI's image route");
   CHECK(!validImagePath("/api/display/feed") && !validImagePath("https://x/api/images/view?a=1") && !validImagePath(nullptr), "other paths refused");
   CHECK(!validImagePath("/api/images/view?a=1 HTTP/1.0\r\nX: y") && !validImagePath("/api/images/view?a=b c"), "no spaces or line breaks");
@@ -67,6 +67,23 @@ int main() {
     agoText(t, sizeof(t), now, 0); CHECK(!t[0], "unknown time: nothing");
     agoText(t, sizeof(t), 0, now); CHECK(!t[0], "clock not set: nothing");
     agoText(t, sizeof(t), now, now + 3600); CHECK(!t[0], "made in the future: nothing");
+  }
+  {  // 12.6
+    CHECK(shownKind("done") && shownKind("disk"), "finished work and the disk are shown");
+    CHECK(validQuestion("today") && validQuestion("next") && validQuestion("weather"), "the new questions");
+    Card c{};
+    strcpy(c.kind, "running");
+    CHECK(!strcmp(askFor(c), "running"), "a card asks by its kind");
+    strcpy(c.ask, "today");
+    CHECK(!strcmp(askFor(c), "today"), "or by what Local AI says");
+    strcpy(c.ask, "delete");
+    strcpy(c.kind, "image");
+    CHECK(askFor(c) == nullptr, "a bad ask and no kind: nothing");
+    strcpy(c.kind, "disk"); c.ask[0] = 0;
+    CHECK(!strcmp(askFor(c), "health"), "the disk asks about health");
+    CHECK(validPage("image") && validPage("camera") && !validPage("settings") && !validPage(nullptr), "pages a message may open");
+    CHECK(messageIsNew(5, 4, 0, 0) && !messageIsNew(4, 4, 0, 0), "newer than the last shown");
+    CHECK(messageIsNew(9, 0, 1000, 1100) && !messageIsNew(9, 0, 1000, 1200) && !messageIsNew(9, 0, 0, 1100), "after a restart: the last 2 minutes only");
   }
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
