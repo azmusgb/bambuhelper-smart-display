@@ -1321,7 +1321,6 @@ static void wtTab(uint8_t i) {
 }
 
 static bool wtHomeTouch(int16_t x, int16_t y) {
-  if (g_wtBootPreview) { g_wtBootPreview = 0; g_dirty = true; return true; }  // a tap ends the splash preview
   const wsm::Screen s = wsScreen();
   // The calm idle screen has no tab bar and no controls: the whole screen is
   // one wake target, and the tap that wakes it ends here (it never reaches
@@ -1330,6 +1329,7 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     if (wtl::calmHitTest(s, x, y).kind == wtl::HitKind::Wake) { g_ambientActive = false; g_dirty = true; }
     return true;
   }
+  if (g_wtBootPreview) { g_wtBootPreview = 0; g_dirty = true; return true; }  // a tap ends the splash preview
   g_ambientActive = false;
   const WtPrint w = wtPrint();
   if (wtHomeIdle(w)) {
