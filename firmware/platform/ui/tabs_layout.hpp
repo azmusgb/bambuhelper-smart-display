@@ -131,7 +131,7 @@ static const ItemSpec kPrinterControlItems[] = {
 // 12.4.0: the third tab is Local AI. Its cards come first (one row each, at least one: All clear or why there
 // are none), then the workshop tools that used to be the whole tab.
 static const ItemSpec kWorkshopSetupItems[] = {
-  {ItemId::WsAiCard, ItemKind::Row, RowKind::Info, false, "Local AI"},
+  {ItemId::WsAiCard, ItemKind::Row, RowKind::Nav, false, "Local AI"},  // 12.4.3: a tap asks about it
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
@@ -141,7 +141,7 @@ static const ItemSpec kWorkshopSetupItems[] = {
 };
 
 static const ItemSpec kWorkshopInventoryItems[] = {
-  {ItemId::WsAiCard, ItemKind::Row, RowKind::Info, false, "Local AI"},
+  {ItemId::WsAiCard, ItemKind::Row, RowKind::Nav, false, "Local AI"},  // 12.4.3: a tap asks about it
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsInventory, ItemKind::Row, RowKind::Action, false, "Filament inventory"},

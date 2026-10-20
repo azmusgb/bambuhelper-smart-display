@@ -370,15 +370,25 @@ static uint16_t wtAiToneColor(workshop::localai::Tone t) {
   return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : t == Tone::Busy ? OS12V_ACCENT : OS12V_MUTED;
 }
 
-// One Local AI card as a row: a dot in its tone, the title, then the line (display only).
+// One Local AI card as a row: a dot in its tone, the title, then the line, and (12.4.3) a chevron: a tap opens the
+// Local AI tab from Home, and asks about the card on the tab.
 static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg) {
   const int16_t mid = (int16_t)(row.y + row.h / 2), x = (int16_t)(row.x + 14);
   tft.fillCircle(x + 5, mid, 5, wtAiToneColor(card.tone));
   setFont(tft, FONT_BODY);
   const int16_t titleW = (int16_t)(tft.textWidth(card.title) + 12);
   uiDrawFit(card.title, (int16_t)(x + 20), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, bg);
-  const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(row.right() - 14 - textX);
+  const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(row.right() - 30 - textX);
   if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
+  wsDrawChevronRight((int16_t)(row.right() - 16), mid, OS12V_MUTED);
+}
+
+// 12.4.3: the Ask question a card leads to (nullptr: just open Ask).
+static const char* wtAiQuestionFor(const char* kind) {
+  if (!strcmp(kind, "needs")) return "needs";
+  if (!strcmp(kind, "running")) return "running";
+  if (!strcmp(kind, "watch")) return "health";
+  return nullptr;
 }
 
 // Home's bottom row: the workshop timer while it runs, otherwise Local AI's
@@ -1486,7 +1496,17 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
       return true;
   }
   const wtl::ItemSpec& it = wtl::item(v, h.index, aiCount);
-  if (it.id == wtl::ItemId::WsAiCard) return true;  // Local AI cards are read-only
+  if (it.id == wtl::ItemId::WsAiCard) {
+    // 12.4.3: a card opens Ask with its question asked (Needs you -> what needs me, Working on -> what's running,
+    // a watchdog finding -> is everything OK). Without cards, the row says why; Ask can't help then.
+    const workshop::localai::Card c = wtAiCard(wtl::headIndex(v, h.index, aiCount));
+    if (!strcmp(c.kind, "status")) { wsToast(c.text); return true; }
+    const char* q = wtAiQuestionFor(c.kind);
+    if (q) workshopLocalAiFeedAsk(q);
+    g_wtAiOverlay = 1;
+    wsClick();
+    return true;
+  }
   WsRowView row;
   wtWorkshopRow(it.id, inv, row);
   if (!row.enabled || it.rowKind == wsm::RowKind::Info) {
