@@ -1091,7 +1091,7 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
       const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
       if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       if (!e.hasImage) { v.enabled = false; v.reason = "No image yet"; break; }
-      strlcpy(v.value, e.imageText, sizeof(v.value));
+      wtAiImageLine(e, v.value, sizeof(v.value));
       break;
     }
     case wtl::ItemId::WsNote:
@@ -1101,6 +1101,16 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
     default:
       break;
   }
+}
+
+// 12.4.3: "12 min ago · <what it shows>" for the Latest image row and caption (the words alone when the time is not
+// known).
+static void wtAiImageLine(const WorkshopLocalAiExtras& e, char* out, size_t len) {
+  char ago[24];
+  const time_t now = time(nullptr);
+  workshop::localai::agoText(ago, sizeof(ago), now >= 1700000000 ? (uint32_t)now : 0U, e.imageAt);
+  if (ago[0]) snprintf(out, len, "%s · %s", ago, e.imageText);
+  else strlcpy(out, e.imageText, len);
 }
 
 // 12.4.2 Ask: three fixed questions; Local AI answers in a sentence or two (no model, so it is quick).
@@ -1159,7 +1169,9 @@ static void wtDrawImage(const wsm::Screen& s, bool full) {
   tft.fillRect(cap.x, cap.y, cap.w, cap.h, OS12V_BG);
   setFont(tft, FONT_SMALL);
   const int16_t hintW = (int16_t)(tft.textWidth("Tap to close") + 16);
-  uiDrawFit(e.imageText, (int16_t)(cap.x + 12), (int16_t)(cap.y + cap.h / 2), (int16_t)(cap.w - 24 - hintW), FONT_SMALL, ML_DATUM, OS12V_TEXT, OS12V_BG);
+  char caption[workshop::localai::kTextLen + 24];
+  wtAiImageLine(e, caption, sizeof(caption));
+  uiDrawFit(caption, (int16_t)(cap.x + 12), (int16_t)(cap.y + cap.h / 2), (int16_t)(cap.w - 24 - hintW), FONT_SMALL, ML_DATUM, OS12V_TEXT, OS12V_BG);
   uiDrawFit("Tap to close", (int16_t)(cap.right() - 12), (int16_t)(cap.y + cap.h / 2), hintW, FONT_SMALL, MR_DATUM, OS12V_MUTED, OS12V_BG);
   hubMarkFrameDirty();
   g_dirty = false;

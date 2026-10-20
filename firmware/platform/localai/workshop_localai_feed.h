@@ -28,6 +28,7 @@ struct WorkshopLocalAiExtras {
     bool hasImage{false};     // the feed has a latest-image card
     char imageTitle[workshop::localai::kTitleLen]{};
     char imageText[workshop::localai::kTextLen]{};
+    std::uint32_t imageAt{0};  // when Local AI made it (epoch seconds), 0 when it didn't say
     bool imageBusy{false};
     bool imageReady{false};   // a JPEG is in the buffer (workshopLocalAiFeedImage)
     std::uint32_t imageSeq{0};  // counts finished downloads
@@ -43,7 +44,8 @@ void workshopLocalAiFeedClear();
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
 // Asks one of the fixed questions (needs, running, health); false when not set up, busy, or not a question.
 bool workshopLocalAiFeedAsk(const char* question);
-// Downloads the feed's latest image (a JPEG); false when there is none or a download is running.
+// Makes sure the feed's latest image is downloaded (a JPEG; 12.4.3: kept until the feed names another, which is
+// fetched in the background). False when there is none or a download is already running.
 bool workshopLocalAiFeedFetchImage();
 WorkshopLocalAiExtras workshopLocalAiFeedExtras();
 // The downloaded JPEG, valid until the next workshopLocalAiFeedFetchImage(); false while one is running.

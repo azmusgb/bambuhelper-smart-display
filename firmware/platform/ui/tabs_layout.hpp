@@ -135,7 +135,6 @@ static const ItemSpec kWorkshopSetupItems[] = {
   {ItemId::WsAsk, ItemKind::Row, RowKind::Nav, false, "Ask Local AI"},     // 12.4.2
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
-  {ItemId::WsHowTo, ItemKind::Row, RowKind::Info, false, "How to connect"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
   {ItemId::WsTimerLength, ItemKind::Row, RowKind::Stepper, false, "Timer length"},
   {ItemId::WsNote, ItemKind::Row, RowKind::Info, false, "Note"},
