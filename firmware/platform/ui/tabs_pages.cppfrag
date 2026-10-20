@@ -1287,7 +1287,7 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
       default: return true;
     }
     const wtl::ItemId id = wtl::item(v, hi.index, aiCount).id;
-    if (id == wtl::ItemId::HomeAi) { setPage(SCREEN_HUB_WORKSHOP); wsClick(); }  // the full list is on the Local AI tab
+    if (id == wtl::ItemId::HomeAi) { g_wtAiOverlay = 0; setPage(SCREEN_HUB_WORKSHOP); wsClick(); }  // the full list is on the Local AI tab
     else if (id == wtl::ItemId::HomePrinterRow) {
       if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
       else wsOpenFrom(wsm::PageId::LocalPortal, 0);
@@ -1309,6 +1309,7 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     else wsOpenFrom(wsm::PageId::LocalPortal, 0);
     wsClick();
   } else if (id == wtl::ItemId::HomeExtra) {
+    g_wtAiOverlay = 0;
     setPage(SCREEN_HUB_WORKSHOP);
     wsClick();
   }
