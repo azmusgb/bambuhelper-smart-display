@@ -15,6 +15,8 @@
 
 #include <cstring>
 
+#include <nvs.h>
+
 namespace {
 
 using workshop::localai::Card;
@@ -187,16 +189,26 @@ void workshopLocalAiFeedLoop() {
 }
 
 bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem) {
-    if (!lai::validPrivateIp(address) || !lai::validTlsName(tlsName) || !lai::validKey(key)) return false;
-    if (!caPem || strlen(caPem) >= kMaxCaBytes || !strstr(caPem, "-----BEGIN CERTIFICATE-----")) return false;
+    if (!lai::validPrivateIp(address) || !lai::validTlsName(tlsName) || !lai::validKey(key) ||
+        !caPem || strlen(caPem) >= kMaxCaBytes || !strstr(caPem, "-----BEGIN CERTIFICATE-----")) {
+        setStatus("Not saved: the address, certificate name, key or CA is not valid.");
+        return false;
+    }
     if (!ensureCaBuffer()) return false;
+    // Save all four or none: a put that fails (NVS full) must not leave a half-saved setting that only works until
+    // the next restart.
     Preferences prefs;
-    if (!prefs.begin(kNamespace, false)) return false;
-    prefs.putString("addr", address);
-    prefs.putString("name", tlsName);
-    prefs.putString("key", key);
-    prefs.putString("ca", caPem);
+    if (!prefs.begin(kNamespace, false)) { setStatus("Could not open the settings storage."); return false; }
+    const bool saved = prefs.putString("addr", address) == strlen(address) && prefs.putString("name", tlsName) == strlen(tlsName) &&
+                       prefs.putString("key", key) == strlen(key) && prefs.putString("ca", caPem) == strlen(caPem);
+    if (!saved) prefs.clear();
     prefs.end();
+    if (!saved) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Could not save: settings storage is full (%u free entries).", (unsigned)workshopLocalAiFeedNvsFreeEntries());
+        setStatus(msg);
+        return false;
+    }
     portENTER_CRITICAL(&g_mux);
     copyText(g_address, sizeof(g_address), address);
     copyText(g_tlsName, sizeof(g_tlsName), tlsName);
@@ -223,6 +235,11 @@ void workshopLocalAiFeedClear() {
     g_snap = WorkshopLocalAiFeedSnapshot{};
     copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are not set up.");
     portEXIT_CRITICAL(&g_mux);
+}
+
+std::size_t workshopLocalAiFeedNvsFreeEntries() {
+    nvs_stats_t st;
+    return nvs_get_stats(nullptr, &st) == ESP_OK ? st.free_entries : 0;
 }
 
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot() {
