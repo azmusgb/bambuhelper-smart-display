@@ -989,6 +989,17 @@ static uint32_t g_wtImageDrawnAt = 0;
 static const char* const kWtAskIds[3] = {"needs", "running", "health"};
 static const char* const kWtAskLabels[3] = {"Needs me?", "Running?", "All OK?"};
 static const char* const kWtAskQuestions[3] = {"Anything need me?", "What's running?", "Is everything OK?"};
+
+// 12.4.3: "12 min ago · <what it shows>" for the Latest image row and caption (the words alone when the time is not
+// known).
+static void wtAiImageLine(const WorkshopLocalAiExtras& e, char* out, size_t len) {
+  char ago[24];
+  const time_t now = time(nullptr);
+  workshop::localai::agoText(ago, sizeof(ago), now >= 1700000000 ? (uint32_t)now : 0U, e.imageAt);
+  if (ago[0]) snprintf(out, len, "%s · %s", ago, e.imageText);
+  else strlcpy(out, e.imageText, len);
+}
+
 static uint16_t g_wtTimerMinutes = 0;  // 0 = the first portal preset
 
 // Timer length: one of the four presets set in Local Portal, low to high.
@@ -1101,16 +1112,6 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
     default:
       break;
   }
-}
-
-// 12.4.3: "12 min ago · <what it shows>" for the Latest image row and caption (the words alone when the time is not
-// known).
-static void wtAiImageLine(const WorkshopLocalAiExtras& e, char* out, size_t len) {
-  char ago[24];
-  const time_t now = time(nullptr);
-  workshop::localai::agoText(ago, sizeof(ago), now >= 1700000000 ? (uint32_t)now : 0U, e.imageAt);
-  if (ago[0]) snprintf(out, len, "%s · %s", ago, e.imageText);
-  else strlcpy(out, e.imageText, len);
 }
 
 // 12.4.2 Ask: three fixed questions; Local AI answers in a sentence or two (no model, so it is quick).
