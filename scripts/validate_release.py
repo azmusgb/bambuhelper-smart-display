@@ -315,6 +315,9 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
         fail("Release Gate must not duplicate Core Validate shell syntax work")
 
 
+IGNORED_LOCAL_PREFIXES = (".workshop-tools/", "dist/", "upstream/", ".git/")
+
+
 def main() -> int:
     for rel in REQUIRED:
         if not (ROOT / rel).is_file():
@@ -333,6 +336,8 @@ def main() -> int:
         if not path.is_file():
             continue
         rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(IGNORED_LOCAL_PREFIXES):
+            continue
         if rel.startswith(FORBIDDEN_PREFIXES) or rel in FORBIDDEN_PATHS:
             fail(f"forbidden generated/superseded content is present: {rel}")
         if path.parent == ROOT and path.name.startswith("validation-report"):
