@@ -842,12 +842,9 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
   const int16_t right = row.right() - 12;
   int16_t valueRight = right;
   if (t.inUse) {
-    const int16_t badgeW = 62, badgeH = 20;
-    const int16_t badgeX = right - badgeW;
-    const int16_t badgeY = mid - 10;
-    tft.fillRoundRect(badgeX, badgeY, badgeW, badgeH, 10, OS12V_ACCENT);
-    uiDrawFit("ACTIVE", badgeX + badgeW / 2, mid, badgeW - 6, FONT_SMALL, MC_DATUM, OS12V_BG, OS12V_ACCENT);
-    valueRight = badgeX - 10;
+    uiDrawFit("In use", right, mid, 60, FONT_BODY, MR_DATUM, OS12V_ACCENT, bg);
+    setFont(tft, FONT_BODY);
+    valueRight = (int16_t)(right - tft.textWidth("In use") - 12);
   }
   const int16_t valueX = labelX + labelW + 8;
   if (valueRight > valueX)
