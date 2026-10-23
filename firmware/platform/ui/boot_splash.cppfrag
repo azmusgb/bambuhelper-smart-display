@@ -1,13 +1,14 @@
 // ---------------------------------------------------------------------------
 // Workshop OS 12.5 boot splash (apply_workshop_os12_boot_splash.py).
 //
-// 2.6 s while Wi-Fi starts: a hexagon is "printed" layer by layer by a moving
-// nozzle (violet at the bed to Local AI blue at the top), Local AI's sparkle is
-// cut out of it, a light sweeps across, a ring pulses out, and the name types
-// in. The bar under it fills with the boot and the line under that says what
-// Wi-Fi is doing. Every frame is drawn whole from the time since boot into a
-// PSRAM sprite and pushed at once, so nothing flickers; without the sprite the
-// finished frame is drawn once, straight to the panel.
+// High-definition cybernetic boot sequence on the LocalAI palette:
+// - Luminous hexagon printed layer-by-layer with glowing toolhead and spark
+// - Precision aerospace HUD grid, crosshairs and corner brackets
+// - Radiant central AI Star power core with diamond aperture
+// - Crystal-clear Figtree typography without nearest-neighbor scaling artifacts
+// - Gradient power progress bar with white leading-edge spark
+// - Live hardware telemetry and Wi-Fi connection indicator
+//
 // /hub/show boot-splash[-<percent>] draws a frame into the hub framebuffer so
 // captures can check it.
 // ---------------------------------------------------------------------------
@@ -17,16 +18,27 @@ void bootSplashTick();
 static lgfx::LGFX_Sprite* g_bootSprite = nullptr;
 static uint32_t g_bootSplashStart = 0;
 
-// LocalAI palette (app.css --ds-*), RGB565.
-static const uint16_t kBsBg = 0x0883, kBsGlow = 0x1947, kBsDot = 0x1928, kBsLine = 0x2A4D;
-static const uint16_t kBsText = 0xEF9F, kBsMuted = 0x9537, kBsAccent = 0x6DBF, kBsViolet = 0xACFF;
-static const uint16_t kBsGood = 0x3EB3, kBsSurface = 0x1107, kBsWhite = 0xFFFF;
+// LocalAI / Midnight Navy palette (app.css --ds-*), RGB565.
+static const uint16_t kBsBg = 0x0862;        // #070d14 deep midnight obsidian
+static const uint16_t kBsSurface = 0x1107;   // #111a26
+static const uint16_t kBsSurface2 = 0x11EB;  // #152538
+static const uint16_t kBsLine = 0x1A4F;      // #1e324a
+static const uint16_t kBsLineLight = 0x2AE3; // #2d4b70
+static const uint16_t kBsText = 0xFFFF;      // #ffffff pure crisp white
+static const uint16_t kBsMuted = 0x94F2;     // #94a3b8 slate muted
+static const uint16_t kBsAccent = 0x3D7F;    // #38bdf8 electric sky cyan
+static const uint16_t kBsViolet = 0x8A9E;    // #818cf8 vibrant indigo violet
+static const uint16_t kBsGood = 0x3E53;      // #34d399 emerald green
+static const uint16_t kBsWhite = 0xFFFF;
 
 static uint16_t bsLerp(uint16_t a, uint16_t b, float f) {
   if (f <= 0.0f) return a;
   if (f >= 1.0f) return b;
-  const int ar = a >> 11, ag = (a >> 5) & 63, ab = a & 31, br = b >> 11, bg = (b >> 5) & 63, bb = b & 31;
-  return (uint16_t)(((int)(ar + (br - ar) * f) << 11) | ((int)(ag + (bg - ag) * f) << 5) | (int)(ab + (bb - ab) * f));
+  const int ar = a >> 11, ag = (a >> 5) & 63, ab = a & 31;
+  const int br = b >> 11, bg = (b >> 5) & 63, bb = b & 31;
+  return (uint16_t)(((int)(ar + (br - ar) * f) << 11) |
+                    ((int)(ag + (bg - ag) * f) << 5) |
+                    (int)(ab + (bb - ab) * f));
 }
 
 // 0..1 for t in [a, b], eased out.
@@ -56,142 +68,253 @@ static void bsSparkle(lgfx::LovyanGFX& g, int x, int y, int s, uint16_t c) {
 }
 
 static void bsFont(lgfx::LovyanGFX& g, FontID id, bool panelCache) {
-  if (panelCache) { setFont(g, FONT_NONE); setFont(g, id); }  // the hub framebuffer: reload, past setFont()'s cache
-  else loadFontInto(g, id);        // the splash sprite: a target setFont() doesn't track
+  if (panelCache) { setFont(g, FONT_NONE); setFont(g, id); }
+  else loadFontInto(g, id);
+}
+
+// Point on a regular hexagon at radius r, vertex index k (0..5).
+static void bsHexPoint(int cx, int cy, int r, int k, int& outX, int& outY) {
+  const float a = (k * 60 - 90) * 0.0174533f;
+  outX = cx + (int)(r * cosf(a));
+  outY = cy + (int)(r * sinf(a));
 }
 
 // The whole splash at `t` ms after boot onto `g` (sprite, hub framebuffer or panel).
 static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
   const int sw = g.width(), sh = g.height(), cx = sw / 2;
   const bool landscape = sw > sh;
-  const int r = landscape ? 62 : 70;
-  const int cy = landscape ? 112 : 168;
+  const int r = landscape ? 54 : 64;
+  const int cy = landscape ? 102 : 156;
   g.fillScreen(kBsBg);
 
-  // A dot grid fades in, and a glow grows behind the mark.
-  const uint16_t dot = bsLerp(kBsBg, kBsDot, bsPhase(t, 0, 600));
-  for (int y = 12; y < sh; y += 24)
-    for (int x = 12; x < sw; x += 24) g.drawPixel(x, y, dot);
-  const float glow = bsPhase(t, 100, 900);
-  for (int i = 8; i >= 1; --i) g.fillCircle(cx, cy, (int)((r + 10 + i * 9) * glow), bsLerp(kBsBg, kBsGlow, (9 - i) / 9.0f * glow));
+  // 1. Aerospace HUD brackets, crosshairs and corner metadata:
+  const float hudFade = bsPhase(t, 150, 750);
+  if (hudFade > 0.0f) {
+    const uint16_t bCol = bsLerp(kBsBg, kBsLine, hudFade);
+    const uint16_t tCol = bsLerp(kBsBg, 0x3A75, hudFade);
 
-  // The print: one layer every 3 px, bottom to top, the nozzle going back and forth.
-  const int layers = (2 * r) / 3;
-  const float printed = bsPhase(t, 150, 1450) * layers;
+    // Corner brackets:
+    g.drawFastHLine(12, 12, 14, bCol);
+    g.drawFastVLine(12, 12, 14, bCol);
+    g.drawFastHLine(sw - 26, 12, 14, bCol);
+    g.drawFastVLine(sw - 13, 12, 14, bCol);
+    g.drawFastHLine(12, sh - 13, 14, bCol);
+    g.drawFastVLine(12, sh - 26, 14, bCol);
+    g.drawFastHLine(sw - 26, sh - 13, 14, bCol);
+    g.drawFastVLine(sw - 13, sh - 26, 14, bCol);
+
+    // Alignment crosshairs:
+    g.drawFastHLine(cx - 154, cy, 9, bCol);
+    g.drawFastVLine(cx - 150, cy - 4, 9, bCol);
+    g.drawFastHLine(cx + 146, cy, 9, bCol);
+    g.drawFastVLine(cx + 150, cy - 4, 9, bCol);
+
+    // Corner readouts:
+    bsFont(g, FONT_SMALL, panelCache);
+    g.setTextColor(tCol);
+    g.setTextDatum(TL_DATUM);
+    g.drawString("SYS // WS350-S3", 30, 10);
+    g.setTextDatum(TR_DATUM);
+    g.setTextColor(bsLerp(kBsBg, kBsGood, hudFade));
+    g.drawString("ONLINE // OK", sw - 30, 10);
+    g.setTextDatum(BL_DATUM);
+    g.setTextColor(tCol);
+    g.drawString("DISP // 480x320 60Hz", 30, sh - 8);
+    g.setTextDatum(BR_DATUM);
+    g.drawString(WORKSHOP_OS_RELEASE_VERSION, sw - 30, sh - 8);
+    g.setTextDatum(TL_DATUM);
+  }
+
+  // 2. Outer luminous hex frame & vertex pins:
+  const float frameFade = bsPhase(t, 250, 850);
+  if (frameFade > 0.0f) {
+    const uint16_t lineCol = bsLerp(kBsBg, kBsLine, frameFade);
+    const uint16_t pinCol = bsLerp(kBsBg, kBsAccent, frameFade);
+    for (int k = 0; k < 6; ++k) {
+      int x1, y1, x2, y2;
+      bsHexPoint(cx, cy, r + 4, k, x1, y1);
+      bsHexPoint(cx, cy, r + 4, (k + 1) % 6, x2, y2);
+      g.drawLine(x1, y1, x2, y2, lineCol);
+    }
+    for (int k = 0; k < 6; ++k) {
+      int px, py;
+      bsHexPoint(cx, cy, r + 4, k, px, py);
+      g.fillCircle(px, py, 2, pinCol);
+    }
+  }
+
+  // 3. Layer-by-layer 3D Print Deposition:
+  const int layers = r;
+  const float printed = bsPhase(t, 100, 1400) * layers;
   const int done = (int)printed;
   for (int i = 0; i < layers && i <= done; ++i) {
-    const int y = cy + r - 2 - i * 3;
+    const int y = cy + r - 2 - i * 2;
     const int half = bsHexHalf(r, y - cy);
     if (half <= 0) continue;
     const uint16_t c = bsLerp(kBsViolet, kBsAccent, (float)i / layers);
-    if (i < done) { g.fillRect(cx - half, y, half * 2, 2, c); continue; }
+    if (i < done) {
+      g.fillRect(cx - half, y, half * 2, 2, c);
+      continue;
+    }
     if (done >= layers) continue;
-    // The layer being printed, up to the nozzle (left to right on even layers, right to left on odd).
+
+    // Moving toolhead deposition:
     const float f = printed - done;
     const int len = (int)(half * 2 * f);
-    const int nx = (i % 2 == 0) ? cx - half + len : cx + half - len;
+    const int nx = (i % 2 == 0) ? (cx - half + len) : (cx + half - len);
     if (i % 2 == 0) g.fillRect(cx - half, y, len, 2, c);
     else g.fillRect(nx, y, len, 2, c);
-    g.fillCircle(nx, y, 4, bsLerp(kBsBg, kBsAccent, 0.5f));  // the hot spot
+
+    // Nozzle toolhead with metallic block, heater & glowing tip:
+    g.fillCircle(nx, y, 4, kBsAccent);
     g.fillCircle(nx, y, 2, kBsWhite);
-    g.fillTriangle(nx - 5, y - 6, nx + 5, y - 6, nx, y - 1, kBsMuted);  // the nozzle and its heater block
-    g.fillRoundRect(nx - 9, y - 16, 18, 10, 3, kBsLine);
-    g.drawRoundRect(nx - 9, y - 16, 18, 10, 3, kBsMuted);
+    g.fillTriangle(nx - 4, y - 6, nx + 4, y - 6, nx, y - 1, 0xD6BA);
+    g.fillRoundRect(nx - 7, y - 14, 14, 8, 2, 0x2A4D);
+    g.drawRoundRect(nx - 7, y - 14, 14, 8, 2, 0x6DBF);
   }
 
-  // Local AI's sparkle is cut out of the finished print, and a small one twinkles beside it.
-  const float cut = bsPhase(t, 1450, 1750);
+  // 4. Luminous Central AI Star Power Core:
+  const float cut = bsPhase(t, 1300, 1650);
   if (cut > 0.0f) {
-    bsSparkle(g, cx, cy, (int)(r * 0.55f * cut), kBsBg);
-    const float tw = bsPhase(t, 1650, 1900);
-    bsSparkle(g, cx + (int)(r * 0.62f), cy - (int)(r * 0.62f), (int)(9 * tw), bsLerp(kBsWhite, kBsAccent, tw));
-  }
+    const int dr = (int)(20 * cut);
+    // Dark diamond core chamber:
+    g.fillTriangle(cx, cy - dr, cx + dr, cy, cx - dr, cy, kBsBg);
+    g.fillTriangle(cx, cy + dr, cx + dr, cy, cx - dr, cy, kBsBg);
+    // Outer diamond ring:
+    g.drawLine(cx, cy - dr, cx + dr, cy, kBsAccent);
+    g.drawLine(cx + dr, cy, cx, cy + dr, kBsAccent);
+    g.drawLine(cx, cy + dr, cx - dr, cy, kBsAccent);
+    g.drawLine(cx - dr, cy, cx, cy - dr, kBsAccent);
 
-  // The outline lights up, then a band of light sweeps across the mark.
-  if (t >= 1450) {
-    const uint16_t edge = bsLerp(kBsBg, kBsAccent, bsPhase(t, 1450, 1700));
-    int px = cx, py = cy - r;
-    for (int k = 1; k <= 6; ++k) {
-      const float a = (k * 60 - 90) * 0.0174533f;
-      const int qx = cx + (int)(r * cosf(a)), qy = cy + (int)(r * sinf(a));
-      g.drawLine(px, py, qx, qy, edge);
-      px = qx; py = qy;
+    // Radiant AI Star:
+    const int starS = (int)(15 * cut);
+    bsSparkle(g, cx, cy, starS, kBsAccent);
+    bsSparkle(g, cx, cy, (int)(starS * 0.55f), kBsWhite);
+
+    // Secondary sparkle on upper-right:
+    const float tw = bsPhase(t, 1600, 1900);
+    if (tw > 0.0f) {
+      bsSparkle(g, cx + (int)(r * 0.62f), cy - (int)(r * 0.62f), (int)(8 * tw), kBsWhite);
     }
   }
+
+  // 5. Specular Light Sweep across the emblem:
   const float sweep = bsPhase(t, 1750, 2150);
   if (sweep > 0.0f && sweep < 1.0f) {
     const int sx = cx - r - 20 + (int)((2 * r + 40) * sweep);
     for (int y = cy - r; y <= cy + r; ++y) {
       const int half = bsHexHalf(r, y - cy);
-      const int x0 = sx + (y - cy) / 2;  // a slanted band, 10 px wide
-      for (int x = x0; x < x0 + 10; ++x)
-        if (x > cx - half && x < cx + half && g.readPixel(x, y) != kBsBg) g.drawPixel(x, y, bsLerp(g.readPixel(x, y), kBsWhite, 0.55f));
+      const int x0 = sx + (y - cy) / 2;
+      for (int x = x0; x < x0 + 10; ++x) {
+        if (x > cx - half && x < cx + half && g.readPixel(x, y) != kBsBg) {
+          g.drawPixel(x, y, bsLerp(g.readPixel(x, y), kBsWhite, 0.6f));
+        }
+      }
     }
   }
 
-  // A ring pulses out when the mark is done.
+  // 6. Sonic Pulse Ring expanding outward:
   const float ring = bsPhase(t, 2050, 2550);
   if (ring > 0.0f && ring < 1.0f) {
-    const int rr = r + 6 + (int)(46 * ring);
+    const int rr = r + 6 + (int)(42 * ring);
     const uint16_t rc = bsLerp(kBsAccent, kBsBg, ring);
     g.drawCircle(cx, cy, rr, rc);
     g.drawCircle(cx, cy, rr + 1, rc);
   }
 
-  // The name types in, then the line under it.
-  static const char kName[] = "Workshop OS";
-  const int nameY = landscape ? 212 : 290;
-  const float typed = bsPhase(t, 1100, 1700);
+  // 7. Typography: Native 1.0x Figtree Bold (crystal-sharp, zero pixelation):
+  static const char kPrefix[] = "Workshop";
+  static const char kSuffix[] = " OS";
+  const int nameY = landscape ? 172 : 250;
+  const float typed = bsPhase(t, 1050, 1650);
   if (typed > 0.0f) {
     bsFont(g, FONT_XLARGE, panelCache);
-    g.setTextSize(1.5f);
-    const int full = g.textWidth(kName);
-    char shown[sizeof(kName)];
-    const size_t n = (size_t)(typed * (sizeof(kName) - 1) + 0.5f);
-    memcpy(shown, kName, n);
-    shown[n] = 0;
-    g.setTextDatum(ML_DATUM);
-    g.setTextColor(kBsText);  // no background box: the glow shows through
-    g.drawString(shown, cx - full / 2, nameY);
-    if (n < sizeof(kName) - 1) g.fillRect(cx - full / 2 + g.textWidth(shown) + 2, nameY - 14, 3, 28, kBsAccent);  // the cursor
     g.setTextSize(1.0f);
-  }
-  bsFont(g, FONT_SMALL, panelCache);
-  g.setTextDatum(MC_DATUM);
-  const float sub = bsPhase(t, 1600, 2000);
-  if (sub > 0.0f) {
-    g.setTextColor(bsLerp(kBsBg, kBsMuted, sub));
-    g.drawString("Local AI  \xC2\xB7  Printer  \xC2\xB7  Workshop", cx, nameY + (landscape ? 30 : 34));
+    const int wPre = g.textWidth(kPrefix);
+    const int wSuf = g.textWidth(kSuffix);
+    const int totalW = wPre + wSuf;
+    const int startX = cx - totalW / 2;
+
+    const float p1 = bsPhase(t, 1050, 1400);
+    const size_t n1 = (size_t)(p1 * (sizeof(kPrefix) - 1) + 0.5f);
+    char s1[sizeof(kPrefix)];
+    memcpy(s1, kPrefix, n1);
+    s1[n1] = 0;
+
+    g.setTextDatum(ML_DATUM);
+    g.setTextColor(kBsText);
+    g.drawString(s1, startX, nameY + 13);
+
+    int curX = startX + g.textWidth(s1);
+    if (t >= 1400) {
+      const float p2 = bsPhase(t, 1400, 1650);
+      const size_t n2 = (size_t)(p2 * (sizeof(kSuffix) - 1) + 0.5f);
+      char s2[sizeof(kSuffix)];
+      memcpy(s2, kSuffix, n2);
+      s2[n2] = 0;
+      g.setTextColor(kBsAccent);
+      g.drawString(s2, startX + wPre, nameY + 13);
+      curX = startX + wPre + g.textWidth(s2);
+    }
+    if (typed < 0.98f) {
+      g.fillRect(curX + 2, nameY + 2, 2, 22, kBsAccent);
+    }
   }
 
-  // The boot bar, with a highlight running along it, and what Wi-Fi is doing.
-  const int barW = landscape ? 220 : 200, barX = cx - barW / 2, barY = landscape ? sh - 44 : sh - 80;
-  g.fillRoundRect(barX, barY, barW, 4, 2, kBsSurface);
+  // Subtitle:
+  const float sub = bsPhase(t, 1600, 2050);
+  if (sub > 0.0f) {
+    bsFont(g, FONT_SMALL, panelCache);
+    g.setTextDatum(MC_DATUM);
+    g.setTextColor(bsLerp(kBsBg, kBsMuted, sub));
+    g.drawString("LOCAL AI  \xC2\xB7  PRINTER  \xC2\xB7  WORKSHOP", cx, nameY + (landscape ? 36 : 40));
+  }
+
+  // 8. Power Progress Bar:
+  const int barW = landscape ? 240 : 200;
+  const int barH = 5;
+  const int barX = cx - barW / 2;
+  const int barY = landscape ? sh - 58 : sh - 86;
+
+  g.drawRoundRect(barX - 1, barY - 1, barW + 2, barH + 2, 3, kBsLine);
+  g.fillRoundRect(barX, barY, barW, barH, 2, kBsSurface);
+
   const float boot = t >= kBootSplashMs ? 1.0f : (float)t / kBootSplashMs;
   const int fill = (int)(barW * boot);
-  if (fill > 3) g.fillRoundRect(barX, barY, fill, 4, 2, kBsAccent);
-  const int hx = barX + (int)((t % 900) / 900.0f * barW);
-  if (hx < barX + fill - 6) g.fillRect(hx, barY, 6, 4, kBsWhite);
+  if (fill > 2) {
+    for (int bx = 0; bx < fill; ++bx) {
+      const uint16_t col = bsLerp(kBsAccent, kBsGood, (float)bx / barW);
+      g.drawFastVLine(barX + bx, barY, barH, col);
+    }
+    const int sparkX = barX + fill - 2;
+    if (sparkX >= barX) {
+      g.fillRect(sparkX, barY - 1, 3, barH + 2, kBsWhite);
+    }
+  }
+
+  // 9. Hardware & Wi-Fi Telemetry Line:
   char status[64];
-  uint16_t statusColor = kBsMuted;
+  const int statusY = barY + 18;
+  bsFont(g, FONT_SMALL, panelCache);
+  g.setTextDatum(MC_DATUM);
+
   if (WiFi.status() == WL_CONNECTED) {
     snprintf(status, sizeof(status), "Wi-Fi connected  \xC2\xB7  %s", WiFi.localIP().toString().c_str());
-    statusColor = kBsGood;
+    const int tw = g.textWidth(status);
+    g.fillCircle(cx - tw / 2 - 8, statusY, 3, kBsGood);
+    g.setTextColor(kBsMuted);
+    g.drawString(status, cx + 4, statusY);
   } else if (WiFi.SSID().length()) {
-    snprintf(status, sizeof(status), "Joining %s...", WiFi.SSID().c_str());
+    snprintf(status, sizeof(status), "Connecting to %s...", WiFi.SSID().c_str());
+    const int tw = g.textWidth(status);
+    g.fillCircle(cx - tw / 2 - 8, statusY, 3, kBsAccent);
+    g.setTextColor(kBsAccent);
+    g.drawString(status, cx + 4, statusY);
   } else {
-    snprintf(status, sizeof(status), "Starting...");
+    snprintf(status, sizeof(status), "Booting subsystems...");
+    g.setTextColor(kBsMuted);
+    g.drawString(status, cx, statusY);
   }
-  g.setTextColor(statusColor);
-  g.drawString(status, cx, barY + 18);
-
-  // Corners: the device and the release.
-  g.setTextColor(kBsLine);
-  g.setTextDatum(BL_DATUM);
-  g.drawString("WS350", 10, sh - 8);
-  g.setTextDatum(BR_DATUM);
-  g.drawString(WORKSHOP_OS_RELEASE_VERSION, sw - 10, sh - 8);
-  g.setTextDatum(TL_DATUM);
 }
 
 // Called from initDisplay(): the first frame.
