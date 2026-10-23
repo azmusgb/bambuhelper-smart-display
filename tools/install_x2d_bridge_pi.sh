@@ -31,7 +31,7 @@ case "${1:-}" in
   --set-code)
     read -r -s -p "Printer access code (8 characters, from the printer's touchscreen): " code; echo
     [[ "$code" =~ ^[A-Za-z0-9]{8}$ ]] || { echo "That is not an 8-character access code." >&2; exit 1; }
-    printf 'rtsps://bblp:%s@%s:322/streaming/live/1\n' "$code" "$PRINTER_IP" |
+    printf 'bambu://bblp:%s@%s:6000\n' "$code" "$PRINTER_IP" |
       ssh "$HOST" "sudo install -m 600 -o x2dbridge -g x2dbridge /dev/stdin /etc/x2d-bridge/rtsp-url && sudo systemctl restart $UNIT"
     unset code
     echo "Saved on $HOST; the bridge is starting. Check: bash $0 --status"
