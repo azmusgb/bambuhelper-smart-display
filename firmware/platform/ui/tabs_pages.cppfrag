@@ -20,13 +20,72 @@ struct WtPrint {
   bool online;
   bool printing;
   bool paused;
-  bool active;     // printing or paused
-  bool finished;   // last print finished (idle)
-  bool failed;     // last print failed (idle)
-  uint8_t alerts;  // printer errors (HMS + print_error)
+  bool active;        // printing or paused
+  bool finished;      // last print finished (idle)
+  bool failed;        // last print failed (idle)
+  bool failedActive;  // 12.8.1: failed and currently alerting
+  uint8_t alerts;     // printer errors (HMS + print_error)
   const char* chip;
   uint16_t color;
 };
+
+static bool g_wtFailedDismissed = false;
+
+#ifdef ARDUINO
+static void wtBambuddyClearTask(void*) {
+  WiFiClient client;
+  client.setTimeout(2);
+  if (client.connect("10.0.0.30", 8000)) {
+    client.print("POST /api/v1/printers/1/clear-plate HTTP/1.1\r\nHost: 10.0.0.30:8000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    client.stop();
+  }
+  if (client.connect("10.0.0.30", 8000)) {
+    client.print("POST /api/v1/printers/1/hms/clear HTTP/1.1\r\nHost: 10.0.0.30:8000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    client.stop();
+  }
+  vTaskDelete(nullptr);
+}
+#endif
+
+static void wtDismissFailedAlert() {
+  g_wtFailedDismissed = true;
+#ifdef ARDUINO
+  xTaskCreate(wtBambuddyClearTask, "bambuddyClear", 4096, nullptr, 1, nullptr);
+#endif
+}
+
+// 12.8.1: a failed print keeps the big card and red Attention chip while the
+// print is recent and unacknowledged. Once the printer has cooled down to room
+// temperature (nozzle < 45°C, bed < 35°C) and either 30 minutes have elapsed
+// or the user tapped to dismiss it, Home returns to Local AI and calm idle,
+// and the chip returns to Ready. The Printer tab retains the failed job name in
+// muted text on its status row.
+static bool wtFailedRecently(const BambuState* s, bool failed, bool active) {
+  static uint32_t seenAt = 0;
+
+  if (active) {
+    g_wtFailedDismissed = false;
+    seenAt = 0;
+    return false;
+  }
+  if (!failed || !s || g_wtFailedDismissed) {
+    seenAt = 0;
+    return false;
+  }
+  if (!seenAt) seenAt = millis() | 1U;
+
+  const bool cold = (s->nozzleTemp < 45.0f && s->bedTemp < 35.0f);
+  if (cold) {
+    const time_t now = time(nullptr);
+    if (s->finishEpoch && now >= 1700000000) {
+      if ((uint32_t)now >= s->finishEpoch && (uint32_t)now - s->finishEpoch >= 1800U)
+        return false;
+    } else if (millis() - seenAt >= 1800000UL) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // 12.4.4: HMS 0500-0500-0001-0007, "MQTT Command verification failed. Please update Studio ... or Handy": the printer
 // turned down a command from an app it couldn't verify (Bambu's authorization). The print goes on and nothing on the
@@ -60,9 +119,10 @@ static WtPrint wtPrint() {
   w.active = w.printing || w.paused;
   w.finished = !w.active && w.s->gcodeStateId == GCODE_FINISH;
   w.failed = !w.active && w.s->gcodeStateId == GCODE_FAILED;
+  w.failedActive = w.failed && wtFailedRecently(w.s, w.failed, w.active);
   w.alerts = w.online ? wtAlertCount(*w.s) : 0;
   if (!w.online) { w.chip = "Offline"; w.color = OS12V_AMBER; }
-  else if (w.alerts || w.failed) { w.chip = "Attention"; w.color = OS12V_RED; }
+  else if (w.alerts || w.failedActive) { w.chip = "Attention"; w.color = OS12V_RED; }
   else if (w.paused) { w.chip = "Paused"; w.color = OS12V_AMBER; }
   else if (w.printing) { w.chip = "Printing"; w.color = OS12V_ACCENT; }
   else if (w.finished) { w.chip = "Finished"; w.color = OS12V_GREEN; }
@@ -147,8 +207,12 @@ static void wtAlertText(const WtPrint& w, char* out, size_t len) {
 #endif
   if (w.failed) {
     const char* job = (w.s) ? jobDisplayName(*w.s) : nullptr;
-    if (job && job[0]) snprintf(out, len, "%s · Tap to view status & clear", job);
-    else strlcpy(out, "The last print failed. Tap to inspect status.", len);
+    if (job && job[0]) {
+      if (w.failedActive) snprintf(out, len, "%s · Tap to dismiss", job);
+      else snprintf(out, len, "%s", job);
+    } else {
+      strlcpy(out, w.failedActive ? "The last print failed. Tap to dismiss." : "The last print failed.", len);
+    }
   }
 }
 
@@ -345,8 +409,8 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
     headline = "Printer offline";
     headColor = OS12V_AMBER;
     strlcpy(detail, "Check that the printer is on and on the same Wi-Fi as this display.", sizeof(detail));
-  } else if (w.alerts || w.failed) {
-    headline = w.failed && !w.alerts ? "Print failed" : "Needs attention";
+  } else if (w.alerts || w.failedActive) {
+    headline = w.failedActive && !w.alerts ? "Print failed" : "Needs attention";
     headColor = OS12V_RED;
     wtAlertText(w, detail, sizeof(detail));
   } else if (w.finished) {
@@ -563,7 +627,7 @@ static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneL
   } else if (!w.online) {
     c.state = wtl::CalmState::Offline;
     color = OS12V_AMBER;
-  } else if (w.alerts || w.failed) {
+  } else if (w.alerts || w.failedActive) {
     c.state = wtl::CalmState::Attention;
     color = OS12V_RED;
   } else if (w.finished && wtFinishedRecently(w)) {
@@ -676,7 +740,7 @@ static void wtDrawCalm(const WtPrint& w) {
 // 12.4.1: Home keeps the big print card for a print that is running, finished or failed (or an error); otherwise
 // it is Local AI's cards, a printer row and the timer.
 static bool wtHomeIdle(const WtPrint& w) {
-  return !(w.configured && w.online && (w.active || wtFinishedRecently(w) || w.failed || w.alerts));
+  return !(w.configured && w.online && (w.active || wtFinishedRecently(w) || w.failedActive || w.alerts));
 }
 
 static uint8_t g_wtHomeScroll = 0;
@@ -906,8 +970,8 @@ static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const Wt
     headline = "Offline";
     color = OS12V_AMBER;
     strlcpy(detail, "Check that the printer is on and on the same Wi-Fi as this display.", sizeof(detail));
-  } else if (w.alerts || w.failed) {
-    headline = w.failed && !w.alerts ? "Print failed" : "Needs attention";
+  } else if (w.alerts || w.failedActive) {
+    headline = w.failedActive && !w.alerts ? "Print failed" : "Needs attention";
     color = OS12V_RED;
     wtAlertText(w, detail, sizeof(detail));
   } else if (w.finished) {
@@ -946,7 +1010,7 @@ static const char* wtPrinterDetail(const WtPrint& w, WsRowView& v) {
   const char* job = jobDisplayName(st);
   if (w.failed && job && job[0]) {
     strlcpy(v.value, job, sizeof(v.value));
-    v.valueColor = OS12V_RED;
+    v.valueColor = w.failedActive ? OS12V_RED : OS12V_MUTED;
     return "Failed print";
   }
   if (w.finished && job && job[0]) {
@@ -1672,6 +1736,13 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
   if (h.kind != wtl::HitKind::Item) return true;
   const wtl::ItemId id = wtl::view(wtl::View::Home).items[h.index].id;
   if (id == wtl::ItemId::HomeCard) {
+    if (w.failedActive) {
+      wtDismissFailedAlert();
+      wsToast("Alert cleared");
+      wsClick();
+      g_dirty = true;
+      return true;
+    }
     if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
     else wsOpenFrom(wsm::PageId::LocalPortal, 0);
     wsClick();
