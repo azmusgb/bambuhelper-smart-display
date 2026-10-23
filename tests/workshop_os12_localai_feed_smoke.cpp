@@ -21,7 +21,7 @@ int main() {
   CHECK(rotationIndex(0, 3) == 0 && rotationIndex(8000, 3) == 1 && rotationIndex(24000, 3) == 0, "8 s per card");
   CHECK(rotationIndex(12345, 0) == 0, "no cards, index 0");
 
-  CHECK(shownKind("needs") && shownKind("watch") && shownKind("running") && shownKind("weather"), "text cards shown");
+  CHECK(shownKind("needs") && shownKind("watch") && shownKind("running") && shownKind("weather") && shownKind("materials"), "text cards shown");
   CHECK(!shownKind("image") && !shownKind("") && !shownKind(nullptr) && !shownKind("other"), "image and unknown cards skipped");
   CHECK(toneFrom("attention") == Tone::Attention && toneFrom("ok") == Tone::Ok && toneFrom("nope") == Tone::Info && toneFrom(nullptr) == Tone::Info, "tones");
 

@@ -48,7 +48,8 @@ inline Tone toneFrom(const char* s) {
 inline bool shownKind(const char* kind) {
   return kind && (!strcmp(kind, "needs") || !strcmp(kind, "watch") || !strcmp(kind, "running") || !strcmp(kind, "weather") ||
                   !strcmp(kind, "done") || !strcmp(kind, "disk") ||  // 12.6: finished work and the fullest disk
-                  !strcmp(kind, "playing") || !strcmp(kind, "home"));  // 12.8: Plex on the Pi, and the Pi hub's issue
+                  !strcmp(kind, "playing") || !strcmp(kind, "home") ||  // 12.8: Plex on the Pi, and the Pi hub's issue
+                  !strcmp(kind, "materials"));  // LocalAI Materials: active spools & inventory health
 }
 
 // Wait before the next request: a minute after an answer; after failures 2, 4, 8 minutes, then 10.
@@ -123,7 +124,7 @@ inline const char* askFor(const Card& c) {
   if (validQuestion(c.ask)) return c.ask;
   if (!strcmp(c.kind, "needs")) return "needs";
   if (!strcmp(c.kind, "running")) return "running";
-  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk")) return "health";
+  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk") || !strcmp(c.kind, "materials")) return "health";
   if (!strcmp(c.kind, "done")) return "today";
   if (!strcmp(c.kind, "weather")) return "weather";
   return nullptr;
