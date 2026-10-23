@@ -32,6 +32,7 @@ struct Card {
   char id[32];    // 12.6 (feed v2): the same while the card means the same thing
   char ask[10];   // the question a tap asks ("" for none)
   uint32_t at;    // epoch seconds, 0 when not known
+  uint8_t percent;  // 12.8: how far a "playing" card is in (or how full a disk is), 0-100; 255 when not given
 };
 
 inline Tone toneFrom(const char* s) {
@@ -46,7 +47,9 @@ inline Tone toneFrom(const char* s) {
 // Cards the calm screen can draw: text only (the image card needs a picture this screen does not have room for).
 inline bool shownKind(const char* kind) {
   return kind && (!strcmp(kind, "needs") || !strcmp(kind, "watch") || !strcmp(kind, "running") || !strcmp(kind, "weather") ||
-                  !strcmp(kind, "done") || !strcmp(kind, "disk"));  // 12.6: finished work and the fullest disk
+                  !strcmp(kind, "done") || !strcmp(kind, "disk") ||  // 12.6: finished work and the fullest disk
+                  !strcmp(kind, "playing") || !strcmp(kind, "home") ||  // 12.8: Plex on the Pi, and the Pi hub's issue
+                  !strcmp(kind, "materials"));  // LocalAI Materials: active spools & inventory health
 }
 
 // Wait before the next request: a minute after an answer; after failures 2, 4, 8 minutes, then 10.
@@ -121,7 +124,7 @@ inline const char* askFor(const Card& c) {
   if (validQuestion(c.ask)) return c.ask;
   if (!strcmp(c.kind, "needs")) return "needs";
   if (!strcmp(c.kind, "running")) return "running";
-  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk")) return "health";
+  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk") || !strcmp(c.kind, "materials")) return "health";
   if (!strcmp(c.kind, "done")) return "today";
   if (!strcmp(c.kind, "weather")) return "weather";
   return nullptr;
@@ -172,7 +175,9 @@ static const size_t kMaxImageBytes = 600UL * 1024UL;
 static const size_t kImagePathLen = 256;
 inline bool validImagePath(const char* p) {
   static const char kPrefix[] = "/api/images/view?";
-  if (!p || strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 || strlen(p) >= kImagePathLen) return false;
+  static const char kPoster[] = "/api/display/poster?";  // 12.8: what Plex on the Pi is playing, through Local AI
+  if (!p || strlen(p) >= kImagePathLen) return false;
+  if (strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 && strncmp(p, kPoster, sizeof(kPoster) - 1) != 0) return false;
   for (const char* c = p; *c; ++c)
     if ((unsigned char)*c <= ' ' || (unsigned char)*c >= 127) return false;  // one request line: no spaces or CR/LF
   return true;

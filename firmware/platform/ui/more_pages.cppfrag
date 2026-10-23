@@ -496,7 +496,7 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
     }
     // ---- Updates & About ----
     case R::Version:
-      snprintf(v.value, sizeof(v.value), "Workshop OS %s", WORKSHOP_OS_RELEASE_VERSION);
+      snprintf(v.value, sizeof(v.value), "LocalAI Terminal %s", WORKSHOP_OS_RELEASE_VERSION);
       v.valueColor = OS12V_TEXT;
       break;
     case R::UpdateAction: {
@@ -1575,7 +1575,7 @@ static void wsTileStatus(wsm::PageId id, char* out, size_t len, int16_t maxW, ui
       break;
     case P::UpdatesAbout: {
       const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
-      snprintf(out, len, "Workshop OS %s%s", WORKSHOP_OS_RELEASE_VERSION, wsUpdateInstallable(u) ? " · update ready" : "");
+      snprintf(out, len, "LocalAI Terminal %s%s", WORKSHOP_OS_RELEASE_VERSION, wsUpdateInstallable(u) ? " · update ready" : "");
       if (wsUpdateInstallable(u)) color = OS12V_GREEN;
       break;
     }
@@ -1601,7 +1601,7 @@ static uint16_t wsTileColor(wsm::PageId id) {
   switch (id) {
     case wsm::PageId::PrinterPower: return OS12V_GREEN;
     case wsm::PageId::Display: return OS12V_ACCENT;
-    case wsm::PageId::LocalPortal: return OS12V_AMBER;
+    case wsm::PageId::LocalPortal: return OS12V_ACCENT;
     default: return OS12V_BLUE;
   }
 }

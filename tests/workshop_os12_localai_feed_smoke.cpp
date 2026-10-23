@@ -21,7 +21,7 @@ int main() {
   CHECK(rotationIndex(0, 3) == 0 && rotationIndex(8000, 3) == 1 && rotationIndex(24000, 3) == 0, "8 s per card");
   CHECK(rotationIndex(12345, 0) == 0, "no cards, index 0");
 
-  CHECK(shownKind("needs") && shownKind("watch") && shownKind("running") && shownKind("weather"), "text cards shown");
+  CHECK(shownKind("needs") && shownKind("watch") && shownKind("running") && shownKind("weather") && shownKind("materials"), "text cards shown");
   CHECK(!shownKind("image") && !shownKind("") && !shownKind(nullptr) && !shownKind("other"), "image and unknown cards skipped");
   CHECK(toneFrom("attention") == Tone::Attention && toneFrom("ok") == Tone::Ok && toneFrom("nope") == Tone::Info && toneFrom(nullptr) == Tone::Info, "tones");
 
@@ -70,6 +70,8 @@ int main() {
   }
   {  // 12.6
     CHECK(shownKind("done") && shownKind("disk"), "finished work and the disk are shown");
+    CHECK(shownKind("playing") && shownKind("home"), "12.8: Now playing and the Pi hub's issue are shown");
+    CHECK(validImagePath("/api/display/poster?n=0") && !validImagePath("/api/display/posterx") && !validImagePath("/api/display/poster?n=0 x"), "12.8: the poster route");
     CHECK(validQuestion("today") && validQuestion("next") && validQuestion("weather"), "the new questions");
     Card c{};
     strcpy(c.kind, "running");

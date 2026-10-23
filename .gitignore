@@ -12,3 +12,4 @@ __pycache__/
 firmware/build/
 v*-artifacts/
 *.zip
+.superpowers/

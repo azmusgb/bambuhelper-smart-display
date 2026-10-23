@@ -252,6 +252,8 @@ bool fetch(FeedResult& r, char* error, size_t errorLen) {
         copyText(out.id, sizeof(out.id), c["id"] | "");
         copyText(out.ask, sizeof(out.ask), c["ask"] | "");
         out.at = c["at"] | 0U;
+        const int percent = c["percent"] | -1;
+        out.percent = percent >= 0 && percent <= 100 ? (std::uint8_t)percent : 255;
         out.tone = lai::toneFrom(c["tone"] | "");
     }
     // The gallery (feed v2), else the image card alone (Local AI before v2).

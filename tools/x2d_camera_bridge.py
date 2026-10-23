@@ -31,8 +31,11 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import socket
+import ssl
+import struct
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 DEFAULT_CAMERA_ROOT = Path.home() / "Library/Application Support/BambuStudio/cameratools"
 DEFAULT_PLUGIN_ROOT = Path.home() / "Library/Application Support/BambuStudio/plugins"
@@ -102,6 +105,8 @@ class CameraPipeline:
         self.fps = fps
         self.width = width
         self.rtsp_url_file = rtsp_url_file
+        self._is_p1s = False
+        self._p1s_sock: Optional[socket.socket] = None
         self.source: Optional[subprocess.Popen[bytes]] = None
         self.encoder: Optional[subprocess.Popen[bytes]] = None
         self.thread: Optional[threading.Thread] = None
@@ -110,7 +115,7 @@ class CameraPipeline:
         self.restarts = 0
 
     def rtsp_url(self) -> str:
-        """The printer's LAN stream URL from --rtsp-url-file (owner-only, rtsps:// or rtsp://)."""
+        """The printer's LAN stream URL from --rtsp-url-file (owner-only, rtsps://, rtsp://, or bambu://)."""
         assert self.rtsp_url_file is not None
         path = self.rtsp_url_file
         if not path.is_file():
@@ -118,8 +123,8 @@ class CameraPipeline:
         if path.stat().st_mode & 0o077:
             raise RuntimeError(f"{path} must be readable by its owner only (chmod 600): it holds the access code")
         url = path.read_text(encoding="utf-8").strip()
-        if not url.startswith(("rtsps://", "rtsp://")) or any(c.isspace() for c in url):
-            raise RuntimeError(f"{path} must hold one rtsps:// URL")
+        if not url.startswith(("rtsps://", "rtsp://", "bambu://")) or any(c.isspace() for c in url):
+            raise RuntimeError(f"{path} must hold one rtsps:// or bambu:// URL")
         return url
 
     def validate(self) -> None:
@@ -147,10 +152,79 @@ class CameraPipeline:
             "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
         ]
 
+    def _read_p1s_frames(self) -> None:
+        parsed = urlsplit(self.rtsp_url())
+        host = parsed.hostname or "10.0.0.136"
+        port = parsed.port or 6000
+        user = parsed.username or "bblp"
+        password = parsed.password or ""
+
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        payload = struct.pack("<IIII", 0x40, 0x3000, 0, 0)
+        payload += user.encode("ascii").ljust(32, b"\x00")
+        payload += password.encode("ascii").ljust(32, b"\x00")
+
+        buffer = bytearray()
+        while not self.stop_event.is_set():
+            sock = None
+            try:
+                raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                raw.settimeout(10.0)
+                sock = ctx.wrap_socket(raw, server_hostname=host)
+                self._p1s_sock = sock
+                sock.connect((host, port))
+                sock.sendall(payload)
+                while not self.stop_event.is_set():
+                    chunk = sock.recv(32 * 1024)
+                    if not chunk:
+                        break
+                    buffer.extend(chunk)
+                    while True:
+                        start = buffer.find(b"\xff\xd8")
+                        if start < 0:
+                            if len(buffer) > 2:
+                                del buffer[:-2]
+                            break
+                        if start > 0:
+                            del buffer[:start]
+                        end = buffer.find(b"\xff\xd9", 2)
+                        if end < 0:
+                            if len(buffer) > MAX_JPEG_BYTES:
+                                buffer.clear()
+                            break
+                        end += 2
+                        frame = bytes(buffer[:end])
+                        del buffer[:end]
+                        self.latest.update(frame)
+            except Exception as exc:
+                self.last_error = f"P1S port 6000: {exc}"
+            finally:
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+                self._p1s_sock = None
+            if not self.stop_event.is_set():
+                time.sleep(3)
+
     def start(self) -> None:
         self.validate()
         self.stop_event = threading.Event()
         if self.rtsp_url_file is not None:
+            url = self.rtsp_url()
+            parsed = urlsplit(url)
+            if parsed.port == 6000 or parsed.scheme in ("bambu", "tls"):
+                self._is_p1s = True
+                self.source = None
+                self.encoder = None
+                self.thread = threading.Thread(target=self._read_p1s_frames, name="x2d-p1s-reader", daemon=True)
+                self.thread.start()
+                return
+
             # One FFmpeg reads the printer's stream over TCP (the printer's certificate is self-signed).
             self.source = None
             self.encoder = subprocess.Popen(
@@ -231,6 +305,11 @@ class CameraPipeline:
 
     def stop(self) -> None:
         self.stop_event.set()
+        if self._p1s_sock is not None:
+            try:
+                self._p1s_sock.close()
+            except Exception:
+                pass
         for process in (self.encoder, self.source):
             if process is not None and process.poll() is None:
                 process.terminate()
@@ -248,7 +327,9 @@ class CameraPipeline:
             self.thread.join(timeout=1)
 
     def running(self) -> bool:
-        """True while both processes and the frame reader are alive."""
+        """True while both processes (or socket thread) and the frame reader are alive."""
+        if self._is_p1s:
+            return self.thread is not None and self.thread.is_alive()
         return (
             (self.rtsp_url_file is not None or (self.source is not None and self.source.poll() is None))
             and self.encoder is not None and self.encoder.poll() is None
