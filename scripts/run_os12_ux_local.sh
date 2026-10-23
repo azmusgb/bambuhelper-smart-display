@@ -108,6 +108,9 @@ python3 "$ROOT/apply_workshop_os12_more_overhaul.py" --repo "$BUILD" --source-ro
 python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
 # Touchscreen palette: the three role-named RGB565 palettes take LocalAI's colours.
 python3 "$ROOT/apply_workshop_os12_device_localai_palette.py" --repo "$BUILD" --apply
+# Brand typography: install Figtree vector typography tables across all font sizes.
+python3 "$ROOT/apply_workshop_os12_figtree_typography.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_figtree_typography.py" --repo "$BUILD"
 # 12.3.x Home, Printer and Workshop tabs on the More design system. Owning
 # patch for the three tabs; runs after the More overhaul, whose layout and rows
 # it builds on.

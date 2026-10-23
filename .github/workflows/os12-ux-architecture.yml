@@ -162,6 +162,9 @@ jobs:
             apply_workshop_os12_review_hardening.py \
             apply_workshop_os12_glance_legibility.py \
             apply_workshop_os12_boot_splash.py \
+            apply_workshop_os12_figtree_typography.py \
+            scripts/generate_figtree_vlw_fonts.py \
+            scripts/validate_os12_figtree_typography.py \
             scripts/validate_os12_ux_architecture.py \
             scripts/validate_os12_ux_geometry.py \
             scripts/validate_os12_ux_physical_fit.py \
