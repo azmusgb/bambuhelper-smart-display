@@ -145,7 +145,11 @@ static void wtAlertText(const WtPrint& w, char* out, size_t len) {
     return;
   }
 #endif
-  if (w.failed) strlcpy(out, "The last print failed", len);
+  if (w.failed) {
+    const char* job = (w.s) ? jobDisplayName(*w.s) : nullptr;
+    if (job && job[0]) snprintf(out, len, "%s · Tap to view status & clear", job);
+    else strlcpy(out, "The last print failed. Tap to inspect status.", len);
+  }
 }
 
 // Active nozzle temperature and its label ("Nozzle", or "Left nozzle" /
@@ -813,27 +817,37 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
 }
 
 // AMS trays are read-only, so they are drawn flat (12.3.6): the tray in use
-// is marked by an accent rail and "In use", not by a raised, outlined row
+// is marked by an accent rail and an ACTIVE badge, not by a raised, outlined row
 // that looked like a selected button.
 static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t) {
   const wsm::Rect surface = wsm::rowSurface(row);
   tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
   tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
-  if (t.inUse) tft.fillRoundRect(surface.x, surface.y + 8, 4, surface.h - 16, 2, OS12V_ACCENT);
+  if (t.inUse) tft.fillRoundRect(surface.x + 2, surface.y + 6, 4, surface.h - 12, 2, OS12V_ACCENT);
   const uint16_t bg = OS12V_BG;
   const int16_t mid = row.y + row.h / 2;
-  // Colour swatch.
-  if (t.present) tft.fillCircle(row.x + 22, mid, 8, t.color);
-  tft.drawCircle(row.x + 22, mid, 8, t.present ? OS12V_MUTED : OS12V_LINE);
-  const int16_t labelX = row.x + 40;
-  const int16_t labelW = s.landscape() ? 150 : 104;
+  // Tactile 22x22 colour swatch with rounded corners.
+  const int16_t swatchX = row.x + 16;
+  const int16_t swatchY = mid - 11;
+  if (t.present) {
+    tft.fillRoundRect(swatchX, swatchY, 22, 22, 5, t.color);
+    tft.drawRoundRect(swatchX, swatchY, 22, 22, 5, OS12V_LINE);
+  } else {
+    tft.drawRoundRect(swatchX, swatchY, 22, 22, 5, OS12V_LINE);
+    tft.drawFastHLine(swatchX + 6, mid, 10, OS12V_LINE);
+  }
+  const int16_t labelX = row.x + 46;
+  const int16_t labelW = s.landscape() ? 144 : 98;
   uiDrawFit(t.label, labelX, mid, labelW, FONT_BODY, ML_DATUM, t.present ? OS12V_TEXT : OS12V_MUTED, bg);
   const int16_t right = row.right() - 12;
   int16_t valueRight = right;
   if (t.inUse) {
-    uiDrawFit("In use", right, mid, 60, FONT_BODY, MR_DATUM, OS12V_ACCENT, bg);
-    setFont(tft, FONT_BODY);
-    valueRight = (int16_t)(right - tft.textWidth("In use") - 12);
+    const int16_t badgeW = 62, badgeH = 20;
+    const int16_t badgeX = right - badgeW;
+    const int16_t badgeY = mid - 10;
+    tft.fillRoundRect(badgeX, badgeY, badgeW, badgeH, 10, OS12V_ACCENT);
+    uiDrawFit("ACTIVE", badgeX + badgeW / 2, mid, badgeW - 6, FONT_SMALL, MC_DATUM, OS12V_BG, OS12V_ACCENT);
+    valueRight = badgeX - 10;
   }
   const int16_t valueX = labelX + labelW + 8;
   if (valueRight > valueX)
@@ -911,7 +925,7 @@ static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const Wt
 }
 
 // Printer > Status bottom row: the first error, else layer and speed while
-// printing, else the printer's Wi-Fi.
+// printing, else the last print result, else the printer's Wi-Fi.
 static const char* wtPrinterDetail(const WtPrint& w, WsRowView& v) {
   wsView(v);
   v.valueColor = OS12V_TEXT;
@@ -931,6 +945,22 @@ static const char* wtPrinterDetail(const WtPrint& w, WsRowView& v) {
       strlcat(v.value, speed, sizeof(v.value));
     }
     return "Layer";
+  }
+  const char* job = jobDisplayName(st);
+  if (w.failed && job && job[0]) {
+    strlcpy(v.value, job, sizeof(v.value));
+    v.valueColor = OS12V_RED;
+    return "Failed print";
+  }
+  if (w.finished && job && job[0]) {
+    strlcpy(v.value, job, sizeof(v.value));
+    v.valueColor = OS12V_GREEN;
+    return "Last print";
+  }
+  if (job && job[0]) {
+    strlcpy(v.value, job, sizeof(v.value));
+    v.valueColor = OS12V_TEXT;
+    return "Last print";
   }
   const int rssi = st.wifiSignal;
   if (rssi >= 0) { strlcpy(v.value, "Not reported", sizeof(v.value)); v.valueColor = OS12V_MUTED; return "Printer Wi-Fi"; }

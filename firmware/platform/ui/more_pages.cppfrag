@@ -1601,7 +1601,7 @@ static uint16_t wsTileColor(wsm::PageId id) {
   switch (id) {
     case wsm::PageId::PrinterPower: return OS12V_GREEN;
     case wsm::PageId::Display: return OS12V_ACCENT;
-    case wsm::PageId::LocalPortal: return OS12V_AMBER;
+    case wsm::PageId::LocalPortal: return OS12V_ACCENT;
     default: return OS12V_BLUE;
   }
 }
