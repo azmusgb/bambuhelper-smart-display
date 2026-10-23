@@ -7,6 +7,7 @@ if dist.exists(): shutil.rmtree(dist)
 dist.mkdir()
 for name in ['index.html','styles.css','app.js','release.json']:
     shutil.copy2(root/name,dist/name)
+shutil.copy2(root/'assets'/'appliance-nav.js', dist/'appliance-nav.js')
 release=json.loads((root/'release.json').read_text())
 assert release['release']=='production-workshop-os-12.7.1'
 assert release['board']['id']=='ws_lcd_350'
