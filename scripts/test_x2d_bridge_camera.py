@@ -150,7 +150,7 @@ class RtspSourceTests(unittest.TestCase):
             self.pipeline(folder).validate()  # no Studio files needed
             with self.assertRaisesRegex(RuntimeError, "owner only"):
                 self.pipeline(folder, mode=0o644).validate()
-            with self.assertRaisesRegex(RuntimeError, "one rtsps:// URL"):
+            with self.assertRaisesRegex(RuntimeError, "one rtsps:// or bambu:// URL"):
                 self.pipeline(folder, text="http://10.0.0.136/").validate()
 
     def test_access_code_never_logged(self) -> None:
