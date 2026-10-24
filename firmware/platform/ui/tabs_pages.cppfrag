@@ -623,6 +623,9 @@ static bool wtBannerTouch(int16_t x, int16_t y) {
 
 // Home's bottom row: the workshop timer while it runs, otherwise Local AI's
 // most important card (12.4.0). Opens the Local AI tab.
+static workshop::localai::Card wtHomeSummary(uint8_t& others);  // Home at a glance (below)
+static void wtHomeClock(char* out, size_t len);
+
 static const char* wtHomeExtra(WsRowView& v) {
   wsView(v);
   if (g_workshopTimerDone) {
@@ -636,8 +639,10 @@ static const char* wtHomeExtra(WsRowView& v) {
     v.valueColor = OS12V_ACCENT;
     return "Timer";
   }
-  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab).
-  const workshop::localai::Card c = wtAiCard(0);
+  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab). Home at a glance: the
+  // same pick as idle Home's house card, so a problem is never hidden behind "All clear".
+  uint8_t others = 0;
+  const workshop::localai::Card c = wtHomeSummary(others);
   strlcpy(v.value, c.text, sizeof(v.value));
   v.valueColor = c.tone == workshop::localai::Tone::Info || c.tone == workshop::localai::Tone::Ok ? OS12V_MUTED : wtAiToneColor(c.tone);
   static char label[workshop::localai::kTitleLen];
@@ -828,6 +833,15 @@ static void wtHomeWeather(char* out, size_t len) {
     if (!strcmp(ai.cards[i].kind, "weather")) { workshop::localai::weatherShort(out, len, ai.cards[i].text); return; }
 }
 
+// The time for Home's header; "Home" until the clock is set over Wi-Fi.
+static void wtHomeClock(char* out, size_t len) {
+  const time_t now = time(nullptr);
+  if (now < 1700000000) { strlcpy(out, "Home", len); return; }
+  struct tm t;
+  localtime_r(&now, &t);
+  wtl::clockText(out, len, t.tm_hour, t.tm_min, netSettings.use24h);
+}
+
 static void wtDrawHomeHouse(const wsm::Rect& r) {
   uint8_t others = 0;
   const workshop::localai::Card c = wtHomeSummary(others);
@@ -891,14 +905,7 @@ static void wtDrawHomeIdle(const WtPrint& w) {
   tft.fillScreen(OS12V_BG);
   // Home at a glance: the header says the time (Home is already marked in the tab bar) and the weather.
   char clock[16], weather[24];
-  const time_t now = time(nullptr);
-  if (now >= 1700000000) {
-    struct tm t;
-    localtime_r(&now, &t);
-    wtl::clockText(clock, sizeof(clock), t.tm_hour, t.tm_min, netSettings.use24h);
-  } else {
-    strlcpy(clock, v.title, sizeof(clock));
-  }
+  wtHomeClock(clock, sizeof(clock));
   wtHomeWeather(weather, sizeof(weather));
   wtDrawHeader(s, clock, weather[0] ? weather : nullptr, OS12V_ACCENT, false, 0, 0);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
@@ -934,7 +941,9 @@ static void wtDrawHome(bool full) {
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::Home);
   tft.fillScreen(OS12V_BG);
-  wtDrawHeader(s, v.title, w.chip, w.color, false, 0, 0);
+  char clock[16];
+  wtHomeClock(clock, sizeof(clock));  // Home at a glance: the time, as on idle Home; the chip keeps the print state
+  wtDrawHeader(s, clock, w.chip, w.color, false, 0, 0);
   for (uint8_t i = 0; i < v.itemCount; ++i) {
     const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
     if (r.empty()) continue;
