@@ -15,13 +15,11 @@ This repository is the authoritative product boundary for **Waveshare Workshop O
 
 ## This repository does not own
 
-Filament inventory data, cloud synchronization or inventory LLM behavior are owned by:
+Filament inventory data (spools, remaining quantities, AMS placement, projects) is owned by **Bambuddy**, which runs in Docker on the household Pi (`http://10.0.0.30:8000`). It reads the printer and the AMS itself and takes each print's filament off its spool.
 
-- `azmusgb/filamentinventory` — **Filament Inventory**
+Workshop OS must not become a second inventory database, quantity authority, ownership authority or placement authority. Filament facts reach the display through Local AI's display feed (a `materials` card), not through a direct inventory link.
 
-That repository is authoritative for profile isolation, spool state, remaining-quantity evidence, cloud sync, QR/audit workflows, inventory Assistant grounding and server-side model transport.
-
-Workshop OS consumes inventory facts through versioned authenticated device APIs. It must not become a second inventory database, quantity authority, ownership authority, placement authority, or model provider.
+**Retired:** `azmusgb/filamentinventory` (**Filament Inventory**), on 24 Oct 2026. Nothing used its data; on the WS350, its device feed was never configured. Since then `filamentinventory.netlify.app` serves only a notice, and every `/api/*` route returns 410. The sections below are kept as history. The firmware's inventory service (`firmware/platform/inventory/`) still targets the retired `/api/device-feed/v1`; it stays "Not set up" until it is removed or pointed at Bambuddy.
 
 ## Filament Inventory integration mirror
 
@@ -31,9 +29,9 @@ That mirror is used for product-level contract validation, reconstruction, share
 
 Mirrored CI may be cited as additional software evidence only when it is tied to an exact source/candidate mapping. It must not be used to promote firmware independently of the authoritative Workshop OS candidate line.
 
-## Canonical device contract
+## Canonical device contract (retired 24 Oct 2026)
 
-Current device-facing inventory endpoint:
+Former device-facing inventory endpoint:
 
 - `GET https://filamentinventory.netlify.app/api/display-feed`
 - `X-Filament-Sync-Key`
