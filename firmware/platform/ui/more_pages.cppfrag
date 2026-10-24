@@ -1551,7 +1551,7 @@ static void wsTileStatus(wsm::PageId id, char* out, size_t len, int16_t maxW, ui
       if (!workshopPlatformWifiOnline()) { strlcpy(out, "Offline", len); color = OS12V_AMBER; break; }
       wsIpText(ip, sizeof(ip));
       snprintf(out, len, "Wi-Fi · %s", ip);
-      color = OS12V_GREEN;
+      color = OS12V_MUTED;
       break;
     case P::Display:
       snprintf(out, len, "Brightness %u%%", (unsigned)hubLevelPct(brightness));
