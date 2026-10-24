@@ -120,7 +120,7 @@ def validate(repo: Path) -> None:
     need(web, '{"id":"workshop","label":"Local AI"', "the catalog names the third tab Local AI")
     need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));", "Local AI's card leads the calm screen")
     need(calm, "printerBusy", "the printer's line only while it is doing something")
-    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtAiCard(0)", "Home's bottom row is Local AI")
+    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtHomeSummary(others)", "Home's Local AI row is the card that matters most")
     print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card)")
 
 

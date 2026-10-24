@@ -50,7 +50,9 @@ static void wtBambuddyClearTask(void*) {
 static void wtDismissFailedAlert() {
   g_wtFailedDismissed = true;
 #ifdef ARDUINO
-  xTaskCreate(wtBambuddyClearTask, "bambuddyClear", 4096, nullptr, 1, nullptr);
+  // Through Local AI, which holds Bambuddy's key; the direct call (no key) only while Local AI isn't set up, and it
+  // stops working once Bambuddy's sign-in is on.
+  if (!workshopLocalAiFeedClearPrinter()) xTaskCreate(wtBambuddyClearTask, "bambuddyClear", 4096, nullptr, 1, nullptr);
 #endif
 }
 
@@ -623,6 +625,9 @@ static bool wtBannerTouch(int16_t x, int16_t y) {
 
 // Home's bottom row: the workshop timer while it runs, otherwise Local AI's
 // most important card (12.4.0). Opens the Local AI tab.
+static workshop::localai::Card wtHomeSummary(uint8_t& others);  // Home at a glance (below)
+static void wtHomeClock(char* out, size_t len);
+
 static const char* wtHomeExtra(WsRowView& v) {
   wsView(v);
   if (g_workshopTimerDone) {
@@ -636,8 +641,10 @@ static const char* wtHomeExtra(WsRowView& v) {
     v.valueColor = OS12V_ACCENT;
     return "Timer";
   }
-  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab).
-  const workshop::localai::Card c = wtAiCard(0);
+  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab). Home at a glance: the
+  // same pick as idle Home's house card, so a problem is never hidden behind "All clear".
+  uint8_t others = 0;
+  const workshop::localai::Card c = wtHomeSummary(others);
   strlcpy(v.value, c.text, sizeof(v.value));
   v.valueColor = c.tone == workshop::localai::Tone::Info || c.tone == workshop::localai::Tone::Ok ? OS12V_MUTED : wtAiToneColor(c.tone);
   static char label[workshop::localai::kTitleLen];
@@ -798,56 +805,119 @@ static bool wtHomeIdle(const WtPrint& w) {
   return !(w.configured && w.online && (w.active || wtFinishedRecently(w) || w.failedActive || w.alerts));
 }
 
-static uint8_t g_wtHomeScroll = 0;
 static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v);  // Local AI tab rows (below)
 
-// The printer's row on idle Home: one line of state, opening Printer (or Local Portal before one is set up).
-static void wtHomePrinterRow(const WtPrint& w, WsRowView& v) {
-  wsView(v);
-  if (!w.configured) { strlcpy(v.value, "Not set up", sizeof(v.value)); v.valueColor = OS12V_MUTED; return; }
-  if (!w.online) { strlcpy(v.value, "Offline", sizeof(v.value)); v.valueColor = OS12V_AMBER; return; }
-  char at[24];
-  float nozTemp = 0, nozTarget = 0;
-  if (w.s) wtNozzle(*w.s, nozTemp, nozTarget);
-  if (w.finished && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) {
-    snprintf(v.value, sizeof(v.value), "Finished %s", at);
-  } else if (w.s && (nozTemp > 0 || w.s->bedTemp > 0)) {
-    snprintf(v.value, sizeof(v.value), "Ready  %.0f° / %.0f°", nozTemp, w.s->bedTemp);
-  } else {
-    strlcpy(v.value, w.finished ? "Finished" : "Ready", sizeof(v.value));
+// Home at a glance: The house card is Local AI's most important card (or why there are none); the
+// printer card is the printer's state in large type with one line of detail; the header has the clock and weather.
+static workshop::localai::Card wtHomeSummary(uint8_t& others) {
+  others = 0;
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const uint8_t n = wtAiCount();
+  const int8_t i = n ? workshop::localai::homeSummaryIndex(ai.cards, n, others) : -1;
+  if (i >= 0) return ai.cards[i];
+  workshop::localai::Card c = wtAiCard(0);
+  if (n) {  // fresh cards, but only information: nothing needs you
+    c = workshop::localai::Card{};
+    strlcpy(c.kind, "status", sizeof(c.kind));
+    strlcpy(c.title, "All clear", sizeof(c.title));
+    strlcpy(c.text, "Nothing needs you right now.", sizeof(c.text));
+    c.tone = workshop::localai::Tone::Ok;
   }
-  v.valueColor = OS12V_GREEN;
+  return c;
+}
+
+// The weather card's temperature and sky for the header ("66° Sunny"); empty without a fresh weather card.
+static void wtHomeWeather(char* out, size_t len) {
+  out[0] = 0;
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const uint8_t n = wtAiCount();
+  for (uint8_t i = 0; i < n; ++i)
+    if (!strcmp(ai.cards[i].kind, "weather")) { workshop::localai::weatherShort(out, len, ai.cards[i].text); return; }
+}
+
+// The time for Home's header; "Home" until the clock is set over Wi-Fi.
+static void wtHomeClock(char* out, size_t len) {
+  const time_t now = time(nullptr);
+  if (now < 1700000000) { strlcpy(out, "Home", len); return; }
+  struct tm t;
+  localtime_r(&now, &t);
+  wtl::clockText(out, len, t.tm_hour, t.tm_min, netSettings.use24h);
+}
+
+static void wtDrawHomeHouse(const wsm::Rect& r) {
+  uint8_t others = 0;
+  const workshop::localai::Card c = wtHomeSummary(others);
+  const uint16_t tone = wtAiToneColor(c.tone), bg = OS12V_SURFACE2;
+  wtDrawCardSurface(r, tone);
+  const int16_t x = (int16_t)(r.x + 18), chevX = wtl::cardChevronX(r);
+  wsDrawChevronRight(chevX, (int16_t)(r.y + r.h / 2), OS12V_MUTED);
+  int16_t titleW = (int16_t)(chevX - 12 - x);
+  if (others) {
+    char more[16];
+    snprintf(more, sizeof(more), "+%u more", (unsigned)others);
+    setFont(tft, FONT_SMALL);
+    const int16_t pw = (int16_t)(tft.textWidth(more) + 16), px = (int16_t)(chevX - 12 - pw);
+    tft.fillRoundRect(px, (int16_t)(r.y + 14), pw, 22, 11, OS12V_SURFACE);
+    tft.drawRoundRect(px, (int16_t)(r.y + 14), pw, 22, 11, OS12V_LINE);
+    uiDrawFit(more, (int16_t)(px + pw / 2), (int16_t)(r.y + 25), (int16_t)(pw - 8), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_SURFACE);
+    titleW = (int16_t)(px - 8 - x);
+  }
+  uiDrawFit(c.title, x, (int16_t)(r.y + 12), titleW, FONT_LARGE, TL_DATUM, tone, bg);
+  if (c.text[0]) wsDrawWrapped(c.text, x, (int16_t)(r.y + 44), (int16_t)(chevX - 12 - x), 20, 2, FONT_BODY, OS12V_TEXT, bg);
+}
+
+static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
+  const uint16_t bg = OS12V_SURFACE2;
+  char state[48], detail[96];
+  uint16_t color = OS12V_GREEN;
+  detail[0] = 0;
+  if (!w.configured) {
+    strlcpy(state, "Not set up", sizeof(state));
+    strlcpy(detail, "Add your printer in Local Portal", sizeof(detail));
+    color = OS12V_MUTED;
+  } else if (!w.online) {
+    strlcpy(state, "Offline", sizeof(state));
+    strlcpy(detail, "Check that it is on and on Wi-Fi", sizeof(detail));
+    color = OS12V_AMBER;
+  } else {
+    char at[24];
+    float nozTemp = 0, nozTarget = 0;
+    if (w.s) wtNozzle(*w.s, nozTemp, nozTarget);
+    if (w.finished && w.s && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) snprintf(state, sizeof(state), "Finished %s", at);
+    else strlcpy(state, w.finished ? "Finished" : "Ready", sizeof(state));
+    const char* job = w.s ? jobDisplayName(*w.s) : nullptr;
+    if (w.finished && job && job[0]) strlcpy(detail, job, sizeof(detail));
+    else if (w.s && (nozTemp > 0 || w.s->bedTemp > 0)) snprintf(detail, sizeof(detail), "Nozzle %.0f°  ·  Bed %.0f°", nozTemp, w.s->bedTemp);
+  }
+  wtDrawCardSurface(r, color);
+  const int16_t x = (int16_t)(r.x + 18), chevX = wtl::cardChevronX(r), textW = (int16_t)(chevX - 12 - x);
+  wsDrawChevronRight(chevX, (int16_t)(r.y + r.h / 2), OS12V_MUTED);
+  // The printer's name small and quiet, its state large: the state is what you read from across the room.
+  const char* name = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : "Printer";
+  setFont(tft, FONT_BODY);
+  const int16_t nameW = (int16_t)(tft.textWidth(name) + 14);
+  uiDrawFit(name, x, (int16_t)(r.y + 22), nameW, FONT_BODY, ML_DATUM, OS12V_MUTED, bg);
+  uiDrawFit(state, (int16_t)(x + nameW), (int16_t)(r.y + 22), (int16_t)(textW - nameW), FONT_LARGE, ML_DATUM, color, bg);
+  if (detail[0]) uiDrawFit(detail, x, (int16_t)(r.y + 58), textW, wsFitFont(detail, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_TEXT, bg);
 }
 
 static void wtDrawHomeIdle(const WtPrint& w) {
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);
-  const uint8_t aiCount = wtAiCount();
-  g_wtHomeScroll = wtl::clampScroll(s, v, aiCount, g_wtHomeScroll);
-  const uint8_t maxS = wtl::maxScroll(s, v, aiCount);
   tft.fillScreen(OS12V_BG);
-  wtDrawHeader(s, v.title, w.chip, w.color, maxS > 0, g_wtHomeScroll, maxS);
-  const uint8_t items = wtl::itemCount(v, aiCount);
+  // Home at a glance: the header says the time (Home is already marked in the tab bar) and the weather.
+  char clock[16], weather[24];
+  wtHomeClock(clock, sizeof(clock));
+  wtHomeWeather(weather, sizeof(weather));
+  wtDrawHeader(s, clock, weather[0] ? weather : nullptr, OS12V_ACCENT, false, 0, 0);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
-  for (uint8_t i = 0; i < items; ++i) {
-    const wsm::Rect r = wtl::itemRect(s, v, aiCount, g_wtHomeScroll, i);
+  for (uint8_t i = 0; i < v.itemCount; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
     if (r.empty()) continue;
-    const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
+    const wtl::ItemSpec& it = v.items[i];
+    if (it.id == wtl::ItemId::HomeAi) { wtDrawHomeHouse(r); continue; }
+    if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(r, w); continue; }
     WsRowView row;
-    if (it.id == wtl::ItemId::HomeAi) {
-      const wsm::Rect surface = wsm::rowSurface(r);
-      // Modern tactile card tile with subtle surface and rounded borders
-      tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-      tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
-      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_SURFACE);
-      continue;
-    }
-    if (it.id == wtl::ItemId::HomePrinterRow) {
-      wtHomePrinterRow(w, row);
-      const char* label = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : it.label;
-      wsDrawRowBody(s, it.rowKind, label, row, r);
-      continue;
-    }
     wtWorkshopRow(it.id, inv, row);
     wsDrawRowBody(s, it.rowKind, it.label, row, r);
   }
@@ -873,7 +943,9 @@ static void wtDrawHome(bool full) {
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::Home);
   tft.fillScreen(OS12V_BG);
-  wtDrawHeader(s, v.title, w.chip, w.color, false, 0, 0);
+  char clock[16];
+  wtHomeClock(clock, sizeof(clock));  // Home at a glance: the time, as on idle Home; the chip keeps the print state
+  wtDrawHeader(s, clock, w.chip, w.color, false, 0, 0);
   for (uint8_t i = 0; i < v.itemCount; ++i) {
     const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
     if (r.empty()) continue;
@@ -1842,20 +1914,13 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
   const WtPrint w = wtPrint();
   if (wtHomeIdle(w)) {
     const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);
-    const uint8_t aiCount = wtAiCount();
-    const wtl::Hit hi = wtl::hitTest(s, wtl::View::HomeIdle, aiCount, g_wtHomeScroll, x, y);
+    const wtl::Hit hi = wtl::hitTest(s, wtl::View::HomeIdle, 0, 0, x, y);  // one fixed screen, no scrolling
     switch (hi.kind) {
       case wtl::HitKind::Tab: wtTab(hi.index); return true;
-      case wtl::HitKind::ScrollUp:
-        if (g_wtHomeScroll > 0) { g_wtHomeScroll = wtl::clampScroll(s, v, aiCount, (int)g_wtHomeScroll - wsm::scrollStep(s)); wsClick(); }
-        return true;
-      case wtl::HitKind::ScrollDown:
-        if (g_wtHomeScroll < wtl::maxScroll(s, v, aiCount)) { g_wtHomeScroll = wtl::clampScroll(s, v, aiCount, (int)g_wtHomeScroll + wsm::scrollStep(s)); wsClick(); }
-        return true;
       case wtl::HitKind::Item: break;
       default: return true;
     }
-    const wtl::ItemId id = wtl::item(v, hi.index, aiCount).id;
+    const wtl::ItemId id = wtl::item(v, hi.index, 0).id;
     if (id == wtl::ItemId::HomeAi) { setPage(SCREEN_HUB_WORKSHOP); wsClick(); }  // the full list is on the Local AI tab
     else if (id == wtl::ItemId::HomePrinterRow) {
       if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
@@ -2192,7 +2257,7 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   const WtPrint w = wtPrint();
   if (cur == SCREEN_HUB_HOME) {
     if (wtCalmShown()) return false;
-    if (wtHomeIdle(w)) { id = wtl::View::HomeIdle; count = wtAiCount(); scroll = g_wtHomeScroll; }
+    if (wtHomeIdle(w)) id = wtl::View::HomeIdle;  // fixed, no runtime rows
   } else if (cur == SCREEN_HUB_PRINTER) {
     id = wtPrinterView();
     if (id == wtl::View::PrinterAms) {

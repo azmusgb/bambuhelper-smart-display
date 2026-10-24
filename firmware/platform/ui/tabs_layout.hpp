@@ -136,7 +136,8 @@ static const ItemSpec kWorkshopSetupItems[] = {
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsApprovals, ItemKind::Row, RowKind::Nav, false, "Approvals"},  // 12.6
   {ItemId::WsPair, ItemKind::Row, RowKind::Nav, false, "Local AI connection"},  // 12.7
-  {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
+  // 24 Oct 2026: no "Filament inventory · Not set up" row. Filament Inventory is retired; spools are in Bambuddy and
+  // reach this tab as Local AI's Materials card.
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
   {ItemId::WsTimerLength, ItemKind::Row, RowKind::Stepper, false, "Timer length"},
   {ItemId::WsNote, ItemKind::Row, RowKind::Info, false, "Note"},
@@ -158,11 +159,13 @@ static const ItemSpec kWorkshopInventoryItems[] = {
   {ItemId::WsNote, ItemKind::Row, RowKind::Info, false, "Note"},
 };
 
-// 12.4.1: Home while the printer is idle, offline or not set up: Local AI's cards, then one row for the printer
-// and the workshop timer. The big print card is only for a print that is running, finished or failed.
+// 12.4.1: Home while the printer is idle, offline or not set up. The big print card is only for a print that is
+// running, finished or failed.
+// Home at a glance: no scrolling: the house (Local AI's most important card), the printer, then the
+// workshop timer. The clock and the weather are in the header; the full card list is on the Local AI tab.
 static const ItemSpec kHomeIdleItems[] = {
-  {ItemId::HomeAi, ItemKind::Row, RowKind::Info, false, "Local AI"},
-  {ItemId::HomePrinterRow, ItemKind::Row, RowKind::Nav, false, "Printer"},
+  {ItemId::HomeAi, ItemKind::Card, RowKind::Info, true, "House"},
+  {ItemId::HomePrinterRow, ItemKind::Card, RowKind::Info, true, "Printer"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
 };
 
@@ -173,7 +176,7 @@ static const ViewSpec kViews[] = {
   {View::PrinterControl, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterControlItems), false},
   {View::WorkshopSetup, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopSetupItems), true},
   {View::WorkshopInventory, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopInventoryItems), true},
-  {View::HomeIdle, Tab::Home, false, true, false, "Home", WT_ITEMS(kHomeIdleItems), true},
+  {View::HomeIdle, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeIdleItems), false},
 };
 
 #undef WT_ITEMS

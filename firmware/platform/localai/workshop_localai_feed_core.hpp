@@ -130,6 +130,46 @@ inline const char* askFor(const Card& c) {
   return nullptr;
 }
 
+// Home at a glance: Home's house line. Of the cards, the one that matters most: something needing you (attention), then
+// something worth a look (warning), then work under way (busy), then All clear (ok). Information cards (weather,
+// disks, music, finished work) stay on the Local AI tab. -1 when no card qualifies. `others` counts the remaining
+// attention and warning cards, for "+1 more".
+inline int8_t homeSummaryIndex(const Card* cards, uint8_t n, uint8_t& others) {
+  others = 0;
+  int8_t best = -1;
+  uint8_t bestRank = 0, problems = 0;
+  for (uint8_t i = 0; i < n; ++i) {
+    const Tone t = cards[i].tone;
+    const uint8_t rank = t == Tone::Attention ? 4 : t == Tone::Warning ? 3 : t == Tone::Busy ? 2 : t == Tone::Ok ? 1 : 0;
+    if (rank >= 3) ++problems;
+    if (rank > bestRank) { bestRank = rank; best = (int8_t)i; }
+  }
+  if (bestRank >= 3) others = (uint8_t)(problems - 1);
+  return best;
+}
+
+// Home at a glance: the header's weather from the weather card's sentence ("Right now in Lake Wylie: 66 degrees and sunny.")
+// as "66° Sunny". Empty when the sentence has no "<number> degrees".
+inline void weatherShort(char* out, size_t len, const char* text) {
+  if (!out || !len) return;
+  out[0] = 0;
+  if (!text) return;
+  const char* deg = strstr(text, " degrees");
+  if (!deg) return;
+  const char* num = deg;
+  while (num > text && ((num[-1] >= '0' && num[-1] <= '9') || num[-1] == '-')) --num;
+  if (num == deg) return;
+  char sky[24] = "";
+  const char* and_ = strstr(deg, " and ");
+  if (and_) {
+    size_t k = 0;
+    for (const char* p = and_ + 5; *p && *p != '.' && *p != ',' && k + 1 < sizeof(sky); ++p) sky[k++] = *p;
+    sky[k] = 0;
+    if (sky[0] >= 'a' && sky[0] <= 'z') sky[0] = (char)(sky[0] - 'a' + 'A');
+  }
+  snprintf(out, len, sky[0] ? "%.*s\xC2\xB0 %s" : "%.*s\xC2\xB0", (int)(deg - num), num, sky);
+}
+
 // 12.6: messages Local AI leaves for the display (feed v2 `messages`): a banner, maybe a chime, maybe one action.
 static const uint8_t kMaxMessages = 4;
 static const size_t kMessageTextLen = 124;

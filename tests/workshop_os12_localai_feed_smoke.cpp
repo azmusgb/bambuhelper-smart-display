@@ -87,6 +87,31 @@ int main() {
     CHECK(messageIsNew(5, 4, 0, 0) && !messageIsNew(4, 4, 0, 0), "newer than the last shown");
     CHECK(messageIsNew(9, 0, 1000, 1100) && !messageIsNew(9, 0, 1000, 1200) && !messageIsNew(9, 0, 0, 1100), "after a restart: the last 2 minutes only");
   }
+  // Home at a glance: the house line and the header's weather.
+  {
+    Card c[4] = {};
+    c[0].tone = Tone::Ok; c[1].tone = Tone::Warning; c[2].tone = Tone::Info; c[3].tone = Tone::Busy;
+    uint8_t others = 9;
+    CHECK(homeSummaryIndex(c, 4, others) == 1 && others == 0, "a warning beats All clear and work under way");
+    c[3].tone = Tone::Attention;
+    CHECK(homeSummaryIndex(c, 4, others) == 3 && others == 1, "attention first, the warning counted as one more");
+    c[1].tone = Tone::Info; c[3].tone = Tone::Info;
+    CHECK(homeSummaryIndex(c, 4, others) == 0 && others == 0, "nothing wrong: All clear");
+    c[0].tone = Tone::Info;
+    CHECK(homeSummaryIndex(c, 4, others) == -1, "information only: no house line");
+    CHECK(homeSummaryIndex(c, 0, others) == -1, "no cards");
+    char w[24];
+    weatherShort(w, sizeof(w), "Right now in Lake Wylie: 66 degrees and sunny.");
+    CHECK(!strcmp(w, "66\xC2\xB0 Sunny"), "66 degrees and sunny");
+    weatherShort(w, sizeof(w), "Right now in Lake Wylie: -3 degrees and light snow.");
+    CHECK(!strcmp(w, "-3\xC2\xB0 Light snow"), "below zero, two words");
+    weatherShort(w, sizeof(w), "It is 71 degrees.");
+    CHECK(!strcmp(w, "71\xC2\xB0"), "no sky");
+    weatherShort(w, sizeof(w), "Weather is not set up.");
+    CHECK(w[0] == 0, "no number: nothing");
+    weatherShort(w, sizeof(w), nullptr);
+    CHECK(w[0] == 0, "no text");
+  }
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }
