@@ -837,10 +837,13 @@ static wtl::View wtPrinterView() { return wtl::segmentView(g_printerMode < wtl::
 // One AMS row: a tray, or the external spool.
 struct WtTray {
   char label[24];
-  char value[40];
+  char value[48];
   uint16_t color;
   bool present;
   bool inUse;
+  int8_t remain;       // 0-100%, -1 = unknown / 3rd-party
+  int16_t grams;       // remaining grams, -1 = unknown
+  int16_t totalGrams;  // spool nominal capacity (e.g. 1000g)
 };
 
 // The rows Printer > AMS lists, in printer order. Zero when there is nothing
@@ -863,9 +866,16 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
         r.present = tr.present;
         r.color = tr.present ? (tr.colorRgb565 ? tr.colorRgb565 : (uint16_t)0x1082) : OS12V_LINE;
         r.inUse = a.activeTray == index;
-        if (!tr.present) strlcpy(r.value, "Empty", sizeof(r.value));
-        else if (tr.remain >= 0) snprintf(r.value, sizeof(r.value), "%s · %d%%", tr.type[0] ? tr.type : "Filament", (int)tr.remain);
-        else strlcpy(r.value, tr.type[0] ? tr.type : "Filament", sizeof(r.value));
+        r.remain = tr.remain;
+        r.grams = tr.remain >= 0 ? (int16_t)((int32_t)tr.remain * 10) : (int16_t)-1;
+        r.totalGrams = 1000;
+        if (!tr.present) {
+          strlcpy(r.value, "Empty", sizeof(r.value));
+        } else if (tr.remain >= 0) {
+          snprintf(r.value, sizeof(r.value), "%s · %dg (%d%%)", tr.type[0] ? tr.type : "Filament", (int)r.grams, (int)tr.remain);
+        } else {
+          snprintf(r.value, sizeof(r.value), "%s · ~1000g", tr.type[0] ? tr.type : "Filament");
+        }
       }
     }
   }
@@ -876,6 +886,9 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
     r.present = true;
     r.color = a.vtColorRgb565 ? a.vtColorRgb565 : (uint16_t)0x1082;
     r.inUse = a.activeTray == 254;
+    r.remain = -1;
+    r.grams = -1;
+    r.totalGrams = 1000;
   }
   return n;
 }
@@ -901,7 +914,7 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
     tft.drawFastHLine(swatchX + 6, mid, 10, OS12V_LINE);
   }
   const int16_t labelX = row.x + 46;
-  const int16_t labelW = s.landscape() ? 144 : 98;
+  const int16_t labelW = s.landscape() ? (t.present ? 96 : 144) : 98;
   uiDrawFit(t.label, labelX, mid, labelW, FONT_BODY, ML_DATUM, t.present ? OS12V_TEXT : OS12V_MUTED, bg);
   const int16_t right = row.right() - 12;
   int16_t valueRight = right;
@@ -910,10 +923,52 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
     setFont(tft, FONT_BODY);
     valueRight = (int16_t)(right - tft.textWidth("In use") - 12);
   }
-  const int16_t valueX = labelX + labelW + 8;
-  if (valueRight > valueX)
-    uiDrawFit(t.value, valueRight, mid, valueRight - valueX, wsValueFont(t.value, valueRight - valueX), MR_DATUM,
-              t.present ? OS12V_TEXT : OS12V_MUTED, bg);
+
+  // Horizon 1.1: Precision Spool Fuel Gauge Meter on landscape 480x320 display
+  if (t.present && s.landscape()) {
+    const int16_t barW = 80;
+    const int16_t barH = 8;
+    const int16_t barX = labelX + labelW + 8;
+    const int16_t barY = mid - 4;
+    // Precision pill track
+    tft.fillRoundRect(barX, barY, barW, barH, 4, OS12V_SURFACE);
+    tft.drawRoundRect(barX, barY, barW, barH, 4, OS12V_LINE);
+
+    const int8_t pct = t.remain >= 0 ? t.remain : (t.grams >= 0 && t.totalGrams > 0 ? (int8_t)((t.grams * 100) / t.totalGrams) : (int8_t)-1);
+    if (pct >= 0) {
+      uint16_t fillCol = OS12V_ACCENT;
+      if (pct <= 10) fillCol = OS12V_RED;
+      else if (pct <= 25) fillCol = OS12V_AMBER;
+      else if (t.color != 0x0000 && t.color != 0x1082) fillCol = t.color;
+
+      int16_t fillW = (int16_t)(((barW - 4) * pct) / 100);
+      if (fillW < 3 && pct > 0) fillW = 3;
+      if (fillW > barW - 4) fillW = barW - 4;
+      if (fillW > 0) {
+        tft.fillRoundRect(barX + 2, barY + 2, fillW, barH - 4, 2, fillCol);
+      }
+      // Low filament alert dot (< 10% / < 50g)
+      if (pct <= 10) {
+        tft.fillCircle(barX - 6, mid, 3, OS12V_RED);
+      }
+    } else {
+      // Standard spool / uncalibrated: draw subtle graduated gauge segments
+      tft.drawFastHLine(barX + 6, mid, barW - 12, OS12V_LINE);
+      for (int16_t tick = barX + 20; tick < barX + barW - 6; tick += 20) {
+        tft.drawFastVLine(tick, mid - 2, 4, OS12V_LINE);
+      }
+    }
+    const int16_t valueX = barX + barW + 10;
+    if (valueRight > valueX) {
+      uiDrawFit(t.value, valueRight, mid, valueRight - valueX, wsValueFont(t.value, valueRight - valueX), MR_DATUM,
+                OS12V_TEXT, bg);
+    }
+  } else {
+    const int16_t valueX = labelX + labelW + 8;
+    if (valueRight > valueX)
+      uiDrawFit(t.value, valueRight, mid, valueRight - valueX, wsValueFont(t.value, valueRight - valueX), MR_DATUM,
+                t.present ? OS12V_TEXT : OS12V_MUTED, bg);
+  }
 }
 
 static void wtDrawSegments(const wsm::Screen& s, uint8_t selected) {
