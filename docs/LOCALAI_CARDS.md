@@ -5,6 +5,12 @@
   note).
 - **Home:** the first row is Local AI's most important card, or the workshop timer while it runs; it opens the Local
   AI tab.
+- **Idle Home, at a glance (since the Home redesign after 12.8.0):** one screen, no scrolling. The header shows the
+  time and the weather card's temperature and sky ("66° Sunny"). Then the **house card**: the card that matters most
+  (attention, then warning, then work under way, then All clear), with "+N more" for other problems. Then the
+  **printer card**: its state in large type ("Finished 1:21 PM", "Ready", "Offline") and one line of detail (the last
+  job, or nozzle and bed temperatures). Then the timer. Information cards (disks, music, finished work) are on the
+  Local AI tab only. `homeSummaryIndex` and `weatherShort` in `workshop_localai_feed_core.hpp` decide what shows.
 - **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;
   otherwise a second Local AI card shows there.
 

@@ -121,7 +121,8 @@ void checkTree(const char* o) {
       const ItemSpec& it = v.items[j];
       check(it.label && it.label[0], "item has a label", v.title, j);
       if (v.list) check(it.kind == ItemKind::Row, "lists hold rows only", it.label);
-      if (it.kind == ItemKind::Card && it.tappable) check(v.id == View::Home, "only the Home card is a button", it.label);
+      if (it.kind == ItemKind::Card && it.tappable)
+        check(v.id == View::Home || v.id == View::HomeIdle, "only Home's cards are buttons", it.label);  // idle Home too
     }
   }
   // Head-repeat mapping: n cards, then the tools in order.
@@ -131,14 +132,19 @@ void checkTree(const char* o) {
     check(item(w, 2, 3).id == ItemId::WsAiCard && item(w, 3, 3).id == w.items[1].id && item(w, itemCount(w, 3) - 1, 3).id == w.items[w.itemCount - 1].id, "cards, then the tools in order", o);
     check(headIndex(w, 2, 3) == 2 && headIndex(w, 3, 3) == 0, "card index", o);
   }
-  // 12.4.1 idle Home: Local AI's cards, then the printer row and the timer; no print card.
+  // Idle Home at a glance: the house card, the printer card and the timer, all on one screen; no print card.
   {
     const ViewSpec& h = view(View::HomeIdle);
-    check(h.tab == Tab::Home && h.headRepeat && h.list, "idle Home is a Home list led by Local AI", o);
-    bool card = false;
-    for (uint8_t j = 0; j < h.itemCount; ++j) card = card || h.items[j].kind == ItemKind::Card;
-    check(!card, "idle Home has no print card", o);
-    check(item(h, 1, 2).id == ItemId::HomeAi && item(h, 2, 2).id == ItemId::HomePrinterRow, "two cards, then the printer row", o);
+    check(h.tab == Tab::Home && !h.headRepeat && !h.list, "idle Home is one fixed screen", o);
+    check(h.itemCount == 3 && h.items[0].id == ItemId::HomeAi && h.items[1].id == ItemId::HomePrinterRow && h.items[2].id == ItemId::WsTimer,
+          "house, printer, timer", o);
+    check(h.items[0].tappable && h.items[1].tappable, "both cards open their tab", o);
+    for (uint8_t j = 0; j < h.itemCount; ++j) check(h.items[j].id != ItemId::HomeCard, "idle Home has no print card", o);
+    for (uint8_t k = 0; k < 2; ++k) {
+      const Screen sc = k ? more::makeScreen(320, 480) : more::makeScreen(480, 320);
+      check(!scrolls(sc, h, 6), "idle Home never scrolls, even with six cards", o);
+      for (uint8_t j = 0; j < h.itemCount; ++j) check(!itemRect(sc, h, 6, 0, j).empty(), "every idle Home item fits", o, k, j);
+    }
   }
   // Stop exists exactly once, as the hold item on Control, after Pause.
   int holds = 0, primaries = 0;
