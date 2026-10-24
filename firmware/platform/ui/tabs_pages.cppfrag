@@ -50,7 +50,9 @@ static void wtBambuddyClearTask(void*) {
 static void wtDismissFailedAlert() {
   g_wtFailedDismissed = true;
 #ifdef ARDUINO
-  xTaskCreate(wtBambuddyClearTask, "bambuddyClear", 4096, nullptr, 1, nullptr);
+  // Through Local AI, which holds Bambuddy's key; the direct call (no key) only while Local AI isn't set up, and it
+  // stops working once Bambuddy's sign-in is on.
+  if (!workshopLocalAiFeedClearPrinter()) xTaskCreate(wtBambuddyClearTask, "bambuddyClear", 4096, nullptr, 1, nullptr);
 #endif
 }
 

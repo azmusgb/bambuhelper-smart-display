@@ -71,6 +71,8 @@ bool workshopLocalAiFeedTakeMessage(workshop::localai::Message* out);
 bool workshopLocalAiFeedRefreshApprovals();
 std::uint8_t workshopLocalAiFeedApprovals(workshop::localai::Approval* out, std::uint8_t max);
 bool workshopLocalAiFeedDecide(const char* id, bool approve);
+// Clear plate through Local AI (which clears the plate and printer errors in Bambuddy); false when Local AI isn't set up.
+bool workshopLocalAiFeedClearPrinter();
 // 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);
 // on success the settings are saved as by the portal. False when the address or code is not acceptable, or busy.
 bool workshopLocalAiFeedPair(const char* address, const char* code);

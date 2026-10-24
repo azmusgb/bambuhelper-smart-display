@@ -66,7 +66,7 @@ std::uint32_t g_nextAtMs = 0;
 bool g_taskActive = false;
 
 // Jobs for the one task, highest priority first.
-enum class Job : std::uint8_t { Pair, Ask, Decide, Approvals, Image, Feed, Heartbeat, Events };
+enum class Job : std::uint8_t { Pair, Ask, Decide, Clear, Approvals, Image, Feed, Heartbeat, Events };
 char g_pairAddress[16] = {};
 char g_pairCode[8] = {};
 WorkshopLocalAiExtras g_extras;
@@ -76,6 +76,7 @@ bool g_feedNow = false;               // the long poll saw news
 bool g_approvalsPending = false;
 char g_decideId[40] = {};
 bool g_decideApprove = false;
+bool g_clearPending = false;          // Clear plate, through Local AI to Bambuddy
 std::uint32_t g_nextBeatAtMs = 0;
 std::uint32_t g_eventsPauseUntilMs = 0;  // after a failed long poll (older Local AI: 404), wait before the next
 char g_sig[24] = {};                  // what the long poll compares
@@ -501,6 +502,18 @@ void runDecide() {
     portEXIT_CRITICAL(&g_mux);
 }
 
+// Clear plate: Local AI clears the plate and the printer's errors in Bambuddy (POST /api/display/printer/clear), so the
+// display never holds a Bambuddy credential. Best effort, like the direct call it replaces.
+void runClear() {
+    char error[96] = {};
+    JsonDocument doc;
+    getJson("POST", "/api/display/printer/clear", "{}", doc, error, sizeof(error));
+    portENTER_CRITICAL(&g_mux);
+    g_clearPending = false;
+    finishJob();
+    portEXIT_CRITICAL(&g_mux);
+}
+
 void runHeartbeat() {
     JsonDocument beat;
     beat["version"] = WORKSHOP_OS_RELEASE_VERSION;
@@ -622,6 +635,7 @@ void fetchTask(void* arg) {
         case Job::Pair: runPair(); break;
         case Job::Ask: runAsk(); break;
         case Job::Decide: runDecide(); break;
+        case Job::Clear: runClear(); break;
         case Job::Approvals: runApprovals(); break;
         case Job::Image: runImage(); break;
         case Job::Feed: runFeed(generation); break;
@@ -673,6 +687,7 @@ void workshopLocalAiFeedLoop() {
         due = true;
         if (g_askPending[0]) job = Job::Ask;
         else if (g_decideId[0]) job = Job::Decide;
+        else if (g_clearPending) job = Job::Clear;
         else if (g_approvalsPending) job = Job::Approvals;
         else if (g_imagePending) job = Job::Image;
         else if (g_feedNow || (std::int32_t)(now - g_nextAtMs) >= 0) { job = Job::Feed; g_feedNow = false; g_snap.busy = true; }
@@ -692,6 +707,7 @@ void workshopLocalAiFeedLoop() {
             case Job::Image: g_imagePending = false; g_extras.imageBusy = false; copyText(g_extras.imageStatus, sizeof(g_extras.imageStatus), "Could not start the download."); ++g_extras.imageSeq; break;
             case Job::Approvals: g_approvalsPending = false; g_extras.approvalsBusy = false; break;
             case Job::Decide: g_decideId[0] = 0; break;
+            case Job::Clear: g_clearPending = false; break;
             case Job::Heartbeat: g_nextBeatAtMs = now + lai::kHeartbeatMs; break;
             case Job::Events: g_eventsPauseUntilMs = now + 10000UL; break;
             case Job::Pair: g_pairCode[0] = 0; g_extras.pairBusy = false; copyText(g_extras.pairStatus, sizeof(g_extras.pairStatus), "Could not start pairing."); ++g_extras.pairSeq; break;
@@ -840,6 +856,14 @@ bool workshopLocalAiFeedDecide(const char* id, bool approve) {
         g_extras.approvalsBusy = true;
         snprintf(g_extras.approvalStatus, sizeof(g_extras.approvalStatus), approve ? "Approving..." : "Rejecting...");
     }
+    portEXIT_CRITICAL(&g_mux);
+    return ok;
+}
+
+bool workshopLocalAiFeedClearPrinter() {
+    portENTER_CRITICAL(&g_mux);
+    const bool ok = g_snap.configured;
+    if (ok) g_clearPending = true;
     portEXIT_CRITICAL(&g_mux);
     return ok;
 }
