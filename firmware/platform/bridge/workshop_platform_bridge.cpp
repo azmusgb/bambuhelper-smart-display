@@ -58,6 +58,12 @@ workshop::platform::PrinterState observePrinter(std::size_t slot, std::uint32_t 
     observation.configured = true;
     observation.connected = source.connected;
     observation.activity = mapPrinterActivity(source.gcodeStateId);
+    if (observation.activity == PrinterActivity::Error) {
+        const bool cold = (source.nozzleTemp < 45.0f && source.bedTemp < 35.0f);
+        if (cold && source.printError == 0) {
+            observation.activity = PrinterActivity::Idle;
+        }
+    }
     observation.lastTelemetryAtMs = static_cast<std::uint32_t>(source.lastUpdate);
     observation.nozzleCelsius = clampTemperature(source.nozzleTemp);
     observation.bedCelsius = clampTemperature(source.bedTemp);
