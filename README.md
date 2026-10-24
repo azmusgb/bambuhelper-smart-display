@@ -2,7 +2,7 @@
 
 Local-first Workshop OS for the **Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`)**, built on the BambuHelper v3.8.1 core.
 
-Workshop OS owns the WS350 firmware, touchscreen UX, printer/device controls, hardware integrations, audio/microphone/BLE, networking, OTA/recovery behavior, and physical acceptance. **Filament Inventory remains the sole authority for filament inventory facts, spool identity, ownership, quantity evidence, location, printer/AMS placement, and print-readiness data.**
+Workshop OS owns the WS350 firmware, touchscreen UX, printer/device controls, hardware integrations, audio/microphone/BLE, networking, OTA/recovery behavior, and physical acceptance. **Bambuddy (on the household Pi) holds the filament inventory: spools, quantities, AMS placement and projects.** Filament Inventory (`azmusgb/filamentinventory`) was retired on 24 Oct 2026; see `docs/REPOSITORY_BOUNDARIES.md`.
 
 ## Current release state
 
