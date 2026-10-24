@@ -255,6 +255,21 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
   }
   if (scrollButtons) {
     const wsm::Rect up = wsm::scrollUpRect(s), down = wsm::scrollDownRect(s);
+    const uint8_t totalDots = (maxScroll < 6) ? (uint8_t)(maxScroll + 1) : 6;
+    if (totalDots > 1) {
+      const int16_t dotGap = 9;
+      const int16_t totalDotsW = (int16_t)((totalDots - 1) * dotGap + 10);
+      const int16_t dotStartX = (int16_t)(up.x - 12 - totalDotsW);
+      const int16_t midY = wsm::kHeaderH / 2;
+      for (uint8_t d = 0; d < totalDots; ++d) {
+        const int16_t xd = (int16_t)(dotStartX + d * dotGap);
+        if (d == scroll || (scroll >= totalDots - 1 && d == totalDots - 1)) {
+          tft.fillRoundRect((int16_t)(xd - 2), (int16_t)(midY - 3), 10, 6, 3, OS12V_ACCENT);
+        } else {
+          tft.fillCircle((int16_t)(xd + 3), midY, 2, OS12V_LINE);
+        }
+      }
+    }
     for (uint8_t i = 0; i < 2; ++i) {
       const wsm::Rect r = i == 0 ? up : down;
       const bool live = i == 0 ? scroll > 0 : scroll < maxScroll;
@@ -331,7 +346,7 @@ static void wtDrawRunningPrint(const wtl::PrintCardLayout& L, const WtPrint& w) 
 }
 
 // Temperatures: one strip of three cells in landscape, three plain rows in
-// portrait. Read-only, so drawn flat (12.3.6): no raised surface or border.
+// portrait. Elevated tactile card capsule with jewel indicator diodes and pre-heat targets.
 static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPrint& w, bool targets) {
   char values[3][24];
   const char* labels[3] = {"Nozzle", "Bed", "Chamber"};
@@ -351,14 +366,28 @@ static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPri
   if (s.landscape()) {
     if (live && w.s->dualNozzle) labels[0] = w.s->activeNozzle == 1 ? "Nozzle L" : "Nozzle R";
     const wsm::Rect surface = wsm::rowSurface(area);
-    tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
-    tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
+    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
     for (uint8_t i = 0; i < 3; ++i) {
       const wsm::Rect c = wtl::tempCellRect(s, area, i);
-      if (i) tft.drawFastVLine(c.x, c.y + 10, c.h - 20, OS12V_LINE);
+      if (i) tft.drawFastVLine(c.x, surface.y + 6, surface.h - 12, OS12V_LINE);
       const int16_t mid = c.y + c.h / 2;
-      uiDrawFit(labels[i], c.x + 12, mid, 56, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_BG);
-      uiDrawFit(values[i], c.right() - 10, mid, c.w - 76, FONT_BODY, MR_DATUM, live ? OS12V_TEXT : OS12V_MUTED, OS12V_BG);
+      const bool heating = live && (want[i] > 1.0f && (want[i] - now[i]) >= 2.0f);
+      uint16_t diodeCol = OS12V_MUTED;
+      if (i == 0) {
+        diodeCol = heating ? OS12V_AMBER : (live && now[0] >= 50.0f ? 0xE2A5 : OS12V_MUTED);
+      } else if (i == 1) {
+        diodeCol = heating ? OS12V_AMBER : (live && now[1] >= 40.0f ? 0xFA60 : OS12V_MUTED);
+      } else {
+        diodeCol = live ? OS12V_ACCENT : OS12V_MUTED;
+      }
+      const int16_t dx = c.x + 12;
+      tft.drawCircle(dx, mid, 5, OS12V_LINE);
+      tft.fillCircle(dx, mid, 3, diodeCol);
+      tft.fillCircle(dx - 1, mid - 1, 1, 0xFFFF);
+      const uint16_t valCol = heating ? OS12V_AMBER : (live ? OS12V_TEXT : OS12V_MUTED);
+      uiDrawFit(labels[i], c.x + 22, mid, 52, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_SURFACE);
+      uiDrawFit(values[i], c.right() - 8, mid, c.w - 76, FONT_BODY, MR_DATUM, valCol, OS12V_SURFACE);
     }
     return;
   }
@@ -850,7 +879,7 @@ static void wtDrawHome(bool full) {
     if (r.empty()) continue;
     switch (v.items[i].id) {
       case wtl::ItemId::HomeCard: wtDrawHomeCard(s, r, w); break;
-      case wtl::ItemId::HomeTemps: if (w.configured) wtDrawTemps(s, r, w, false); break;
+      case wtl::ItemId::HomeTemps: if (w.configured) wtDrawTemps(s, r, w, true); break;
       case wtl::ItemId::HomeExtra: {
         WsRowView row;
         const char* label = wtHomeExtra(row);
@@ -1029,10 +1058,10 @@ static void wtDrawSegments(const wsm::Screen& s, uint8_t selected) {
 
 static const char* wtSpeedText(uint8_t speed) {
   switch (speed) {
-    case 1: return "Silent speed";
-    case 2: return "Standard speed";
-    case 3: return "Sport speed";
-    case 4: return "Ludicrous speed";
+    case 1: return "Silent · 50%";
+    case 2: return "Standard · 100%";
+    case 3: return "Sport · 124%";
+    case 4: return "Ludicrous · 166%";
     default: return "";
   }
 }
@@ -1100,6 +1129,10 @@ static const char* wtPrinterDetail(const WtPrint& w, WsRowView& v) {
       if (v.value[0]) strlcat(v.value, "  ·  ", sizeof(v.value));
       strlcat(v.value, speed, sizeof(v.value));
     }
+    if (st.speedLevel == 3) v.valueColor = OS12V_AMBER;
+    else if (st.speedLevel == 4) v.valueColor = 0xF81F;
+    else if (st.speedLevel == 1) v.valueColor = OS12V_MUTED;
+    else v.valueColor = OS12V_TEXT;
     return "Layer";
   }
   const char* job = jobDisplayName(st);
@@ -1132,6 +1165,7 @@ struct WtControls {
   const char* pauseLabel;
   const char* pauseReason;
   bool resume;
+  uint8_t speedLevel;
   bool lightEnabled;
   bool lightOn;
   bool lightKnown;
@@ -1146,6 +1180,7 @@ static WtControls wtControls(const WtPrint& w) {
   WtControls c;
   memset(&c, 0, sizeof(c));
   c.resume = w.paused;
+  c.speedLevel = (w.s && w.online) ? w.s->speedLevel : 0;
   c.pauseLabel = printerFeedbackLabel(1, w.paused ? "Resume print" : "Pause print");
   const char* offline = !w.configured ? "No printer set up" : "Printer offline";
   c.pauseEnabled = w.online && w.active;
@@ -1172,6 +1207,13 @@ static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c) {
     if (c.resume) tft.fillTriangle(ix, cy - 8, ix, cy + 8, ix + 13, cy, OS12V_BG);
     else { tft.fillRect(ix, cy - 8, 4, 16, OS12V_BG); tft.fillRect(ix + 8, cy - 8, 4, 16, OS12V_BG); }
     uiDrawFit(c.pauseLabel, b.x + b.w / 2 + 10, cy, b.w - 120, FONT_LARGE, MC_DATUM, OS12V_BG, bg);
+    const char* sp = wtSpeedText(c.speedLevel);
+    if (sp && sp[0]) {
+      const int16_t spW = (int16_t)(tft.textWidth(sp) + 16);
+      const int16_t spX = (int16_t)(b.right() - 14 - spW);
+      tft.fillRoundRect(spX, cy - 11, spW, 22, 6, OS12V_BG);
+      uiDrawFit(sp, spX + spW / 2, cy, spW - 8, FONT_SMALL, MC_DATUM, bg, OS12V_BG);
+    }
   } else {
     uiDrawFit(c.pauseReason, b.x + b.w / 2, b.y + b.h / 2, b.w - 24, FONT_BODY, MC_DATUM, OS12V_MUTED, bg);
   }
