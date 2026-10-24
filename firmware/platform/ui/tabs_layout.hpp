@@ -136,7 +136,8 @@ static const ItemSpec kWorkshopSetupItems[] = {
   {ItemId::WsImage, ItemKind::Row, RowKind::Nav, false, "Latest image"},
   {ItemId::WsApprovals, ItemKind::Row, RowKind::Nav, false, "Approvals"},  // 12.6
   {ItemId::WsPair, ItemKind::Row, RowKind::Nav, false, "Local AI connection"},  // 12.7
-  {ItemId::WsInventorySetup, ItemKind::Row, RowKind::Nav, false, "Filament inventory"},
+  // 24 Oct 2026: no "Filament inventory · Not set up" row. Filament Inventory is retired; spools are in Bambuddy and
+  // reach this tab as Local AI's Materials card.
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
   {ItemId::WsTimerLength, ItemKind::Row, RowKind::Stepper, false, "Timer length"},
   {ItemId::WsNote, ItemKind::Row, RowKind::Info, false, "Note"},
