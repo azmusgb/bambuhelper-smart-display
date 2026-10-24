@@ -62,19 +62,26 @@ static void wtDismissFailedAlert() {
 // muted text on its status row.
 static bool wtFailedRecently(const BambuState* s, bool failed, bool active) {
   static uint32_t seenAt = 0;
+  static bool coldOnBoot = false;
 
   if (active) {
     g_wtFailedDismissed = false;
     seenAt = 0;
+    coldOnBoot = false;
     return false;
   }
   if (!failed || !s || g_wtFailedDismissed) {
     seenAt = 0;
+    coldOnBoot = false;
     return false;
   }
-  if (!seenAt) seenAt = millis() | 1U;
-
   const bool cold = (s->nozzleTemp < 45.0f && s->bedTemp < 35.0f);
+  if (!seenAt) {
+    seenAt = millis() | 1U;
+    if (cold) coldOnBoot = true;
+  }
+  if (coldOnBoot) return false;
+
   if (cold) {
     const time_t now = time(nullptr);
     if (s->finishEpoch && now >= 1700000000) {
