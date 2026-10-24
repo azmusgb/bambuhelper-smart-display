@@ -465,27 +465,46 @@ static workshop::localai::Card wtAiCard(uint8_t i) {
 
 static uint16_t wtAiToneColor(workshop::localai::Tone t) {
   using workshop::localai::Tone;
-  return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : t == Tone::Busy ? OS12V_ACCENT : OS12V_MUTED;
+  return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : (t == Tone::Busy || t == Tone::Info) ? OS12V_ACCENT : OS12V_MUTED;
 }
 // The banner's edge: info is Local AI blue rather than grey.
 static uint16_t wtToneColor(workshop::localai::Tone t) { return t == workshop::localai::Tone::Info ? OS12V_ACCENT : wtAiToneColor(t); }
 
-// One Local AI card as a row: a dot in its tone, the title, then the line, and (12.4.3) a chevron: a tap opens the
-// Local AI tab from Home, and asks about the card on the tab.
+// One Local AI card as a row: a luminous diode in its tone, distinct title, divider line,
+// clear details, and chevron; a tap opens the Local AI tab from Home, and asks about the card on the tab.
 static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg) {
   const int16_t mid = (int16_t)(row.y + row.h / 2), x = (int16_t)(row.x + 14);
-  tft.fillCircle(x + 5, mid, 5, wtAiToneColor(card.tone));
+  const uint16_t dotCol = wtAiToneColor(card.tone);
+
+  // Precision jewel indicator diode: outer halo + core + specular glint
+  tft.drawCircle((int16_t)(x + 5), mid, 7, OS12V_LINE);
+  tft.fillCircle((int16_t)(x + 5), mid, 5, dotCol);
+  tft.fillCircle((int16_t)(x + 4), (int16_t)(mid - 1), 1, 0xFFFF);
+
   setFont(tft, FONT_BODY);
-  const int16_t titleW = (int16_t)(tft.textWidth(card.title) + 12);
-  uiDrawFit(card.title, (int16_t)(x + 20), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, bg);
-  const int16_t textX = (int16_t)(x + 20 + titleW), textW = (int16_t)(row.right() - 30 - textX);
-  if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
+  const int16_t maxTitleW = (int16_t)(row.w / 3);
+  int16_t titleW = (int16_t)(tft.textWidth(card.title) + 8);
+  if (titleW > maxTitleW) titleW = maxTitleW;
+  uiDrawFit(card.title, (int16_t)(x + 18), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, bg);
+
+  if (card.text[0]) {
+    // Subtle vertical accent divider between classification title and detail text
+    tft.drawFastVLine((int16_t)(x + 18 + titleW + 2), (int16_t)(mid - 6), 12, OS12V_LINE);
+    const int16_t textX = (int16_t)(x + 18 + titleW + 10), textW = (int16_t)(row.right() - 28 - textX);
+    if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
+  }
   wsDrawChevronRight((int16_t)(row.right() - 16), mid, OS12V_MUTED);
-  // 12.8: Now playing shows how far in it is: a thin bar along the bottom of the row.
+
+  // Live progress bars along card foot
   if (!strcmp(card.kind, "playing") && card.percent <= 100) {
-    const int16_t bx = (int16_t)(row.x + 14), bw = (int16_t)(row.w - 28), by = (int16_t)(row.bottom() - 4);
+    const int16_t bx = (int16_t)(row.x + 14), bw = (int16_t)(row.w - 28), by = (int16_t)(row.bottom() - 3);
     tft.fillRoundRect(bx, by, bw, 3, 1, OS12V_SURFACE2);
     if (card.percent) tft.fillRoundRect(bx, by, (int16_t)(bw * card.percent / 100), 3, 1, OS12V_ACCENT);
+  } else if (!strcmp(card.kind, "disk") && card.percent <= 100) {
+    const int16_t bx = (int16_t)(row.x + 14), bw = (int16_t)(row.w - 28), by = (int16_t)(row.bottom() - 3);
+    tft.fillRoundRect(bx, by, bw, 3, 1, OS12V_SURFACE2);
+    const uint16_t diskCol = card.percent >= 90 ? OS12V_RED : (card.percent >= 80 ? OS12V_AMBER : OS12V_ACCENT);
+    if (card.percent) tft.fillRoundRect(bx, by, (int16_t)(bw * card.percent / 100), 3, 1, diskCol);
   }
 }
 
@@ -751,10 +770,16 @@ static void wtHomePrinterRow(const WtPrint& w, WsRowView& v) {
   wsView(v);
   if (!w.configured) { strlcpy(v.value, "Not set up", sizeof(v.value)); v.valueColor = OS12V_MUTED; return; }
   if (!w.online) { strlcpy(v.value, "Offline", sizeof(v.value)); v.valueColor = OS12V_AMBER; return; }
-  const char* name = w.p && w.p->config.name[0] ? w.p->config.name : "Printer";
   char at[24];
-  if (w.finished && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) snprintf(v.value, sizeof(v.value), "%s · Finished %s", name, at);
-  else snprintf(v.value, sizeof(v.value), w.finished ? "%s · Finished" : "%s · Ready", name);  // the chip says Finished too  // 12.6: the last result, once the big card has gone
+  float nozTemp = 0, nozTarget = 0;
+  if (w.s) wtNozzle(*w.s, nozTemp, nozTarget);
+  if (w.finished && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) {
+    snprintf(v.value, sizeof(v.value), "Finished %s", at);
+  } else if (w.s && (nozTemp > 0 || w.s->bedTemp > 0)) {
+    snprintf(v.value, sizeof(v.value), "Ready  %.0f° / %.0f°", nozTemp, w.s->bedTemp);
+  } else {
+    strlcpy(v.value, w.finished ? "Finished" : "Ready", sizeof(v.value));
+  }
   v.valueColor = OS12V_GREEN;
 }
 
@@ -774,12 +799,20 @@ static void wtDrawHomeIdle(const WtPrint& w) {
     const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
     WsRowView row;
     if (it.id == wtl::ItemId::HomeAi) {
-      tft.drawFastHLine(r.x + 12, r.bottom() - 1, r.w - 24, OS12V_LINE);
-      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_BG);
+      const wsm::Rect surface = wsm::rowSurface(r);
+      // Modern tactile card tile with subtle surface and rounded borders
+      tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+      tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_SURFACE);
       continue;
     }
-    if (it.id == wtl::ItemId::HomePrinterRow) wtHomePrinterRow(w, row);
-    else wtWorkshopRow(it.id, inv, row);
+    if (it.id == wtl::ItemId::HomePrinterRow) {
+      wtHomePrinterRow(w, row);
+      const char* label = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : it.label;
+      wsDrawRowBody(s, it.rowKind, label, row, r);
+      continue;
+    }
+    wtWorkshopRow(it.id, inv, row);
     wsDrawRowBody(s, it.rowKind, it.label, row, r);
   }
   uiBottomNav(0, nullptr);
@@ -1640,9 +1673,10 @@ static void wtDrawWorkshop(bool full) {
     if (r.empty()) continue;
     const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
     if (it.id == wtl::ItemId::WsAiCard) {
-      // Read-only, drawn flat like other information rows, with a hairline under it.
-      tft.drawFastHLine(r.x + 12, r.bottom() - 1, r.w - 24, OS12V_LINE);
-      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_BG);
+      const wsm::Rect surface = wsm::rowSurface(r);
+      tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+      tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_SURFACE);
       continue;
     }
     WsRowView row;
