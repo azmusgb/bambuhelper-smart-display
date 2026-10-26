@@ -878,8 +878,7 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
   int8_t idx[2];
   bool fromNeeds = false;
   // Later on the Judge it sheet hides the judge card here for 2 h (it stays on the other screens).
-  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(),
-                                                         ai.needsTotal);
+  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal);
   for (uint8_t k = 0; k < rows; ++k) {
     WtHomeRow& r = out[k];
     if (!fromNeeds) { r.c = ai.cards[idx[k]]; r.card = idx[k]; continue; }

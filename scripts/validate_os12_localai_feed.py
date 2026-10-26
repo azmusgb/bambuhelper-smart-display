@@ -132,10 +132,12 @@ def validate(repo: Path) -> None:
     need(fetch_fn, "lai::setNeed(r.needs[r.needCount++]", "needs are copied whole-character (UTF-8 safe)")
     need(fetch_fn, 'copyText(out.run, sizeof(out.run), c["run"] | "");', "a lab card keeps its run")
     need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsFromPi = r.needsFromPi;", "needs reach the snapshot")
+    need(fetch_fn, 'doc["needsCount"] | -1L', "the feed's needsCount (Pi Hub's whole list) is read")
+    need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsTotal = r.needsTotal;", "needsCount reaches the snapshot")
     top = block(hub, "static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others)")
     need(top, "const bool needsPresent = fresh && ai.needsFromPi;", "Pi Hub's list wins whenever the feed carried it, even empty")
-    need(top, "workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden())",
-         "idle Home's two rows: needs first, else cards (less the judge card Later hid here)")
+    need(top, "workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal)",
+         "idle Home's two rows: needs first, else cards (less the judge card Later hid here); \"+N more\" counts Pi Hub's whole list")
     forbid(top, "workshopLocalAiFeedSnapshot()", "wtHomeTop uses the caller's one snapshot")
     need(block(hub, "static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen)"),
          "workshopLocalAiFeedSnapshot()", "one snapshot per Home frame or touch, in a leaf")
