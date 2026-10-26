@@ -598,7 +598,7 @@ static uint16_t wtToneColor(workshop::localai::Tone t);
 
 static void wtPollMessage() {
   using workshop::localai::Tone;
-  wtJudgeService();  // 26 Oct 2026: every hub page polls the feed here
+  wtJudgeService();  // 26 Oct 2026: Home, Printer and the Local AI tab poll the feed here
   if (wtBannerShown()) return;
   if (g_wtBannerMs) { g_wtBannerMs = 0; g_dirty = true; }  // the last one just went
   workshop::localai::Message m;

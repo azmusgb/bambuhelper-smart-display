@@ -23,6 +23,7 @@ struct WtJudgeUi {
   int8_t wantPage;  // /hub/show lab-judge-<n>: the page to show once the sheet is here (-1: none, 99: the last)
   bool loading, loadFailed, opened, fromHome;
   bool resume;  // the sheet was up when the display went to the calm screen: the wake tap brings it back
+  bool sendFailed;  // a send failed while the sheet was closed: it reopens on the last page with the error
   uint32_t judgeSeq, verdictSeq;  // the feed's counters already seen
   uint32_t touchedAt, polledAt, waitingSince;
   char error[96];        // why the last read or send failed: Local AI's words when it gave any
@@ -113,8 +114,10 @@ static void wtJudgeOpen(const workshop::localai::Card& c, bool fromHome) {
   } else if (!wlab::draftKept(true, millis(), u.touchedAt) && g_wtJudge.state() != wlab::State::Waiting) {
     g_wtJudge.clearDraft();  // the draft is kept for 10 min of no touches (a verdict still on its way is kept)
   }
-  u.wantPage = -1;
-  u.error[0] = 0;
+  const bool failedNote = u.sendFailed && g_wtJudge.state() == wlab::State::Draft;
+  u.sendFailed = false;
+  u.wantPage = failedNote ? 99 : -1;  // the send that failed while closed: its page and its error, as if never left
+  if (!failedNote) u.error[0] = 0;
   u.loadFailed = false;
   u.fromHome = fromHome;
   u.touchedAt = millis();
@@ -228,6 +231,7 @@ static __attribute__((noinline)) void wtJudgeTick() {
         u.polledAt = now - wlab::kPollMs;
       } else {
         g_wtJudge.sendFailed();  // the same draft sent again keeps its id
+        u.sendFailed = !wtJudgeUp();
         strlcpy(u.error, e.judgeStatus[0] ? e.judgeStatus : "Local AI didn't answer", sizeof(u.error));
         if (e.verdictCode == 409) wtJudgeRequest();  // "This print has changed. Open it again.": read it again
       }
@@ -242,7 +246,8 @@ static __attribute__((noinline)) void wtJudgeTick() {
   }
 }
 
-// Every hub frame (wtPollMessage): with the sheet closed, a verdict on its way still reaches Done or the Mac's words,
+// Every Home, Printer and Local AI tab frame (wtPollMessage; not More, System or the printer's own screens): with the
+// sheet closed, a verdict on its way still reaches Done or the Mac's words,
 // so the sheet shows them when it opens again.
 static void wtJudgeService() {
   if (wtJudgeUp()) return;
@@ -259,6 +264,7 @@ static void wtJudgeSend() {
     strlcpy(u.error, "This verdict is too large to send from here", sizeof(u.error));
     return;
   }
+  u.sendFailed = false;
   u.waitingSince = millis();  // the phone counts its 2 minutes from Send
   if (!workshopLocalAiFeedJudgeSend(g_wtJudgeBody, g_wtJudge.requestId)) {
     g_wtJudge.sendFailed();
