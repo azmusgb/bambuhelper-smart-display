@@ -7,6 +7,12 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace workshop {
+namespace lab {
+struct Sheet;  // the Judge it sheet (workshop_lab_judge.hpp)
+}
+}  // namespace workshop
+
 struct WorkshopLocalAiFeedSnapshot {
     workshop::localai::Card cards[workshop::localai::kMaxCards]{};
     std::uint8_t count{0};
@@ -63,6 +69,17 @@ struct WorkshopLocalAiExtras {
     bool pairOk{false};
     std::uint32_t pairSeq{0};
     char pairStatus[96]{};
+    // 26 Oct 2026: the Judge it sheet (GET /api/display/lab/judge, POST /api/display/lab/verdict), like approvals: a
+    // flag while one runs, a counter of finished ones, the HTTP status and Local AI's words when it said no.
+    bool judgeBusy{false};
+    bool judgeOk{false};
+    std::uint16_t judgeCode{0};
+    std::uint32_t judgeSeq{0};
+    bool verdictBusy{false};
+    bool verdictOk{false};
+    std::uint16_t verdictCode{0};
+    std::uint32_t verdictSeq{0};
+    char judgeStatus[96]{};  // the last judge or verdict request's error, whole characters
 };
 
 void workshopLocalAiFeedBegin();
@@ -90,6 +107,12 @@ bool workshopLocalAiFeedTakeMessage(workshop::localai::Message* out);
 bool workshopLocalAiFeedRefreshApprovals();
 std::uint8_t workshopLocalAiFeedApprovals(workshop::localai::Approval* out, std::uint8_t max);
 bool workshopLocalAiFeedDecide(const char* id, bool approve);
+// 26 Oct 2026: Judge it. Asks Local AI for the sheet of the judge card's `run` (false when not set up, busy, or not a
+// run id); copies the last sheet read into *out (false while a read runs or none came); sends a verdict body made by
+// workshop::lab::LabJudge::beginSend (at most 4 KB; false when busy).
+bool workshopLocalAiFeedJudgeLoad(const char* run);
+bool workshopLocalAiFeedJudgeSheet(workshop::lab::Sheet* out);
+bool workshopLocalAiFeedJudgeSend(const char* body);
 // Clear plate through Local AI (which clears the plate and printer errors in Bambuddy); false when Local AI isn't set up.
 bool workshopLocalAiFeedClearPrinter();
 // 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);

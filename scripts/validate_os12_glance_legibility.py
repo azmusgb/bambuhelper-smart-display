@@ -171,7 +171,7 @@ def validate_kept(hub: str, web: str, layout: str) -> None:
     need(hub, "wpress::sameBox(", "a press acts only on the target it went down on")
     catalog = web[web.find('static const char kCatalog[] = R"json('):web.find(')json";')]
     ids = re.findall(r'\{"id":"([a-z0-9-]+)"', catalog)
-    want = ["home", "printer", "printer-ams", "printer-control", "workshop", "more", "settings-printer-power", "hardware-auto-off",
+    want = ["home", "printer", "printer-ams", "printer-control", "workshop", "lab-judge", "lab-judge-send", "more", "settings-printer-power", "hardware-auto-off",
             "settings-network", "system-date-time", "settings-display", "display-clock", "display-gauges", "settings-sounds",
             "display-alerts", "hardware-led", "media-video", "system-portal", "system-update", "system-diagnostics"]
     if ids != want:

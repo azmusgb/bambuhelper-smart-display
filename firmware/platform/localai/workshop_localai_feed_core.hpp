@@ -200,21 +200,34 @@ inline int8_t homeSummaryIndex(const Card* cards, uint8_t n, uint8_t& others) {
 // nothing needs you (0 rows, fromNeeds true: All clear, never Local AI's cards). Without it: the cards, best first (bad > attention >
 // warning > busy > ok; the earlier card on a tie); the second row only for work under way or worse (All clear is
 // never under a problem), `others` = the problem cards not shown. Returns how many rows (0-2); unused out[] are -1.
+// `hiddenCardId` (Later on the Judge it sheet): that Local AI card, and Pi Hub's "localai:<id>" item for it, are left
+// out on this display only; the rest of the list moves up.
+inline bool hiddenItem(const char* id, const char* hidden, bool fromPi) {
+  if (!hidden || !hidden[0] || !id) return false;
+  if (fromPi) return !strncmp(id, "localai:", 8) && !strcmp(id + 8, hidden);
+  return !strcmp(id, hidden);
+}
+
 inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, const Card* cards, uint8_t nc, int8_t out[2],
-                              bool& fromNeeds, uint8_t& others) {
+                              bool& fromNeeds, uint8_t& others, const char* hiddenCardId = nullptr) {
   out[0] = out[1] = -1;
   others = 0;
   fromNeeds = needsPresent;
   if (fromNeeds) {
     if (!needs || !n) return 0;
-    out[0] = 0;
-    if (n > 1) out[1] = 1;
-    others = (uint8_t)(n > 2 ? n - 2 : 0);
-    return (uint8_t)(n > 1 ? 2 : 1);
+    uint8_t shown = 0, total = 0;
+    for (uint8_t i = 0; i < n; ++i) {
+      if (hiddenItem(needs[i].id, hiddenCardId, true)) continue;
+      ++total;
+      if (shown < 2) out[shown++] = (int8_t)i;
+    }
+    others = (uint8_t)(total - shown);
+    return shown;
   }
   if (!cards) return 0;
   uint8_t ranks[2] = {0, 0}, problems = 0;
   for (uint8_t i = 0; i < nc; ++i) {
+    if (hiddenItem(cards[i].id, hiddenCardId, false)) continue;
     const uint8_t r = toneRank(cards[i].tone);
     if (r >= 3) ++problems;
     if (r > ranks[0]) { out[1] = out[0]; ranks[1] = ranks[0]; out[0] = (int8_t)i; ranks[0] = r; }
@@ -224,6 +237,12 @@ inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, c
   const uint8_t shown = (uint8_t)((ranks[0] >= 3) + (ranks[1] >= 3));
   others = (uint8_t)(problems - shown);
   return (uint8_t)((out[0] >= 0) + (out[1] >= 0));
+}
+
+// 26 Oct 2026: the Print lab card's Judge it nudge ("Judge E-021", ask "lab-judge", its run): a tap opens the stepped
+// Judge it sheet (firmware/platform/ui/lab_judge.hpp).
+inline bool isJudgeCard(const Card& c) {
+  return !strcmp(c.kind, "lab") && !strcmp(c.ask, "lab-judge") && c.run[0];
 }
 
 // 26 Oct 2026: the printing Home's extra row: the Print lab card while its run prints (busy), else -1 (the row shows

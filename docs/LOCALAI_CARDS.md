@@ -18,6 +18,22 @@
 - **Lab cards** (kind `lab`): "Lab · E-021" (busy) while a lab run prints, and "Judge E-021" (attention, `ask:
   "lab-judge"`, `run: "PR-021-01"`) when it finished without a verdict. The display keeps the card's `run` for the
   Judge it sheet.
+- **Judge it (26 Oct 2026):** a tap on the "Judge E-021" row (idle Home or the Local AI tab) opens the same Judge it
+  sheet as the phone, one strip per screen. The header says `Judge it · E-021 · Strip 21B (2 of 3)` and has **Later**.
+  Each criterion is a row: its label, a chip per choice and "–" (not judged, sent as null). Chips wrap to two lines;
+  a strip with more criteria than fit scrolls inside the sheet (the arrows between Back and Next). The last page has
+  **Inconclusive** (optional: "It didn't finish printing", "I can't tell from this print", "The wrong thing printed",
+  sent as those words), the state and **Send**, and says "Add photos from your phone". Send needs every strip graded
+  on every criterion, or a reason. It goes to Local AI's `POST /api/display/lab/verdict`, which queues the very
+  verdict request the phone sends (lighting diagnostic, no note); the sheet then says "Waiting for the Mac" (it reads
+  the sheet again every 3 s), then "Done ✓" or the Mac's refusal in its words with **Change it**. Already judged
+  (a verdict, or a request waiting): it opens on "Judged on the phone at 6:32 PM" with **Change it**, which sends
+  with `replace: true`. A test without criteria says "Judge it on your phone: …". The same draft resent keeps its
+  `rq-` id (Local AI counts it once); any change, or Change it, makes a new one. The draft stays in RAM until Send or
+  10 minutes without a touch. **Later** hides the judge card on this display's Home for 2 hours (the Local AI tab,
+  the calm screen, Pi Hub and the phone still show it). Once per judge card, the sheet also opens by itself when a
+  tap wakes the calm screen. The rules are `firmware/platform/ui/lab_judge.hpp` (host-tested by
+  `tests/workshop_os12_lab_judge_smoke.cpp`); the screens are `lab_judge.cppfrag`.
 - **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;
   otherwise a second Local AI card shows there.
 
@@ -104,7 +120,8 @@ For captures, `/hub/show calm` opens the calm screen when it is turned on.
   "X2D · Finished 9:33 AM" on the printer row.
 
 Captures: `/hub/show localai-ask-<needs|running|health|today|next|weather>`, `localai-image[-<0-5>]`,
-`localai-approvals`.
+`localai-approvals`; Judge it: `lab-judge` (strip 1), `lab-judge-<n>` (page n), `lab-judge-send` (the last page). With
+no judge card the sheet says "Nothing to judge right now."
 
 ## Code
 

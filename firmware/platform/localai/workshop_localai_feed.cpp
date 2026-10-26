@@ -18,8 +18,14 @@
 //
 // 12.7: pairing from the touchscreen (LocalAI docs/WORKSHOP-DISPLAY.md › Pairing): Local AI's CA over plain HTTP, then
 // the 6-digit code over HTTPS pinned to it, for a new display key; the settings are saved as by the portal.
+//
+// 26 Oct 2026: Judge it on the display (LocalAI docs/WORKSHOP-DISPLAY.md › Judge it on the display): the sheet for the
+// judge card's run (GET /api/display/lab/judge, read whole into a static buffer and parsed by the bounded reader in
+// workshop_lab_judge.hpp) and the verdict (POST /api/display/lab/verdict, answered 202), both with the display key and
+// both jobs a person waits for.
 
 #include "workshop_localai_feed.h"
+#include "workshop_lab_judge.hpp"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -66,7 +72,7 @@ std::uint32_t g_nextAtMs = 0;
 bool g_taskActive = false;
 
 // Jobs for the one task, highest priority first.
-enum class Job : std::uint8_t { Pair, Ask, Decide, Clear, Approvals, Image, Feed, Heartbeat, Events };
+enum class Job : std::uint8_t { Pair, Ask, Decide, LabVerdict, LabJudge, Clear, Approvals, Image, Feed, Heartbeat, Events };
 char g_pairAddress[16] = {};
 char g_pairCode[8] = {};
 WorkshopLocalAiExtras g_extras;
@@ -77,6 +83,21 @@ bool g_approvalsPending = false;
 char g_decideId[40] = {};
 bool g_decideApprove = false;
 bool g_clearPending = false;          // Clear plate, through Local AI to Bambuddy
+// 26 Oct 2026: Judge it. The sheet is written by the task only while judgeBusy, and read by the UI only when not.
+char g_judgeRun[16] = {};
+bool g_judgeLoadPending = false;
+bool g_judgeHave = false;             // g_judgeSheet holds a sheet read whole
+workshop::lab::Sheet g_judgeSheet;
+char* g_verdictBody = nullptr;        // PSRAM, kMaxPayload; written by the UI only while no verdict runs
+char* g_judgeBody = nullptr;          // PSRAM, kMaxJudgeJson + 1; the task's, one request at a time
+
+char* bigBuffer(char*& p, size_t n) {
+    if (!p) p = static_cast<char*>(ps_malloc(n));
+    if (!p) p = static_cast<char*>(malloc(n));
+    return p;
+}
+bool g_verdictPending = false;
+int g_lastCode = 0;                   // the last answer's HTTP status (the task's, one request at a time)
 std::uint32_t g_nextBeatAtMs = 0;
 std::uint32_t g_eventsPauseUntilMs = 0;  // after a failed long poll (older Local AI: 404), wait before the next
 char g_sig[24] = {};                  // what the long poll compares
@@ -122,20 +143,21 @@ bool configuredLocked() {
 // The long poll gives way to anything the person is waiting for.
 bool somethingWaits() {
     portENTER_CRITICAL(&g_mux);
-    const bool waits = g_askPending[0] || g_imagePending || g_approvalsPending || g_decideId[0];
+    const bool waits = g_askPending[0] || g_imagePending || g_approvalsPending || g_decideId[0] || g_judgeLoadPending || g_verdictPending;
     portEXIT_CRITICAL(&g_mux);
     return waits;
 }
 
 // One HTTP/1.0 request, so the answer is a plain body until the connection closes (HTTP/1.1 comes back chunked through
 // Caddy). Sends it with the display key (and `body`, as JSON, for a POST) and reads the status line and headers; on
-// HTTP 200 the body is next on `client`. False with `error` set otherwise (the connection is closed then). It waits up
+// HTTP 2xx (26 Oct 2026: the verdict route answers 202) the body is next on `client`; g_lastCode keeps the status. False with `error` set otherwise (the connection is closed then). It waits up
 // to `waitMs` for the answer to start, and (when `yieldToPerson`) stops waiting when someone asks for something.
 // To Local AI at `address`, checking its certificate against `ca` and `name`; with the display key when `key` is set.
 bool openRequestTo(WiFiClientSecure& client, const char* address, const char* name, const char* ca, char* key, const char* method,
                    const char* path, const char* accept, const char* body, size_t& contentLength, char* contentType,
                    size_t contentTypeLen, char* error, size_t errorLen, std::uint32_t waitMs, bool yieldToPerson) {
     contentLength = 0;
+    g_lastCode = 0;
     if (contentType && contentTypeLen) contentType[0] = 0;
     if (WiFi.status() != WL_CONNECTED) { copyText(error, errorLen, "Waiting for Wi-Fi."); if (key) memset(key, 0, 56); return false; }
     IPAddress ip;
@@ -162,6 +184,7 @@ bool openRequestTo(WiFiClientSecure& client, const char* address, const char* na
     const String statusLine = client.readStringUntil('\n');
     int code = 0;
     if (statusLine.startsWith("HTTP/1.")) code = statusLine.substring(9, 12).toInt();
+    g_lastCode = code;
     for (;;) {
         const String line = client.readStringUntil('\n');
         if (line.length() <= 1) break;  // "\r" ends the headers
@@ -174,12 +197,17 @@ bool openRequestTo(WiFiClientSecure& client, const char* address, const char* na
             copyText(contentType, contentTypeLen, v.c_str());
         }
     }
-    if (code != 200) {
+    if (code < 200 || code > 299) {
         snprintf(error, errorLen, code == 401 || code == 403 ? "Local AI turned the display key down (HTTP %d)." : "Local AI answered HTTP %d.", code);
-        // Local AI's own words, when it sent any (pairing says why a code was refused).
-        if (code >= 400 && code < 500 && code != 401) {
+        // Local AI's own words, when it sent any (pairing says why a code was refused; 26 Oct 2026: the verdict route
+        // why a verdict was). Only `error` is kept, cut on a character boundary.
+        if (code >= 400 && code < 500 && code != 401 && contentLength <= 2048) {
+            JsonDocument filter;
+            filter["error"] = true;
             JsonDocument why;
-            if (!deserializeJson(why, client) && (why["error"] | "")[0]) copyText(error, errorLen, why["error"] | "");
+            if (!deserializeJson(why, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4)) &&
+                (why["error"] | "")[0])
+                lai::copyUtf8(error, errorLen, why["error"] | "");
         }
         client.stop();
         return false;
@@ -518,6 +546,96 @@ void runDecide() {
     portEXIT_CRITICAL(&g_mux);
 }
 
+// 26 Oct 2026: a body read whole into buf (at most cap - 1 bytes, terminated), to the length Local AI gave or to the
+// end of the connection. False (with `error`) when it is larger or stops early.
+bool readBody(WiFiClientSecure& client, size_t contentLength, char* buf, size_t cap, size_t& got, char* error, size_t errorLen) {
+    got = 0;
+    if (contentLength >= cap) { copyText(error, errorLen, "Local AI's answer was too large."); return false; }
+    const size_t limit = contentLength ? contentLength : cap - 1;
+    std::uint32_t lastByteAt = millis();
+    while (millis() - lastByteAt < 8000UL) {
+        if (contentLength && got >= contentLength) break;
+        const int avail = client.available();
+        if (avail <= 0) {
+            if (!client.connected()) break;
+            delay(5);
+            continue;
+        }
+        if (got >= limit) { copyText(error, errorLen, "Local AI's answer was too large."); return false; }
+        const size_t want = limit - got < (size_t)avail ? limit - got : (size_t)avail;
+        const int n = client.read(reinterpret_cast<std::uint8_t*>(buf) + got, want);
+        if (n > 0) { got += (size_t)n; lastByteAt = millis(); }
+    }
+    buf[got] = 0;
+    if (contentLength && got != contentLength) { copyText(error, errorLen, "Local AI's answer didn't finish."); return false; }
+    return true;
+}
+
+// 26 Oct 2026: the Judge it sheet for the judge card's run, into g_judgeSheet.
+void runJudgeLoad() {
+    char run[16], path[64], error[96] = {};
+    portENTER_CRITICAL(&g_mux);
+    copyText(run, sizeof(run), g_judgeRun);
+    portEXIT_CRITICAL(&g_mux);
+    const size_t cap = workshop::lab::kMaxJudgeJson + 1;
+    char* body = bigBuffer(g_judgeBody, cap);
+    bool ok = workshop::lab::validRun(run) && body;
+    if (!ok) copyText(error, sizeof(error), body ? "There is no print to judge." : "No memory for the Judge it sheet.");
+    if (ok) {
+        snprintf(path, sizeof(path), "/api/display/lab/judge?run=%s", run);
+        WiFiClientSecure client;
+        size_t contentLength = 0, got = 0;
+        ok = openRequest(client, "GET", path, "application/json", nullptr, contentLength, nullptr, 0, error, sizeof(error));
+        if (ok) {
+            ok = readBody(client, contentLength, body, cap, got, error, sizeof(error));
+            client.stop();
+        }
+        if (ok) {
+            ok = workshop::lab::parseSheet(body, got, g_judgeSheet) && !strcmp(g_judgeSheet.run, run);
+            if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a Judge it sheet.");
+        }
+    }
+    portENTER_CRITICAL(&g_mux);
+    g_judgeHave = ok;
+    g_judgeLoadPending = false;
+    g_extras.judgeOk = ok;
+    g_extras.judgeCode = (std::uint16_t)g_lastCode;
+    lai::copyUtf8(g_extras.judgeStatus, sizeof(g_extras.judgeStatus), ok ? "" : error);
+    ++g_extras.judgeSeq;
+    g_extras.judgeBusy = false;
+    finishJob();
+    portEXIT_CRITICAL(&g_mux);
+}
+
+// 26 Oct 2026: the verdict, queued by Local AI as the phone's request (202 {id, status: "pending"}).
+void runVerdict() {
+    char error[96] = {};
+    WiFiClientSecure client;
+    size_t contentLength = 0;
+    bool ok = openRequest(client, "POST", "/api/display/lab/verdict", "application/json", g_verdictBody, contentLength, nullptr, 0,
+                          error, sizeof(error), 15000UL, false);
+    if (ok) {
+        JsonDocument filter;
+        filter["id"] = true;
+        filter["status"] = true;
+        JsonDocument doc;
+        const bool parsed = contentLength <= 1024 &&
+                            !deserializeJson(doc, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4));
+        client.stop();
+        ok = parsed && !strcmp(doc["status"] | "", "pending");
+        if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a queued verdict.");
+    }
+    portENTER_CRITICAL(&g_mux);
+    g_verdictPending = false;
+    g_extras.verdictOk = ok;
+    g_extras.verdictCode = (std::uint16_t)g_lastCode;
+    lai::copyUtf8(g_extras.judgeStatus, sizeof(g_extras.judgeStatus), ok ? "" : error);
+    ++g_extras.verdictSeq;
+    g_extras.verdictBusy = false;
+    finishJob();
+    portEXIT_CRITICAL(&g_mux);
+}
+
 // Clear plate: Local AI clears the plate and the printer's errors in Bambuddy (POST /api/display/printer/clear), so the
 // display never holds a Bambuddy credential. Best effort, like the direct call it replaces.
 void runClear() {
@@ -651,6 +769,8 @@ void fetchTask(void* arg) {
         case Job::Pair: runPair(); break;
         case Job::Ask: runAsk(); break;
         case Job::Decide: runDecide(); break;
+        case Job::LabVerdict: runVerdict(); break;
+        case Job::LabJudge: runJudgeLoad(); break;
         case Job::Clear: runClear(); break;
         case Job::Approvals: runApprovals(); break;
         case Job::Image: runImage(); break;
@@ -703,6 +823,8 @@ void workshopLocalAiFeedLoop() {
         due = true;
         if (g_askPending[0]) job = Job::Ask;
         else if (g_decideId[0]) job = Job::Decide;
+        else if (g_verdictPending) job = Job::LabVerdict;
+        else if (g_judgeLoadPending) job = Job::LabJudge;
         else if (g_clearPending) job = Job::Clear;
         else if (g_approvalsPending) job = Job::Approvals;
         else if (g_imagePending) job = Job::Image;
@@ -723,6 +845,12 @@ void workshopLocalAiFeedLoop() {
             case Job::Image: g_imagePending = false; g_extras.imageBusy = false; copyText(g_extras.imageStatus, sizeof(g_extras.imageStatus), "Could not start the download."); ++g_extras.imageSeq; break;
             case Job::Approvals: g_approvalsPending = false; g_extras.approvalsBusy = false; break;
             case Job::Decide: g_decideId[0] = 0; break;
+            case Job::LabVerdict:
+                g_verdictPending = false; g_extras.verdictBusy = false; g_extras.verdictOk = false; g_extras.verdictCode = 0;
+                copyText(g_extras.judgeStatus, sizeof(g_extras.judgeStatus), "Could not start the request."); ++g_extras.verdictSeq; break;
+            case Job::LabJudge:
+                g_judgeLoadPending = false; g_extras.judgeBusy = false; g_extras.judgeOk = false; g_extras.judgeCode = 0;
+                copyText(g_extras.judgeStatus, sizeof(g_extras.judgeStatus), "Could not start the request."); ++g_extras.judgeSeq; break;
             case Job::Clear: g_clearPending = false; break;
             case Job::Heartbeat: g_nextBeatAtMs = now + lai::kHeartbeatMs; break;
             case Job::Events: g_eventsPauseUntilMs = now + 10000UL; break;
@@ -873,6 +1001,42 @@ bool workshopLocalAiFeedDecide(const char* id, bool approve) {
         g_decideApprove = approve;
         g_extras.approvalsBusy = true;
         snprintf(g_extras.approvalStatus, sizeof(g_extras.approvalStatus), approve ? "Approving..." : "Rejecting...");
+    }
+    portEXIT_CRITICAL(&g_mux);
+    return ok;
+}
+
+bool workshopLocalAiFeedJudgeLoad(const char* run) {
+    if (!workshop::lab::validRun(run)) return false;
+    portENTER_CRITICAL(&g_mux);
+    const bool ok = g_snap.configured && !g_extras.judgeBusy;
+    if (ok) {
+        copyText(g_judgeRun, sizeof(g_judgeRun), run);
+        g_judgeLoadPending = true;
+        g_extras.judgeBusy = true;
+    }
+    portEXIT_CRITICAL(&g_mux);
+    return ok;
+}
+
+bool workshopLocalAiFeedJudgeSheet(workshop::lab::Sheet* out) {
+    if (!out) return false;
+    portENTER_CRITICAL(&g_mux);
+    const bool ok = g_judgeHave && !g_extras.judgeBusy;
+    if (ok) memcpy(out, &g_judgeSheet, sizeof(g_judgeSheet));
+    portEXIT_CRITICAL(&g_mux);
+    return ok;
+}
+
+bool workshopLocalAiFeedJudgeSend(const char* body) {
+    const size_t n = body ? strlen(body) : 0;
+    if (!n || n >= workshop::lab::kMaxPayload || !bigBuffer(g_verdictBody, workshop::lab::kMaxPayload)) return false;
+    portENTER_CRITICAL(&g_mux);
+    const bool ok = g_snap.configured && !g_extras.verdictBusy;
+    if (ok) {
+        memcpy(g_verdictBody, body, n + 1);  // the task reads it only while verdictBusy
+        g_extras.verdictBusy = true;
+        g_verdictPending = true;
     }
     portEXIT_CRITICAL(&g_mux);
     return ok;

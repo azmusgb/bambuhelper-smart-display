@@ -126,6 +126,30 @@ static void checkNeedsAndLab() {
     c[2].tone = Tone::Ok;
     CHECK(printingExtraIndex(c, 3) == -1, "lab_card_takes_printing_extra_row: no busy lab card, no lab row");
     CHECK(printingExtraIndex(c, 0) == -1 && printingExtraIndex(nullptr, 3) == -1, "no cards, no lab row");
+    strcpy(c[1].id, "judge-PR-021-01");
+    CHECK(isJudgeCard(c[1]) && !isJudgeCard(c[0]) && !isJudgeCard(c[2]), "the judge card is the lab card that asks lab-judge for a run");
+    c[1].run[0] = 0;
+    CHECK(!isJudgeCard(c[1]), "no run, no Judge it");
+  }
+  {  // later_hides_judge_card: Later hides the judge card on this display for 2 h; the rest of the list moves up
+    const Need n[4] = {need("pi:disk", Tone::Bad, "Disk full"), need("localai:judge-PR-021-01", Tone::Attention, "Judge E-021"),
+                       need("printer:plate", Tone::Warning, "Clear the plate"), need("localai:needs-2", Tone::Attention, "Approve")};
+    int8_t out[2] = {9, 9};
+    bool fromNeeds = false;
+    uint8_t others = 9;
+    CHECK(homeSummaryTop(n, 4, true, nullptr, 0, out, fromNeeds, others, "judge-PR-021-01") == 2 && out[0] == 0 && out[1] == 2 && others == 1,
+          "later_hides_judge_card: Pi Hub's list without the judge item, in its order");
+    CHECK(homeSummaryTop(n, 4, true, nullptr, 0, out, fromNeeds, others, "") == 2 && out[1] == 1 && others == 2 &&
+              homeSummaryTop(n, 4, true, nullptr, 0, out, fromNeeds, others, nullptr) == 2 && out[1] == 1,
+          "later_hides_judge_card: nothing hidden, nothing changes");
+    CHECK(homeSummaryTop(n + 1, 1, true, nullptr, 0, out, fromNeeds, others, "judge-PR-021-01") == 0 && fromNeeds && out[0] == -1,
+          "later_hides_judge_card: only the judge item: All clear here");
+    Card c[3] = {};
+    c[0].tone = Tone::Attention; strcpy(c[0].id, "judge-PR-021-01");
+    c[1].tone = Tone::Warning; strcpy(c[1].id, "watch-1");
+    c[2].tone = Tone::Busy;
+    CHECK(homeSummaryTop(nullptr, 0, false, c, 3, out, fromNeeds, others, "judge-PR-021-01") == 2 && out[0] == 1 && out[1] == 2 && others == 0,
+          "later_hides_judge_card: the cards without it");
   }
 }
 
