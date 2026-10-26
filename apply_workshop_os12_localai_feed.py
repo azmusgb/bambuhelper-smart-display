@@ -40,6 +40,9 @@ LAB_PAGES = "firmware/platform/ui/lab_judge.cppfrag"
 LAB_INCLUDE = '#include "workshop_lab_judge.hpp"\n'
 LAB_MARKER = "static wlab::LabJudge g_wtJudge;"
 NAMESPACE_END = "\n} // namespace\n"
+SET_PAGE = "static void setPage(ScreenState s) {\n"
+SET_PAGE_LEAVE = ("static void wtJudgeLeft();  // 26 Oct 2026: leaving closes the Judge it sheet (lab_judge.cppfrag)\n"
+                  + SET_PAGE + "  wtJudgeLeft();\n")
 CATALOG_LAB_ANCHOR = '    {"id":"workshop","label":"Local AI","group":"Primary"},\n'
 CATALOG_LAB = ('    {"id":"lab-judge","label":"Judge it","group":"Primary"},\n'
                '    {"id":"lab-judge-send","label":"Judge it - Send","group":"Primary"},\n')
@@ -240,6 +243,10 @@ def apply(repo: Path, source_root: Path) -> None:
             raise PatchError("Judge it: the tab pages' declarations or the end of smart_hub's namespace is missing/non-unique")
         fragment = lab_pages.read_text(encoding="utf-8")
         hub = hub.replace(NAMESPACE_END, "\n" + fragment.rstrip() + "\n" + NAMESPACE_END, 1)
+    if SET_PAGE_LEAVE not in hub:
+        if hub.count(SET_PAGE) != 1:
+            raise PatchError("Judge it: setPage missing/non-unique")
+        hub = hub.replace(SET_PAGE, SET_PAGE_LEAVE, 1)
     if TAB_LABELS_NEW not in hub:
         if hub.count(TAB_LABELS_OLD) != 1 or hub.count(TAB_ICON_OLD) != 1 or hub.count(TAB_ICON_FN_ANCHOR) != 1:
             raise PatchError("tab bar anchors missing/non-unique")

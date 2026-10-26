@@ -667,6 +667,41 @@ struct LabJudge {
 };
 
 // ---------------------------------------------------------------------------
+// When the sheet is up (fix round 2, from the device: it stayed stuck over the Local AI tab). It is up only while the
+// person is on it: any navigation away closes it (leave), and so does a gap in its frames (it is drawn every 250 ms
+// while shown, so a gap means another screen or the display was off). "Nothing to judge" closes itself after a
+// moment, or at the next feed update. It reopens only from a judge row or the once-per-card rule; the draft is kept
+// across closing (draftKept).
+// ---------------------------------------------------------------------------
+
+static const uint32_t kAwayMs = 5000UL;
+static const uint32_t kEmptyCloseMs = 5000UL;
+
+struct SheetGate {
+  bool open;
+  uint32_t lastFrameAt;
+  bool empty;            // saying "Nothing to judge" since emptySince
+  uint32_t emptySince;
+  uint32_t emptyFeedAt;  // the feed update it said so under
+  void show(uint32_t now) { open = true; lastFrameAt = now; empty = false; }
+  void leave() { open = false; empty = false; }
+  // One frame of the sheet: false (and closed) when it shouldn't be up. `empty`: nothing to judge (not while asking).
+  // `feedAt`: when the last feed came.
+  bool frame(uint32_t now, bool nothing, uint32_t feedAt) {
+    if (!open) return false;
+    if (now - lastFrameAt > kAwayMs) { leave(); return false; }
+    lastFrameAt = now;
+    if (!nothing) { empty = false; return true; }
+    if (!empty) { empty = true; emptySince = now; emptyFeedAt = feedAt; return true; }
+    if (now - emptySince >= kEmptyCloseMs || feedAt != emptyFeedAt) { leave(); return false; }
+    return true;
+  }
+};
+
+// Reopening keeps the draft for the same print within 10 minutes of the last touch.
+inline bool draftKept(bool samePrint, uint32_t now, uint32_t lastTouchAt) { return samePrint && now - lastTouchAt < kIdleMs; }
+
+// ---------------------------------------------------------------------------
 // Layout: one page of the sheet on a w x h screen. Header (title, Later), the body (criteria rows: label and chips,
 // chips on at most two lines; scrolled by whole rows when they don't all fit), the footer (Back or Close, the scroll
 // arrows when the page scrolls, Next or the last page's button). The Send page: the Inconclusive reasons (while

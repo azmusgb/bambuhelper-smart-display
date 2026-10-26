@@ -35,7 +35,9 @@
   10 minutes without a touch. **Later** hides the judge card on this display for 2 hours: idle Home's rows, the calm
   screen's rotation and opening by itself (the Local AI tab still lists it as a row; Pi Hub and the phone still show
   it). Once per judge card, the sheet also opens by itself when a
-  tap wakes the calm screen. The rules are `firmware/platform/ui/lab_judge.hpp` (host-tested by
+  tap wakes the calm screen. The sheet is up only while you're on it: any navigation away (a tab, another page,
+  `/hub/show` of another view, waking the calm screen) closes it, and "Nothing to judge right now." closes itself
+  after 5 s or at the next feed update; the draft is kept for 10 minutes, so reopening restores the choices. The rules are `firmware/platform/ui/lab_judge.hpp` (host-tested by
   `tests/workshop_os12_lab_judge_smoke.cpp`); the screens are `lab_judge.cppfrag`.
 - **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;
   otherwise a second Local AI card shows there.

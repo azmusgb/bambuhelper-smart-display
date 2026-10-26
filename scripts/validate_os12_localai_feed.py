@@ -164,6 +164,10 @@ def validate(repo: Path) -> None:
          "the verdict's request id is random, kept while the same draft is resent")
     need(block(hub, "static bool wtShowPrinterView(const char* name) {"), "return wtJudgeShow(name);", "/hub/show lab-judge pages")
     need(web, '{"id":"lab-judge","label":"Judge it","group":"Primary"}', "/hub/views lists the Judge it sheet")
+    need(block(hub, "static void setPage(ScreenState s) {"), "  wtJudgeLeft();", "any navigation away closes the Judge it sheet")
+    need(block(hub, "static __attribute__((noinline)) void wtDrawJudge(const wsm::Screen& s) {"), "g_wtJudgeGate.frame(millis(), nothing,",
+         "an empty or left sheet closes itself")
+    need(block(hub, "static void wtJudgeNoteWake() {"), "wtJudgeLeft();", "waking the calm screen closes the sheet")
     need(web, '{"id":"lab-judge-send","label":"Judge it - Send","group":"Primary"}', "/hub/views lists the Judge it Send page")
     judge = block(feed, "void runJudgeLoad() {")
     need(judge, '"/api/display/lab/judge?run=%s"', "the judge route")

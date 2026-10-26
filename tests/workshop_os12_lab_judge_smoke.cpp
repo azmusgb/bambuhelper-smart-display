@@ -265,6 +265,40 @@ static void fixRound1() {
         "real_record_lengths: a 24-byte label and 7-byte strips fit whole");
 }
 
+// Fix round 2 (device): the sheet never stays stuck over the Local AI tab. Leaving closes it; an empty sheet
+// ("Nothing to judge right now.") closes itself; a draft survives closing and reopening for 10 minutes.
+static void fixRound2() {
+  SheetGate g = {};
+  CHECK(!g.frame(1000, false, 0), "sheet_closes_on_leave: closed until shown");
+  g.show(1000);
+  CHECK(g.open && g.frame(1250, false, 7) && g.frame(1500, false, 7), "sheet_closes_on_leave: drawn every frame while shown");
+  g.leave();
+  CHECK(!g.open && !g.frame(1750, false, 7), "sheet_closes_on_leave: any navigation away closes it");
+  g.show(2000);
+  CHECK(g.frame(2250, false, 7) && !g.frame(2250 + kAwayMs + 1, false, 7) && !g.open,
+        "sheet_closes_on_leave: no frame for a while (another screen, the display off): closed when it comes back");
+  g.show(10000);
+  CHECK(g.frame(10000, true, 7) && g.frame(10000 + kEmptyCloseMs - 1, true, 7), "empty_sheet_closes_itself: says so for a moment");
+  CHECK(!g.frame(10000 + kEmptyCloseMs, true, 7) && !g.open, "empty_sheet_closes_itself: then closes");
+  g.show(20000);
+  CHECK(g.frame(20000, true, 7) && !g.frame(20250, true, 8) && !g.open, "empty_sheet_closes_itself: or on the next feed update");
+  g.show(30000);
+  CHECK(g.frame(30000, true, 7) && g.frame(30250, false, 7) && g.frame(30000 + kEmptyCloseMs + 10, false, 8) && g.open,
+        "empty_sheet_closes_itself: a sheet that arrived stays open");
+  g.show(0xFFFFFF00UL);
+  CHECK(g.frame((uint32_t)(0xFFFFFF00UL + 300UL), false, 7), "sheet_closes_on_leave: millis() wrapping is fine");
+  // The draft: closed mid-judgement and reopened for the same print within 10 minutes, the choices are still there.
+  CHECK(draftKept(true, 5000, 1000) && draftKept(true, 1000 + kIdleMs - 1, 1000), "draft_kept: same print, within 10 min");
+  CHECK(!draftKept(true, 1000 + kIdleMs, 1000) && !draftKept(false, 2000, 1000), "draft_kept: not after 10 min, nor for another print");
+  LabJudge j;
+  load(j, kThree);
+  j.select(0, 0, 2);
+  j.select(1, 1, kNotJudged);
+  g.show(0);
+  g.leave();  // the LabJudge is untouched by closing
+  CHECK(j.selected(0, 0) == 2 && j.selected(1, 1) == kNotJudged && j.state() == State::Draft, "draft_kept: closing keeps the choices");
+}
+
 static void boundedParsing() {
   LabJudge j;
   CHECK(!load(j, "") && !j.s.ok, "parse: empty");
@@ -402,6 +436,7 @@ int main() {
   sendStates();
   boundedParsing();
   fixRound1();
+  fixRound2();
   judgePageFits();
   if (failures) {
     std::printf("lab-judge smoke: %d of %d checks FAILED\n", failures, checks);
