@@ -121,7 +121,8 @@ def validate(repo: Path) -> None:
     # 12.4.0: Local AI is the third tab, leads the calm screen and takes Home's bottom row.
     need(hub, 'labels[4]={"Home","Printer","Local AI","More"}', "the third tab is Local AI")
     need(web, '{"id":"workshop","label":"Local AI"', "the catalog names the third tab Local AI")
-    need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));", "Local AI's card leads the calm screen")
+    need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtCalmCard(rot, hid, shown));", "Local AI's card leads the calm screen")
+    need(calm, "const int8_t hid = wtJudgeHiddenIndex();", "26 Oct 2026: Later hides the judge card from the calm rotation too")
     need(calm, "printerBusy", "the printer's line only while it is doing something")
     need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtHomeSummary(others)", "Home's Local AI row is the card that matters most")
     # 26 Oct 2026: Pi Hub's one "Needs you" list and the Print lab card.
@@ -170,6 +171,8 @@ def validate(repo: Path) -> None:
     need(judge, "readBody(client, contentLength, body, cap, got, error, sizeof(error))", "the sheet is read whole, bounded")
     need(judge, "workshop::lab::parseSheet(body, got, g_judgeSheet)", "the bounded reader parses it")
     verdict = block(feed, "void runVerdict() {")
+    need(verdict, 'workshop::lab::verdictAccepted(g_lastCode, g_verdictId, doc["id"] | "")', "a 2xx naming the sent id is accepted, whatever its status")
+    forbid(verdict, '"pending")', "a resent id's applied/refused status is not an error")
     need(verdict, '"/api/display/lab/verdict"', "the verdict route")
     need(verdict, "DeserializationOption::Filter(filter)", "only id and status are read from the answer")
     need(block(feed, "bool somethingWaits() {"), "g_judgeLoadPending || g_verdictPending", "the long poll gives way to Judge it")

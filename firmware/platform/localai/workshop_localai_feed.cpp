@@ -97,6 +97,7 @@ char* bigBuffer(char*& p, size_t n) {
     return p;
 }
 bool g_verdictPending = false;
+char g_verdictId[20] = {};            // the request id in g_verdictBody
 int g_lastCode = 0;                   // the last answer's HTTP status (the task's, one request at a time)
 std::uint32_t g_nextBeatAtMs = 0;
 std::uint32_t g_eventsPauseUntilMs = 0;  // after a failed long poll (older Local AI: 404), wait before the next
@@ -607,7 +608,9 @@ void runJudgeLoad() {
     portEXIT_CRITICAL(&g_mux);
 }
 
-// 26 Oct 2026: the verdict, queued by Local AI as the phone's request (202 {id, status: "pending"}).
+// 26 Oct 2026: the verdict, queued by Local AI as the phone's request: 202 {id, status}. A new id answers "pending"; an
+// id sent again answers its request's current status (applied, refused, duplicate). Either way it is accepted when
+// the answer names the id sent, and the judge read that follows shows Waiting, Done or the Mac's words.
 void runVerdict() {
     char error[96] = {};
     WiFiClientSecure client;
@@ -622,7 +625,7 @@ void runVerdict() {
         const bool parsed = contentLength <= 1024 &&
                             !deserializeJson(doc, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4));
         client.stop();
-        ok = parsed && !strcmp(doc["status"] | "", "pending");
+        ok = parsed && workshop::lab::verdictAccepted(g_lastCode, g_verdictId, doc["id"] | "");
         if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a queued verdict.");
     }
     portENTER_CRITICAL(&g_mux);
@@ -1028,13 +1031,14 @@ bool workshopLocalAiFeedJudgeSheet(workshop::lab::Sheet* out) {
     return ok;
 }
 
-bool workshopLocalAiFeedJudgeSend(const char* body) {
+bool workshopLocalAiFeedJudgeSend(const char* body, const char* requestId) {
     const size_t n = body ? strlen(body) : 0;
-    if (!n || n >= workshop::lab::kMaxPayload || !bigBuffer(g_verdictBody, workshop::lab::kMaxPayload)) return false;
+    if (!workshop::lab::validRequestId(requestId) || !n || n >= workshop::lab::kMaxPayload || !bigBuffer(g_verdictBody, workshop::lab::kMaxPayload)) return false;
     portENTER_CRITICAL(&g_mux);
     const bool ok = g_snap.configured && !g_extras.verdictBusy;
     if (ok) {
         memcpy(g_verdictBody, body, n + 1);  // the task reads it only while verdictBusy
+        memcpy(g_verdictId, requestId, sizeof(g_verdictId));
         g_extras.verdictBusy = true;
         g_verdictPending = true;
     }

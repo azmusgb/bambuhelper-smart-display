@@ -26,12 +26,15 @@
   sent as those words), the state and **Send**, and says "Add photos from your phone". Send needs every strip graded
   on every criterion, or a reason. It goes to Local AI's `POST /api/display/lab/verdict`, which queues the very
   verdict request the phone sends (lighting diagnostic, no note); the sheet then says "Waiting for the Mac" (it reads
-  the sheet again every 3 s), then "Done ✓" or the Mac's refusal in its words with **Change it**. Already judged
+  the sheet again every 3 s; after 2 minutes, as the phone: "The Mac hasn't picked this up. It runs when the Mac is
+  awake."), then "Done ✓" or the Mac's refusal in its words: with **Change it** when it says the print "already has
+  a verdict" (as the phone's Replace), else with Close. A resent id is accepted whatever its status. Already judged
   (a verdict, or a request waiting): it opens on "Judged on the phone at 6:32 PM" with **Change it**, which sends
   with `replace: true`. A test without criteria says "Judge it on your phone: …". The same draft resent keeps its
   `rq-` id (Local AI counts it once); any change, or Change it, makes a new one. The draft stays in RAM until Send or
-  10 minutes without a touch. **Later** hides the judge card on this display's Home for 2 hours (the Local AI tab,
-  the calm screen, Pi Hub and the phone still show it). Once per judge card, the sheet also opens by itself when a
+  10 minutes without a touch. **Later** hides the judge card on this display for 2 hours: idle Home's rows, the calm
+  screen's rotation and opening by itself (the Local AI tab still lists it as a row; Pi Hub and the phone still show
+  it). Once per judge card, the sheet also opens by itself when a
   tap wakes the calm screen. The rules are `firmware/platform/ui/lab_judge.hpp` (host-tested by
   `tests/workshop_os12_lab_judge_smoke.cpp`); the screens are `lab_judge.cppfrag`.
 - **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;

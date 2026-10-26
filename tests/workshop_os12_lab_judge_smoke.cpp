@@ -211,7 +211,7 @@ static void sendStates() {
   const std::string refused = body + "refused\",\"message\":\"" + words + "\"}}";
   CHECK(j.load(refused.c_str(), refused.size()) && j.state() == State::Refused, "send: refused");
   CHECK(validUtf8(j.s.pendingMessage) && strlen(j.s.pendingMessage) == 122, "send: the Mac's words cut on a character boundary");
-  CHECK(!strcmp(j.action(on), "Change it") && on, "send: refused offers Change it");
+  CHECK(!strcmp(j.action(on), "Close") && on, "send: a refusal other than \"already has a verdict\" closes (no Change it)");
   // A different sheet (criteria edited) clears the draft.
   load(j, kThree);
   j.select(0, 0, 2);
@@ -219,6 +219,50 @@ static void sendStates() {
                        "\"criteria\":[{\"key\":\"print\",\"label\":\"Print\",\"choices\":[\"clean\",\"rough\",\"failed\"]},"
                        "{\"key\":\"apart\",\"label\":\"Comes apart\",\"choices\":[\"yes\",\"hard\",\"no\"]}],\"judged\":null,\"pending\":null}";
   CHECK(j.load(edited, strlen(edited)) && j.selected(0, 0) == kUnset, "send: a changed sheet clears the draft");
+}
+
+// Fix round 1: a resent request id answers 202 with that request's current status; the refusal that offers Change
+// it is the phone's "already has a verdict" one only; the phone's slow-wait words; real-record lengths.
+static void fixRound1() {
+  CHECK(verdictAccepted(202, "rq-0000000100000002", "rq-0000000100000002") &&
+            verdictAccepted(200, "rq-0000000100000002", "rq-0000000100000002"),
+        "resend_after_applied: any 2xx naming the sent id is accepted, whatever its status");
+  CHECK(!verdictAccepted(202, "rq-0000000100000002", "rq-0000000100000003") && !verdictAccepted(400, "rq-0000000100000002", "rq-0000000100000002") &&
+            !verdictAccepted(202, "", "") && !verdictAccepted(202, "rq-0000000100000002", nullptr),
+        "resend_after_applied: another id, an error, or no id is not");
+  LabJudge j;
+  load(j, kThree);
+  gradeAll(j, 0);
+  char out[kMaxPayload], id[20];
+  CHECK(j.beginSend(out, sizeof(out), 1, 2), "resend_after_applied: first send");
+  strcpy(id, j.requestId);
+  j.sendFailed();  // its answer was lost, but Local AI queued it and the Mac applied it
+  CHECK(j.beginSend(out, sizeof(out), 9, 9) && !strcmp(j.requestId, id), "resend_after_applied: the same id again");
+  CHECK(verdictAccepted(202, j.requestId, id), "resend_after_applied: 202 {id, status: applied} is accepted");
+  j.sendAccepted();
+  std::string applied = std::string("{\"experiment\":\"E-021\",\"run\":\"PR-021-01\",\"judgeOn\":\"seam\",\"tabs\":[\"21A\",\"21B\",\"21C\"],"
+                                    "\"criteria\":[{\"key\":\"print\",\"label\":\"Print\",\"choices\":[\"clean\",\"flawed\",\"failed\"]},"
+                                    "{\"key\":\"apart\",\"label\":\"Comes apart\",\"choices\":[\"yes\",\"hard\",\"no\"]}],"
+                                    "\"judged\":{\"at\":\"2026-10-26T18:32:05Z\",\"by\":\"display\"},\"pending\":{\"id\":\"") + id + "\",\"status\":\"";
+  const std::string done = applied + "applied\",\"message\":null}}";
+  CHECK(j.load(done.c_str(), done.size()) && j.state() == State::Done, "resend_after_applied: reaches Done");
+  // Change it only for the Mac's "already has a verdict" refusal, as the phone's Replace.
+  const std::string already = applied + "refused\",\"message\":\"E-021 already has a verdict; send replace to change it\"}}";
+  bool on = false;
+  CHECK(j.load(already.c_str(), already.size()) && j.state() == State::Refused && j.alreadyJudged() && !strcmp(j.action(on), "Change it") && on,
+        "refusal_change_it: already has a verdict: Change it");
+  const std::string other = applied + "refused\",\"message\":\"PR-021-01 is not a run of E-021\"}}";
+  CHECK(j.load(other.c_str(), other.size()) && j.state() == State::Refused && !j.alreadyJudged() && !strcmp(j.action(on), "Close") && on,
+        "refusal_change_it: any other refusal: the Mac's words and Close");
+  CHECK(!strcmp(kPickup, "The Mac hasn't picked this up. It runs when the Mac is awake.") && kSlowMs == 120000UL,
+        "slow_wait: the phone's words after 2 minutes");
+  // Real records: labels up to 24 bytes, keys and choices up to 6, strips up to 7.
+  CHECK(load(j, "{\"experiment\":\"E-012\",\"run\":\"PR-012-01\",\"tabs\":[\"12A-xyz\",\"12B-xyz\"],\"criteria\":["
+                "{\"key\":\"print\",\"label\":\"Seam visible from 1 m ok\",\"choices\":[\"clean\",\"flawed\",\"failed\"]}],"
+                "\"judged\":null,\"pending\":null}") &&
+            !j.s.phoneOnly && strlen(j.s.criteria[0].label) == 24 && !strcmp(j.s.criteria[0].label, "Seam visible from 1 m ok") &&
+            !strcmp(j.s.tabs[0], "12A-xyz"),
+        "real_record_lengths: a 24-byte label and 7-byte strips fit whole");
 }
 
 static void boundedParsing() {
@@ -357,6 +401,7 @@ int main() {
   judgedOpensOnChangeIt();
   sendStates();
   boundedParsing();
+  fixRound1();
   judgePageFits();
   if (failures) {
     std::printf("lab-judge smoke: %d of %d checks FAILED\n", failures, checks);

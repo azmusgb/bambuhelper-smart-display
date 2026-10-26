@@ -7,7 +7,8 @@
 // "Judge it · E-021 · Strip B (2 of 3)" and Later, one row per criterion (its label, its choices and "–"), Back and Next;
 // the last page has Inconclusive, the state and Send. It opens from the judge card (Home's need row or the Local AI
 // tab) and, once per judge card, by itself when a tap wakes the calm screen. Later hides the judge card on this
-// display's Home for 2 h; it stays on the other screens. The sheet, its draft and the layout live in static storage
+// display for 2 h (idle Home's rows, the calm rotation, opening by itself); it stays on the other screens and as an
+// ordinary row on the Local AI tab. The sheet, its draft and the layout live in static storage
 // or in short noinline leaves, never in the long-lived frames of the 8 KB loop task.
 // ---------------------------------------------------------------------------
 namespace wlab = workshop::lab;
@@ -34,6 +35,16 @@ static const char* wtJudgeHidden() {
   WtJudgeUi& u = g_wtJudgeUi;
   if (u.hidden[0] && millis() - u.hiddenAt >= wlab::kLaterMs) u.hidden[0] = 0;
   return u.hidden[0] ? u.hidden : nullptr;
+}
+
+static int8_t wtJudgeHiddenIndex() {
+  const char* hidden = wtJudgeHidden();
+  if (!hidden) return -1;
+  const uint8_t n = wtAiCount();
+  workshop::localai::Card c;
+  for (uint8_t i = 0; i < n; ++i)
+    if (workshopLocalAiFeedCard(i, &c) && !strcmp(c.id, hidden)) return (int8_t)i;
+  return -1;
 }
 
 static void wtJudgeNoteWake() { g_wtJudgeUi.wokeAt = millis() | 1UL; }
@@ -187,10 +198,9 @@ static __attribute__((noinline)) void wtJudgeTick() {
     u.verdictSeq = e.verdictSeq;
     if (g_wtJudge.sending) {
       if (e.verdictOk) {
-        g_wtJudge.sendAccepted();
+        g_wtJudge.sendAccepted();  // the read that follows settles Waiting, Done or the Mac's words
         u.error[0] = 0;
-        u.waitingSince = now;
-        u.polledAt = now;
+        u.polledAt = now - wlab::kPollMs;
       } else {
         g_wtJudge.sendFailed();  // the same draft sent again keeps its id
         strlcpy(u.error, e.judgeStatus[0] ? e.judgeStatus : "Local AI didn't answer", sizeof(u.error));
@@ -214,7 +224,8 @@ static void wtJudgeSend() {
     strlcpy(u.error, "This verdict is too large to send from here", sizeof(u.error));
     return;
   }
-  if (!workshopLocalAiFeedJudgeSend(g_wtJudgeBody)) {
+  u.waitingSince = millis();  // the phone counts its 2 minutes from Send
+  if (!workshopLocalAiFeedJudgeSend(g_wtJudgeBody, g_wtJudge.requestId)) {
     g_wtJudge.sendFailed();
     strlcpy(u.error, workshopLocalAiFeedStatus().configured ? "Local AI is busy; try again" : "Pair the display with Local AI", sizeof(u.error));
   }
@@ -271,9 +282,7 @@ static void wtJudgeDrawStatus(const wlab::Box& b) {
     case wlab::State::Sending:
     case wlab::State::Waiting:
       color = OS12V_ACCENT;
-      text = st == wlab::State::Waiting && millis() - u.waitingSince > wlab::kSlowMs
-                 ? "Waiting for the Mac. It hasn't picked this up; it runs when the Mac is awake."
-                 : "Waiting for the Mac";
+      text = st == wlab::State::Waiting && millis() - u.waitingSince > wlab::kSlowMs ? wlab::kPickup : "Waiting for the Mac";
       break;
     case wlab::State::Done: text = "Done"; color = OS12V_GREEN; check = true; break;
     case wlab::State::Refused:
@@ -365,7 +374,7 @@ static __attribute__((noinline)) bool wtJudgeTouch(const wsm::Screen& s, int16_t
   wtJudgeLayout(s, L);
   const wlab::Hit h = wlab::hitTest(L, x, y);
   switch (h.kind) {
-    case wlab::HitKind::Later:  // hidden on this display's Home for 2 h; still on the other screens
+    case wlab::HitKind::Later:  // hidden on this display for 2 h; still on the other screens
       if (u.card[0]) { strlcpy(u.hidden, u.card, sizeof(u.hidden)); u.hiddenAt = millis(); }
       wtJudgeClose();
       break;
@@ -382,7 +391,10 @@ static __attribute__((noinline)) bool wtJudgeTouch(const wsm::Screen& s, int16_t
         case wlab::State::Draft: wtJudgeSend(); break;
         case wlab::State::Refused:
         case wlab::State::Judged:
-          g_wtJudge.changeIt();  // a new request that replaces the verdict, as the phone's Replace
+          // Change it (a new request that replaces the verdict, as the phone's Replace) only for an existing verdict
+          // or the Mac's "already has a verdict"; any other refusal shows the Mac's words and closes, as the phone.
+          if (g_wtJudge.state() == wlab::State::Refused && !g_wtJudge.alreadyJudged()) { wtJudgeClose(); break; }
+          g_wtJudge.changeIt();
           u.error[0] = 0;
           u.page = 0;
           u.first = 0;

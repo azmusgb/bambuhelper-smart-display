@@ -109,10 +109,11 @@ std::uint8_t workshopLocalAiFeedApprovals(workshop::localai::Approval* out, std:
 bool workshopLocalAiFeedDecide(const char* id, bool approve);
 // 26 Oct 2026: Judge it. Asks Local AI for the sheet of the judge card's `run` (false when not set up, busy, or not a
 // run id); copies the last sheet read into *out (false while a read runs or none came); sends a verdict body made by
-// workshop::lab::LabJudge::beginSend (at most 4 KB; false when busy).
+// workshop::lab::LabJudge::beginSend under its `requestId` (at most 4 KB; false when busy). Accepted means Local AI
+// answered 2xx naming that id, whatever the request's status (a resent id answers with its current one).
 bool workshopLocalAiFeedJudgeLoad(const char* run);
 bool workshopLocalAiFeedJudgeSheet(workshop::lab::Sheet* out);
-bool workshopLocalAiFeedJudgeSend(const char* body);
+bool workshopLocalAiFeedJudgeSend(const char* body, const char* requestId);
 // Clear plate through Local AI (which clears the plate and printer errors in Bambuddy); false when Local AI isn't set up.
 bool workshopLocalAiFeedClearPrinter();
 // 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);

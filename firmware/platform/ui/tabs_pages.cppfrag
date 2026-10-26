@@ -10,7 +10,8 @@
 namespace wtl = workshop::ui::tabs;
 
 // 26 Oct 2026: the Judge it sheet (the Local AI tab's overlay 5), in lab_judge.cppfrag, installed after these pages.
-static const char* wtJudgeHidden();  // Later: the judge card hidden on this display's Home for 2 h (nullptr: none)
+static const char* wtJudgeHidden();  // Later: the judge card hidden on this display for 2 h (nullptr: none)
+static int8_t wtJudgeHiddenIndex();  // its index among the fresh cards, -1 when none is hidden
 static void wtJudgeNoteWake();       // a tap woke the calm screen
 static bool wtJudgeAutoOpen();       // once per judge card, on that wake: opens the sheet; true when it did
 static void wtJudgeOpen(const workshop::localai::Card& c, bool fromHome);
@@ -516,6 +517,21 @@ static workshop::localai::Card wtAiCard(uint8_t i) {
   return c;
 }
 
+// The calm screen's card at rotation position k, stepping over the judge card Later hid (`hid`, -1 for none; `shown`
+// cards left). With only the hidden card left: All clear, as idle Home.
+static workshop::localai::Card wtCalmCard(uint8_t k, int8_t hid, uint8_t shown) {
+  if (hid >= 0 && !shown) {
+    workshop::localai::Card c{};
+    strlcpy(c.kind, "status", sizeof(c.kind));
+    strlcpy(c.title, "All clear", sizeof(c.title));
+    strlcpy(c.text, "Nothing needs you right now.", sizeof(c.text));
+    c.tone = workshop::localai::Tone::Ok;
+    c.percent = 255;
+    return c;
+  }
+  return wtAiCard(workshop::localai::calmIndex(k, hid));
+}
+
 static uint16_t wtAiToneColor(workshop::localai::Tone t) {
   using workshop::localai::Tone;
   return (t == Tone::Attention || t == Tone::Bad) ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : (t == Tone::Busy || t == Tone::Info) ? OS12V_ACCENT : OS12V_MUTED;
@@ -750,16 +766,19 @@ static void wtDrawCalm(const WtPrint& w) {
   // 12.4.0: Local AI leads. Its card takes the first slot under the date; the printer's line is the second slot,
   // and only while the printer is doing something (otherwise a second Local AI card, when there is one).
   const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();  // the small fields; wtAiCard reads one card
-  const bool aiFresh = ai.count > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  // 26 Oct 2026: Later on the Judge it sheet hides the judge card here too; the rotation steps over it.
+  const int8_t hid = wtJudgeHiddenIndex();
+  const uint8_t shown = (uint8_t)(ai.count - (hid >= 0 ? 1 : 0));
+  const bool aiFresh = shown > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
   char doneAt[24], status[64];
   uint16_t dot = OS12V_GREEN;
   const wtl::CalmStatus calm = wtCalmStatus(w, doneAt, sizeof(doneAt), dot);
   const bool printerBusy = calm.state != wtl::CalmState::Idle && calm.state != wtl::CalmState::NoPrinter &&
                            calm.state != wtl::CalmState::Offline;
-  const uint8_t rot = workshop::localai::rotationIndex(millis(), ai.count);
+  const uint8_t rot = workshop::localai::rotationIndex(millis(), shown);
   // Without Local AI set up the screen is as before: the printer's line alone.
   const bool aiFirst = ai.configured;
-  const bool secondAi = aiFirst && !printerBusy && aiFresh && ai.count > 1;
+  const bool secondAi = aiFirst && !printerBusy && aiFresh && shown > 1;
   const bool aiShown = aiFirst && (printerBusy || secondAi);  // two slots
   const wtl::CalmLayout c = wtl::calmLayout(s, aiShown);
   tft.fillScreen(OS12V_BG);
@@ -801,9 +820,9 @@ static void wtDrawCalm(const WtPrint& w) {
 
   // One calm status line on a card: a dot in the state colour and plain words.
   wtl::calmStatusText(status, sizeof(status), calm);
-  if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));
+  if (aiFirst) wtDrawCalmAiCard(c.status, wtCalmCard(rot, hid, shown));
   if (aiFirst && !printerBusy) {
-    if (secondAi) wtDrawCalmAiCard(c.ai, wtAiCard((uint8_t)((rot + 1) % ai.count)));
+    if (secondAi) wtDrawCalmAiCard(c.ai, wtCalmCard((uint8_t)((rot + 1) % shown), hid, shown));
   } else {
   const wsm::Rect card = wsm::rowSurface(aiFirst ? c.ai : c.status);
   tft.fillRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_SURFACE2);

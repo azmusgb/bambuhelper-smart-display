@@ -150,6 +150,9 @@ static void checkNeedsAndLab() {
     c[2].tone = Tone::Busy;
     CHECK(homeSummaryTop(nullptr, 0, false, c, 3, out, fromNeeds, others, "judge-PR-021-01") == 2 && out[0] == 1 && out[1] == 2 && others == 0,
           "later_hides_judge_card: the cards without it");
+    // The calm screen's rotation skips it too: shown position k is card calmIndex(k, hidden).
+    CHECK(calmIndex(0, 1) == 0 && calmIndex(1, 1) == 2 && calmIndex(2, 1) == 3 && calmIndex(0, 0) == 1 && calmIndex(3, -1) == 3,
+          "later_hides_judge_card: the calm rotation steps over the hidden card");
   }
 }
 

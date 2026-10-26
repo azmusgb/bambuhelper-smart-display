@@ -39,7 +39,9 @@ static const int8_t kNotJudged = -2;  // "–": sent as null
 static const uint32_t kIdleMs = 600000UL;    // the draft is kept in RAM until Send or 10 min idle
 static const uint32_t kLaterMs = 7200000UL;  // Later hides the judge card on the display for 2 h
 static const uint32_t kPollMs = 3000UL;      // while Waiting for the Mac
-static const uint32_t kSlowMs = 120000UL;    // then the phone's "The Mac hasn't picked this up" line
+static const uint32_t kSlowMs = 120000UL;    // then the phone's words (print-lab.js PICKUP), word for word
+static const char kPickup[] = "The Mac hasn't picked this up. It runs when the Mac is awake.";
+static const char kAlreadyJudged[] = "already has a verdict";  // the refusal the phone offers Replace for
 
 // The inconclusive reasons the display offers, sent as these words (the phone takes free text).
 static const uint8_t kReasonCount = 3;
@@ -60,6 +62,12 @@ inline bool validRequestId(const char* id) {
   for (const char* p = id + 3; *p; ++p)
     if (!((*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'f'))) return false;
   return true;
+}
+
+// Local AI accepted the verdict: any 2xx naming the id sent. A resent id answers with that request's current status
+// (pending, applied, refused, duplicate); the judge read that follows says which.
+inline bool verdictAccepted(int httpCode, const char* sentId, const char* answeredId) {
+  return httpCode >= 200 && httpCode <= 299 && validRequestId(sentId) && answeredId && !strcmp(sentId, answeredId);
 }
 
 inline void makeRequestId(char out[20], uint32_t hi, uint32_t lo) {
@@ -535,6 +543,9 @@ struct LabJudge {
     return State::Draft;
   }
   bool editable() const { return state() == State::Draft; }
+  // The Mac refused because a verdict exists: Change it sends the replacing request (the phone's Replace shows only
+  // for this refusal, print-lab.js).
+  bool alreadyJudged() const { return s.pending && strstr(s.pendingMessage, kAlreadyJudged) != nullptr; }
   // Where the sheet opens: strip 1 for a new draft, else the last page with its state.
   uint8_t startPage() const { return state() == State::Draft ? 0 : (uint8_t)(pages() - 1); }
 
@@ -570,7 +581,7 @@ struct LabJudge {
       case State::Draft: enabled = canSend(); return "Send";
       case State::Sending:
       case State::Waiting: enabled = false; return "Send";
-      case State::Refused:
+      case State::Refused: return alreadyJudged() ? "Change it" : "Close";
       case State::Judged: return "Change it";
       default: return "Close";
     }

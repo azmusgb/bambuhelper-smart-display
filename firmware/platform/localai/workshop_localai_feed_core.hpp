@@ -239,6 +239,12 @@ inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, c
   return (uint8_t)((out[0] >= 0) + (out[1] >= 0));
 }
 
+// The calm screen's rotation without the card Later hid (`hidden`, its index; -1 for none): shown position k is card
+// calmIndex(k, hidden).
+inline uint8_t calmIndex(uint8_t k, int8_t hidden) {
+  return hidden >= 0 && k >= (uint8_t)hidden ? (uint8_t)(k + 1) : k;
+}
+
 // 26 Oct 2026: the Print lab card's Judge it nudge ("Judge E-021", ask "lab-judge", its run): a tap opens the stepped
 // Judge it sheet (firmware/platform/ui/lab_judge.hpp).
 inline bool isJudgeCard(const Card& c) {
