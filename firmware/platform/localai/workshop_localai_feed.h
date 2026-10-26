@@ -23,6 +23,17 @@ struct WorkshopLocalAiFeedSnapshot {
     char status[96]{};
 };
 
+// 26 Oct 2026: the snapshot's small fields, for the UI's many "is it set up / fresh / how many" questions; the whole
+// snapshot (about 2.6 KB with the needs) is copied only where the cards or needs themselves are read.
+struct WorkshopLocalAiFeedStatus {
+    bool configured{false};
+    std::uint32_t lastSuccessAtMs{0};
+    std::uint8_t count{0};
+    std::uint8_t needCount{0};
+    bool needsFromPi{false};
+    char status[96]{};
+};
+
 // 12.4.2: the Local AI tab's ask buttons and its latest image. One request at a time runs on the feed's task.
 struct WorkshopLocalAiExtras {
     bool askBusy{false};
@@ -61,6 +72,9 @@ void workshopLocalAiFeedLoop();
 bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem);
 void workshopLocalAiFeedClear();
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
+WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus();
+// Card `i` of the last feed into *out; false when there is no such card.
+bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out);
 // Asks one of the fixed questions (needs, running, health; 12.6: today, next, weather); false when not set up, busy,
 // or not a question.
 bool workshopLocalAiFeedAsk(const char* question);

@@ -482,17 +482,21 @@ static bool wtFinishedRecently(const WtPrint& w) {
 // Local AI (12.4.0): its cards lead the third tab, take Home's bottom row and
 // the calm screen's top card. One place decides what to say with no cards.
 // ---------------------------------------------------------------------------
+// 26 Oct 2026: these read the feed's small status and one card, not the whole snapshot (about 2.6 KB with Pi Hub's
+// needs): they run inside draw and touch paths on the 8 KB loop task.
 static uint8_t wtAiCount() {
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
   return workshop::localai::fresh(millis(), ai.lastSuccessAtMs) ? ai.count : 0;
 }
 
 // Card `i` when there are fresh cards; otherwise one card saying why there are none.
 static workshop::localai::Card wtAiCard(uint8_t i) {
   using workshop::localai::Tone;
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
   workshop::localai::Card c{};
-  if (workshop::localai::fresh(millis(), ai.lastSuccessAtMs) && ai.count) return ai.cards[i < ai.count ? i : 0];
+  if (workshop::localai::fresh(millis(), ai.lastSuccessAtMs) && ai.count &&
+      workshopLocalAiFeedCard(i < ai.count ? i : 0, &c)) return c;
+  c = workshop::localai::Card{};
   strlcpy(c.kind, "status", sizeof(c.kind));
   c.tone = Tone::Info;
   if (!ai.configured) { strlcpy(c.title, "Not set up", sizeof(c.title)); strlcpy(c.text, "Tap to pair with Local AI", sizeof(c.text)); }
@@ -734,7 +738,7 @@ static void wtDrawCalm(const WtPrint& w) {
   const wsm::Screen s = wsScreen();
   // 12.4.0: Local AI leads. Its card takes the first slot under the date; the printer's line is the second slot,
   // and only while the printer is doing something (otherwise a second Local AI card, when there is one).
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();  // the small fields; wtAiCard reads one card
   const bool aiFresh = ai.count > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
   char doneAt[24], status[64];
   uint16_t dot = OS12V_GREEN;
@@ -828,18 +832,20 @@ struct WtHomeRow {
   int8_t card;
 };
 
-static uint8_t wtHomeTop(WtHomeRow out[2], uint8_t& others) {
+// `ai` is the caller's one snapshot for this frame or touch (never copied again below).
+static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others) {
   using workshop::localai::Tone;
   others = 0;
   out[0] = WtHomeRow{};
   out[1] = WtHomeRow{};
   out[0].card = out[1].card = -1;
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
   const bool fresh = workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
   const uint8_t nc = fresh ? ai.count : 0, nn = fresh ? ai.needCount : 0;
+  // Pi Hub's list when the feed carried it (even empty: then nothing needs you); the cards only when it didn't.
+  const bool needsPresent = fresh && ai.needsFromPi;
   int8_t idx[2];
   bool fromNeeds = false;
-  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, ai.cards, nc, idx, fromNeeds, others);
+  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others);
   for (uint8_t k = 0; k < rows; ++k) {
     WtHomeRow& r = out[k];
     if (!fromNeeds) { r.c = ai.cards[idx[k]]; r.card = idx[k]; continue; }
@@ -856,7 +862,7 @@ static uint8_t wtHomeTop(WtHomeRow out[2], uint8_t& others) {
       if (ai.cards[i].id[0] && !strcmp(ai.cards[i].id, cardId)) { r.card = (int8_t)i; break; }
   }
   if (rows == 0) {
-    if (nc) {  // fresh cards, but only information: nothing needs you
+    if (fromNeeds || nc) {  // Pi Hub's list is empty, or fresh cards but only information: nothing needs you
       strlcpy(out[0].c.kind, "status", sizeof(out[0].c.kind));
       strlcpy(out[0].c.title, "All clear", sizeof(out[0].c.title));
       strlcpy(out[0].c.text, "Nothing needs you right now.", sizeof(out[0].c.text));
@@ -876,26 +882,39 @@ static uint8_t wtHomeTop(WtHomeRow out[2], uint8_t& others) {
   return rows;
 }
 
+static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len);
+
+// The one snapshot for a Home frame or touch: both need rows and (when `weather` is given) the header's weather. A
+// leaf: the snapshot (about 2.6 KB) lives only while this runs, never under the row drawing (noinline keeps it out of
+// the callers' frames on the 8 KB loop task).
+static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen) {
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  if (weather) wtHomeWeather(ai, weather, weatherLen);
+  return wtHomeTop(ai, rows, others);
+}
+
 // The most important item (idle Home's first row), for the printing Home's extra row.
 static workshop::localai::Card wtHomeSummary(uint8_t& others) {
   WtHomeRow rows[2];
-  wtHomeTop(rows, others);
+  wtHomeRows(rows, others, nullptr, 0);
   return rows[0].c;
 }
 
 // 26 Oct 2026: the Print lab card's index while its run prints (it takes the printing Home's extra row), else -1.
+// One card at a time, not the whole snapshot.
 static int8_t wtLabExtraIndex() {
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) return -1;
-  return workshop::localai::printingExtraIndex(ai.cards, ai.count);
+  const uint8_t n = wtAiCount();
+  workshop::localai::Card c;
+  for (uint8_t i = 0; i < n; ++i)
+    if (workshopLocalAiFeedCard(i, &c) && workshop::localai::printingExtraIndex(&c, 1) == 0) return (int8_t)i;
+  return -1;
 }
 
 // The weather card's temperature and sky for the header ("66° Sunny"); empty without a fresh weather card.
-static void wtHomeWeather(char* out, size_t len) {
+static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len) {
   out[0] = 0;
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  const uint8_t n = wtAiCount();
-  for (uint8_t i = 0; i < n; ++i)
+  if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) return;
+  for (uint8_t i = 0; i < ai.count; ++i)
     if (!strcmp(ai.cards[i].kind, "weather")) { workshop::localai::weatherShort(out, len, ai.cards[i].text); return; }
 }
 
@@ -961,12 +980,11 @@ static void wtDrawHomeIdle(const WtPrint& w) {
   // Home at a glance: the header says the time (Home is already marked in the tab bar) and the weather.
   char clock[16], weather[24];
   wtHomeClock(clock, sizeof(clock));
-  wtHomeWeather(weather, sizeof(weather));
+  WtHomeRow rows[2];  // one snapshot for the frame: the weather and both need rows (wtHomeRows)
+  uint8_t others = 0;
+  wtHomeRows(rows, others, weather, sizeof(weather));
   wtDrawHeader(s, clock, weather[0] ? weather : nullptr, OS12V_ACCENT, false, 0, 0);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
-  WtHomeRow rows[2];
-  uint8_t others = 0;
-  wtHomeTop(rows, others);
   for (uint8_t i = 0; i < v.itemCount; ++i) {
     const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
     if (r.empty()) continue;
@@ -1591,26 +1609,26 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
       if (workshopTimerActive()) { v.enabled = false; v.reason = "Cancel the timer to change it"; }
       break;
     case wtl::ItemId::WsAsk:
-      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!workshopLocalAiFeedStatus().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       strlcpy(v.value, "Needs · today · weather…", sizeof(v.value));
       break;
     case wtl::ItemId::WsImage: {
       const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
-      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!workshopLocalAiFeedStatus().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       if (!e.hasImage) { v.enabled = false; v.reason = "No image yet"; break; }
       wtAiImageLine(e, v.value, sizeof(v.value));
       break;
     }
     case wtl::ItemId::WsApprovals: {  // 12.6
       const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
-      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!workshopLocalAiFeedStatus().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       if (!e.approvalSeq) strlcpy(v.value, "Review", sizeof(v.value));
       else if (e.approvalTotal) { snprintf(v.value, sizeof(v.value), "%u waiting", (unsigned)e.approvalTotal); v.valueColor = OS12V_AMBER; }
       else strlcpy(v.value, "None waiting", sizeof(v.value));
       break;
     }
     case wtl::ItemId::WsPair: {  // 12.7
-      const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+      const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
       if (!ai.configured) { strlcpy(v.value, "Pair with Local AI", sizeof(v.value)); v.valueColor = OS12V_ACCENT; break; }
       if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) { strlcpy(v.value, ai.lastSuccessAtMs ? "Not answering" : "Connecting", sizeof(v.value)); v.valueColor = OS12V_AMBER; break; }
       strlcpy(v.value, workshopLocalAiFeedExtras().live ? "Connected · live" : "Connected", sizeof(v.value));
@@ -1956,6 +1974,16 @@ static void wtTab(uint8_t i) {
   else wsOpen(wsm::PageId::Root);
 }
 
+// The Local AI tab row a tap on idle Home's need row `need` opens at (0 when it has none); noinline keeps its rows out
+// of wtHomeTouch's frame.
+static __attribute__((noinline)) uint8_t wtHomeNeedCard(int8_t need) {
+  if (need < 0 || need > 1) return 0;
+  WtHomeRow rows[2];
+  uint8_t others = 0;
+  wtHomeRows(rows, others, nullptr, 0);
+  return rows[need].card > 0 ? (uint8_t)rows[need].card : 0;
+}
+
 static bool wtHomeTouch(int16_t x, int16_t y) {
   const wsm::Screen s = wsScreen();
   // The calm idle screen has no tab bar and no controls: the whole screen is
@@ -1979,12 +2007,8 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     }
     const wtl::ItemId id = wtl::item(v, hi.index, 0).id;
     if (id == wtl::ItemId::HomeAi) {  // the full list is on the Local AI tab, opened at the row's item
-      WtHomeRow rows[2];
-      uint8_t others = 0;
-      wtHomeTop(rows, others);
-      const int8_t need = wtl::homeNeedRow(v, hi.index);
       g_wtAiOverlay = 0;
-      g_wtWorkshopScroll = need >= 0 && rows[need].card > 0 ? (uint8_t)rows[need].card : 0;  // clamped when the tab draws
+      g_wtWorkshopScroll = wtHomeNeedCard(wtl::homeNeedRow(v, hi.index));  // clamped when the tab draws
       setPage(SCREEN_HUB_WORKSHOP);
       wsClick();
     }
@@ -2244,7 +2268,7 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
     const workshop::localai::Card c = wtAiCard(wtl::headIndex(v, h.index, aiCount));
     if (!strcmp(c.kind, "playing") && workshopLocalAiFeedExtras().hasImage) { wtOpenImage(); wsClick(); return true; }  // 12.8: its poster
     if (!strcmp(c.kind, "status")) {
-      if (!workshopLocalAiFeedSnapshot().configured) { wtOpenPair(); wsClick(); return true; }  // 12.7: not set up: pair
+      if (!workshopLocalAiFeedStatus().configured) { wtOpenPair(); wsClick(); return true; }  // 12.7: not set up: pair
       wsToast(c.text);
       return true;
     }

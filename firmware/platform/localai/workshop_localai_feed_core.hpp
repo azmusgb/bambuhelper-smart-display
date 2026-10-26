@@ -195,16 +195,18 @@ inline int8_t homeSummaryIndex(const Card* cards, uint8_t n, uint8_t& others) {
   return best;
 }
 
-// 26 Oct 2026: idle Home's two "Needs you" rows. With Pi Hub's list (n > 0): its first two items in its order (every
-// screen shows the same list from the top), `others` = the rest. Without it: the cards, best first (bad > attention >
+// 26 Oct 2026: idle Home's two "Needs you" rows. With Pi Hub's list (`needsPresent`: the feed had `needs`): its first
+// two items in its order (every screen shows the same list from the top), `others` = the rest; an empty list means
+// nothing needs you (0 rows, fromNeeds true: All clear, never Local AI's cards). Without it: the cards, best first (bad > attention >
 // warning > busy > ok; the earlier card on a tie); the second row only for work under way or worse (All clear is
 // never under a problem), `others` = the problem cards not shown. Returns how many rows (0-2); unused out[] are -1.
-inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, const Card* cards, uint8_t nc, int8_t out[2], bool& fromNeeds,
-                              uint8_t& others) {
+inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, const Card* cards, uint8_t nc, int8_t out[2],
+                              bool& fromNeeds, uint8_t& others) {
   out[0] = out[1] = -1;
   others = 0;
-  fromNeeds = needs && n > 0;
+  fromNeeds = needsPresent;
   if (fromNeeds) {
+    if (!needs || !n) return 0;
     out[0] = 0;
     if (n > 1) out[1] = 1;
     others = (uint8_t)(n > 2 ? n - 2 : 0);

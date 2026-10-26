@@ -37,7 +37,7 @@ static void checkNeedsAndLab() {
     int8_t out[2] = {9, 9};
     bool fromNeeds = false;
     uint8_t others = 9;
-    CHECK(homeSummaryTop(n, 3, nullptr, 0, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && fromNeeds,
+    CHECK(homeSummaryTop(n, 3, true, nullptr, 0, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && fromNeeds,
           "home_top_two_in_order: the first two needs, in Pi Hub's order");
     CHECK(others == 1, "home_top_two_in_order: one more");
   }
@@ -47,21 +47,29 @@ static void checkNeedsAndLab() {
     int8_t out[2] = {9, 9};
     bool fromNeeds = true;
     uint8_t others = 9;
-    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 2 && out[0] == 3 && out[1] == 1 && !fromNeeds && others == 0,
+    CHECK(homeSummaryTop(nullptr, 0, false, c, 5, out, fromNeeds, others) == 2 && out[0] == 3 && out[1] == 1 && !fromNeeds && others == 0,
           "home_top_falls_back_to_cards: attention, then the warning");
     c[2].tone = Tone::Bad;
-    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 2 && out[0] == 2 && out[1] == 3 && others == 1,
+    CHECK(homeSummaryTop(nullptr, 0, false, c, 5, out, fromNeeds, others) == 2 && out[0] == 2 && out[1] == 3 && others == 1,
           "home_top_falls_back_to_cards: bad first; the warning left over is one more");
     c[1].tone = Tone::Info; c[2].tone = Tone::Busy; c[3].tone = Tone::Info;
-    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 1 && out[0] == 2 && out[1] == -1 && others == 0,
+    CHECK(homeSummaryTop(nullptr, 0, false, c, 5, out, fromNeeds, others) == 1 && out[0] == 2 && out[1] == -1 && others == 0,
           "home_top_falls_back_to_cards: work under way beats All clear, and All clear is never a second row");
     c[2].tone = Tone::Info;
-    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 1 && out[0] == 0 && out[1] == -1,
+    CHECK(homeSummaryTop(nullptr, 0, false, c, 5, out, fromNeeds, others) == 1 && out[0] == 0 && out[1] == -1,
           "home_top_falls_back_to_cards: nothing wrong: All clear");
     c[0].tone = Tone::Info;
-    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 0 && out[0] == -1 && out[1] == -1,
+    CHECK(homeSummaryTop(nullptr, 0, false, c, 5, out, fromNeeds, others) == 0 && out[0] == -1 && out[1] == -1,
           "home_top_falls_back_to_cards: information only: nothing");
-    CHECK(homeSummaryTop(nullptr, 0, nullptr, 0, out, fromNeeds, others) == 0 && out[0] == -1 && !fromNeeds, "no needs, no cards");
+    CHECK(homeSummaryTop(nullptr, 0, false, nullptr, 0, out, fromNeeds, others) == 0 && out[0] == -1 && !fromNeeds, "no needs, no cards");
+    // needs_present_but_empty: Pi Hub answered and nothing needs you: All clear, never Local AI's cards instead.
+    c[0].tone = Tone::Attention; c[1].tone = Tone::Warning;
+    CHECK(homeSummaryTop(nullptr, 0, true, c, 5, out, fromNeeds, others) == 0 && out[0] == -1 && out[1] == -1 && fromNeeds && others == 0,
+          "needs_present_but_empty: Pi Hub's empty list wins over the cards");
+    const Need none[1] = {};
+    CHECK(homeSummaryTop(none, 0, true, c, 5, out, fromNeeds, others) == 0 && fromNeeds, "needs_present_but_empty: an empty array too");
+    CHECK(homeSummaryTop(none, 0, false, c, 5, out, fromNeeds, others) == 2 && out[0] == 0 && !fromNeeds,
+          "needs absent (Pi Hub not answering): the cards");
   }
   {  // others_counts_the_rest
     Need n[kMaxNeeds];
@@ -69,11 +77,11 @@ static void checkNeedsAndLab() {
     int8_t out[2];
     bool fromNeeds = false;
     uint8_t others = 0;
-    CHECK(homeSummaryTop(n, kMaxNeeds, nullptr, 0, out, fromNeeds, others) == 2 && others == kMaxNeeds - 2, "others_counts_the_rest: six needs, +4 more");
-    CHECK(homeSummaryTop(n, 1, nullptr, 0, out, fromNeeds, others) == 1 && out[0] == 0 && out[1] == -1 && others == 0, "others_counts_the_rest: one need, no second row");
+    CHECK(homeSummaryTop(n, kMaxNeeds, true, nullptr, 0, out, fromNeeds, others) == 2 && others == kMaxNeeds - 2, "others_counts_the_rest: six needs, +4 more");
+    CHECK(homeSummaryTop(n, 1, true, nullptr, 0, out, fromNeeds, others) == 1 && out[0] == 0 && out[1] == -1 && others == 0, "others_counts_the_rest: one need, no second row");
     Card c[4] = {};
     c[0].tone = Tone::Attention; c[1].tone = Tone::Warning; c[2].tone = Tone::Warning; c[3].tone = Tone::Busy;
-    CHECK(homeSummaryTop(n, 0, c, 4, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && others == 1,
+    CHECK(homeSummaryTop(n, 0, false, c, 4, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && others == 1,
           "others_counts_the_rest: cards: the problems not shown");
   }
   {  // needs_utf8_cut: six needs with long UTF-8 titles and details; each copy ends on a character boundary

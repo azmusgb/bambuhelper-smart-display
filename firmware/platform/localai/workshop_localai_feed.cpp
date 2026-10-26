@@ -936,3 +936,25 @@ WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot() {
     portEXIT_CRITICAL(&g_mux);
     return s;
 }
+
+WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus() {
+    WorkshopLocalAiFeedStatus s;
+    portENTER_CRITICAL(&g_mux);
+    s.configured = g_snap.configured;
+    s.lastSuccessAtMs = g_snap.lastSuccessAtMs;
+    s.count = g_snap.count;
+    s.needCount = g_snap.needCount;
+    s.needsFromPi = g_snap.needsFromPi;
+    memcpy(s.status, g_snap.status, sizeof(s.status));
+    portEXIT_CRITICAL(&g_mux);
+    return s;
+}
+
+bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out) {
+    if (!out) return false;
+    portENTER_CRITICAL(&g_mux);
+    const bool ok = i < g_snap.count;
+    if (ok) *out = g_snap.cards[i];
+    portEXIT_CRITICAL(&g_mux);
+    return ok;
+}

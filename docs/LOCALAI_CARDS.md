@@ -8,7 +8,7 @@
 - **Idle Home, at a glance (since the Home redesign after 12.8.0; two rows since 26 Oct 2026):** one screen, no
   scrolling. The header shows the time and the weather card's temperature and sky ("66° Sunny"). Then **two "Needs
   you" rows** (title and one line each, "+N more" on the second): the top two of Pi Hub's one list (the feed's
-  `needs`, in Pi Hub's order, the same list Pi Hub and the Print lab page show). Without `needs` (Pi Hub not
+  `needs`, in Pi Hub's order, the same list Pi Hub and the Print lab page show; an empty list is All clear). Without `needs` (Pi Hub not
   answering) they are Local AI's cards ranked bad, attention, warning, work under way, All clear, and the second
   row says "Pi Hub isn't answering" when there is only one. A tap opens the Local AI tab at that item. Then the
   **printer card**: its state in large type ("Finished 1:21 PM", "Ready", "Offline") and one line of detail (the
