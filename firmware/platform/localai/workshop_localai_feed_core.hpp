@@ -201,7 +201,8 @@ inline int8_t homeSummaryIndex(const Card* cards, uint8_t n, uint8_t& others) {
 // warning > busy > ok; the earlier card on a tie); the second row only for work under way or worse (All clear is
 // never under a problem), `others` = the problem cards not shown. Returns how many rows (0-2); unused out[] are -1.
 // `hiddenCardId` (Later on the Judge it sheet): that Local AI card, and Pi Hub's "localai:<id>" item for it, are left
-// out on this display only; the rest of the list moves up.
+// out on this display only; the rest of the list moves up. `needsTotal` (the feed's needsCount: Pi Hub's whole list,
+// of which at most six are sent) makes "+N more" count the items not sent too; 0 when the feed didn't say.
 inline bool hiddenItem(const char* id, const char* hidden, bool fromPi) {
   if (!hidden || !hidden[0] || !id) return false;
   if (fromPi) return !strncmp(id, "localai:", 8) && !strcmp(id + 8, hidden);
@@ -209,7 +210,7 @@ inline bool hiddenItem(const char* id, const char* hidden, bool fromPi) {
 }
 
 inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, const Card* cards, uint8_t nc, int8_t out[2],
-                              bool& fromNeeds, uint8_t& others, const char* hiddenCardId = nullptr) {
+                              bool& fromNeeds, uint8_t& others, const char* hiddenCardId = nullptr, uint16_t needsTotal = 0) {
   out[0] = out[1] = -1;
   others = 0;
   fromNeeds = needsPresent;
@@ -221,7 +222,8 @@ inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, c
       ++total;
       if (shown < 2) out[shown++] = (int8_t)i;
     }
-    others = (uint8_t)(total - shown);
+    const unsigned unsent = needsTotal > n ? (unsigned)(needsTotal - n) : 0U;
+    others = (uint8_t)(total - shown + unsent > 255U ? 255U : total - shown + unsent);
     return shown;
   }
   if (!cards) return 0;

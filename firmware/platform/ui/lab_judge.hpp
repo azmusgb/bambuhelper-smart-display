@@ -39,6 +39,7 @@ static const int8_t kNotJudged = -2;  // "–": sent as null
 static const uint32_t kIdleMs = 600000UL;    // the draft is kept in RAM until Send or 10 min idle
 static const uint32_t kLaterMs = 7200000UL;  // Later hides the judge card on the display for 2 h
 static const uint32_t kPollMs = 3000UL;      // while Waiting for the Mac
+static const uint32_t kBackgroundPollMs = 30000UL;  // the same, with the sheet closed
 static const uint32_t kSlowMs = 120000UL;    // then the phone's words (print-lab.js PICKUP), word for word
 static const char kPickup[] = "The Mac hasn't picked this up. It runs when the Mac is awake.";
 static const char kAlreadyJudged[] = "already has a verdict";  // the refusal the phone offers Replace for
@@ -486,13 +487,14 @@ struct LabJudge {
   bool sending;
   char requestId[20];  // the draft's id: the same while the same draft is resent, new after any change
   char sentId[20];     // the request Local AI accepted
+  char priorId[24];    // the newest request the last read showed when it did: older, so it never settles this one
 
   void clearDraft() {
     for (uint8_t t = 0; t < kMaxTabs; ++t)
       for (uint8_t c = 0; c < kMaxCriteria; ++c) sel[t][c] = kUnset;
     reason = -1;
     replace = changing = sending = false;
-    requestId[0] = sentId[0] = 0;
+    requestId[0] = sentId[0] = priorId[0] = 0;
   }
   void clear() {
     memset(&s, 0, sizeof(s));
@@ -532,6 +534,11 @@ struct LabJudge {
     if (sending) return State::Sending;
     if (sentId[0]) {
       if (s.pending && !strcmp(s.pendingId, sentId)) {
+        if (!strcmp(s.pendingStatus, "applied") || !strcmp(s.pendingStatus, "duplicate")) return State::Done;
+        if (!strcmp(s.pendingStatus, "refused")) return State::Refused;
+      }
+      // A newer request replaced ours (the phone judged too): its outcome settles the wait, as on the phone.
+      if (s.pending && s.pendingId[0] && strcmp(s.pendingId, sentId) != 0 && strcmp(s.pendingId, priorId) != 0) {
         if (!strcmp(s.pendingStatus, "applied") || !strcmp(s.pendingStatus, "duplicate")) return State::Done;
         if (!strcmp(s.pendingStatus, "refused")) return State::Refused;
       }
@@ -648,7 +655,7 @@ struct LabJudge {
     replace = true;
     changing = true;
     sending = false;
-    requestId[0] = sentId[0] = 0;
+    requestId[0] = sentId[0] = priorId[0] = 0;
   }
   // Send: the payload for the draft, under its id (made from two random words the first time). The same draft sent
   // again keeps its id, so Local AI counts it once.
@@ -662,6 +669,8 @@ struct LabJudge {
   void sendAccepted() {
     sending = false;
     if (requestId[0]) memcpy(sentId, requestId, sizeof(sentId));
+    strncpy(priorId, s.pending ? s.pendingId : "", sizeof(priorId) - 1);
+    priorId[sizeof(priorId) - 1] = 0;
   }
   void sendFailed() { sending = false; }
 };

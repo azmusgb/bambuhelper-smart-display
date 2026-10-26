@@ -13,6 +13,7 @@ namespace wtl = workshop::ui::tabs;
 static const char* wtJudgeHidden();  // Later: the judge card hidden on this display for 2 h (nullptr: none)
 static int8_t wtJudgeHiddenIndex();  // its index among the fresh cards, -1 when none is hidden
 static void wtJudgeNoteWake();       // a tap woke the calm screen
+static void wtJudgeService();        // every hub frame: a verdict on its way, with the sheet closed
 static bool wtJudgeAutoOpen();       // once per judge card, on that wake: opens the sheet; true when it did
 static void wtJudgeOpen(const workshop::localai::Card& c, bool fromHome);
 static bool wtJudgeOpenIndex(int8_t cardIndex, bool fromHome);  // false when that card isn't the judge card
@@ -597,6 +598,7 @@ static uint16_t wtToneColor(workshop::localai::Tone t);
 
 static void wtPollMessage() {
   using workshop::localai::Tone;
+  wtJudgeService();  // 26 Oct 2026: every hub page polls the feed here
   if (wtBannerShown()) return;
   if (g_wtBannerMs) { g_wtBannerMs = 0; g_dirty = true; }  // the last one just went
   workshop::localai::Message m;
@@ -876,7 +878,8 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
   int8_t idx[2];
   bool fromNeeds = false;
   // Later on the Judge it sheet hides the judge card here for 2 h (it stays on the other screens).
-  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden());
+  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(),
+                                                         ai.needsTotal);
   for (uint8_t k = 0; k < rows; ++k) {
     WtHomeRow& r = out[k];
     if (!fromNeeds) { r.c = ai.cards[idx[k]]; r.card = idx[k]; continue; }

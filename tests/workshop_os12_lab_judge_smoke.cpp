@@ -426,6 +426,32 @@ static void judgePageFits() {
   }
 }
 
+// Fix round 3: a newer verdict request (the phone's) that replaced the display's settles Waiting with its outcome; an
+// older request the last read showed never does (the display's own is the newest once Local AI accepted it).
+static void fixRound3() {
+  const std::string head = "{\"experiment\":\"E-021\",\"run\":\"PR-021-01\",\"judgeOn\":\"seam\",\"tabs\":[\"21A\",\"21B\",\"21C\"],"
+                           "\"criteria\":[{\"key\":\"print\",\"label\":\"Print\",\"choices\":[\"clean\",\"flawed\",\"failed\"]},"
+                           "{\"key\":\"apart\",\"label\":\"Comes apart\",\"choices\":[\"yes\",\"hard\",\"no\"]}],"
+                           "\"judged\":null,\"pending\":{\"id\":\"";
+  LabJudge j;
+  const std::string earlier = head + "rq-00000000000000aa\",\"status\":\"refused\",\"message\":\"E-021 already has a verdict; send replace to change it\"}}";
+  CHECK(j.load(earlier.c_str(), earlier.size()) && j.state() == State::Refused, "replaced_by_newer: an earlier refusal shows");
+  j.changeIt();
+  gradeAll(j, 0);
+  char out[kMaxPayload];
+  CHECK(j.beginSend(out, sizeof(out), 1, 2), "replaced_by_newer: Change it sends");
+  j.sendAccepted();
+  CHECK(j.state() == State::Waiting, "replaced_by_newer: the earlier refusal the last read showed doesn't settle the new send");
+  const std::string newer = head + "rq-00000000000000bb\",\"status\":\"";
+  const std::string pend = newer + "pending\",\"message\":null}}";
+  CHECK(j.load(pend.c_str(), pend.size()) && j.state() == State::Waiting, "replaced_by_newer: a newer request still pending: Waiting");
+  const std::string applied = newer + "applied\",\"message\":null}}";
+  CHECK(j.load(applied.c_str(), applied.size()) && j.state() == State::Done, "replaced_by_newer: the newer request applied: Done");
+  const std::string refused = newer + "refused\",\"message\":\"PR-021-01 is not a run of E-021\"}}";
+  CHECK(j.load(refused.c_str(), refused.size()) && j.state() == State::Refused && !strcmp(j.s.pendingMessage, "PR-021-01 is not a run of E-021"),
+        "replaced_by_newer: the newer request refused: the Mac's words");
+}
+
 int main() {
   pagesAreTabsPlusSend();
   dashIsNullInPayload();
@@ -437,6 +463,7 @@ int main() {
   boundedParsing();
   fixRound1();
   fixRound2();
+  fixRound3();
   judgePageFits();
   if (failures) {
     std::printf("lab-judge smoke: %d of %d checks FAILED\n", failures, checks);

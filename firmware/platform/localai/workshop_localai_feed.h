@@ -21,6 +21,7 @@ struct WorkshopLocalAiFeedSnapshot {
     workshop::localai::Need needs[workshop::localai::kMaxNeeds]{};
     std::uint8_t needCount{0};
     bool needsFromPi{false};
+    std::uint16_t needsTotal{0};  // the feed's needsCount (Pi Hub's whole list; at most six are sent), for "+N more"
     bool configured{false};
     bool busy{false};
     std::uint32_t lastSuccessAtMs{0};

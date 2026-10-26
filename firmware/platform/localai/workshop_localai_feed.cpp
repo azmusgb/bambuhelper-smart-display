@@ -255,6 +255,7 @@ struct FeedResult {
     lai::Need needs[lai::kMaxNeeds];
     std::uint8_t needCount;
     bool needsFromPi;
+    std::uint16_t needsTotal;  // the feed's needsCount: Pi Hub's whole list (0: not said)
     Picture pictures[lai::kMaxImages];
     std::uint8_t pictureCount;
     lai::Message messages[lai::kMaxMessages];
@@ -293,6 +294,8 @@ bool fetch(FeedResult& r, char* error, size_t errorLen) {
     // 26 Oct 2026: Pi Hub's one "Needs you" list, in its order. Absent when Pi Hub didn't answer Local AI.
     JsonArray needs = doc["needs"].as<JsonArray>();
     r.needsFromPi = !needs.isNull();
+    const long total = doc["needsCount"] | -1L;
+    r.needsTotal = total < 0 ? 0 : total > 999 ? 999 : (std::uint16_t)total;
     for (JsonObject n : needs) {
         if (r.needCount >= lai::kMaxNeeds) break;
         const char* title = n["title"] | "";
@@ -451,6 +454,7 @@ void runFeed(std::uint32_t generation) {
             memcpy(g_snap.needs, r.needs, sizeof(r.needs));
             g_snap.needCount = r.needCount;
             g_snap.needsFromPi = r.needsFromPi;
+            g_snap.needsTotal = r.needsTotal;
             g_snap.lastSuccessAtMs = now;
             g_snap.failures = 0;
             copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are current.");
@@ -897,6 +901,7 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
     g_snap.count = 0;
     g_snap.needCount = 0;
     g_snap.needsFromPi = false;
+    g_snap.needsTotal = 0;
     g_snap.failures = 0;
     g_nextAtMs = millis();
     g_sig[0] = 0;

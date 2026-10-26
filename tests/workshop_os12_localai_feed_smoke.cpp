@@ -40,6 +40,10 @@ static void checkNeedsAndLab() {
     CHECK(homeSummaryTop(n, 3, true, nullptr, 0, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && fromNeeds,
           "home_top_two_in_order: the first two needs, in Pi Hub's order");
     CHECK(others == 1, "home_top_two_in_order: one more");
+    CHECK(homeSummaryTop(n, 3, true, nullptr, 0, out, fromNeeds, others, nullptr, 9) == 2 && others == 7,
+          "home_more_counts_pi_hub: \"+N more\" counts Pi Hub's whole list (needsCount), not the six sent");
+    CHECK(homeSummaryTop(n, 3, true, nullptr, 0, out, fromNeeds, others, nullptr, 2) == 2 && others == 1,
+          "home_more_counts_pi_hub: a count below what was sent counts what was sent");
   }
   {  // home_top_falls_back_to_cards: no needs (Pi Hub not answering) -> cards, ranked bad > attention > warning > busy > ok
     Card c[5] = {};

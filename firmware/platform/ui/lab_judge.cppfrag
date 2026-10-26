@@ -22,6 +22,7 @@ struct WtJudgeUi {
   uint8_t page, first;
   int8_t wantPage;  // /hub/show lab-judge-<n>: the page to show once the sheet is here (-1: none, 99: the last)
   bool loading, loadFailed, opened, fromHome;
+  bool resume;  // the sheet was up when the display went to the calm screen: the wake tap brings it back
   uint32_t judgeSeq, verdictSeq;  // the feed's counters already seen
   uint32_t touchedAt, polledAt, waitingSince;
   char error[96];        // why the last read or send failed: Local AI's words when it gave any
@@ -57,6 +58,7 @@ static void wtJudgeLeft() {
 }
 
 static void wtJudgeNoteWake() {
+  g_wtJudgeUi.resume = g_wtAiOverlay == 5 && g_wtJudgeUi.card[0];
   wtJudgeLeft();  // waking the calm screen is leaving too
   g_wtJudgeUi.wokeAt = millis() | 1UL;
 }
@@ -108,8 +110,8 @@ static void wtJudgeOpen(const workshop::localai::Card& c, bool fromHome) {
     g_wtJudge.clear();
     strlcpy(u.run, c.run, sizeof(u.run));
     strlcpy(u.card, c.id, sizeof(u.card));
-  } else if (!wlab::draftKept(true, millis(), u.touchedAt)) {
-    g_wtJudge.clearDraft();  // the draft is kept for 10 min of no touches
+  } else if (!wlab::draftKept(true, millis(), u.touchedAt) && g_wtJudge.state() != wlab::State::Waiting) {
+    g_wtJudge.clearDraft();  // the draft is kept for 10 min of no touches (a verdict still on its way is kept)
   }
   u.wantPage = -1;
   u.error[0] = 0;
@@ -161,24 +163,32 @@ static void wtJudgeClose() {
   g_dirty = true;
 }
 
-// Once per judge card, when a tap wakes the calm screen: the sheet opens by itself (not while Later hides it).
+// Once per judge card, when a tap wakes the calm screen: the sheet opens by itself (not while Later hides it); and
+// again whenever the sheet for that card was up when the display went calm.
 static bool wtJudgeAutoOpen() {
   WtJudgeUi& u = g_wtJudgeUi;
   if (!u.wokeAt) return false;
   const bool recent = millis() - u.wokeAt <= 3000UL;
+  const bool wasUp = u.resume;
   u.wokeAt = 0;
+  u.resume = false;
   if (!recent) return false;
   workshop::localai::Card c;
   if (!wtJudgeCardNow(&c)) return false;
   const char* hidden = wtJudgeHidden();
-  if ((hidden && !strcmp(hidden, c.id)) || !strcmp(u.autoOpened, c.id)) return false;
+  const bool resume = wasUp && !strcmp(u.card, c.id);
+  if ((hidden && !strcmp(hidden, c.id)) || (!resume && !strcmp(u.autoOpened, c.id))) return false;
   strlcpy(u.autoOpened, c.id, sizeof(u.autoOpened));
   wtJudgeOpen(c, true);
   return true;
 }
 
+// The sheet is on screen (drawn every 250 ms); while it is, its frames run wtJudgeTick.
+static bool wtJudgeUp() { return g_wtAiOverlay == 5 && getScreenState() == SCREEN_HUB_WORKSHOP; }
+
 // What the feed task finished since the last frame: a sheet read (taken into the draft when it is the same sheet), a
-// verdict sent; and, while Waiting for the Mac, the next read every few seconds. A leaf (the extras copy is ~1 KB).
+// verdict sent; and, while Waiting for the Mac, the next read every few seconds (every 30 s while the sheet is closed,
+// wtJudgeService). A leaf (the extras copy is ~1 KB).
 static __attribute__((noinline)) void wtJudgeTick() {
   WtJudgeUi& u = g_wtJudgeUi;
   const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
@@ -223,11 +233,21 @@ static __attribute__((noinline)) void wtJudgeTick() {
       }
     }
   }
-  if (g_wtJudge.state() == wlab::State::Waiting && !u.loading && now - u.polledAt >= wlab::kPollMs) wtJudgeRequest();
-  if (now - u.touchedAt >= wlab::kIdleMs) {  // 10 min without a touch: the draft goes, the sheet closes
-    g_wtJudge.clearDraft();
+  const bool up = wtJudgeUp();
+  if (g_wtJudge.state() == wlab::State::Waiting && !u.loading && now - u.polledAt >= (up ? wlab::kPollMs : wlab::kBackgroundPollMs))
+    wtJudgeRequest();
+  if (up && now - u.touchedAt >= wlab::kIdleMs) {  // 10 min without a touch: the draft goes, the sheet closes
+    if (g_wtJudge.state() != wlab::State::Waiting) g_wtJudge.clearDraft();  // a verdict on its way keeps its id
     wtJudgeClose();
   }
+}
+
+// Every hub frame (wtPollMessage): with the sheet closed, a verdict on its way still reaches Done or the Mac's words,
+// so the sheet shows them when it opens again.
+static void wtJudgeService() {
+  if (wtJudgeUp()) return;
+  const wlab::State st = g_wtJudge.state();
+  if (st == wlab::State::Waiting || st == wlab::State::Sending || g_wtJudgeUi.loading) wtJudgeTick();
 }
 
 static void wtJudgeSend() {
