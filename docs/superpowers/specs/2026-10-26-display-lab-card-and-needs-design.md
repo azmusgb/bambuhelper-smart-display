@@ -1,6 +1,6 @@
 # Workshop display: Print lab card, Judge it, and "Needs you" on idle Home
 
-Written 26 Oct 2026 for the owner's review. **Status: draft, not started.** The owner picked items 1 and 3 from the
+Written 26 Oct 2026 for the owner's review. **Status: approved 26 Oct (Pi Hub builds the one list), not started.** The owner picked items 1 and 3 from the
 display ideas list (26 Oct): a Print lab card with judging after a lab print, and Pi Hub's "Needs you" items on idle
 Home. Owner's rule (26 Oct): **"I want the experience to be consistent across devices."** Owner's choice (26 Oct):
 the display gets **the same Judge it sheet as the phone, stepped one strip per screen**.
@@ -117,7 +117,6 @@ Hub's "Needs you" (it comes through Local AI's feed), so all three screens show 
    match).
 3. Firmware: idle Home two rows, lab row, the stepped Judge it sheet (OTA after the owner's OK).
 
-## Open question for the owner
+## Decided
 
-1. **Pi Hub builds the one list** (recommended: it's the house-wide app and already merges everything), and Local AI's
-   own Home "Needs you" follows it in a later step — or Local AI builds it instead?
+1. **Pi Hub builds the one list** (owner, 26 Oct). Local AI's own Home "Needs you" follows it in a later step.
