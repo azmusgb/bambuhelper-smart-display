@@ -434,6 +434,7 @@ static void fixRound3() {
                            "{\"key\":\"apart\",\"label\":\"Comes apart\",\"choices\":[\"yes\",\"hard\",\"no\"]}],"
                            "\"judged\":null,\"pending\":{\"id\":\"";
   LabJudge j;
+  j.clear();
   const std::string earlier = head + "rq-00000000000000aa\",\"status\":\"refused\",\"message\":\"E-021 already has a verdict; send replace to change it\"}}";
   CHECK(j.load(earlier.c_str(), earlier.size()) && j.state() == State::Refused, "replaced_by_newer: an earlier refusal shows");
   j.changeIt();
