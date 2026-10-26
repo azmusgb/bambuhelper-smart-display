@@ -223,6 +223,9 @@ bool getJson(const char* method, const char* path, const char* body, JsonDocumen
 struct FeedResult {
     Card cards[lai::kMaxCards];
     std::uint8_t count;
+    lai::Need needs[lai::kMaxNeeds];
+    std::uint8_t needCount;
+    bool needsFromPi;
     Picture pictures[lai::kMaxImages];
     std::uint8_t pictureCount;
     lai::Message messages[lai::kMaxMessages];
@@ -248,14 +251,24 @@ bool fetch(FeedResult& r, char* error, size_t errorLen) {
         if (!lai::shownKind(kind) || r.count >= lai::kMaxCards) continue;
         Card& out = r.cards[r.count++];
         copyText(out.kind, sizeof(out.kind), kind);
-        copyText(out.title, sizeof(out.title), c["title"] | "");
-        copyText(out.text, sizeof(out.text), c["text"] | "");
+        lai::copyUtf8(out.title, sizeof(out.title), c["title"] | "");  // whole characters ("Lab · E-021")
+        lai::copyUtf8(out.text, sizeof(out.text), c["text"] | "");
         copyText(out.id, sizeof(out.id), c["id"] | "");
         copyText(out.ask, sizeof(out.ask), c["ask"] | "");
+        copyText(out.run, sizeof(out.run), c["run"] | "");  // 26 Oct 2026: a lab card's run
         out.at = c["at"] | 0U;
         const int percent = c["percent"] | -1;
         out.percent = percent >= 0 && percent <= 100 ? (std::uint8_t)percent : 255;
         out.tone = lai::toneFrom(c["tone"] | "");
+    }
+    // 26 Oct 2026: Pi Hub's one "Needs you" list, in its order. Absent when Pi Hub didn't answer Local AI.
+    JsonArray needs = doc["needs"].as<JsonArray>();
+    r.needsFromPi = !needs.isNull();
+    for (JsonObject n : needs) {
+        if (r.needCount >= lai::kMaxNeeds) break;
+        const char* title = n["title"] | "";
+        if (!title[0]) continue;
+        lai::setNeed(r.needs[r.needCount++], n["id"] | "", lai::toneFrom(n["tone"] | ""), title, n["detail"] | "", n["source"] | "");
     }
     // The gallery (feed v2), else the image card alone (Local AI before v2).
     for (JsonObject i : doc["images"].as<JsonArray>()) {
@@ -406,6 +419,9 @@ void runFeed(std::uint32_t generation) {
         if (ok) {
             memcpy(g_snap.cards, r.cards, sizeof(r.cards));
             g_snap.count = r.count;
+            memcpy(g_snap.needs, r.needs, sizeof(r.needs));
+            g_snap.needCount = r.needCount;
+            g_snap.needsFromPi = r.needsFromPi;
             g_snap.lastSuccessAtMs = now;
             g_snap.failures = 0;
             copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are current.");
@@ -748,6 +764,8 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
     ++g_generation;
     g_snap.configured = true;
     g_snap.count = 0;
+    g_snap.needCount = 0;
+    g_snap.needsFromPi = false;
     g_snap.failures = 0;
     g_nextAtMs = millis();
     g_sig[0] = 0;

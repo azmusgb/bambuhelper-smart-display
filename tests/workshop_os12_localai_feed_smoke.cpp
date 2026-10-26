@@ -9,6 +9,118 @@ using namespace workshop::localai;
 static int failures = 0, checks = 0;
 #define CHECK(c, what) do { ++checks; if (!(c)) { ++failures; std::printf("FAIL %s\n", what); } } while (0)
 
+// Whole UTF-8 characters only: no lead byte without all its continuation bytes, no stray continuation byte.
+static bool validUtf8(const char* s) {
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(s);
+  while (*p) {
+    const unsigned char c = *p;
+    const int n = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 : (c & 0xF8) == 0xF0 ? 3 : -1;
+    if (n < 0) return false;
+    ++p;
+    for (int k = 0; k < n; ++k, ++p)
+      if ((*p & 0xC0) != 0x80) return false;
+  }
+  return true;
+}
+
+static Need need(const char* id, Tone tone, const char* title) {
+  Need n{};
+  setNeed(n, id, tone, title, "", "pi");
+  return n;
+}
+
+// 26 Oct 2026: the feed's `needs` (Pi Hub's one list) and the Print lab cards.
+static void checkNeedsAndLab() {
+  {  // home_top_two_in_order: Pi Hub's order, as sent (it already ranks bad > attention > warn)
+    const Need n[3] = {need("pi:disk", Tone::Bad, "Disk full"), need("printer:plate", Tone::Warning, "Clear the plate"),
+                       need("localai:approval:7", Tone::Attention, "Approve the update")};
+    int8_t out[2] = {9, 9};
+    bool fromNeeds = false;
+    uint8_t others = 9;
+    CHECK(homeSummaryTop(n, 3, nullptr, 0, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && fromNeeds,
+          "home_top_two_in_order: the first two needs, in Pi Hub's order");
+    CHECK(others == 1, "home_top_two_in_order: one more");
+  }
+  {  // home_top_falls_back_to_cards: no needs (Pi Hub not answering) -> cards, ranked bad > attention > warning > busy > ok
+    Card c[5] = {};
+    c[0].tone = Tone::Ok; c[1].tone = Tone::Warning; c[2].tone = Tone::Busy; c[3].tone = Tone::Attention; c[4].tone = Tone::Info;
+    int8_t out[2] = {9, 9};
+    bool fromNeeds = true;
+    uint8_t others = 9;
+    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 2 && out[0] == 3 && out[1] == 1 && !fromNeeds && others == 0,
+          "home_top_falls_back_to_cards: attention, then the warning");
+    c[2].tone = Tone::Bad;
+    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 2 && out[0] == 2 && out[1] == 3 && others == 1,
+          "home_top_falls_back_to_cards: bad first; the warning left over is one more");
+    c[1].tone = Tone::Info; c[2].tone = Tone::Busy; c[3].tone = Tone::Info;
+    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 1 && out[0] == 2 && out[1] == -1 && others == 0,
+          "home_top_falls_back_to_cards: work under way beats All clear, and All clear is never a second row");
+    c[2].tone = Tone::Info;
+    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 1 && out[0] == 0 && out[1] == -1,
+          "home_top_falls_back_to_cards: nothing wrong: All clear");
+    c[0].tone = Tone::Info;
+    CHECK(homeSummaryTop(nullptr, 0, c, 5, out, fromNeeds, others) == 0 && out[0] == -1 && out[1] == -1,
+          "home_top_falls_back_to_cards: information only: nothing");
+    CHECK(homeSummaryTop(nullptr, 0, nullptr, 0, out, fromNeeds, others) == 0 && out[0] == -1 && !fromNeeds, "no needs, no cards");
+  }
+  {  // others_counts_the_rest
+    Need n[kMaxNeeds];
+    for (uint8_t i = 0; i < kMaxNeeds; ++i) n[i] = need("pi:x", Tone::Warning, "Something");
+    int8_t out[2];
+    bool fromNeeds = false;
+    uint8_t others = 0;
+    CHECK(homeSummaryTop(n, kMaxNeeds, nullptr, 0, out, fromNeeds, others) == 2 && others == kMaxNeeds - 2, "others_counts_the_rest: six needs, +4 more");
+    CHECK(homeSummaryTop(n, 1, nullptr, 0, out, fromNeeds, others) == 1 && out[0] == 0 && out[1] == -1 && others == 0, "others_counts_the_rest: one need, no second row");
+    Card c[4] = {};
+    c[0].tone = Tone::Attention; c[1].tone = Tone::Warning; c[2].tone = Tone::Warning; c[3].tone = Tone::Busy;
+    CHECK(homeSummaryTop(n, 0, c, 4, out, fromNeeds, others) == 2 && out[0] == 0 && out[1] == 1 && others == 1,
+          "others_counts_the_rest: cards: the problems not shown");
+  }
+  {  // needs_utf8_cut: six needs with long UTF-8 titles and details; each copy ends on a character boundary
+    struct Guarded { Need n[kMaxNeeds]; unsigned char tail[8]; } g;
+    memset(&g, 0, sizeof(g));
+    memset(g.tail, 0xA5, sizeof(g.tail));
+    char title[128] = "", detail[512] = "", id[80] = "";
+    for (int i = 0; i < 24; ++i) strcat(title, "\xC3\xA9");          // 24 x "e acute": 48 bytes
+    strcat(title, "\xE2\x80\xA6");                                   // and the cut mark
+    for (int i = 0; i < 90; ++i) strcat(detail, "\xF0\x9F\x94\xA5");  // 90 x a 4-byte emoji: 360 bytes
+    for (int i = 0; i < 70; ++i) strcat(id, "a");
+    for (uint8_t i = 0; i < kMaxNeeds; ++i) setNeed(g.n[i], id, toneFrom("bad"), title, detail, "localai-long-source");
+    bool ok = true;
+    for (uint8_t i = 0; i < kMaxNeeds; ++i) {
+      ok = ok && strlen(g.n[i].title) < sizeof(g.n[i].title) && validUtf8(g.n[i].title);
+      ok = ok && strlen(g.n[i].detail) < sizeof(g.n[i].detail) && validUtf8(g.n[i].detail);
+      ok = ok && strlen(g.n[i].id) < sizeof(g.n[i].id) && strlen(g.n[i].source) < sizeof(g.n[i].source);
+      ok = ok && g.n[i].tone == Tone::Bad;
+    }
+    CHECK(ok, "needs_utf8_cut: every field fits and is whole UTF-8");
+    CHECK(strlen(g.n[0].title) == 26 && strlen(g.n[0].detail) == 108, "needs_utf8_cut: as many whole characters as fit");
+    bool tail = true;
+    for (size_t i = 0; i < sizeof(g.tail); ++i) tail = tail && g.tail[i] == 0xA5;
+    CHECK(tail, "needs_utf8_cut: nothing written past the list");
+    char small[4];
+    copyUtf8(small, sizeof(small), "ab\xC3\xA9");
+    CHECK(!strcmp(small, "ab"), "needs_utf8_cut: a 2-byte character that does not fit is left out whole");
+    copyUtf8(small, sizeof(small), "abc");
+    CHECK(!strcmp(small, "abc"), "needs_utf8_cut: ASCII fills the buffer");
+    copyUtf8(small, sizeof(small), nullptr);
+    CHECK(!small[0], "needs_utf8_cut: nothing in, nothing out");
+    CHECK(toneFrom("warn") == Tone::Warning && toneFrom("warning") == Tone::Warning, "Pi Hub's warn is a warning");
+  }
+  {  // lab_card_takes_printing_extra_row
+    CHECK(shownKind("lab"), "lab cards are shown");
+    Card c[3] = {};
+    strcpy(c[0].kind, "needs"); c[0].tone = Tone::Attention;
+    strcpy(c[1].kind, "lab"); c[1].tone = Tone::Attention; strcpy(c[1].ask, "lab-judge"); strcpy(c[1].run, "PR-021-01");
+    strcpy(c[2].kind, "lab"); c[2].tone = Tone::Busy; strcpy(c[2].title, "Lab \xC2\xB7 E-021");
+    CHECK(sizeof(c[1].run) >= 16 && !strcmp(c[1].run, "PR-021-01") && !strcmp(c[1].ask, "lab-judge"), "the judge card keeps its run and ask");
+    CHECK(printingExtraIndex(c, 3) == 2, "lab_card_takes_printing_extra_row: the busy lab card");
+    c[2].tone = Tone::Ok;
+    CHECK(printingExtraIndex(c, 3) == -1, "lab_card_takes_printing_extra_row: no busy lab card, no lab row");
+    CHECK(printingExtraIndex(c, 0) == -1 && printingExtraIndex(nullptr, 3) == -1, "no cards, no lab row");
+  }
+}
+
 int main() {
   CHECK(nextDelayMs(0) == 60000UL, "a minute after an answer");
   CHECK(nextDelayMs(1) == 120000UL && nextDelayMs(2) == 240000UL && nextDelayMs(3) == 480000UL, "doubling backoff");
@@ -112,6 +224,7 @@ int main() {
     weatherShort(w, sizeof(w), nullptr);
     CHECK(w[0] == 0, "no text");
   }
+  checkNeedsAndLab();
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }

@@ -3,14 +3,21 @@
 **Where they show (12.4.0):**
 - **Local AI tab** (third tab, sparkle icon): every card, one row each, then the workshop tools (filament, timer,
   note).
-- **Home:** the first row is Local AI's most important card, or the workshop timer while it runs; it opens the Local
-  AI tab.
-- **Idle Home, at a glance (since the Home redesign after 12.8.0):** one screen, no scrolling. The header shows the
-  time and the weather card's temperature and sky ("66° Sunny"). Then the **house card**: the card that matters most
-  (attention, then warning, then work under way, then All clear), with "+N more" for other problems. Then the
-  **printer card**: its state in large type ("Finished 1:21 PM", "Ready", "Offline") and one line of detail (the last
-  job, or nozzle and bed temperatures). Then the timer. Information cards (disks, music, finished work) are on the
-  Local AI tab only. `homeSummaryIndex` and `weatherShort` in `workshop_localai_feed_core.hpp` decide what shows.
+- **Home (printing):** the first row is the workshop timer while it runs, else the **Print lab card** while a lab
+  run prints ("Lab · E-021", since 26 Oct 2026), else the first "Needs you" item; it opens the Local AI tab.
+- **Idle Home, at a glance (since the Home redesign after 12.8.0; two rows since 26 Oct 2026):** one screen, no
+  scrolling. The header shows the time and the weather card's temperature and sky ("66° Sunny"). Then **two "Needs
+  you" rows** (title and one line each, "+N more" on the second): the top two of Pi Hub's one list (the feed's
+  `needs`, in Pi Hub's order, the same list Pi Hub and the Print lab page show). Without `needs` (Pi Hub not
+  answering) they are Local AI's cards ranked bad, attention, warning, work under way, All clear, and the second
+  row says "Pi Hub isn't answering" when there is only one. A tap opens the Local AI tab at that item. Then the
+  **printer card**: its state in large type ("Finished 1:21 PM", "Ready", "Offline") and one line of detail (the
+  last job, or nozzle and bed temperatures). Then the timer. Information cards (disks, music, finished work) are on
+  the Local AI tab only. `homeSummaryTop`, `printingExtraIndex` and `weatherShort` in
+  `workshop_localai_feed_core.hpp` decide what shows; `copyUtf8` cuts every title and line on a character boundary.
+- **Lab cards** (kind `lab`): "Lab · E-021" (busy) while a lab run prints, and "Judge E-021" (attention, `ask:
+  "lab-judge"`, `run: "PR-021-01"`) when it finished without a verdict. The display keeps the card's `run` for the
+  Judge it sheet.
 - **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;
   otherwise a second Local AI card shows there.
 

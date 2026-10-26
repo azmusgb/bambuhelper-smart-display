@@ -503,14 +503,14 @@ static workshop::localai::Card wtAiCard(uint8_t i) {
 
 static uint16_t wtAiToneColor(workshop::localai::Tone t) {
   using workshop::localai::Tone;
-  return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : (t == Tone::Busy || t == Tone::Info) ? OS12V_ACCENT : OS12V_MUTED;
+  return (t == Tone::Attention || t == Tone::Bad) ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : (t == Tone::Busy || t == Tone::Info) ? OS12V_ACCENT : OS12V_MUTED;
 }
 // The banner's edge: info is Local AI blue rather than grey.
 static uint16_t wtToneColor(workshop::localai::Tone t) { return t == workshop::localai::Tone::Info ? OS12V_ACCENT : wtAiToneColor(t); }
 
 // One Local AI card as a row: a luminous diode in its tone, distinct title, divider line,
 // clear details, and chevron; a tap opens the Local AI tab from Home, and asks about the card on the tab.
-static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg) {
+static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg, const char* pill = nullptr) {
   const int16_t mid = (int16_t)(row.y + row.h / 2), x = (int16_t)(row.x + 14);
   const uint16_t dotCol = wtAiToneColor(card.tone);
 
@@ -525,10 +525,20 @@ static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& car
   if (titleW > maxTitleW) titleW = maxTitleW;
   uiDrawFit(card.title, (int16_t)(x + 18), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, bg);
 
+  // 26 Oct 2026: idle Home's second need row says how many more there are ("+3 more") before its chevron.
+  int16_t right = (int16_t)(row.right() - 28);
+  if (pill && pill[0]) {
+    setFont(tft, FONT_SMALL);
+    const int16_t pw = (int16_t)(tft.textWidth(pill) + 16), px = (int16_t)(right - pw);
+    tft.fillRoundRect(px, (int16_t)(mid - 11), pw, 22, 11, OS12V_SURFACE2);
+    tft.drawRoundRect(px, (int16_t)(mid - 11), pw, 22, 11, OS12V_LINE);
+    uiDrawFit(pill, (int16_t)(px + pw / 2), mid, (int16_t)(pw - 8), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_SURFACE2);
+    right = (int16_t)(px - 8);
+  }
   if (card.text[0]) {
     // Subtle vertical accent divider between classification title and detail text
     tft.drawFastVLine((int16_t)(x + 18 + titleW + 2), (int16_t)(mid - 6), 12, OS12V_LINE);
-    const int16_t textX = (int16_t)(x + 18 + titleW + 10), textW = (int16_t)(row.right() - 28 - textX);
+    const int16_t textX = (int16_t)(x + 18 + titleW + 10), textW = (int16_t)(right - textX);
     if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
   }
   wsDrawChevronRight((int16_t)(row.right() - 16), mid, OS12V_MUTED);
@@ -562,7 +572,7 @@ static void wtPollMessage() {
   if (!workshopLocalAiFeedTakeMessage(&m)) return;
   g_wtBanner = m;
   g_wtBannerAt = millis();
-  g_wtBannerMs = (m.tone == Tone::Attention || m.tone == Tone::Warning) ? 20000UL : 12000UL;
+  g_wtBannerMs = (m.tone == Tone::Attention || m.tone == Tone::Bad || m.tone == Tone::Warning) ? 20000UL : 12000UL;
   g_ambientActive = false;
   if (m.chime) buzzerPlay(m.tone == Tone::Warning ? BUZZ_ERROR : m.tone == Tone::Ok ? BUZZ_PRINT_FINISHED : BUZZ_CONNECTED);
   g_dirty = true;
@@ -626,6 +636,7 @@ static bool wtBannerTouch(int16_t x, int16_t y) {
 // Home's bottom row: the workshop timer while it runs, otherwise Local AI's
 // most important card (12.4.0). Opens the Local AI tab.
 static workshop::localai::Card wtHomeSummary(uint8_t& others);  // Home at a glance (below)
+static int8_t wtLabExtraIndex();
 static void wtHomeClock(char* out, size_t len);
 
 static const char* wtHomeExtra(WsRowView& v) {
@@ -641,10 +652,12 @@ static const char* wtHomeExtra(WsRowView& v) {
     v.valueColor = OS12V_ACCENT;
     return "Timer";
   }
-  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab). Home at a glance: the
-  // same pick as idle Home's house card, so a problem is never hidden behind "All clear".
+  // 26 Oct 2026: the Print lab card while its run prints ("Lab · E-021" and what to judge it on).
+  // 12.4.0: otherwise Local AI's most important item (filament is on the Local AI tab). Home at a glance: the
+  // same pick as idle Home's first need row, so a problem is never hidden behind "All clear".
   uint8_t others = 0;
-  const workshop::localai::Card c = wtHomeSummary(others);
+  const int8_t lab = wtLabExtraIndex();
+  const workshop::localai::Card c = lab >= 0 ? wtAiCard((uint8_t)lab) : wtHomeSummary(others);
   strlcpy(v.value, c.text, sizeof(v.value));
   v.valueColor = c.tone == workshop::localai::Tone::Info || c.tone == workshop::localai::Tone::Ok ? OS12V_MUTED : wtAiToneColor(c.tone);
   static char label[workshop::localai::kTitleLen];
@@ -705,7 +718,7 @@ static void wtDrawCalmAiCard(const wsm::Rect& r, const workshop::localai::Card& 
   const wsm::Rect surface = wsm::rowSurface(r);
   tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_SURFACE);
   tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_LINE);
-  const uint16_t dot = card.tone == Tone::Attention ? OS12V_RED : card.tone == Tone::Warning ? OS12V_AMBER
+  const uint16_t dot = (card.tone == Tone::Attention || card.tone == Tone::Bad) ? OS12V_RED : card.tone == Tone::Warning ? OS12V_AMBER
                      : card.tone == Tone::Ok ? OS12V_GREEN : OS12V_ACCENT;
   const int16_t mid = (int16_t)(r.y + r.h / 2), x = (int16_t)(surface.x + 16);
   tft.fillCircle(x + 5, mid, 5, dot);
@@ -807,23 +820,74 @@ static bool wtHomeIdle(const WtPrint& w) {
 
 static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v);  // Local AI tab rows (below)
 
-// Home at a glance: The house card is Local AI's most important card (or why there are none); the
-// printer card is the printer's state in large type with one line of detail; the header has the clock and weather.
-static workshop::localai::Card wtHomeSummary(uint8_t& others) {
+// Home at a glance (26 Oct 2026): idle Home's two "Needs you" rows. Pi Hub's one list from the top (the same list,
+// in the same order, as on Pi Hub and the Print lab page), else Local AI's cards; one snapshot for both rows.
+// `card` is the Local AI tab's row for the item (-1 when it has none), so a tap opens the tab there.
+struct WtHomeRow {
+  workshop::localai::Card c;
+  int8_t card;
+};
+
+static uint8_t wtHomeTop(WtHomeRow out[2], uint8_t& others) {
+  using workshop::localai::Tone;
   others = 0;
+  out[0] = WtHomeRow{};
+  out[1] = WtHomeRow{};
+  out[0].card = out[1].card = -1;
   const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  const uint8_t n = wtAiCount();
-  const int8_t i = n ? workshop::localai::homeSummaryIndex(ai.cards, n, others) : -1;
-  if (i >= 0) return ai.cards[i];
-  workshop::localai::Card c = wtAiCard(0);
-  if (n) {  // fresh cards, but only information: nothing needs you
-    c = workshop::localai::Card{};
-    strlcpy(c.kind, "status", sizeof(c.kind));
-    strlcpy(c.title, "All clear", sizeof(c.title));
-    strlcpy(c.text, "Nothing needs you right now.", sizeof(c.text));
-    c.tone = workshop::localai::Tone::Ok;
+  const bool fresh = workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  const uint8_t nc = fresh ? ai.count : 0, nn = fresh ? ai.needCount : 0;
+  int8_t idx[2];
+  bool fromNeeds = false;
+  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, ai.cards, nc, idx, fromNeeds, others);
+  for (uint8_t k = 0; k < rows; ++k) {
+    WtHomeRow& r = out[k];
+    if (!fromNeeds) { r.c = ai.cards[idx[k]]; r.card = idx[k]; continue; }
+    const workshop::localai::Need& n = ai.needs[idx[k]];
+    strlcpy(r.c.kind, "needs", sizeof(r.c.kind));
+    strlcpy(r.c.title, n.title, sizeof(r.c.title));
+    strlcpy(r.c.text, n.detail, sizeof(r.c.text));
+    strlcpy(r.c.id, n.id, sizeof(r.c.id));
+    r.c.tone = n.tone;
+    r.c.percent = 255;
+    // Local AI's own items are "localai:<card id>" in Pi Hub's list: open the tab at that card.
+    const char* cardId = !strncmp(n.id, "localai:", 8) ? n.id + 8 : nullptr;
+    for (uint8_t i = 0; cardId && i < nc; ++i)
+      if (ai.cards[i].id[0] && !strcmp(ai.cards[i].id, cardId)) { r.card = (int8_t)i; break; }
   }
-  return c;
+  if (rows == 0) {
+    if (nc) {  // fresh cards, but only information: nothing needs you
+      strlcpy(out[0].c.kind, "status", sizeof(out[0].c.kind));
+      strlcpy(out[0].c.title, "All clear", sizeof(out[0].c.title));
+      strlcpy(out[0].c.text, "Nothing needs you right now.", sizeof(out[0].c.text));
+      out[0].c.tone = Tone::Ok;
+    } else {
+      out[0].c = wtAiCard(0);  // why there is nothing: not set up, connecting, not answering
+    }
+  }
+  if (rows < 2) {  // the second row: why Pi Hub's list is missing, else the way to every card
+    workshop::localai::Card& c = out[1].c;
+    strlcpy(c.kind, "status", sizeof(c.kind));
+    c.tone = Tone::Info;
+    c.percent = 255;
+    if (fresh && !ai.needsFromPi) { strlcpy(c.title, "Pi Hub", sizeof(c.title)); strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text)); }
+    else { strlcpy(c.title, "Local AI", sizeof(c.title)); strlcpy(c.text, "Every card is on the Local AI tab", sizeof(c.text)); }
+  }
+  return rows;
+}
+
+// The most important item (idle Home's first row), for the printing Home's extra row.
+static workshop::localai::Card wtHomeSummary(uint8_t& others) {
+  WtHomeRow rows[2];
+  wtHomeTop(rows, others);
+  return rows[0].c;
+}
+
+// 26 Oct 2026: the Print lab card's index while its run prints (it takes the printing Home's extra row), else -1.
+static int8_t wtLabExtraIndex() {
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) return -1;
+  return workshop::localai::printingExtraIndex(ai.cards, ai.count);
 }
 
 // The weather card's temperature and sky for the header ("66° Sunny"); empty without a fresh weather card.
@@ -844,26 +908,15 @@ static void wtHomeClock(char* out, size_t len) {
   wtl::clockText(out, len, t.tm_hour, t.tm_min, netSettings.use24h);
 }
 
-static void wtDrawHomeHouse(const wsm::Rect& r) {
-  uint8_t others = 0;
-  const workshop::localai::Card c = wtHomeSummary(others);
-  const uint16_t tone = wtAiToneColor(c.tone), bg = OS12V_SURFACE2;
-  wtDrawCardSurface(r, tone);
-  const int16_t x = (int16_t)(r.x + 18), chevX = wtl::cardChevronX(r);
-  wsDrawChevronRight(chevX, (int16_t)(r.y + r.h / 2), OS12V_MUTED);
-  int16_t titleW = (int16_t)(chevX - 12 - x);
-  if (others) {
-    char more[16];
-    snprintf(more, sizeof(more), "+%u more", (unsigned)others);
-    setFont(tft, FONT_SMALL);
-    const int16_t pw = (int16_t)(tft.textWidth(more) + 16), px = (int16_t)(chevX - 12 - pw);
-    tft.fillRoundRect(px, (int16_t)(r.y + 14), pw, 22, 11, OS12V_SURFACE);
-    tft.drawRoundRect(px, (int16_t)(r.y + 14), pw, 22, 11, OS12V_LINE);
-    uiDrawFit(more, (int16_t)(px + pw / 2), (int16_t)(r.y + 25), (int16_t)(pw - 8), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_SURFACE);
-    titleW = (int16_t)(px - 8 - x);
-  }
-  uiDrawFit(c.title, x, (int16_t)(r.y + 12), titleW, FONT_LARGE, TL_DATUM, tone, bg);
-  if (c.text[0]) wsDrawWrapped(c.text, x, (int16_t)(r.y + 44), (int16_t)(chevX - 12 - x), 20, 2, FONT_BODY, OS12V_TEXT, bg);
+// One of idle Home's need rows: a dot in its tone, its title, its line and a chevron, as on the Local AI tab; the
+// second row also says "+N more".
+static void wtDrawHomeHouse(const wsm::Rect& r, const WtHomeRow& row, uint8_t others) {
+  const wsm::Rect surface = wsm::rowSurface(r);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  char more[16] = "";
+  if (others) snprintf(more, sizeof(more), "+%u more", (unsigned)others);
+  wtDrawAiRow(r, row.c, OS12V_SURFACE, more);
 }
 
 static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
@@ -911,11 +964,15 @@ static void wtDrawHomeIdle(const WtPrint& w) {
   wtHomeWeather(weather, sizeof(weather));
   wtDrawHeader(s, clock, weather[0] ? weather : nullptr, OS12V_ACCENT, false, 0, 0);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
+  WtHomeRow rows[2];
+  uint8_t others = 0;
+  wtHomeTop(rows, others);
   for (uint8_t i = 0; i < v.itemCount; ++i) {
     const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
     if (r.empty()) continue;
     const wtl::ItemSpec& it = v.items[i];
-    if (it.id == wtl::ItemId::HomeAi) { wtDrawHomeHouse(r); continue; }
+    const int8_t need = wtl::homeNeedRow(v, i);
+    if (need >= 0) { wtDrawHomeHouse(r, rows[need], need == 1 ? others : 0); continue; }
     if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(r, w); continue; }
     WsRowView row;
     wtWorkshopRow(it.id, inv, row);
@@ -1921,7 +1978,16 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
       default: return true;
     }
     const wtl::ItemId id = wtl::item(v, hi.index, 0).id;
-    if (id == wtl::ItemId::HomeAi) { setPage(SCREEN_HUB_WORKSHOP); wsClick(); }  // the full list is on the Local AI tab
+    if (id == wtl::ItemId::HomeAi) {  // the full list is on the Local AI tab, opened at the row's item
+      WtHomeRow rows[2];
+      uint8_t others = 0;
+      wtHomeTop(rows, others);
+      const int8_t need = wtl::homeNeedRow(v, hi.index);
+      g_wtAiOverlay = 0;
+      g_wtWorkshopScroll = need >= 0 && rows[need].card > 0 ? (uint8_t)rows[need].card : 0;  // clamped when the tab draws
+      setPage(SCREEN_HUB_WORKSHOP);
+      wsClick();
+    }
     else if (id == wtl::ItemId::HomePrinterRow) {
       if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
       else wsOpenFrom(wsm::PageId::LocalPortal, 0);

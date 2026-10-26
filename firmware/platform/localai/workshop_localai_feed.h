@@ -10,6 +10,11 @@
 struct WorkshopLocalAiFeedSnapshot {
     workshop::localai::Card cards[workshop::localai::kMaxCards]{};
     std::uint8_t count{0};
+    // 26 Oct 2026: Pi Hub's one "Needs you" list as Local AI passes it on (feed `needs`); needsFromPi is false when
+    // the feed came without it (Pi Hub not answering), and Home falls back to the cards.
+    workshop::localai::Need needs[workshop::localai::kMaxNeeds]{};
+    std::uint8_t needCount{0};
+    bool needsFromPi{false};
     bool configured{false};
     bool busy{false};
     std::uint32_t lastSuccessAtMs{0};

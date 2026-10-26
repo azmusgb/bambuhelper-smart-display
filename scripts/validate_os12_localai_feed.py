@@ -121,6 +121,18 @@ def validate(repo: Path) -> None:
     need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));", "Local AI's card leads the calm screen")
     need(calm, "printerBusy", "the printer's line only while it is doing something")
     need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtHomeSummary(others)", "Home's Local AI row is the card that matters most")
+    # 26 Oct 2026: Pi Hub's one "Needs you" list and the Print lab card.
+    fetch_fn = block(feed, "bool fetch(FeedResult& r, char* error, size_t errorLen)")
+    need(fetch_fn, 'doc["needs"].as<JsonArray>()', "the feed's needs list is read")
+    need(fetch_fn, "r.needsFromPi = !needs.isNull();", "a feed without needs (Pi Hub not answering) falls back to the cards")
+    need(fetch_fn, "lai::setNeed(r.needs[r.needCount++]", "needs are copied whole-character (UTF-8 safe)")
+    need(fetch_fn, 'copyText(out.run, sizeof(out.run), c["run"] | "");', "a lab card keeps its run")
+    need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsFromPi = r.needsFromPi;", "needs reach the snapshot")
+    top = block(hub, "static uint8_t wtHomeTop(WtHomeRow out[2], uint8_t& others)")
+    need(top, "workshop::localai::homeSummaryTop(ai.needs, nn, ai.cards, nc, idx, fromNeeds, others)", "idle Home's two rows: needs first, else cards")
+    need(top, '"Pi Hub isn\'t answering"', "says when Pi Hub's list is missing")
+    need(block(hub, "static void wtDrawHomeIdle(const WtPrint& w)"), "wtl::homeNeedRow(v, i)", "idle Home draws two need rows")
+    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtLabExtraIndex()", "the Print lab card takes the printing Home's extra row")
     print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card)")
 
 

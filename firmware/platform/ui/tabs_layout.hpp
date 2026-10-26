@@ -161,10 +161,12 @@ static const ItemSpec kWorkshopInventoryItems[] = {
 
 // 12.4.1: Home while the printer is idle, offline or not set up. The big print card is only for a print that is
 // running, finished or failed.
-// Home at a glance: no scrolling: the house (Local AI's most important card), the printer, then the
-// workshop timer. The clock and the weather are in the header; the full card list is on the Local AI tab.
+// Home at a glance: no scrolling: the top two "Needs you" rows (26 Oct 2026: Pi Hub's one list from the top, else
+// Local AI's cards; title and one line each, "+N more" on the second), the printer, then the workshop timer. The
+// clock and the weather are in the header; the full list is on the Local AI tab, which a need row opens.
 static const ItemSpec kHomeIdleItems[] = {
-  {ItemId::HomeAi, ItemKind::Card, RowKind::Info, true, "House"},
+  {ItemId::HomeAi, ItemKind::Row, RowKind::Nav, false, "Needs you"},
+  {ItemId::HomeAi, ItemKind::Row, RowKind::Nav, false, "Needs you"},
   {ItemId::HomePrinterRow, ItemKind::Card, RowKind::Info, true, "Printer"},
   {ItemId::WsTimer, ItemKind::Row, RowKind::Action, false, "Timer"},
 };
@@ -180,6 +182,15 @@ static const ViewSpec kViews[] = {
 };
 
 #undef WT_ITEMS
+
+// 26 Oct 2026: which of idle Home's need rows item i is (0 the top need, 1 the second); -1 for other items.
+inline int8_t homeNeedRow(const ViewSpec& v, uint8_t i) {
+  if (i >= v.itemCount || v.items[i].id != ItemId::HomeAi) return -1;
+  int8_t k = 0;
+  for (uint8_t j = 0; j < i; ++j)
+    if (v.items[j].id == ItemId::HomeAi) ++k;
+  return k;
+}
 
 // The most AMS rows the firmware lists: 4 units x 4 trays + the external spool.
 static const uint8_t kMaxAmsRows = 17;
