@@ -132,18 +132,28 @@ void checkTree(const char* o) {
     check(item(w, 2, 3).id == ItemId::WsAiCard && item(w, 3, 3).id == w.items[1].id && item(w, itemCount(w, 3) - 1, 3).id == w.items[w.itemCount - 1].id, "cards, then the tools in order", o);
     check(headIndex(w, 2, 3) == 2 && headIndex(w, 3, 3) == 0, "card index", o);
   }
-  // Idle Home at a glance: the house card, the printer card and the timer, all on one screen; no print card.
+  // Idle Home at a glance: the top two "Needs you" rows, the printer card and the timer, all on one screen; no print card.
+  // idle_home_two_rows_fit (26 Oct 2026): two need rows, each a 44 px target, never scrolling, in both orientations.
   {
     const ViewSpec& h = view(View::HomeIdle);
     check(h.tab == Tab::Home && !h.headRepeat && !h.list, "idle Home is one fixed screen", o);
-    check(h.itemCount == 3 && h.items[0].id == ItemId::HomeAi && h.items[1].id == ItemId::HomePrinterRow && h.items[2].id == ItemId::WsTimer,
-          "house, printer, timer", o);
-    check(h.items[0].tappable && h.items[1].tappable, "both cards open their tab", o);
+    check(h.itemCount == 4 && h.items[0].id == ItemId::HomeAi && h.items[1].id == ItemId::HomeAi &&
+          h.items[2].id == ItemId::HomePrinterRow && h.items[3].id == ItemId::WsTimer,
+          "idle_home_two_rows_fit: need, need, printer, timer", o);
+    check(h.items[0].kind == ItemKind::Row && h.items[1].kind == ItemKind::Row && itemInteractive(h.items[0]) && itemInteractive(h.items[1]),
+          "idle_home_two_rows_fit: each need row is a tappable row", o);
+    check(homeNeedRow(h, 0) == 0 && homeNeedRow(h, 1) == 1 && homeNeedRow(h, 2) == -1 && homeNeedRow(h, 3) == -1 && homeNeedRow(h, 9) == -1,
+          "idle_home_two_rows_fit: which need each row shows", o);
+    check(h.items[2].tappable, "the printer card opens its tab", o);
     for (uint8_t j = 0; j < h.itemCount; ++j) check(h.items[j].id != ItemId::HomeCard, "idle Home has no print card", o);
     for (uint8_t k = 0; k < 2; ++k) {
       const Screen sc = k ? more::makeScreen(320, 480) : more::makeScreen(480, 320);
       check(!scrolls(sc, h, 6), "idle Home never scrolls, even with six cards", o);
       for (uint8_t j = 0; j < h.itemCount; ++j) check(!itemRect(sc, h, 6, 0, j).empty(), "every idle Home item fits", o, k, j);
+      const Rect a = itemRect(sc, h, 6, 0, 0), b = itemRect(sc, h, 6, 0, 1);
+      check(bigEnough(a) && bigEnough(b) && a.bottom() <= b.y, "idle_home_two_rows_fit: two 44 px rows, one under the other", o, k);
+      const Hit ha = hitTest(sc, View::HomeIdle, 6, 0, a.x + a.w / 2, a.y + a.h / 2), hb = hitTest(sc, View::HomeIdle, 6, 0, b.x + b.w / 2, b.y + b.h / 2);
+      check(ha.kind == HitKind::Item && ha.index == 0 && hb.kind == HitKind::Item && hb.index == 1, "idle_home_two_rows_fit: each row is its own target", o, k);
     }
   }
   // Stop exists exactly once, as the hold item on Control, after Pause.

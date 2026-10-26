@@ -7,14 +7,37 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace workshop {
+namespace lab {
+struct Sheet;  // the Judge it sheet (workshop_lab_judge.hpp)
+}
+}  // namespace workshop
+
 struct WorkshopLocalAiFeedSnapshot {
     workshop::localai::Card cards[workshop::localai::kMaxCards]{};
     std::uint8_t count{0};
+    // 26 Oct 2026: Pi Hub's one "Needs you" list as Local AI passes it on (feed `needs`); needsFromPi is false when
+    // the feed came without it (Pi Hub not answering), and Home falls back to the cards.
+    workshop::localai::Need needs[workshop::localai::kMaxNeeds]{};
+    std::uint8_t needCount{0};
+    bool needsFromPi{false};
+    std::uint16_t needsTotal{0};  // the feed's needsCount (Pi Hub's whole list; at most six are sent), for "+N more"
     bool configured{false};
     bool busy{false};
     std::uint32_t lastSuccessAtMs{0};
     std::uint32_t lastAttemptAtMs{0};
     std::uint8_t failures{0};
+    char status[96]{};
+};
+
+// 26 Oct 2026: the snapshot's small fields, for the UI's many "is it set up / fresh / how many" questions; the whole
+// snapshot (about 2.6 KB with the needs) is copied only where the cards or needs themselves are read.
+struct WorkshopLocalAiFeedStatus {
+    bool configured{false};
+    std::uint32_t lastSuccessAtMs{0};
+    std::uint8_t count{0};
+    std::uint8_t needCount{0};
+    bool needsFromPi{false};
     char status[96]{};
 };
 
@@ -47,6 +70,17 @@ struct WorkshopLocalAiExtras {
     bool pairOk{false};
     std::uint32_t pairSeq{0};
     char pairStatus[96]{};
+    // 26 Oct 2026: the Judge it sheet (GET /api/display/lab/judge, POST /api/display/lab/verdict), like approvals: a
+    // flag while one runs, a counter of finished ones, the HTTP status and Local AI's words when it said no.
+    bool judgeBusy{false};
+    bool judgeOk{false};
+    std::uint16_t judgeCode{0};
+    std::uint32_t judgeSeq{0};
+    bool verdictBusy{false};
+    bool verdictOk{false};
+    std::uint16_t verdictCode{0};
+    std::uint32_t verdictSeq{0};
+    char judgeStatus[96]{};  // the last judge or verdict request's error, whole characters
 };
 
 void workshopLocalAiFeedBegin();
@@ -56,6 +90,9 @@ void workshopLocalAiFeedLoop();
 bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem);
 void workshopLocalAiFeedClear();
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
+WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus();
+// Card `i` of the last feed into *out; false when there is no such card.
+bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out);
 // Asks one of the fixed questions (needs, running, health; 12.6: today, next, weather); false when not set up, busy,
 // or not a question.
 bool workshopLocalAiFeedAsk(const char* question);
@@ -71,6 +108,13 @@ bool workshopLocalAiFeedTakeMessage(workshop::localai::Message* out);
 bool workshopLocalAiFeedRefreshApprovals();
 std::uint8_t workshopLocalAiFeedApprovals(workshop::localai::Approval* out, std::uint8_t max);
 bool workshopLocalAiFeedDecide(const char* id, bool approve);
+// 26 Oct 2026: Judge it. Asks Local AI for the sheet of the judge card's `run` (false when not set up, busy, or not a
+// run id); copies the last sheet read into *out (false while a read runs or none came); sends a verdict body made by
+// workshop::lab::LabJudge::beginSend under its `requestId` (at most 4 KB; false when busy). Accepted means Local AI
+// answered 2xx naming that id, whatever the request's status (a resent id answers with its current one).
+bool workshopLocalAiFeedJudgeLoad(const char* run);
+bool workshopLocalAiFeedJudgeSheet(workshop::lab::Sheet* out);
+bool workshopLocalAiFeedJudgeSend(const char* body, const char* requestId);
 // Clear plate through Local AI (which clears the plate and printer errors in Bambuddy); false when Local AI isn't set up.
 bool workshopLocalAiFeedClearPrinter();
 // 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);

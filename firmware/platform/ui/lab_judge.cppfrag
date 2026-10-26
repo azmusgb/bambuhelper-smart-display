@@ -1,0 +1,513 @@
+// ---------------------------------------------------------------------------
+// 26 Oct 2026: Judge it on the display, stepped one strip per screen.
+//
+// Inserted into smart_hub.cpp's anonymous namespace after the tab pages by apply_workshop_os12_localai_feed.py; the
+// rules (pages, selection, payload, states, layout) are in workshop_lab_judge.hpp, host-tested by
+// tests/workshop_os12_lab_judge_smoke.cpp. The sheet is the Local AI tab's overlay 5: no tab bar, a header with
+// "Judge it · E-021 · Strip B (2 of 3)" and Later, one row per criterion (its label, its choices and "–"), Back and Next;
+// the last page has Inconclusive, the state and Send. It opens from the judge card (Home's need row or the Local AI
+// tab) and, once per judge card, by itself when a tap wakes the calm screen. Later hides the judge card on this
+// display for 2 h (idle Home's rows, the calm rotation, opening by itself); it stays on the other screens and as an
+// ordinary row on the Local AI tab. The sheet, its draft and the layout live in static storage
+// or in short noinline leaves, never in the long-lived frames of the 8 KB loop task.
+// ---------------------------------------------------------------------------
+namespace wlab = workshop::lab;
+
+static wlab::LabJudge g_wtJudge;                    // the sheet and its draft (about 2.3 KB)
+static char* g_wtJudgeBody = nullptr;               // the verdict body handed to the feed task (PSRAM, kMaxPayload)
+
+struct WtJudgeUi {
+  char card[32];   // the judge card the sheet is for
+  char run[16];
+  uint8_t page, first;
+  int8_t wantPage;  // /hub/show lab-judge-<n>: the page to show once the sheet is here (-1: none, 99: the last)
+  bool loading, loadFailed, opened, fromHome;
+  bool resume;  // the sheet was up when the display went to the calm screen: the wake tap brings it back
+  bool sendFailed;  // a send failed while the sheet was closed: it reopens on the last page with the error
+  uint32_t judgeSeq, verdictSeq;  // the feed's counters already seen
+  uint32_t touchedAt, polledAt, waitingSince;
+  char error[96];        // why the last read or send failed: Local AI's words when it gave any
+  char autoOpened[32];   // the judge card the sheet opened by itself for (once per card)
+  char hidden[32];       // Later: hidden on this display's Home
+  uint32_t hiddenAt, wokeAt;
+};
+static WtJudgeUi g_wtJudgeUi = {};
+static wlab::SheetGate g_wtJudgeGate = {};  // when the sheet is up (fix round 2: never stuck over the Local AI tab)
+
+static const char* wtJudgeHidden() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  if (u.hidden[0] && millis() - u.hiddenAt >= wlab::kLaterMs) u.hidden[0] = 0;
+  return u.hidden[0] ? u.hidden : nullptr;
+}
+
+static int8_t wtJudgeHiddenIndex() {
+  const char* hidden = wtJudgeHidden();
+  if (!hidden) return -1;
+  const uint8_t n = wtAiCount();
+  workshop::localai::Card c;
+  for (uint8_t i = 0; i < n; ++i)
+    if (workshopLocalAiFeedCard(i, &c) && !strcmp(c.id, hidden)) return (int8_t)i;
+  return -1;
+}
+
+// Any navigation away (setPage: a tab, /hub/show of another page, a row that opens a page) closes the sheet. The draft
+// stays (draftKept); the sheet comes back only from a judge row or the once-per-card rule.
+static void wtJudgeLeft() {
+  if (g_wtAiOverlay == 5) { g_wtAiOverlay = 0; g_dirty = true; }
+  g_wtJudgeGate.leave();
+  g_wtJudgeUi.wantPage = -1;
+}
+
+static void wtJudgeNoteWake() {
+  g_wtJudgeUi.resume = g_wtAiOverlay == 5 && g_wtJudgeUi.card[0];
+  wtJudgeLeft();  // waking the calm screen is leaving too
+  g_wtJudgeUi.wokeAt = millis() | 1UL;
+}
+
+// The judge card among the fresh cards, one card at a time; false when there is none.
+static bool wtJudgeCardNow(workshop::localai::Card* out) {
+  const uint8_t n = wtAiCount();
+  for (uint8_t i = 0; i < n; ++i)
+    if (workshopLocalAiFeedCard(i, out) && workshop::localai::isJudgeCard(*out)) return true;
+  return false;
+}
+
+static int wtJudgeMeasure(const char* text, void*) {
+  setFont(tft, FONT_BODY);
+  return tft.textWidth(text);
+}
+
+static void wtJudgeLayout(const wsm::Screen& s, wlab::SheetLayout& L) {
+  WtJudgeUi& u = g_wtJudgeUi;
+  if (u.page >= g_wtJudge.pages()) u.page = (uint8_t)(g_wtJudge.pages() - 1);
+  wlab::sheetLayout(s.w, s.h, g_wtJudge, u.page, u.first, wtJudgeMeasure, nullptr, L);
+  u.first = L.first;
+}
+
+// The page a sheet that just arrived opens on: the one /hub/show asked for, else strip 1 for a new draft or the last
+// page with its state (Waiting, Done, the Mac's words, already judged).
+static void wtJudgeStartPage() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  const uint8_t last = (uint8_t)(g_wtJudge.pages() - 1);
+  if (u.wantPage >= 0) u.page = u.wantPage == 99 || u.wantPage > last ? last : (uint8_t)u.wantPage;
+  else u.page = g_wtJudge.startPage();
+  u.wantPage = -1;
+  u.first = 0;
+}
+
+static void wtJudgeRequest() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  u.polledAt = millis();
+  // Refused only when not set up, not a run id, or a read is already on its way (checked when it lands).
+  if (workshopLocalAiFeedJudgeLoad(u.run) || (wlab::validRun(u.run) && workshopLocalAiFeedStatus().configured)) { u.loading = true; return; }
+  u.loading = false;
+  u.loadFailed = true;
+  strlcpy(u.error, wlab::validRun(u.run) ? "Pair the display with Local AI" : "Nothing to judge right now.", sizeof(u.error));
+}
+
+static void wtJudgeOpen(const workshop::localai::Card& c, bool fromHome) {
+  WtJudgeUi& u = g_wtJudgeUi;
+  if (strcmp(u.run, c.run) != 0 || strcmp(u.card, c.id) != 0) {  // another print: a new sheet
+    g_wtJudge.clear();
+    strlcpy(u.run, c.run, sizeof(u.run));
+    strlcpy(u.card, c.id, sizeof(u.card));
+  } else if (!wlab::draftKept(true, millis(), u.touchedAt) && g_wtJudge.state() != wlab::State::Waiting) {
+    g_wtJudge.clearDraft();  // the draft is kept for 10 min of no touches (a verdict still on its way is kept)
+  }
+  const bool failedNote = u.sendFailed && g_wtJudge.state() == wlab::State::Draft;
+  u.sendFailed = false;
+  u.wantPage = failedNote ? 99 : -1;  // the send that failed while closed: its page and its error, as if never left
+  if (!failedNote) u.error[0] = 0;
+  u.loadFailed = false;
+  u.fromHome = fromHome;
+  u.touchedAt = millis();
+  u.opened = g_wtJudge.s.ok;  // the sheet is still here (the same print): open on it, read it again
+  if (u.opened) wtJudgeStartPage();
+  else { u.page = 0; u.first = 0; }
+  wtJudgeRequest();
+  setPage(SCREEN_HUB_WORKSHOP);  // (closes whatever sheet was up: wtJudgeLeft) then this one goes up
+  g_wtAiOverlay = 5;
+  g_wtJudgeGate.show(millis());
+}
+
+// /hub/show lab-judge without a judge card: the sheet saying so.
+static void wtJudgeOpenEmpty() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  g_wtJudge.clear();
+  u.card[0] = u.run[0] = 0;
+  u.page = u.first = 0;
+  u.loading = false;
+  u.loadFailed = true;
+  u.opened = false;
+  u.fromHome = false;
+  u.touchedAt = millis();
+  strlcpy(u.error, "Nothing to judge right now.", sizeof(u.error));
+  setPage(SCREEN_HUB_WORKSHOP);
+  g_wtAiOverlay = 5;
+  g_wtJudgeGate.show(millis());
+}
+
+// The Local AI card at `i`, when it is the judge card: opens its sheet. A leaf, so the card copy stays out of the touch
+// handler's frame.
+static __attribute__((noinline)) bool wtJudgeOpenIndex(int8_t i, bool fromHome) {
+  workshop::localai::Card c;
+  if (i < 0 || !workshopLocalAiFeedCard((uint8_t)i, &c) || !workshop::localai::isJudgeCard(c)) return false;
+  wtJudgeOpen(c, fromHome);
+  return true;
+}
+
+static void wtJudgeClose() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  if (g_wtJudge.state() == wlab::State::Done) g_wtJudge.clearDraft();  // recorded: nothing left to keep
+  g_wtAiOverlay = 0;
+  g_wtJudgeGate.leave();
+  u.wantPage = -1;
+  if (u.fromHome) setPage(SCREEN_HUB_HOME);
+  g_dirty = true;
+}
+
+// Once per judge card, when a tap wakes the calm screen: the sheet opens by itself (not while Later hides it); and
+// again whenever the sheet for that card was up when the display went calm.
+static bool wtJudgeAutoOpen() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  if (!u.wokeAt) return false;
+  const bool recent = millis() - u.wokeAt <= 3000UL;
+  const bool wasUp = u.resume;
+  u.wokeAt = 0;
+  u.resume = false;
+  if (!recent) return false;
+  workshop::localai::Card c;
+  if (!wtJudgeCardNow(&c)) return false;
+  const char* hidden = wtJudgeHidden();
+  const bool resume = wasUp && !strcmp(u.card, c.id);
+  if ((hidden && !strcmp(hidden, c.id)) || (!resume && !strcmp(u.autoOpened, c.id))) return false;
+  strlcpy(u.autoOpened, c.id, sizeof(u.autoOpened));
+  wtJudgeOpen(c, true);
+  return true;
+}
+
+// The sheet is on screen (drawn every 250 ms); while it is, its frames run wtJudgeTick.
+static bool wtJudgeUp() { return g_wtAiOverlay == 5 && getScreenState() == SCREEN_HUB_WORKSHOP; }
+
+// What the feed task finished since the last frame: a sheet read (taken into the draft when it is the same sheet), a
+// verdict sent; and, while Waiting for the Mac, the next read every few seconds (every 30 s while the sheet is closed,
+// wtJudgeService). A leaf (the extras copy is ~1 KB).
+static __attribute__((noinline)) void wtJudgeTick() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+  const uint32_t now = millis();
+  if (e.judgeSeq != u.judgeSeq && !e.judgeBusy) {
+    u.judgeSeq = e.judgeSeq;
+    if (u.loading) {
+      u.loading = false;
+      const uint32_t before = g_wtJudge.signature();
+      if (e.judgeOk && workshopLocalAiFeedJudgeSheet(&g_wtJudge.s)) {
+        if (strcmp(g_wtJudge.s.run, u.run) != 0) {  // an earlier print's answer: ask again for this one
+          g_wtJudge.clear();
+          wtJudgeRequest();
+        } else {
+          g_wtJudge.reconcile(before);
+          u.loadFailed = false;
+          u.error[0] = 0;
+          if (!u.opened) { u.opened = true; wtJudgeStartPage(); }
+          if (u.page >= g_wtJudge.pages()) u.page = (uint8_t)(g_wtJudge.pages() - 1);
+        }
+      } else {
+        u.loadFailed = true;
+        strlcpy(u.error, e.judgeStatus[0] ? e.judgeStatus : "Local AI didn't answer", sizeof(u.error));
+        if (e.judgeCode == 409) {  // the judge card moved on (a new run, or nothing to judge): no sheet to send
+          g_wtJudge.clear();
+          u.page = u.first = 0;
+        }
+      }
+    }
+  }
+  if (e.verdictSeq != u.verdictSeq && !e.verdictBusy) {
+    u.verdictSeq = e.verdictSeq;
+    if (g_wtJudge.sending) {
+      if (e.verdictOk) {
+        g_wtJudge.sendAccepted();  // the read that follows settles Waiting, Done or the Mac's words
+        u.error[0] = 0;
+        u.polledAt = now - wlab::kPollMs;
+      } else {
+        g_wtJudge.sendFailed();  // the same draft sent again keeps its id
+        u.sendFailed = !wtJudgeUp();
+        strlcpy(u.error, e.judgeStatus[0] ? e.judgeStatus : "Local AI didn't answer", sizeof(u.error));
+        if (e.verdictCode == 409) wtJudgeRequest();  // "This print has changed. Open it again.": read it again
+      }
+    }
+  }
+  const bool up = wtJudgeUp();
+  if (g_wtJudge.state() == wlab::State::Waiting && !u.loading && now - u.polledAt >= (up ? wlab::kPollMs : wlab::kBackgroundPollMs))
+    wtJudgeRequest();
+  if (up && now - u.touchedAt >= wlab::kIdleMs) {  // 10 min without a touch: the draft goes, the sheet closes
+    if (g_wtJudge.state() != wlab::State::Waiting) g_wtJudge.clearDraft();  // a verdict on its way keeps its id
+    wtJudgeClose();
+  }
+}
+
+// Every Home, Printer and Local AI tab frame (wtPollMessage; not More, System or the printer's own screens): with the
+// sheet closed, a verdict on its way still reaches Done or the Mac's words,
+// so the sheet shows them when it opens again.
+static void wtJudgeService() {
+  if (wtJudgeUp()) return;
+  const wlab::State st = g_wtJudge.state();
+  if (st == wlab::State::Waiting || st == wlab::State::Sending || g_wtJudgeUi.loading) wtJudgeTick();
+}
+
+static void wtJudgeSend() {
+  WtJudgeUi& u = g_wtJudgeUi;
+  u.error[0] = 0;
+  if (!g_wtJudgeBody) g_wtJudgeBody = static_cast<char*>(ps_malloc(wlab::kMaxPayload));
+  if (!g_wtJudgeBody) g_wtJudgeBody = static_cast<char*>(malloc(wlab::kMaxPayload));
+  if (!g_wtJudgeBody || !g_wtJudge.beginSend(g_wtJudgeBody, wlab::kMaxPayload, esp_random(), esp_random())) {
+    strlcpy(u.error, "This verdict is too large to send from here", sizeof(u.error));
+    return;
+  }
+  u.sendFailed = false;
+  u.waitingSince = millis();  // the phone counts its 2 minutes from Send
+  if (!workshopLocalAiFeedJudgeSend(g_wtJudgeBody, g_wtJudge.requestId)) {
+    g_wtJudge.sendFailed();
+    strlcpy(u.error, workshopLocalAiFeedStatus().configured ? "Local AI is busy; try again" : "Pair the display with Local AI", sizeof(u.error));
+  }
+}
+
+// "Judged on the phone at 6:32 PM".
+static void wtJudgedLine(char* out, size_t len) {
+  const wlab::Sheet& sh = g_wtJudge.s;
+  const char* by = !strcmp(sh.judgedBy, "display") ? "the display" : !strcmp(sh.judgedBy, "phone") ? "the phone" : sh.judgedBy;
+  char at[24] = "";
+  long t = 0;
+  if (wlab::isoToEpoch(sh.judgedAt, t) && t > 0) wtClockOf(at, sizeof(at), (time_t)t);
+  if (by[0] && at[0]) snprintf(out, len, "Judged on %s at %s", by, at);
+  else if (by[0]) snprintf(out, len, "Judged on %s", by);
+  else strlcpy(out, "Judged", len);
+}
+
+static void wtJudgeDrawChip(const wlab::Box& b, const char* text, bool dash, bool on, bool live) {
+  const uint16_t bg = on ? OS12V_ACCENT : OS12V_SURFACE2;
+  const uint16_t fg = on ? OS12V_BG : (live ? OS12V_TEXT : OS12V_MUTED);
+  tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, live || on ? bg : OS12V_BG);
+  tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, on ? OS12V_ACCENT : OS12V_LINE);
+  if (dash) tft.fillRoundRect(b.x + b.w / 2 - 8, b.y + b.h / 2 - 1, 16, 3, 1, fg);  // "–" (not in the panel's font)
+  else uiDrawFit(text, b.x + b.w / 2, b.y + b.h / 2, b.w - 12, wsValueFont(text, b.w - 12), MC_DATUM, fg, live || on ? bg : OS12V_BG);
+}
+
+static void wtJudgeDrawCheck(int16_t x, int16_t cy, uint16_t c) {  // the "✓" of "Done ✓"
+  tft.drawLine(x, cy, x + 5, cy + 6, c);
+  tft.drawLine(x, cy + 1, x + 5, cy + 7, c);
+  tft.drawLine(x + 5, cy + 6, x + 15, cy - 6, c);
+  tft.drawLine(x + 5, cy + 7, x + 15, cy - 5, c);
+}
+
+// The last page's state, the Mac's words and the photos line (and the one-page states: loading, nothing to judge, on
+// the phone). Text is cut to whole characters by the reader; wrapped on at most three lines here.
+static void wtJudgeDrawStatus(const wlab::Box& b) {
+  WtJudgeUi& u = g_wtJudgeUi;
+  const wlab::State st = g_wtJudge.state();
+  char line[128];
+  const char* text = line;
+  uint16_t color = OS12V_TEXT;
+  bool check = false, photos = st != wlab::State::Empty && st != wlab::State::PhoneOnly;
+  switch (st) {
+    case wlab::State::Empty:
+      text = u.loading ? "Asking Local AI..." : u.error[0] ? u.error : "Nothing to judge right now.";
+      color = u.loading ? OS12V_MUTED : OS12V_AMBER;
+      break;
+    case wlab::State::PhoneOnly: text = g_wtJudge.s.reason; break;
+    case wlab::State::Draft:
+      if (u.error[0]) { text = u.error; color = OS12V_AMBER; }
+      else if (g_wtJudge.canSend()) text = g_wtJudge.replace ? "Ready to send. It replaces the verdict." : "Ready to send.";
+      else { text = "Grade every strip, or say why it's inconclusive."; color = OS12V_MUTED; }
+      break;
+    case wlab::State::Sending:
+    case wlab::State::Waiting:
+      color = OS12V_ACCENT;
+      text = st == wlab::State::Waiting && millis() - u.waitingSince > wlab::kSlowMs ? wlab::kPickup : "Waiting for the Mac";
+      break;
+    case wlab::State::Done: text = "Done"; color = OS12V_GREEN; check = true; break;
+    case wlab::State::Refused:
+      text = g_wtJudge.s.pendingMessage[0] ? g_wtJudge.s.pendingMessage : "Verdict refused by the Mac";
+      color = OS12V_RED;
+      break;
+    case wlab::State::Judged: wtJudgedLine(line, sizeof(line)); break;
+  }
+  const int16_t x = (int16_t)(b.x + 12), w = (int16_t)(b.w - 24);
+  const int16_t textH = (int16_t)(b.h - (photos ? 22 : 0));
+  int16_t y = (int16_t)(b.y + 6);
+  if (check) {
+    uiDrawFit(text, x, (int16_t)(y + 12), 80, FONT_LARGE, ML_DATUM, color, OS12V_BG);
+    setFont(tft, FONT_LARGE);
+    wtJudgeDrawCheck((int16_t)(x + tft.textWidth(text) + 10), (int16_t)(y + 12), color);
+  } else {
+    const uint8_t lines = (uint8_t)(textH >= 66 ? 3 : textH >= 44 ? 2 : 1);
+    wsDrawWrapped(text, x, y, w, 20, lines, FONT_BODY, color, OS12V_BG);
+  }
+  if (photos) uiDrawFit("Add photos from your phone", x, (int16_t)(b.y + b.h - 11), w, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_BG);
+}
+
+static __attribute__((noinline)) void wtDrawJudge(const wsm::Screen& s) {
+  wtJudgeTick();
+  if (g_wtAiOverlay != 5) { g_dirty = true; return; }  // it closed: the next frame draws where it went
+  WtJudgeUi& u = g_wtJudgeUi;
+  // Up only while the person is on it; "Nothing to judge" closes itself after a moment or at the next feed update.
+  const bool nothing = g_wtJudge.state() == wlab::State::Empty && !u.loading;
+  if (!g_wtJudgeGate.frame(millis(), nothing, workshopLocalAiFeedStatus().lastSuccessAtMs)) {
+    if (nothing) wtJudgeClose();
+    else g_wtAiOverlay = 0;  // came back after being away: the Local AI tab, not a stale sheet
+    g_dirty = true;
+    return;
+  }
+  wlab::SheetLayout L;
+  wtJudgeLayout(s, L);
+  const bool editable = g_wtJudge.editable();
+  tft.fillScreen(OS12V_BG);
+  // Header: the title (or a toast), Later.
+  tft.fillRoundRect(OS12V_INSET, 12, 4, 20, 2, OS12V_ACCENT);
+  const int16_t titleX = (int16_t)(L.title.x + 10), titleW = (int16_t)(L.title.w - 10);
+  if (wsToastActive()) {
+    uiDrawFit(g_wsToast, titleX, wsm::kHeaderH / 2, titleW, wsFitFont(g_wsToast, titleW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_AMBER, OS12V_BG);
+  } else {
+    char title[72];
+    g_wtJudge.title(title, sizeof(title), u.page);
+    uiDrawFit(title, titleX, wsm::kHeaderH / 2, titleW, wsFitFont(title, titleW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_TEXT, OS12V_BG);
+  }
+  wsDrawButton(wsm::makeRect(L.later.x, L.later.y + 6, L.later.w, L.later.h - 12), "Later", true, false, OS12V_BG);
+  tft.drawFastHLine(OS12V_INSET, wsm::kHeaderH - 1, s.w - OS12V_INSET * 2, OS12V_LINE);
+  // Body: a strip's criteria, or the last page.
+  const bool sendPage = g_wtJudge.sendPage(u.page);
+  for (uint8_t r = 0; r < L.rowCount; ++r) {
+    const wlab::ChipRow& row = L.rows[r];
+    if (!row.shown) continue;
+    if (L.reasons) {
+      uiDrawFit("Inconclusive", row.label.x, (int16_t)(row.label.y + (s.w >= 400 ? 14 : 10)), row.label.w, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
+      if (s.w >= 400) uiDrawFit("optional", row.label.x, (int16_t)(row.label.y + 32), row.label.w, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_BG);
+      for (uint8_t k = 0; k < row.chipCount; ++k) wtJudgeDrawChip(row.chips[k], wlab::kReasons[k], false, g_wtJudge.reason == (int8_t)k, editable);
+      continue;
+    }
+    const wlab::Criterion& c = g_wtJudge.s.criteria[r];
+    if (s.w >= 400) wsDrawWrapped(c.label, row.label.x, (int16_t)(row.label.y + 4), row.label.w, 18, row.lines > 1 ? 4 : 2, FONT_SMALL, OS12V_TEXT, OS12V_BG);
+    else uiDrawFit(c.label, row.label.x, (int16_t)(row.label.y + 10), row.label.w, FONT_SMALL, ML_DATUM, OS12V_TEXT, OS12V_BG);
+    const int8_t chosen = g_wtJudge.selected(u.page, r);
+    for (uint8_t k = 0; k < row.chipCount; ++k) {
+      const bool dash = k == c.choiceCount;
+      wtJudgeDrawChip(row.chips[k], dash ? "" : c.choices[k], dash, dash ? chosen == wlab::kNotJudged : chosen == (int8_t)k, editable);
+    }
+  }
+  if (sendPage || !L.rowCount) wtJudgeDrawStatus(L.status);
+  // Footer: Back (Close on the first page), the scroll arrows when the page scrolls, Next or the last page's button.
+  if (L.hasBack) wsDrawButton(wsm::makeRect(L.back.x, L.back.y, L.back.w, L.back.h), u.page == 0 ? "Close" : "Back", true, false, OS12V_BG);
+  if (L.scrolls) {
+    for (uint8_t i = 0; i < 2; ++i) {
+      const wlab::Box& r = i == 0 ? L.up : L.down;
+      const bool live = i == 0 ? L.first > 0 : L.first < L.maxFirst;
+      tft.fillRoundRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6, 9, live ? OS12V_SURFACE2 : OS12V_SURFACE);
+      tft.drawRoundRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6, 9, live ? OS12V_LINE : OS12V_SURFACE);
+      const int16_t cx = (int16_t)(r.x + r.w / 2), cy = (int16_t)(r.y + r.h / 2);
+      const uint16_t col = live ? OS12V_ACCENT : OS12V_LINE;
+      if (i == 0) tft.fillTriangle(cx - 7, cy + 4, cx + 7, cy + 4, cx, cy - 5, col);
+      else tft.fillTriangle(cx - 7, cy - 4, cx + 7, cy - 4, cx, cy + 5, col);
+    }
+  }
+  bool on = true;
+  const char* next = sendPage ? g_wtJudge.action(on) : "Next";
+  wsDrawButton(wsm::makeRect(L.next.x, L.next.y, L.next.w, L.next.h), next, on, sendPage && on, OS12V_BG);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+static __attribute__((noinline)) bool wtJudgeTouch(const wsm::Screen& s, int16_t x, int16_t y) {
+  WtJudgeUi& u = g_wtJudgeUi;
+  u.touchedAt = millis();
+  wlab::SheetLayout L;
+  wtJudgeLayout(s, L);
+  const wlab::Hit h = wlab::hitTest(L, x, y);
+  switch (h.kind) {
+    case wlab::HitKind::Later:  // hidden on this display for 2 h; still on the other screens
+      if (u.card[0]) { strlcpy(u.hidden, u.card, sizeof(u.hidden)); u.hiddenAt = millis(); }
+      wtJudgeClose();
+      break;
+    case wlab::HitKind::Back:
+      if (u.page == 0) wtJudgeClose();
+      else { --u.page; u.first = 0; }
+      break;
+    case wlab::HitKind::Next: {
+      if (!g_wtJudge.sendPage(u.page)) { ++u.page; u.first = 0; break; }
+      bool on = false;
+      g_wtJudge.action(on);
+      if (!on) return true;
+      switch (g_wtJudge.state()) {
+        case wlab::State::Draft: wtJudgeSend(); break;
+        case wlab::State::Refused:
+        case wlab::State::Judged:
+          // Change it (a new request that replaces the verdict, as the phone's Replace) only for an existing verdict
+          // or the Mac's "already has a verdict"; any other refusal shows the Mac's words and closes, as the phone.
+          if (g_wtJudge.state() == wlab::State::Refused && !g_wtJudge.alreadyJudged()) { wtJudgeClose(); break; }
+          g_wtJudge.changeIt();
+          u.error[0] = 0;
+          u.page = 0;
+          u.first = 0;
+          break;
+        default: wtJudgeClose(); break;
+      }
+      break;
+    }
+    case wlab::HitKind::ScrollUp:
+      if (u.first > 0) --u.first;
+      break;
+    case wlab::HitKind::ScrollDown:
+      if (u.first < L.maxFirst) ++u.first;
+      break;
+    case wlab::HitKind::Chip: {
+      const wlab::Criterion& c = g_wtJudge.s.criteria[h.row];
+      if (g_wtJudge.select(u.page, h.row, h.index == c.choiceCount ? wlab::kNotJudged : (int8_t)h.index)) u.error[0] = 0;
+      break;
+    }
+    case wlab::HitKind::Reason:
+      if (g_wtJudge.setReason(g_wtJudge.reason == (int8_t)h.index ? -1 : (int8_t)h.index)) u.error[0] = 0;
+      break;
+    default:
+      return true;
+  }
+  wsClick();
+  return true;
+}
+
+// The pressed outline: only what a tap would act on now (not a disabled Send, a dead arrow, or chips while the verdict
+// can't change).
+static __attribute__((noinline)) bool wtJudgePressRect(const wsm::Screen& s, int16_t x, int16_t y, wsm::Rect& out) {
+  wlab::SheetLayout L;
+  wtJudgeLayout(s, L);
+  const wlab::Hit h = wlab::hitTest(L, x, y);
+  switch (h.kind) {
+    case wlab::HitKind::None: return false;
+    case wlab::HitKind::Next:
+      if (g_wtJudge.sendPage(g_wtJudgeUi.page)) { bool on = false; g_wtJudge.action(on); if (!on) return false; }
+      break;
+    case wlab::HitKind::ScrollUp: if (L.first == 0) return false; break;
+    case wlab::HitKind::ScrollDown: if (L.first >= L.maxFirst) return false; break;
+    case wlab::HitKind::Chip:
+    case wlab::HitKind::Reason: if (!g_wtJudge.editable()) return false; break;
+    default: break;
+  }
+  out = wsm::makeRect(h.box.x, h.box.y, h.box.w, h.box.h);
+  return true;
+}
+
+// /hub/show lab-judge (strip 1), lab-judge-<n> (page n), lab-judge-send (the last page): the sheet for the judge card
+// (Later doesn't apply), or one saying there is nothing to judge, so captures can check every page without a touch.
+static bool wtJudgeShow(const char* name) {
+  if (!name || strncmp(name, "lab-judge", 9) != 0) return false;
+  int8_t want = 0;
+  if (!name[9]) want = 0;
+  else if (!strcmp(name + 9, "-send")) want = 99;
+  else if (name[9] == '-' && name[10] >= '1' && name[10] <= '9' && !name[11]) want = (int8_t)(name[10] - '1');
+  else return false;
+  workshop::localai::Card c;
+  if (wtJudgeCardNow(&c)) wtJudgeOpen(c, false);
+  else wtJudgeOpenEmpty();
+  g_wtJudgeUi.wantPage = want;
+  if (g_wtJudgeUi.opened) wtJudgeStartPage();
+  g_dirty = true;
+  return true;
+}

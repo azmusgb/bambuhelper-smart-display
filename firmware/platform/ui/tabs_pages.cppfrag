@@ -9,6 +9,19 @@
 // ---------------------------------------------------------------------------
 namespace wtl = workshop::ui::tabs;
 
+// 26 Oct 2026: the Judge it sheet (the Local AI tab's overlay 5), in lab_judge.cppfrag, installed after these pages.
+static const char* wtJudgeHidden();  // Later: the judge card hidden on this display for 2 h (nullptr: none)
+static int8_t wtJudgeHiddenIndex();  // its index among the fresh cards, -1 when none is hidden
+static void wtJudgeNoteWake();       // a tap woke the calm screen
+static void wtJudgeService();        // every hub frame: a verdict on its way, with the sheet closed
+static bool wtJudgeAutoOpen();       // once per judge card, on that wake: opens the sheet; true when it did
+static void wtJudgeOpen(const workshop::localai::Card& c, bool fromHome);
+static bool wtJudgeOpenIndex(int8_t cardIndex, bool fromHome);  // false when that card isn't the judge card
+static void wtDrawJudge(const wsm::Screen& s);
+static bool wtJudgeTouch(const wsm::Screen& s, int16_t x, int16_t y);
+static bool wtJudgePressRect(const wsm::Screen& s, int16_t x, int16_t y, wsm::Rect& out);
+static bool wtJudgeShow(const char* name);
+
 // ---------------------------------------------------------------------------
 // Printer state shared by the tabs
 // ---------------------------------------------------------------------------
@@ -482,17 +495,21 @@ static bool wtFinishedRecently(const WtPrint& w) {
 // Local AI (12.4.0): its cards lead the third tab, take Home's bottom row and
 // the calm screen's top card. One place decides what to say with no cards.
 // ---------------------------------------------------------------------------
+// 26 Oct 2026: these read the feed's small status and one card, not the whole snapshot (about 2.6 KB with Pi Hub's
+// needs): they run inside draw and touch paths on the 8 KB loop task.
 static uint8_t wtAiCount() {
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
   return workshop::localai::fresh(millis(), ai.lastSuccessAtMs) ? ai.count : 0;
 }
 
 // Card `i` when there are fresh cards; otherwise one card saying why there are none.
 static workshop::localai::Card wtAiCard(uint8_t i) {
   using workshop::localai::Tone;
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
   workshop::localai::Card c{};
-  if (workshop::localai::fresh(millis(), ai.lastSuccessAtMs) && ai.count) return ai.cards[i < ai.count ? i : 0];
+  if (workshop::localai::fresh(millis(), ai.lastSuccessAtMs) && ai.count &&
+      workshopLocalAiFeedCard(i < ai.count ? i : 0, &c)) return c;
+  c = workshop::localai::Card{};
   strlcpy(c.kind, "status", sizeof(c.kind));
   c.tone = Tone::Info;
   if (!ai.configured) { strlcpy(c.title, "Not set up", sizeof(c.title)); strlcpy(c.text, "Tap to pair with Local AI", sizeof(c.text)); }
@@ -501,16 +518,31 @@ static workshop::localai::Card wtAiCard(uint8_t i) {
   return c;
 }
 
+// The calm screen's card at rotation position k, stepping over the judge card Later hid (`hid`, -1 for none; `shown`
+// cards left). With only the hidden card left: All clear, as idle Home.
+static workshop::localai::Card wtCalmCard(uint8_t k, int8_t hid, uint8_t shown) {
+  if (hid >= 0 && !shown) {
+    workshop::localai::Card c{};
+    strlcpy(c.kind, "status", sizeof(c.kind));
+    strlcpy(c.title, "All clear", sizeof(c.title));
+    strlcpy(c.text, "Nothing needs you right now.", sizeof(c.text));
+    c.tone = workshop::localai::Tone::Ok;
+    c.percent = 255;
+    return c;
+  }
+  return wtAiCard(workshop::localai::calmIndex(k, hid));
+}
+
 static uint16_t wtAiToneColor(workshop::localai::Tone t) {
   using workshop::localai::Tone;
-  return t == Tone::Attention ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : (t == Tone::Busy || t == Tone::Info) ? OS12V_ACCENT : OS12V_MUTED;
+  return (t == Tone::Attention || t == Tone::Bad) ? OS12V_RED : t == Tone::Warning ? OS12V_AMBER : t == Tone::Ok ? OS12V_GREEN : (t == Tone::Busy || t == Tone::Info) ? OS12V_ACCENT : OS12V_MUTED;
 }
 // The banner's edge: info is Local AI blue rather than grey.
 static uint16_t wtToneColor(workshop::localai::Tone t) { return t == workshop::localai::Tone::Info ? OS12V_ACCENT : wtAiToneColor(t); }
 
 // One Local AI card as a row: a luminous diode in its tone, distinct title, divider line,
 // clear details, and chevron; a tap opens the Local AI tab from Home, and asks about the card on the tab.
-static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg) {
+static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& card, uint16_t bg, const char* pill = nullptr) {
   const int16_t mid = (int16_t)(row.y + row.h / 2), x = (int16_t)(row.x + 14);
   const uint16_t dotCol = wtAiToneColor(card.tone);
 
@@ -525,10 +557,20 @@ static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& car
   if (titleW > maxTitleW) titleW = maxTitleW;
   uiDrawFit(card.title, (int16_t)(x + 18), mid, titleW, FONT_BODY, ML_DATUM, OS12V_TEXT, bg);
 
+  // 26 Oct 2026: idle Home's second need row says how many more there are ("+3 more") before its chevron.
+  int16_t right = (int16_t)(row.right() - 28);
+  if (pill && pill[0]) {
+    setFont(tft, FONT_SMALL);
+    const int16_t pw = (int16_t)(tft.textWidth(pill) + 16), px = (int16_t)(right - pw);
+    tft.fillRoundRect(px, (int16_t)(mid - 11), pw, 22, 11, OS12V_SURFACE2);
+    tft.drawRoundRect(px, (int16_t)(mid - 11), pw, 22, 11, OS12V_LINE);
+    uiDrawFit(pill, (int16_t)(px + pw / 2), mid, (int16_t)(pw - 8), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_SURFACE2);
+    right = (int16_t)(px - 8);
+  }
   if (card.text[0]) {
     // Subtle vertical accent divider between classification title and detail text
     tft.drawFastVLine((int16_t)(x + 18 + titleW + 2), (int16_t)(mid - 6), 12, OS12V_LINE);
-    const int16_t textX = (int16_t)(x + 18 + titleW + 10), textW = (int16_t)(row.right() - 28 - textX);
+    const int16_t textX = (int16_t)(x + 18 + titleW + 10), textW = (int16_t)(right - textX);
     if (textW > 24) wtTextOn(card.text, textX, mid, textW, wsFitFont(card.text, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_MUTED, bg);
   }
   wsDrawChevronRight((int16_t)(row.right() - 16), mid, OS12V_MUTED);
@@ -556,13 +598,14 @@ static uint16_t wtToneColor(workshop::localai::Tone t);
 
 static void wtPollMessage() {
   using workshop::localai::Tone;
+  wtJudgeService();  // 26 Oct 2026: Home, Printer and the Local AI tab poll the feed here
   if (wtBannerShown()) return;
   if (g_wtBannerMs) { g_wtBannerMs = 0; g_dirty = true; }  // the last one just went
   workshop::localai::Message m;
   if (!workshopLocalAiFeedTakeMessage(&m)) return;
   g_wtBanner = m;
   g_wtBannerAt = millis();
-  g_wtBannerMs = (m.tone == Tone::Attention || m.tone == Tone::Warning) ? 20000UL : 12000UL;
+  g_wtBannerMs = (m.tone == Tone::Attention || m.tone == Tone::Bad || m.tone == Tone::Warning) ? 20000UL : 12000UL;
   g_ambientActive = false;
   if (m.chime) buzzerPlay(m.tone == Tone::Warning ? BUZZ_ERROR : m.tone == Tone::Ok ? BUZZ_PRINT_FINISHED : BUZZ_CONNECTED);
   g_dirty = true;
@@ -626,6 +669,7 @@ static bool wtBannerTouch(int16_t x, int16_t y) {
 // Home's bottom row: the workshop timer while it runs, otherwise Local AI's
 // most important card (12.4.0). Opens the Local AI tab.
 static workshop::localai::Card wtHomeSummary(uint8_t& others);  // Home at a glance (below)
+static int8_t wtLabExtraIndex();
 static void wtHomeClock(char* out, size_t len);
 
 static const char* wtHomeExtra(WsRowView& v) {
@@ -641,10 +685,12 @@ static const char* wtHomeExtra(WsRowView& v) {
     v.valueColor = OS12V_ACCENT;
     return "Timer";
   }
-  // 12.4.0: otherwise Local AI's most important card (filament is on the Local AI tab). Home at a glance: the
-  // same pick as idle Home's house card, so a problem is never hidden behind "All clear".
+  // 26 Oct 2026: the Print lab card while its run prints ("Lab · E-021" and what to judge it on).
+  // 12.4.0: otherwise Local AI's most important item (filament is on the Local AI tab). Home at a glance: the
+  // same pick as idle Home's first need row, so a problem is never hidden behind "All clear".
   uint8_t others = 0;
-  const workshop::localai::Card c = wtHomeSummary(others);
+  const int8_t lab = wtLabExtraIndex();
+  const workshop::localai::Card c = lab >= 0 ? wtAiCard((uint8_t)lab) : wtHomeSummary(others);
   strlcpy(v.value, c.text, sizeof(v.value));
   v.valueColor = c.tone == workshop::localai::Tone::Info || c.tone == workshop::localai::Tone::Ok ? OS12V_MUTED : wtAiToneColor(c.tone);
   static char label[workshop::localai::kTitleLen];
@@ -705,7 +751,7 @@ static void wtDrawCalmAiCard(const wsm::Rect& r, const workshop::localai::Card& 
   const wsm::Rect surface = wsm::rowSurface(r);
   tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_SURFACE);
   tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_LINE);
-  const uint16_t dot = card.tone == Tone::Attention ? OS12V_RED : card.tone == Tone::Warning ? OS12V_AMBER
+  const uint16_t dot = (card.tone == Tone::Attention || card.tone == Tone::Bad) ? OS12V_RED : card.tone == Tone::Warning ? OS12V_AMBER
                      : card.tone == Tone::Ok ? OS12V_GREEN : OS12V_ACCENT;
   const int16_t mid = (int16_t)(r.y + r.h / 2), x = (int16_t)(surface.x + 16);
   tft.fillCircle(x + 5, mid, 5, dot);
@@ -721,17 +767,20 @@ static void wtDrawCalm(const WtPrint& w) {
   const wsm::Screen s = wsScreen();
   // 12.4.0: Local AI leads. Its card takes the first slot under the date; the printer's line is the second slot,
   // and only while the printer is doing something (otherwise a second Local AI card, when there is one).
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  const bool aiFresh = ai.count > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();  // the small fields; wtAiCard reads one card
+  // 26 Oct 2026: Later on the Judge it sheet hides the judge card here too; the rotation steps over it.
+  const int8_t hid = wtJudgeHiddenIndex();
+  const uint8_t shown = (uint8_t)(ai.count - (hid >= 0 ? 1 : 0));
+  const bool aiFresh = shown > 0 && workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
   char doneAt[24], status[64];
   uint16_t dot = OS12V_GREEN;
   const wtl::CalmStatus calm = wtCalmStatus(w, doneAt, sizeof(doneAt), dot);
   const bool printerBusy = calm.state != wtl::CalmState::Idle && calm.state != wtl::CalmState::NoPrinter &&
                            calm.state != wtl::CalmState::Offline;
-  const uint8_t rot = workshop::localai::rotationIndex(millis(), ai.count);
+  const uint8_t rot = workshop::localai::rotationIndex(millis(), shown);
   // Without Local AI set up the screen is as before: the printer's line alone.
   const bool aiFirst = ai.configured;
-  const bool secondAi = aiFirst && !printerBusy && aiFresh && ai.count > 1;
+  const bool secondAi = aiFirst && !printerBusy && aiFresh && shown > 1;
   const bool aiShown = aiFirst && (printerBusy || secondAi);  // two slots
   const wtl::CalmLayout c = wtl::calmLayout(s, aiShown);
   tft.fillScreen(OS12V_BG);
@@ -773,9 +822,9 @@ static void wtDrawCalm(const WtPrint& w) {
 
   // One calm status line on a card: a dot in the state colour and plain words.
   wtl::calmStatusText(status, sizeof(status), calm);
-  if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));
+  if (aiFirst) wtDrawCalmAiCard(c.status, wtCalmCard(rot, hid, shown));
   if (aiFirst && !printerBusy) {
-    if (secondAi) wtDrawCalmAiCard(c.ai, wtAiCard((uint8_t)((rot + 1) % ai.count)));
+    if (secondAi) wtDrawCalmAiCard(c.ai, wtCalmCard((uint8_t)((rot + 1) % shown), hid, shown));
   } else {
   const wsm::Rect card = wsm::rowSurface(aiFirst ? c.ai : c.status);
   tft.fillRoundRect(card.x, card.y, card.w, card.h, 12, OS12V_SURFACE2);
@@ -807,31 +856,98 @@ static bool wtHomeIdle(const WtPrint& w) {
 
 static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v);  // Local AI tab rows (below)
 
-// Home at a glance: The house card is Local AI's most important card (or why there are none); the
-// printer card is the printer's state in large type with one line of detail; the header has the clock and weather.
-static workshop::localai::Card wtHomeSummary(uint8_t& others) {
+// Home at a glance (26 Oct 2026): idle Home's two "Needs you" rows. Pi Hub's one list from the top (the same list,
+// in the same order, as on Pi Hub and the Print lab page), else Local AI's cards; one snapshot for both rows.
+// `card` is the Local AI tab's row for the item (-1 when it has none), so a tap opens the tab there.
+struct WtHomeRow {
+  workshop::localai::Card c;
+  int8_t card;
+};
+
+// `ai` is the caller's one snapshot for this frame or touch (never copied again below).
+static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others) {
+  using workshop::localai::Tone;
   others = 0;
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  const uint8_t n = wtAiCount();
-  const int8_t i = n ? workshop::localai::homeSummaryIndex(ai.cards, n, others) : -1;
-  if (i >= 0) return ai.cards[i];
-  workshop::localai::Card c = wtAiCard(0);
-  if (n) {  // fresh cards, but only information: nothing needs you
-    c = workshop::localai::Card{};
-    strlcpy(c.kind, "status", sizeof(c.kind));
-    strlcpy(c.title, "All clear", sizeof(c.title));
-    strlcpy(c.text, "Nothing needs you right now.", sizeof(c.text));
-    c.tone = workshop::localai::Tone::Ok;
+  out[0] = WtHomeRow{};
+  out[1] = WtHomeRow{};
+  out[0].card = out[1].card = -1;
+  const bool fresh = workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
+  const uint8_t nc = fresh ? ai.count : 0, nn = fresh ? ai.needCount : 0;
+  // Pi Hub's list when the feed carried it (even empty: then nothing needs you); the cards only when it didn't.
+  const bool needsPresent = fresh && ai.needsFromPi;
+  int8_t idx[2];
+  bool fromNeeds = false;
+  // Later on the Judge it sheet hides the judge card here for 2 h (it stays on the other screens).
+  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal);
+  for (uint8_t k = 0; k < rows; ++k) {
+    WtHomeRow& r = out[k];
+    if (!fromNeeds) { r.c = ai.cards[idx[k]]; r.card = idx[k]; continue; }
+    const workshop::localai::Need& n = ai.needs[idx[k]];
+    strlcpy(r.c.kind, "needs", sizeof(r.c.kind));
+    strlcpy(r.c.title, n.title, sizeof(r.c.title));
+    strlcpy(r.c.text, n.detail, sizeof(r.c.text));
+    strlcpy(r.c.id, n.id, sizeof(r.c.id));
+    r.c.tone = n.tone;
+    r.c.percent = 255;
+    // Local AI's own items are "localai:<card id>" in Pi Hub's list: open the tab at that card.
+    const char* cardId = !strncmp(n.id, "localai:", 8) ? n.id + 8 : nullptr;
+    for (uint8_t i = 0; cardId && i < nc; ++i)
+      if (ai.cards[i].id[0] && !strcmp(ai.cards[i].id, cardId)) { r.card = (int8_t)i; break; }
   }
-  return c;
+  if (rows == 0) {
+    if (fromNeeds || nc) {  // Pi Hub's list is empty, or fresh cards but only information: nothing needs you
+      strlcpy(out[0].c.kind, "status", sizeof(out[0].c.kind));
+      strlcpy(out[0].c.title, "All clear", sizeof(out[0].c.title));
+      strlcpy(out[0].c.text, "Nothing needs you right now.", sizeof(out[0].c.text));
+      out[0].c.tone = Tone::Ok;
+    } else {
+      out[0].c = wtAiCard(0);  // why there is nothing: not set up, connecting, not answering
+    }
+  }
+  if (rows < 2) {  // the second row: why Pi Hub's list is missing, else the way to every card
+    workshop::localai::Card& c = out[1].c;
+    strlcpy(c.kind, "status", sizeof(c.kind));
+    c.tone = Tone::Info;
+    c.percent = 255;
+    if (fresh && !ai.needsFromPi) { strlcpy(c.title, "Pi Hub", sizeof(c.title)); strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text)); }
+    else { strlcpy(c.title, "Local AI", sizeof(c.title)); strlcpy(c.text, "Every card is on the Local AI tab", sizeof(c.text)); }
+  }
+  return rows;
+}
+
+static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len);
+
+// The one snapshot for a Home frame or touch: both need rows and (when `weather` is given) the header's weather. A
+// leaf: the snapshot (about 2.6 KB) lives only while this runs, never under the row drawing (noinline keeps it out of
+// the callers' frames on the 8 KB loop task).
+static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen) {
+  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+  if (weather) wtHomeWeather(ai, weather, weatherLen);
+  return wtHomeTop(ai, rows, others);
+}
+
+// The most important item (idle Home's first row), for the printing Home's extra row.
+static workshop::localai::Card wtHomeSummary(uint8_t& others) {
+  WtHomeRow rows[2];
+  wtHomeRows(rows, others, nullptr, 0);
+  return rows[0].c;
+}
+
+// 26 Oct 2026: the Print lab card's index while its run prints (it takes the printing Home's extra row), else -1.
+// One card at a time, not the whole snapshot.
+static int8_t wtLabExtraIndex() {
+  const uint8_t n = wtAiCount();
+  workshop::localai::Card c;
+  for (uint8_t i = 0; i < n; ++i)
+    if (workshopLocalAiFeedCard(i, &c) && workshop::localai::printingExtraIndex(&c, 1) == 0) return (int8_t)i;
+  return -1;
 }
 
 // The weather card's temperature and sky for the header ("66° Sunny"); empty without a fresh weather card.
-static void wtHomeWeather(char* out, size_t len) {
+static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len) {
   out[0] = 0;
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  const uint8_t n = wtAiCount();
-  for (uint8_t i = 0; i < n; ++i)
+  if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) return;
+  for (uint8_t i = 0; i < ai.count; ++i)
     if (!strcmp(ai.cards[i].kind, "weather")) { workshop::localai::weatherShort(out, len, ai.cards[i].text); return; }
 }
 
@@ -844,26 +960,15 @@ static void wtHomeClock(char* out, size_t len) {
   wtl::clockText(out, len, t.tm_hour, t.tm_min, netSettings.use24h);
 }
 
-static void wtDrawHomeHouse(const wsm::Rect& r) {
-  uint8_t others = 0;
-  const workshop::localai::Card c = wtHomeSummary(others);
-  const uint16_t tone = wtAiToneColor(c.tone), bg = OS12V_SURFACE2;
-  wtDrawCardSurface(r, tone);
-  const int16_t x = (int16_t)(r.x + 18), chevX = wtl::cardChevronX(r);
-  wsDrawChevronRight(chevX, (int16_t)(r.y + r.h / 2), OS12V_MUTED);
-  int16_t titleW = (int16_t)(chevX - 12 - x);
-  if (others) {
-    char more[16];
-    snprintf(more, sizeof(more), "+%u more", (unsigned)others);
-    setFont(tft, FONT_SMALL);
-    const int16_t pw = (int16_t)(tft.textWidth(more) + 16), px = (int16_t)(chevX - 12 - pw);
-    tft.fillRoundRect(px, (int16_t)(r.y + 14), pw, 22, 11, OS12V_SURFACE);
-    tft.drawRoundRect(px, (int16_t)(r.y + 14), pw, 22, 11, OS12V_LINE);
-    uiDrawFit(more, (int16_t)(px + pw / 2), (int16_t)(r.y + 25), (int16_t)(pw - 8), FONT_SMALL, MC_DATUM, OS12V_MUTED, OS12V_SURFACE);
-    titleW = (int16_t)(px - 8 - x);
-  }
-  uiDrawFit(c.title, x, (int16_t)(r.y + 12), titleW, FONT_LARGE, TL_DATUM, tone, bg);
-  if (c.text[0]) wsDrawWrapped(c.text, x, (int16_t)(r.y + 44), (int16_t)(chevX - 12 - x), 20, 2, FONT_BODY, OS12V_TEXT, bg);
+// One of idle Home's need rows: a dot in its tone, its title, its line and a chevron, as on the Local AI tab; the
+// second row also says "+N more".
+static void wtDrawHomeHouse(const wsm::Rect& r, const WtHomeRow& row, uint8_t others) {
+  const wsm::Rect surface = wsm::rowSurface(r);
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  char more[16] = "";
+  if (others) snprintf(more, sizeof(more), "+%u more", (unsigned)others);
+  wtDrawAiRow(r, row.c, OS12V_SURFACE, more);
 }
 
 static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
@@ -908,14 +1013,17 @@ static void wtDrawHomeIdle(const WtPrint& w) {
   // Home at a glance: the header says the time (Home is already marked in the tab bar) and the weather.
   char clock[16], weather[24];
   wtHomeClock(clock, sizeof(clock));
-  wtHomeWeather(weather, sizeof(weather));
+  WtHomeRow rows[2];  // one snapshot for the frame: the weather and both need rows (wtHomeRows)
+  uint8_t others = 0;
+  wtHomeRows(rows, others, weather, sizeof(weather));
   wtDrawHeader(s, clock, weather[0] ? weather : nullptr, OS12V_ACCENT, false, 0, 0);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   for (uint8_t i = 0; i < v.itemCount; ++i) {
     const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
     if (r.empty()) continue;
     const wtl::ItemSpec& it = v.items[i];
-    if (it.id == wtl::ItemId::HomeAi) { wtDrawHomeHouse(r); continue; }
+    const int8_t need = wtl::homeNeedRow(v, i);
+    if (need >= 0) { wtDrawHomeHouse(r, rows[need], need == 1 ? others : 0); continue; }
     if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(r, w); continue; }
     WsRowView row;
     wtWorkshopRow(it.id, inv, row);
@@ -939,6 +1047,7 @@ static void wtDrawHome(bool full) {
   if (g_wtBootPreview) { bootSplashPreview(tft, (uint8_t)(g_wtBootPreview - 1)); hubMarkFrameDirty(); g_dirty = false; return; }
   const WtPrint w = wtPrint();
   if (wtCalmShown()) { wtDrawCalm(w); return; }
+  if (wtJudgeAutoOpen()) { g_dirty = true; return; }  // 26 Oct 2026: once per judge card, after a wake tap
   if (wtHomeIdle(w)) { wtDrawHomeIdle(w); return; }
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::Home);
@@ -1414,7 +1523,7 @@ static void wtDrawPrinter(bool full) {
 
 static uint8_t g_wtWorkshopScroll = 0;
 // 12.4.2: the Local AI tab's overlays: 0 none, 1 Ask, 2 the latest image (12.6: the gallery), 3 approvals (12.6),
-// 4 pairing (12.7).
+// 4 pairing (12.7), 5 Judge it (26 Oct 2026, lab_judge.cppfrag).
 static uint8_t g_wtAiOverlay = 0;
 static char g_wtPairCode[7] = {};  // 12.7: the digits typed so far (overlay 4)
 static int8_t g_wtApprovalArmed = -1;  // 12.6: row * 2 + (1 approve, 0 reject) waiting for its second tap
@@ -1534,26 +1643,26 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
       if (workshopTimerActive()) { v.enabled = false; v.reason = "Cancel the timer to change it"; }
       break;
     case wtl::ItemId::WsAsk:
-      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!workshopLocalAiFeedStatus().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       strlcpy(v.value, "Needs · today · weather…", sizeof(v.value));
       break;
     case wtl::ItemId::WsImage: {
       const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
-      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!workshopLocalAiFeedStatus().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       if (!e.hasImage) { v.enabled = false; v.reason = "No image yet"; break; }
       wtAiImageLine(e, v.value, sizeof(v.value));
       break;
     }
     case wtl::ItemId::WsApprovals: {  // 12.6
       const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
-      if (!workshopLocalAiFeedSnapshot().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
+      if (!workshopLocalAiFeedStatus().configured) { v.enabled = false; v.reason = "Set up Local AI first"; break; }
       if (!e.approvalSeq) strlcpy(v.value, "Review", sizeof(v.value));
       else if (e.approvalTotal) { snprintf(v.value, sizeof(v.value), "%u waiting", (unsigned)e.approvalTotal); v.valueColor = OS12V_AMBER; }
       else strlcpy(v.value, "None waiting", sizeof(v.value));
       break;
     }
     case wtl::ItemId::WsPair: {  // 12.7
-      const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
+      const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
       if (!ai.configured) { strlcpy(v.value, "Pair with Local AI", sizeof(v.value)); v.valueColor = OS12V_ACCENT; break; }
       if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) { strlcpy(v.value, ai.lastSuccessAtMs ? "Not answering" : "Connecting", sizeof(v.value)); v.valueColor = OS12V_AMBER; break; }
       strlcpy(v.value, workshopLocalAiFeedExtras().live ? "Connected · live" : "Connected", sizeof(v.value));
@@ -1775,6 +1884,7 @@ static void wtDrawWorkshop(bool full) {
   if (g_wtAiOverlay == 2) { wtDrawImage(s, full); return; }
   if (g_wtAiOverlay == 3) { wtDrawApprovals(s); return; }
   if (g_wtAiOverlay == 4) { wtDrawPair(s); return; }
+  if (g_wtAiOverlay == 5) { wtDrawJudge(s); return; }
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
   const wtl::View id = inv.credentialConfigured ? wtl::View::WorkshopInventory : wtl::View::WorkshopSetup;
   const wtl::ViewSpec& v = wtl::view(id);
@@ -1836,6 +1946,8 @@ static bool wtShowPrinterView(const char* name) {
     g_dirty = true;
     return true;
   }
+  // 26 Oct 2026: "lab-judge", "lab-judge-<n>" and "lab-judge-send" open the Judge it sheet at that page.
+  if (name && strncmp(name, "lab-judge", 9) == 0) return wtJudgeShow(name);
   // "printer-camera" opens Printer > Camera, so capture and acceptance
   // scripts can reach it without a touch (it is a page, not a /hub/views id).
   if (name && strcmp(name, "printer-camera") == 0) { wsOpenCamera(1); return true; }
@@ -1899,13 +2011,23 @@ static void wtTab(uint8_t i) {
   else wsOpen(wsm::PageId::Root);
 }
 
+// The Local AI card idle Home's need row `need` stands for (-1 when it has none); noinline keeps its rows out of
+// wtHomeTouch's frame.
+static __attribute__((noinline)) int8_t wtHomeNeedCard(int8_t need) {
+  if (need < 0 || need > 1) return -1;
+  WtHomeRow rows[2];
+  uint8_t others = 0;
+  wtHomeRows(rows, others, nullptr, 0);
+  return rows[need].card;
+}
+
 static bool wtHomeTouch(int16_t x, int16_t y) {
   const wsm::Screen s = wsScreen();
   // The calm idle screen has no tab bar and no controls: the whole screen is
   // one wake target, and the tap that wakes it ends here (it never reaches
   // the Home card, the Filament row or a tab).
   if (wtCalmShown()) {
-    if (wtl::calmHitTest(s, x, y).kind == wtl::HitKind::Wake) { g_ambientActive = false; g_dirty = true; }
+    if (wtl::calmHitTest(s, x, y).kind == wtl::HitKind::Wake) { g_ambientActive = false; g_dirty = true; wtJudgeNoteWake(); }
     return true;
   }
   if (g_wtBootPreview) { g_wtBootPreview = 0; g_dirty = true; return true; }  // a tap ends the splash preview
@@ -1921,7 +2043,14 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
       default: return true;
     }
     const wtl::ItemId id = wtl::item(v, hi.index, 0).id;
-    if (id == wtl::ItemId::HomeAi) { setPage(SCREEN_HUB_WORKSHOP); wsClick(); }  // the full list is on the Local AI tab
+    if (id == wtl::ItemId::HomeAi) {  // the full list is on the Local AI tab, opened at the row's item
+      const int8_t card = wtHomeNeedCard(wtl::homeNeedRow(v, hi.index));
+      if (wtJudgeOpenIndex(card, true)) { wsClick(); g_dirty = true; return true; }  // 26 Oct 2026: Judge it
+      g_wtAiOverlay = 0;
+      g_wtWorkshopScroll = card > 0 ? (uint8_t)card : 0;  // clamped when the tab draws
+      setPage(SCREEN_HUB_WORKSHOP);
+      wsClick();
+    }
     else if (id == wtl::ItemId::HomePrinterRow) {
       if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
       else wsOpenFrom(wsm::PageId::LocalPortal, 0);
@@ -2149,6 +2278,7 @@ static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {
 
 static bool wtWorkshopTouch(int16_t x, int16_t y) {
   const wsm::Screen s = wsScreen();
+  if (g_wtAiOverlay == 5) return wtJudgeTouch(s, x, y);  // 26 Oct 2026: the sheet owns the screen (no banner, no tabs)
   if (wtBannerTouch(x, y)) return true;  // 12.6
   if (g_wtAiOverlay) return wtAiOverlayTouch(s, x, y);
   const WorkshopInventoryRuntimeSnapshot inv = workshopInventorySnapshot();
@@ -2176,9 +2306,10 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
     // 12.4.3: a card opens Ask with its question asked (Needs you -> what needs me, Working on -> what's running,
     // a watchdog finding -> is everything OK). Without cards, the row says why; Ask can't help then.
     const workshop::localai::Card c = wtAiCard(wtl::headIndex(v, h.index, aiCount));
+    if (workshop::localai::isJudgeCard(c)) { wtJudgeOpen(c, false); wsClick(); return true; }  // 26 Oct 2026: Judge it
     if (!strcmp(c.kind, "playing") && workshopLocalAiFeedExtras().hasImage) { wtOpenImage(); wsClick(); return true; }  // 12.8: its poster
     if (!strcmp(c.kind, "status")) {
-      if (!workshopLocalAiFeedSnapshot().configured) { wtOpenPair(); wsClick(); return true; }  // 12.7: not set up: pair
+      if (!workshopLocalAiFeedStatus().configured) { wtOpenPair(); wsClick(); return true; }  // 12.7: not set up: pair
       wsToast(c.text);
       return true;
     }
@@ -2249,6 +2380,7 @@ static bool wtWorkshopTouch(int16_t x, int16_t y) {
 static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   const ScreenState cur = getScreenState();
   if ((cur == SCREEN_HUB_HOME || cur == SCREEN_HUB_PRINTER || cur == SCREEN_HUB_WORKSHOP) && wtBannerShown() &&
+      !(cur == SCREEN_HUB_WORKSHOP && g_wtAiOverlay == 5) &&  // the Judge it sheet draws no banner
       wtl::bannerRect(wsScreen()).contains(x, y)) { out = wtl::bannerRect(wsScreen()); return true; }  // 12.6
   if (cur == SCREEN_HUB_MORE || cur == SCREEN_HUB_SYSTEM || cur == SCREEN_HUB_CUSTOM) return wsMorePressRect(x, y, out);
   const wsm::Screen s = wsScreen();
@@ -2268,6 +2400,7 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
     }
   } else if (cur == SCREEN_HUB_WORKSHOP) {
     if (g_wtAiOverlay == 2) return false;  // the picture: no targets, a tap anywhere closes it
+    if (g_wtAiOverlay == 5) return wtJudgePressRect(s, x, y, out);  // 26 Oct 2026: Judge it
     if (g_wtAiOverlay == 4) {  // 12.7: the keypad, Done and the tabs
       for (uint8_t i = 0; i < wtl::kPairKeys; ++i)
         if (wtl::pairKeyRect(s, i).contains(x, y)) { out = wtl::pairKeyRect(s, i); return true; }

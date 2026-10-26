@@ -22,7 +22,7 @@ static const uint32_t kRotateMs = 8000UL;           // one card at a time, 8 s e
 static const size_t kTitleLen = 28;                 // Local AI cuts titles to 24 characters (UTF-8 can be longer)
 static const size_t kTextLen = 112;                 // and lines to 90
 
-enum class Tone : uint8_t { Info = 0, Ok, Attention, Warning, Busy };
+enum class Tone : uint8_t { Info = 0, Ok, Attention, Warning, Busy, Bad };  // Bad: 26 Oct 2026, Pi Hub's needs
 
 struct Card {
   char kind[12];
@@ -33,7 +33,48 @@ struct Card {
   char ask[10];   // the question a tap asks ("" for none)
   uint32_t at;    // epoch seconds, 0 when not known
   uint8_t percent;  // 12.8: how far a "playing" card is in (or how full a disk is), 0-100; 255 when not given
+  char run[16];   // 26 Oct 2026: a lab card's run ("PR-021-01"); the Judge it sheet asks Local AI about it
 };
+
+// 26 Oct 2026: one item of the feed's `needs` list: Pi Hub's one "Needs you" list (Pi issues, Local AI's attention
+// cards, the newest print event), ranked bad > attention > warn and passed on by Local AI as it is. Absent when Pi
+// Hub doesn't answer; the display then falls back to the cards.
+static const uint8_t kMaxNeeds = 6;
+struct Need {
+  char id[32];      // stable while the item means the same thing ("printer:plate", "localai:<card id>")
+  char title[kTitleLen];
+  char detail[kTextLen];
+  char source[12];  // "pi", "localai", "printer"
+  Tone tone;
+};
+
+// Copies `in` into out[len], cut on a UTF-8 character boundary: Local AI cuts in characters, so a title of 24
+// two-byte characters is 48 bytes and must lose whole characters, never half of one. Always terminates.
+inline void copyUtf8(char* out, size_t len, const char* in) {
+  if (!out || !len) return;
+  out[0] = 0;
+  if (!in) return;
+  size_t i = 0;
+  while (in[i]) {
+    const unsigned char c = (unsigned char)in[i];
+    const size_t n = c < 0x80 ? 1 : (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 0;
+    if (!n) break;  // a stray continuation byte or not UTF-8: stop here
+    size_t k = 1;
+    while (k < n && ((unsigned char)in[i + k] & 0xC0) == 0x80) ++k;
+    if (k < n || i + n >= len) break;  // cut short in the input, or doesn't fit whole
+    memcpy(out + i, in + i, n);
+    i += n;
+  }
+  out[i] = 0;
+}
+
+inline void setNeed(Need& n, const char* id, Tone tone, const char* title, const char* detail, const char* source) {
+  copyUtf8(n.id, sizeof(n.id), id);
+  copyUtf8(n.title, sizeof(n.title), title);
+  copyUtf8(n.detail, sizeof(n.detail), detail);
+  copyUtf8(n.source, sizeof(n.source), source);
+  n.tone = tone;
+}
 
 inline Tone toneFrom(const char* s) {
   if (!s) return Tone::Info;
@@ -41,6 +82,8 @@ inline Tone toneFrom(const char* s) {
   if (!strcmp(s, "attention")) return Tone::Attention;
   if (!strcmp(s, "warning")) return Tone::Warning;
   if (!strcmp(s, "busy")) return Tone::Busy;
+  if (!strcmp(s, "bad")) return Tone::Bad;       // 26 Oct 2026: Pi Hub's tones
+  if (!strcmp(s, "warn")) return Tone::Warning;
   return Tone::Info;
 }
 
@@ -49,7 +92,8 @@ inline bool shownKind(const char* kind) {
   return kind && (!strcmp(kind, "needs") || !strcmp(kind, "watch") || !strcmp(kind, "running") || !strcmp(kind, "weather") ||
                   !strcmp(kind, "done") || !strcmp(kind, "disk") ||  // 12.6: finished work and the fullest disk
                   !strcmp(kind, "playing") || !strcmp(kind, "home") ||  // 12.8: Plex on the Pi, and the Pi hub's issue
-                  !strcmp(kind, "materials"));  // LocalAI Materials: active spools & inventory health
+                  !strcmp(kind, "materials") ||  // LocalAI Materials: active spools & inventory health
+                  !strcmp(kind, "lab"));  // 26 Oct 2026: the Print lab card (printing) and its Judge it nudge
 }
 
 // Wait before the next request: a minute after an answer; after failures 2, 4, 8 minutes, then 10.
@@ -130,22 +174,92 @@ inline const char* askFor(const Card& c) {
   return nullptr;
 }
 
-// Home at a glance: Home's house line. Of the cards, the one that matters most: something needing you (attention), then
-// something worth a look (warning), then work under way (busy), then All clear (ok). Information cards (weather,
-// disks, music, finished work) stay on the Local AI tab. -1 when no card qualifies. `others` counts the remaining
-// attention and warning cards, for "+1 more".
+// How much a card's tone matters on Home: bad, attention (needs you), warning (worth a look), busy (work under way),
+// ok (All clear); information cards (weather, disks, music, finished work) 0: they stay on the Local AI tab.
+inline uint8_t toneRank(Tone t) {
+  return t == Tone::Bad ? 5 : t == Tone::Attention ? 4 : t == Tone::Warning ? 3 : t == Tone::Busy ? 2 : t == Tone::Ok ? 1 : 0;
+}
+
+// Home at a glance: Home's house line. Of the cards, the one that matters most. -1 when no card qualifies. `others`
+// counts the remaining problem cards (bad, attention, warning), for "+1 more".
 inline int8_t homeSummaryIndex(const Card* cards, uint8_t n, uint8_t& others) {
   others = 0;
   int8_t best = -1;
   uint8_t bestRank = 0, problems = 0;
   for (uint8_t i = 0; i < n; ++i) {
-    const Tone t = cards[i].tone;
-    const uint8_t rank = t == Tone::Attention ? 4 : t == Tone::Warning ? 3 : t == Tone::Busy ? 2 : t == Tone::Ok ? 1 : 0;
+    const uint8_t rank = toneRank(cards[i].tone);
     if (rank >= 3) ++problems;
     if (rank > bestRank) { bestRank = rank; best = (int8_t)i; }
   }
   if (bestRank >= 3) others = (uint8_t)(problems - 1);
   return best;
+}
+
+// 26 Oct 2026: idle Home's two "Needs you" rows. With Pi Hub's list (`needsPresent`: the feed had `needs`): its first
+// two items in its order (every screen shows the same list from the top), `others` = the rest; an empty list means
+// nothing needs you (0 rows, fromNeeds true: All clear, never Local AI's cards). Without it: the cards, best first (bad > attention >
+// warning > busy > ok; the earlier card on a tie); the second row only for work under way or worse (All clear is
+// never under a problem), `others` = the problem cards not shown. Returns how many rows (0-2); unused out[] are -1.
+// `hiddenCardId` (Later on the Judge it sheet): that Local AI card, and Pi Hub's "localai:<id>" item for it, are left
+// out on this display only; the rest of the list moves up. `needsTotal` (the feed's needsCount: Pi Hub's whole list,
+// of which at most six are sent) makes "+N more" count the items not sent too; 0 when the feed didn't say.
+inline bool hiddenItem(const char* id, const char* hidden, bool fromPi) {
+  if (!hidden || !hidden[0] || !id) return false;
+  if (fromPi) return !strncmp(id, "localai:", 8) && !strcmp(id + 8, hidden);
+  return !strcmp(id, hidden);
+}
+
+inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, const Card* cards, uint8_t nc, int8_t out[2],
+                              bool& fromNeeds, uint8_t& others, const char* hiddenCardId = nullptr, uint16_t needsTotal = 0) {
+  out[0] = out[1] = -1;
+  others = 0;
+  fromNeeds = needsPresent;
+  if (fromNeeds) {
+    if (!needs || !n) return 0;
+    uint8_t shown = 0, total = 0;
+    for (uint8_t i = 0; i < n; ++i) {
+      if (hiddenItem(needs[i].id, hiddenCardId, true)) continue;
+      ++total;
+      if (shown < 2) out[shown++] = (int8_t)i;
+    }
+    const unsigned unsent = needsTotal > n ? (unsigned)(needsTotal - n) : 0U;
+    others = (uint8_t)(total - shown + unsent > 255U ? 255U : total - shown + unsent);
+    return shown;
+  }
+  if (!cards) return 0;
+  uint8_t ranks[2] = {0, 0}, problems = 0;
+  for (uint8_t i = 0; i < nc; ++i) {
+    if (hiddenItem(cards[i].id, hiddenCardId, false)) continue;
+    const uint8_t r = toneRank(cards[i].tone);
+    if (r >= 3) ++problems;
+    if (r > ranks[0]) { out[1] = out[0]; ranks[1] = ranks[0]; out[0] = (int8_t)i; ranks[0] = r; }
+    else if (r > ranks[1]) { out[1] = (int8_t)i; ranks[1] = r; }
+  }
+  if (ranks[1] < 2) { out[1] = -1; ranks[1] = 0; }
+  const uint8_t shown = (uint8_t)((ranks[0] >= 3) + (ranks[1] >= 3));
+  others = (uint8_t)(problems - shown);
+  return (uint8_t)((out[0] >= 0) + (out[1] >= 0));
+}
+
+// The calm screen's rotation without the card Later hid (`hidden`, its index; -1 for none): shown position k is card
+// calmIndex(k, hidden).
+inline uint8_t calmIndex(uint8_t k, int8_t hidden) {
+  return hidden >= 0 && k >= (uint8_t)hidden ? (uint8_t)(k + 1) : k;
+}
+
+// 26 Oct 2026: the Print lab card's Judge it nudge ("Judge E-021", ask "lab-judge", its run): a tap opens the stepped
+// Judge it sheet (firmware/platform/ui/lab_judge.hpp).
+inline bool isJudgeCard(const Card& c) {
+  return !strcmp(c.kind, "lab") && !strcmp(c.ask, "lab-judge") && c.run[0];
+}
+
+// 26 Oct 2026: the printing Home's extra row: the Print lab card while its run prints (busy), else -1 (the row shows
+// the top need as before).
+inline int8_t printingExtraIndex(const Card* cards, uint8_t n) {
+  if (!cards) return -1;
+  for (uint8_t i = 0; i < n; ++i)
+    if (!strcmp(cards[i].kind, "lab") && cards[i].tone == Tone::Busy) return (int8_t)i;
+  return -1;
 }
 
 // Home at a glance: the header's weather from the weather card's sentence ("Right now in Lake Wylie: 66 degrees and sunny.")

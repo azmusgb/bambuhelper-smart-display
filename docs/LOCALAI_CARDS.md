@@ -3,14 +3,42 @@
 **Where they show (12.4.0):**
 - **Local AI tab** (third tab, sparkle icon): every card, one row each, then the workshop tools (filament, timer,
   note).
-- **Home:** the first row is Local AI's most important card, or the workshop timer while it runs; it opens the Local
-  AI tab.
-- **Idle Home, at a glance (since the Home redesign after 12.8.0):** one screen, no scrolling. The header shows the
-  time and the weather card's temperature and sky ("66° Sunny"). Then the **house card**: the card that matters most
-  (attention, then warning, then work under way, then All clear), with "+N more" for other problems. Then the
-  **printer card**: its state in large type ("Finished 1:21 PM", "Ready", "Offline") and one line of detail (the last
-  job, or nozzle and bed temperatures). Then the timer. Information cards (disks, music, finished work) are on the
-  Local AI tab only. `homeSummaryIndex` and `weatherShort` in `workshop_localai_feed_core.hpp` decide what shows.
+- **Home (printing):** the first row is the workshop timer while it runs, else the **Print lab card** while a lab
+  run prints ("Lab · E-021", since 26 Oct 2026), else the first "Needs you" item; it opens the Local AI tab.
+- **Idle Home, at a glance (since the Home redesign after 12.8.0; two rows since 26 Oct 2026):** one screen, no
+  scrolling. The header shows the time and the weather card's temperature and sky ("66° Sunny"). Then **two "Needs
+  you" rows** (title and one line each, "+N more" on the second): the top two of Pi Hub's one list (the feed's
+  `needs`, in Pi Hub's order, the same list Pi Hub and the Print lab page show; an empty list is All clear). Without `needs` (Pi Hub not
+  answering) they are Local AI's cards ranked bad, attention, warning, work under way, All clear, and the second
+  row says "Pi Hub isn't answering" when there is only one. A tap opens the Local AI tab at that item. Then the
+  **printer card**: its state in large type ("Finished 1:21 PM", "Ready", "Offline") and one line of detail (the
+  last job, or nozzle and bed temperatures). Then the timer. Information cards (disks, music, finished work) are on
+  the Local AI tab only. `homeSummaryTop`, `printingExtraIndex` and `weatherShort` in
+  `workshop_localai_feed_core.hpp` decide what shows; `copyUtf8` cuts every title and line on a character boundary.
+- **Lab cards** (kind `lab`): "Lab · E-021" (busy) while a lab run prints, and "Judge E-021" (attention, `ask:
+  "lab-judge"`, `run: "PR-021-01"`) when it finished without a verdict. The display keeps the card's `run` for the
+  Judge it sheet.
+- **Judge it (26 Oct 2026):** a tap on the "Judge E-021" row (idle Home or the Local AI tab) opens the same Judge it
+  sheet as the phone, one strip per screen. The header says `Judge it · E-021 · Strip 21B (2 of 3)` and has **Later**.
+  Each criterion is a row: its label, a chip per choice and "–" (not judged, sent as null). Chips wrap to two lines;
+  a strip with more criteria than fit scrolls inside the sheet (the arrows between Back and Next). The last page has
+  **Inconclusive** (optional: "It didn't finish printing", "I can't tell from this print", "The wrong thing printed",
+  sent as those words), the state and **Send**, and says "Add photos from your phone". Send needs every strip graded
+  on every criterion, or a reason. It goes to Local AI's `POST /api/display/lab/verdict`, which queues the very
+  verdict request the phone sends (lighting diagnostic, no note); the sheet then says "Waiting for the Mac" (it reads
+  the sheet again every 3 s; after 2 minutes, as the phone: "The Mac hasn't picked this up. It runs when the Mac is
+  awake."), then "Done ✓" or the Mac's refusal in its words: with **Change it** when it says the print "already has
+  a verdict" (as the phone's Replace), else with Close. A resent id is accepted whatever its status. Already judged
+  (a verdict, or a request waiting): it opens on "Judged on the phone at 6:32 PM" with **Change it**, which sends
+  with `replace: true`. A test without criteria says "Judge it on your phone: …". The same draft resent keeps its
+  `rq-` id (Local AI counts it once); any change, or Change it, makes a new one. The draft stays in RAM until Send or
+  10 minutes without a touch. **Later** hides the judge card on this display for 2 hours: idle Home's rows, the calm
+  screen's rotation and opening by itself (the Local AI tab still lists it as a row; Pi Hub and the phone still show
+  it). Once per judge card, the sheet also opens by itself when a
+  tap wakes the calm screen. The sheet is up only while you're on it: any navigation away (a tab, another page,
+  `/hub/show` of another view, waking the calm screen) closes it, and "Nothing to judge right now." closes itself
+  after 5 s or at the next feed update; the draft is kept for 10 minutes, so reopening restores the choices. The rules are `firmware/platform/ui/lab_judge.hpp` (host-tested by
+  `tests/workshop_os12_lab_judge_smoke.cpp`); the screens are `lab_judge.cppfrag`.
 - **Calm screen:** Local AI's card comes first. The printer's line shows only while the printer is doing something;
   otherwise a second Local AI card shows there.
 
@@ -97,7 +125,8 @@ For captures, `/hub/show calm` opens the calm screen when it is turned on.
   "X2D · Finished 9:33 AM" on the printer row.
 
 Captures: `/hub/show localai-ask-<needs|running|health|today|next|weather>`, `localai-image[-<0-5>]`,
-`localai-approvals`.
+`localai-approvals`; Judge it: `lab-judge` (strip 1), `lab-judge-<n>` (page n), `lab-judge-send` (the last page). With
+no judge card the sheet says "Nothing to judge right now."
 
 ## Code
 

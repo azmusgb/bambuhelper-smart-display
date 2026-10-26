@@ -10,6 +10,11 @@ main.cpp beside Filament Inventory, includes it where the calm screen is drawn, 
 
 The calm screen's drawing is in firmware/platform/ui/tabs_pages.cppfrag (wtDrawCalm, wtDrawCalmAiCard). Run after
 apply_workshop_os12_tabs_overhaul.py. Every change is staged and written only after every anchor validates.
+
+26 Oct 2026, Judge it on the display: firmware/platform/ui/lab_judge.hpp (the sheet's rules, host-tested by
+tests/workshop_os12_lab_judge_smoke.cpp) is installed as include/workshop_lab_judge.hpp, its drawing and touch
+(firmware/platform/ui/lab_judge.cppfrag) go into smart_hub.cpp's anonymous namespace after the tab pages, and /hub/views
+lists lab-judge and lab-judge-send for captures.
 """
 from __future__ import annotations
 
@@ -30,6 +35,17 @@ FILES = {
     "workshop_localai_feed.cpp": "src",
 }
 INCLUDE = '#include "workshop_localai_feed.h"\n'
+LAB_HEADER = ("firmware/platform/ui/lab_judge.hpp", "include/workshop_lab_judge.hpp")
+LAB_PAGES = "firmware/platform/ui/lab_judge.cppfrag"
+LAB_INCLUDE = '#include "workshop_lab_judge.hpp"\n'
+LAB_MARKER = "static wlab::LabJudge g_wtJudge;"
+NAMESPACE_END = "\n} // namespace\n"
+SET_PAGE = "static void setPage(ScreenState s) {\n"
+SET_PAGE_LEAVE = ("static void wtJudgeLeft();  // 26 Oct 2026: leaving closes the Judge it sheet (lab_judge.cppfrag)\n"
+                  + SET_PAGE + "  wtJudgeLeft();\n")
+CATALOG_LAB_ANCHOR = '    {"id":"workshop","label":"Local AI","group":"Primary"},\n'
+CATALOG_LAB = ('    {"id":"lab-judge","label":"Judge it","group":"Primary"},\n'
+               '    {"id":"lab-judge-send","label":"Judge it - Send","group":"Primary"},\n')
 
 HANDLERS = r'''
 // ---------------------------------------------------------------------------
@@ -202,6 +218,12 @@ def apply(repo: Path, source_root: Path) -> None:
         if not (src / name).is_file():
             raise PatchError(f"missing source asset: {src / name}")
         staged[repo / where / name] = (src / name).read_text(encoding="utf-8")
+    lab_src = source_root / LAB_HEADER[0]
+    lab_pages = source_root / LAB_PAGES
+    for asset in (lab_src, lab_pages):
+        if not asset.is_file():
+            raise PatchError(f"missing source asset: {asset}")
+    staged[repo / LAB_HEADER[1]] = lab_src.read_text(encoding="utf-8")
 
     def load(rel: str) -> str:
         p = repo / rel
@@ -215,6 +237,16 @@ def apply(repo: Path, source_root: Path) -> None:
     if "wtDrawCalmAiCard(" not in hub:
         raise PatchError("the tabs overhaul with the 12.3.10 calm screen must be applied first")
     hub = insert_after_once(hub, '#include "workshop_tabs_layout.hpp"\n', INCLUDE, "smart_hub include")
+    hub = insert_after_once(hub, INCLUDE, LAB_INCLUDE, "smart_hub lab judge include")
+    if LAB_MARKER not in hub:
+        if hub.count(NAMESPACE_END) != 1 or "static bool wtJudgeShow(const char* name);" not in hub:
+            raise PatchError("Judge it: the tab pages' declarations or the end of smart_hub's namespace is missing/non-unique")
+        fragment = lab_pages.read_text(encoding="utf-8")
+        hub = hub.replace(NAMESPACE_END, "\n" + fragment.rstrip() + "\n" + NAMESPACE_END, 1)
+    if SET_PAGE_LEAVE not in hub:
+        if hub.count(SET_PAGE) != 1:
+            raise PatchError("Judge it: setPage missing/non-unique")
+        hub = hub.replace(SET_PAGE, SET_PAGE_LEAVE, 1)
     if TAB_LABELS_NEW not in hub:
         if hub.count(TAB_LABELS_OLD) != 1 or hub.count(TAB_ICON_OLD) != 1 or hub.count(TAB_ICON_FN_ANCHOR) != 1:
             raise PatchError("tab bar anchors missing/non-unique")
@@ -240,6 +272,10 @@ def apply(repo: Path, source_root: Path) -> None:
         if web.count(CATALOG_OLD) != 1:
             raise PatchError("catalog workshop entry missing/non-unique")
         web = web.replace(CATALOG_OLD, CATALOG_NEW, 1)
+    if '"id":"lab-judge"' not in web:
+        if web.count(CATALOG_LAB_ANCHOR) != 1:
+            raise PatchError("catalog Local AI entry missing/non-unique (Judge it views)")
+        web = web.replace(CATALOG_LAB_ANCHOR, CATALOG_LAB_ANCHOR + CATALOG_LAB, 1)
     staged[repo / "src/web_server.cpp"] = web
 
     pages = load("include/web_pages.h")
@@ -256,7 +292,7 @@ def apply(repo: Path, source_root: Path) -> None:
     for path, text in staged.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-    print("Workshop OS 12.3.10 Local AI cards installed: calm screen card, /os12/localai/{status,config,clear}")
+    print("Workshop OS 12.3.10 Local AI cards installed: calm screen card, /os12/localai/{status,config,clear}; Judge it sheet")
 
 
 def main() -> int:

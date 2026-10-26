@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST = ROOT / "tests/workshop_os12_localai_feed_smoke.cpp"
+LAB_TEST = ROOT / "tests/workshop_os12_lab_judge_smoke.cpp"
 
 
 class ValidationError(Exception):
@@ -44,17 +45,19 @@ def block(text: str, signature: str) -> str:
 
 
 def smoke() -> None:
-    with tempfile.TemporaryDirectory() as td:
-        binary = Path(td) / "localai-feed-smoke"
-        subprocess.run(["c++", "-std=c++11", "-O1", "-Wall", "-Wextra", "-Werror", "-pedantic", "-o", str(binary), str(TEST)], check=True)
-        out = subprocess.run([str(binary)], check=False, capture_output=True, text=True)
-        if out.returncode != 0:
-            raise ValidationError("localai feed smoke test failed:\n" + out.stdout)
+    for name, test in (("localai-feed-smoke", TEST), ("lab-judge-smoke", LAB_TEST)):
+        with tempfile.TemporaryDirectory() as td:
+            binary = Path(td) / name
+            subprocess.run(["c++", "-std=c++11", "-O1", "-Wall", "-Wextra", "-Werror", "-pedantic", "-o", str(binary), str(test)], check=True)
+            out = subprocess.run([str(binary)], check=False, capture_output=True, text=True)
+            if out.returncode != 0:
+                raise ValidationError(f"{name} failed:\n" + out.stdout)
 
 
 def validate(repo: Path) -> None:
     smoke()
-    for rel in ("include/workshop_localai_feed_core.hpp", "include/workshop_localai_feed.h", "src/workshop_localai_feed.cpp"):
+    for rel in ("include/workshop_localai_feed_core.hpp", "include/workshop_localai_feed.h", "src/workshop_localai_feed.cpp",
+                "include/workshop_lab_judge.hpp"):
         if not (repo / rel).is_file():
             raise ValidationError(f"missing {rel}")
     main = (repo / "src/main.cpp").read_text(encoding="utf-8")
@@ -118,10 +121,70 @@ def validate(repo: Path) -> None:
     # 12.4.0: Local AI is the third tab, leads the calm screen and takes Home's bottom row.
     need(hub, 'labels[4]={"Home","Printer","Local AI","More"}', "the third tab is Local AI")
     need(web, '{"id":"workshop","label":"Local AI"', "the catalog names the third tab Local AI")
-    need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtAiCard(rot));", "Local AI's card leads the calm screen")
+    need(calm, "if (aiFirst) wtDrawCalmAiCard(c.status, wtCalmCard(rot, hid, shown));", "Local AI's card leads the calm screen")
+    need(calm, "const int8_t hid = wtJudgeHiddenIndex();", "26 Oct 2026: Later hides the judge card from the calm rotation too")
     need(calm, "printerBusy", "the printer's line only while it is doing something")
     need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtHomeSummary(others)", "Home's Local AI row is the card that matters most")
-    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card)")
+    # 26 Oct 2026: Pi Hub's one "Needs you" list and the Print lab card.
+    fetch_fn = block(feed, "bool fetch(FeedResult& r, char* error, size_t errorLen)")
+    need(fetch_fn, 'doc["needs"].as<JsonArray>()', "the feed's needs list is read")
+    need(fetch_fn, "r.needsFromPi = !needs.isNull();", "a feed without needs (Pi Hub not answering) falls back to the cards")
+    need(fetch_fn, "lai::setNeed(r.needs[r.needCount++]", "needs are copied whole-character (UTF-8 safe)")
+    need(fetch_fn, 'copyText(out.run, sizeof(out.run), c["run"] | "");', "a lab card keeps its run")
+    need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsFromPi = r.needsFromPi;", "needs reach the snapshot")
+    need(fetch_fn, 'doc["needsCount"] | -1L', "the feed's needsCount (Pi Hub's whole list) is read")
+    need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsTotal = r.needsTotal;", "needsCount reaches the snapshot")
+    top = block(hub, "static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others)")
+    need(top, "const bool needsPresent = fresh && ai.needsFromPi;", "Pi Hub's list wins whenever the feed carried it, even empty")
+    need(top, "workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal)",
+         "idle Home's two rows: needs first, else cards (less the judge card Later hid here); \"+N more\" counts Pi Hub's whole list")
+    forbid(top, "workshopLocalAiFeedSnapshot()", "wtHomeTop uses the caller's one snapshot")
+    need(block(hub, "static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen)"),
+         "workshopLocalAiFeedSnapshot()", "one snapshot per Home frame or touch, in a leaf")
+    forbid(block(hub, "static void wtDrawHomeIdle(const WtPrint& w)"), "workshopLocalAiFeedSnapshot()", "no snapshot held while idle Home draws its rows")
+    for fn in ("static uint8_t wtAiCount()", "static workshop::localai::Card wtAiCard(uint8_t i)", "static int8_t wtLabExtraIndex()",
+               "static void wtDrawCalm(const WtPrint& w)"):
+        forbid(block(hub, fn), "workshopLocalAiFeedSnapshot()", "small reads in hot draw paths (8 KB loop stack)")
+    need(top, '"Pi Hub isn\'t answering"', "says when Pi Hub's list is missing")
+    need(block(hub, "static void wtDrawHomeIdle(const WtPrint& w)"), "wtl::homeNeedRow(v, i)", "idle Home draws two need rows")
+    need(block(hub, "static const char* wtHomeExtra(WsRowView& v)"), "wtLabExtraIndex()", "the Print lab card takes the printing Home's extra row")
+    # 26 Oct 2026: Judge it on the display.
+    need(hub, '#include "workshop_lab_judge.hpp"', "the Judge it rules are included")
+    need(hub, "static wlab::LabJudge g_wtJudge;", "the sheet and its draft live in static storage")
+    for fn in ("static __attribute__((noinline)) void wtDrawJudge(const wsm::Screen& s) {",
+               "static __attribute__((noinline)) bool wtJudgeTouch(const wsm::Screen& s, int16_t x, int16_t y) {",
+               "static __attribute__((noinline)) bool wtJudgePressRect(const wsm::Screen& s, int16_t x, int16_t y, wsm::Rect& out) {",
+               "static __attribute__((noinline)) void wtJudgeTick() {"):
+        body = block(hub, fn)
+        forbid(body, "workshopLocalAiFeedSnapshot()", "Judge it never copies the whole feed snapshot (8 KB loop stack)")
+        forbid(body, "wlab::LabJudge ", "Judge it keeps no sheet on the stack")
+    need(block(hub, "static void wtDrawWorkshop(bool full) {"), "if (g_wtAiOverlay == 5) { wtDrawJudge(s); return; }", "the sheet is the Local AI tab's overlay 5")
+    need(block(hub, "static bool wtWorkshopTouch(int16_t x, int16_t y) {"), "if (g_wtAiOverlay == 5) return wtJudgeTouch(s, x, y);", "the sheet owns its touches")
+    need(block(hub, "static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {"), "if (g_wtAiOverlay == 5) return wtJudgePressRect(s, x, y, out);",
+         "a press on the sheet outlines only its live targets")
+    need(block(hub, "static void wtJudgeSend() {"), "g_wtJudge.beginSend(g_wtJudgeBody, wlab::kMaxPayload, esp_random(), esp_random())",
+         "the verdict's request id is random, kept while the same draft is resent")
+    need(block(hub, "static bool wtShowPrinterView(const char* name) {"), "return wtJudgeShow(name);", "/hub/show lab-judge pages")
+    need(web, '{"id":"lab-judge","label":"Judge it","group":"Primary"}', "/hub/views lists the Judge it sheet")
+    need(block(hub, "static void setPage(ScreenState s) {"), "  wtJudgeLeft();", "any navigation away closes the Judge it sheet")
+    need(block(hub, "static __attribute__((noinline)) void wtDrawJudge(const wsm::Screen& s) {"), "g_wtJudgeGate.frame(millis(), nothing,",
+         "an empty or left sheet closes itself")
+    need(block(hub, "static void wtJudgeNoteWake() {"), "wtJudgeLeft();", "waking the calm screen closes the sheet")
+    need(web, '{"id":"lab-judge-send","label":"Judge it - Send","group":"Primary"}', "/hub/views lists the Judge it Send page")
+    judge = block(feed, "void runJudgeLoad() {")
+    need(judge, '"/api/display/lab/judge?run=%s"', "the judge route")
+    need(judge, "workshop::lab::validRun(run)", "only a run id goes into the path")
+    need(judge, "readBody(client, contentLength, body, cap, got, error, sizeof(error))", "the sheet is read whole, bounded")
+    need(judge, "workshop::lab::parseSheet(body, got, g_judgeSheet)", "the bounded reader parses it")
+    verdict = block(feed, "void runVerdict() {")
+    need(verdict, 'workshop::lab::verdictAccepted(g_lastCode, g_verdictId, doc["id"] | "")', "a 2xx naming the sent id is accepted, whatever its status")
+    forbid(verdict, '"pending")', "a resent id's applied/refused status is not an error")
+    need(verdict, '"/api/display/lab/verdict"', "the verdict route")
+    need(verdict, "DeserializationOption::Filter(filter)", "only id and status are read from the answer")
+    need(block(feed, "bool somethingWaits() {"), "g_judgeLoadPending || g_verdictPending", "the long poll gives way to Judge it")
+    need(fetch, "if (code < 200 || code > 299) {", "the verdict route's 202 is a success")
+    need(fetch, 'lai::copyUtf8(error, errorLen, why["error"] | "");', "Local AI's words are cut whole-character")
+    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card, Judge it)")
 
 
 def main() -> int:
