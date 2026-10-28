@@ -181,6 +181,44 @@ class RtspSourceTests(unittest.TestCase):
                 p.stop()
 
 
+class DetectPipelineTests(unittest.TestCase):
+    def test_encoder_args_with_detect(self) -> None:
+        folder = Path("/tmp")
+        latest = bridge.LatestFrame()
+        det = bridge.LatestFrame()
+        p = bridge.CameraPipeline(latest, folder, folder, folder / "url.txt", "ffmpeg", 5, 384, latest_detect=det)
+        args = p.encoder_args(["-i", "test"], detect_pipe=4)
+        self.assertIn("-filter_complex", args)
+        self.assertIn("crop=in_h:in_h:(in_w*0.16):0", " ".join(args))
+        self.assertIn("scale=416:416", " ".join(args))
+        self.assertIn("pipe:4", args)
+
+    def test_detect_endpoint_served(self) -> None:
+        import urllib.request
+        import json
+        latest = bridge.LatestFrame()
+        det = bridge.LatestFrame()
+        latest.update(b"\xff\xd8frame\xff\xd9")
+        det.update(b"\xff\xd8detect\xff\xd9")
+        server = bridge.BridgeServer(("127.0.0.1", 0), latest, FakePipeline(True), latest_detect=det)
+        port = server.server_address[1]
+        import threading
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/x2d/detect.jpg") as r:
+                self.assertEqual(r.read(), b"\xff\xd8detect\xff\xd9")
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/x2d/frame.jpg") as r:
+                self.assertEqual(r.read(), b"\xff\xd8frame\xff\xd9")
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/x2d/health.json") as r:
+                data = json.loads(r.read().decode())
+                self.assertIn("detectSequence", data)
+                self.assertEqual(data["detectSequence"], 1)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 class BridgeUrlTests(unittest.TestCase):
     def test_accepts_private_literal_ip_and_fixed_path(self) -> None:
         self.assertEqual(
