@@ -147,3 +147,20 @@ Read `GET /os12/localai/status` and look at `status`:
 | "Local AI turned the display key down (HTTP 401/403)." | Local AI's sign-in is enforced and the key fingerprint is missing: re-run `set-key.sh`, then `configure_localai_feed.py`. |
 | "Waiting for Wi-Fi." | The display is off Wi-Fi. |
 | "Local AI cards are not set up." after a restart | Firmware 12.3.10 or 12.3.11 kept the settings only until a restart: update to 12.3.12, then re-run `configure_localai_feed.py`. |
+
+
+## Household ownership and action results — 28 October server integration
+
+Pi Hub owns the combined household **Needs you** list. It reads LocalAI's own `/api/attention` cards, and LocalAI
+forwards the combined list to this display. The aggregate display feed is not an input to the household list.
+Agent World's printer summary uses Pi Hub's designated Bambuddy record; immediate firmware controls and direct
+printer telemetry remain Workshop OS responsibilities.
+
+LocalAI's plate-confirmation route now stops before clearing printer errors if confirming the plate failed. When
+only error clearing fails, it preserves the accepted plate confirmation. It also sends a quiet result through the
+existing message/banner channel: **Plate confirmed**, **Check printer errors**, or **Plate not confirmed**.
+This changes the server response/feedback behavior without changing the WS350 firmware protocol. Message delivery
+is best effort; it does not prove the plate is physically empty.
+
+These changes require a LocalAI server release; this note does not claim installation, a new firmware candidate or
+physical acceptance. Direct display-to-Pi routine commands and linked cross-system task identities remain future work.
