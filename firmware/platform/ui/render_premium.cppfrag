@@ -1,0 +1,86 @@
+// Workshop OS 12.4: Premium Rendering Engine
+// Implements Semantic Colors, Bottom Nav, and Bento Visuals.
+
+#include "tabs_layout.hpp"
+
+using namespace workshop::ui::tabs;
+
+// --- Visual Constants ---
+static const uint32_t COLOR_BG_DARK    = 0x121212;
+static const uint32_t COLOR_CARD_BG    = 0x1E1E1E;
+static const uint32_t COLOR_TEXT_MAIN  = 0xFFFFFF;
+static const uint32_t COLOR_TEXT_DIM   = 0xAAAAAA;
+
+static uint32_t getSemanticColor(SemanticColor color) {
+  switch (color) {
+    case SemanticColor::Success: return 0x4CAF50; // Green
+    case SemanticColor::Warning: return 0xFFB300; // Amber
+    case SemanticColor::Danger:  return 0xF44336; // Red
+    case SemanticColor::Primary: return 0x2196F3; // Blue
+    default:                     return COLOR_TEXT_MAIN;
+  }
+}
+
+// --- Bottom Navigation Renderer ---
+void drawBottomNav(Screen s, Tab activeTab) {
+  Rect band = bottomTabBand(s);
+  
+  // Draw Background with a slight blur/transparency effect if supported
+  drawRectFilled(band, COLOR_CARD_BG);
+  drawLine(band.x, band.y, band.right(), band.y, COLOR_TEXT_DIM); // Subtle top border
+
+  for (uint8_t i = 0; i < kTabCount; ++i) {
+    Rect r = bottomTabRect(s, i);
+    bool isActive = (static_cast<uint8_t>(activeTab) == i);
+    
+    // Active state highlight: Small accent bar at the bottom of the tab
+    if (isActive) {
+      drawRectFilled(makeRect(r.x + 10, r.bottom() - 4, r.w - 20, 4), getSemanticColor(SemanticColor::Primary));
+    }
+
+    // Icon + Label
+    uint32_t color = isActive ? COLOR_TEXT_MAIN : COLOR_TEXT_DIM;
+    drawIcon(r.x + r.w/2, r.y + 15, getIconForTab(i), color);
+    drawText(r.x + r.w/2, r.y + 30, getLabelForTab(i), 10, color, ALIGN_CENTER);
+  }
+}
+
+// --- Bento Widget Renderer ---
+void drawBentoItem(Screen s, const ItemSpec& it, Rect r, bool isActive) {
+  // Draw Rounded Card Background
+  uint32_t bgColor = (it.kind == ItemKind::BentoCard) ? COLOR_CARD_BG : COLOR_BG_DARK;
+  drawRoundedRectFilled(r, 12, bgColor);
+
+  // Semantic Border: Highlights critical alerts (Warnings/Danger)
+  if (it.color == SemanticColor::Warning || it.color == SemanticColor::Danger) {
+    drawRoundedRectOutline(r, 12, 2, getSemanticColor(it.color));
+  }
+
+  // Content Layout based on Item Kind
+  if (it.kind == ItemKind::BentoCard) {
+    // High-priority data: Large numeric font for glanceability (e.g., 85%)
+    drawText(r.x + 20, r.y + 20, "85%", 48, COLOR_TEXT_MAIN, ALIGN_LEFT);
+    
+    // Secondary detail: Dimmed label
+    drawText(r.x + 20, r.y + 70, it.label, 14, COLOR_TEXT_DIM, ALIGN_LEFT);
+  } else {
+    // Standard Row Layout for tools and settings
+    drawText(r.x + 15, r.y + (r.h/2 - 7), it.label, 16, COLOR_TEXT_MAIN, ALIGN_LEFT);
+    
+    if (it.tappable) {
+      drawChevron(r.right() - 20, r.y + (r.h/2), getSemanticColor(SemanticColor::Primary));
+    }
+  }
+}
+
+// --- Radial Hold Renderer ---
+void drawStopHoldProgress(Rect r, float percent) {
+  // Base outline: The track
+  drawCircleOutline(r.x + r.w/2, r.y + r.h/2, 30, COLOR_TEXT_DIM);
+  
+  // The Radial Fill: Progress arc from 0 to 360 degrees
+  drawArc(r.x + r.w/2, r.y + r.h/2, 30, 0, percent * 360.0f, getSemanticColor(SemanticColor::Danger));
+  
+  // Center text: High contrast "STOP"
+  drawText(r.x + r.w/2, r.y + r.h/2, "STOP", 14, COLOR_TEXT_MAIN, ALIGN_CENTER);
+}
