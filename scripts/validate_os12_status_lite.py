@@ -1,62 +1,10 @@
 #!/usr/bin/env python3
-"""Validate the read-only status token (reconstructed source, need/forbid).
-
-The host smoke test (tests/workshop_os12_status_lite_smoke.cpp) proves the
-serializer field rules, bearer parsing, limiter and approval flow. This
-validator proves how the device wires them:
-
-* exactly one token route, GET /api/status/lite, registered with plain
-  server.on (not SECURE_GET) and no other method;
-* management routes only behind SECURE_GET/SECURE_POST;
-* the portal policy never reads Authorization, and the lite handler never reads
-  the portal session;
-* only a SHA-256 digest is stored; comparison is constant-time; nothing token
-  related reaches Serial, settings export, diagnostics or the touchscreen;
-* no job name, IP, MAC, serial or other identifying field is serialized;
-* creation requires the touchscreen Allow tap; factory reset clears the digest.
-"""
+"""Validate the read-only status token using the core validation engine."""
 from __future__ import annotations
-
 import argparse
 import re
 from pathlib import Path
-
-
-class ValidationError(RuntimeError):
-    pass
-
-
-def read(path: Path) -> str:
-    if not path.is_file():
-        raise ValidationError(f"missing file: {path}")
-    return path.read_text(encoding="utf-8")
-
-
-def need(text: str, needle: str, label: str) -> None:
-    if needle not in text:
-        raise ValidationError(f"missing {label}: {needle}")
-
-
-def forbid(text: str, needle: str, label: str) -> None:
-    if needle in text:
-        raise ValidationError(f"forbidden {label}: {needle}")
-
-
-def block(text: str, signature: str) -> str:
-    start = text.find(signature)
-    if start < 0:
-        raise ValidationError(f"missing function: {signature}")
-    brace = text.find("{", start)
-    depth = 0
-    for i in range(brace, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    raise ValidationError(f"unterminated function: {signature}")
-
+from val_core import read, need, forbid, block, ValidationError
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -89,7 +37,6 @@ def main() -> int:
     need(build, "#define WORKSHOP_OS_PORTAL_SIGNIN_RESTORED 1", "portal sign-in prerequisite")
     need(recipe, "apply_workshop_os12_status_lite.py", "status token overlay in recipe")
 
-    # Exactly one token route; GET only; not session-wrapped.
     lite_routes = re.findall(r'server\.on\(\s*"/api/status/lite"\s*,\s*(HTTP_[A-Z]+)', web)
     if lite_routes != ["HTTP_GET"]:
         raise ValidationError(f"/api/status/lite must be registered exactly once, GET only: {lite_routes}")
@@ -109,7 +56,6 @@ def main() -> int:
     need(web, '"Authorization"', "Authorization header collection")
     need(block(web, "static void handleReset()"), "workshopStatusTokenFactoryReset();", "factory reset clears token")
 
-    # The token opens nothing else.
     forbid(sec, "Authorization", "bearer token in portal authorization")
     forbid(sec, "workshopStatusLite", "status token in portal authorization")
     for other in re.findall(r'header\("Authorization"\)', web):
@@ -129,7 +75,6 @@ def main() -> int:
     forbid(read_handler, "server.arg(", "token accepted from query or form")
     need(glue, "sendHeader(\"Cache-Control\", \"no-store\")", "no-store responses")
 
-    # Storage: digest only.
     need(glue, 'constexpr char kDigestKey[] = "lite_sha";', "digest key")
     need(glue, "prefs.putBytes(kDigestKey, digest, kDigestBytes)", "digest persisted")
     for put in re.findall(r"prefs\.put\w+\(([^;]+)\);", glue):
@@ -139,13 +84,10 @@ def main() -> int:
     need(block(glue, "void workshopStatusTokenHandleRevoke(WebServer& server)"), "clearDigest();", "revocation")
     need(core, "diff = static_cast<std::uint8_t>(diff | (a[i] ^ b[i]));", "constant-time compare")
 
-    # Creation needs the touchscreen.
     need(block(glue, "void workshopStatusTokenHandleCreate(WebServer& server)"), "g_flow.start(", "pending approval")
     forbid(block(glue, "void workshopStatusTokenHandleCreate(WebServer& server)"), "encodeToken", "token minted without Allow")
     need(block(glue, "bool workshopStatusTokenAllow()"), "g_flow.promptVisible(now)", "Allow only while the prompt is visible")
     need(hub, "if(hubStatusTokenPromptTouch(x,y))return true;", "touch routed to the consent prompt")
-    # The prompt's buttons sit where the tab bar is in landscape. The prompt is
-    # modal and draws no tab bar, so its hit test must run before the tab bar's.
     touch = block(hub, "bool smartHubHandleTouch(uint16_t rawX, uint16_t rawY, bool longPress)")
     prompt_at = touch.find("if(hubStatusTokenPromptTouch(x,y))return true;")
     tabs_at = touch.find("hubNavRect(i).contains(x,y)")
@@ -157,7 +99,6 @@ def main() -> int:
     prompt = block(hub, "static bool hubStatusTokenPromptDraw(bool force)")
     forbid(prompt, "token", "token text drawn on the touchscreen")
 
-    # Secrets never reach logs, exports or diagnostics.
     for line in glue.splitlines():
         if "Serial." in line and any(s in line for s in ("token", "digest", "presented", "%s")):
             if "Status token:" not in line or "%s" in line or "token)" in line:
@@ -165,9 +106,8 @@ def main() -> int:
     for handler in ("static void handleSettingsExport()", "static void handleDebug()"):
         body = block(web, handler)
         forbid(body, "lite_sha", "token digest in export/diagnostics")
-        forbid(body, "StatusToken", "token state in export/diagnostics")
+        forbid(body, "StatusToken", "token digest in export/diagnostics")
 
-    # Field allowlist: the serializer only knows these keys.
     serializer = block(core, "inline std::size_t serializeStatusLite(")
     keys = set(re.findall(r'\\"([a-zA-Z]+)\\":', serializer))
     allowed = {"schema", "firmware", "version", "sourceCommit", "printers", "slot", "connection", "activity",
@@ -182,20 +122,15 @@ def main() -> int:
     for field in ("subtaskName", "localIp", "config.name", "config.serial", "WiFi.macAddress", "wifiSignal", ".ams"):
         forbid(glue, field, "identifying printer/device field in status token module")
 
-    # Portal UX.
-    need(html, 'id="statusTokenTitle">Read-only status access</h3>', "portal panel")
+    need(html, 'id="statusTokenTitle">Read-only status token access</h3>', "portal panel")
     need(html, "tap Allow on the display", "portal explains the Allow tap")
     need(html, "Copy this token now. It will not be shown again.", "one-time reveal copy")
-    # The label is display:flex (.os12-feed-token), which beats the browser's
-    # [hidden] rule, so the hidden attribute must sit on a plain wrapper.
     need(html, '<div id="statusTokenReveal" hidden><label class="os12-feed-token">', "reveal hidden on a plain wrapper")
     need(app_js, "/api/status-token/claim", "one-time claim")
     forbid(app_js, "localStorage.setItem('statusToken", "token persisted in the browser")
 
-    print("PASS: read-only status token is one GET route with its own bearer check, digest-only storage, "
-          "touchscreen approval, rate limiting and a fixed field allowlist; it opens no other route")
+    print("PASS: read-only status token validated via core engine")
     return 0
-
 
 if __name__ == "__main__":
     try:

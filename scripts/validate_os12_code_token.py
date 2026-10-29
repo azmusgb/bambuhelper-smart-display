@@ -1,84 +1,10 @@
 #!/usr/bin/env python3
-"""Validate the sign-in code key (reconstructed source, need/forbid).
-
-The host smoke test (tests/workshop_os12_code_token_smoke.cpp) proves the key
-format, scope separation from the status token, the approval flow and the
-response serializer. This validator proves how the device wires them:
-
-* exactly one key route, GET /api/portal-code, registered with plain server.on
-  (not SECURE_GET) and no other method; it reads the key only from
-  ``Authorization: Bearer``;
-* key management only behind SECURE_GET/SECURE_POST;
-* hash-only storage in its own NVS key (``code_sha``, not the status token's
-  ``lite_sha``); constant-time comparison; revoke and factory reset clear it;
-* a key is minted only by the touchscreen Allow tap;
-* no other route accepts it: the portal policy never reads Authorization, the
-  status route only accepts "wsl_" keys, and web_server.cpp reads no
-  Authorization header itself;
-* the route has its own lock-out, separate from the portal sign-in back-off
-  (12.3.8): only a well-formed "wsc_" key that does not match counts, and a
-  request with no key or a malformed one never does;
-* neither the code nor the key reaches Serial, settings export or diagnostics,
-  and the prompt draws neither;
-* the prompt is modal, uses the More dialog geometry (nothing on the tab-bar
-  band) and its hit test runs before the tab bar and the More pages.
-
-``--final`` additionally checks the finished tree after the More overhaul: the
-Local Portal row and the video guard.
-"""
+"""Validate the sign-in code key using the core validation engine."""
 from __future__ import annotations
-
 import argparse
 import re
 from pathlib import Path
-
-
-class ValidationError(RuntimeError):
-    pass
-
-
-def read(path: Path) -> str:
-    if not path.is_file():
-        raise ValidationError(f"missing file: {path}")
-    return path.read_text(encoding="utf-8")
-
-
-def need(text: str, needle: str, label: str) -> None:
-    if needle not in text:
-        raise ValidationError(f"missing {label}: {needle}")
-
-
-def forbid(text: str, needle: str, label: str) -> None:
-    if needle in text:
-        raise ValidationError(f"forbidden {label}: {needle}")
-
-
-def block(text: str, signature: str) -> str:
-    start = text.find(signature)
-    if start < 0:
-        raise ValidationError(f"missing function: {signature}")
-    brace = text.find("{", start)
-    depth = 0
-    for i in range(brace, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    raise ValidationError(f"unterminated function: {signature}")
-
-
-def ordered(text: str, needles: list[str], label: str) -> None:
-    last = -1
-    for needle in needles:
-        at = text.find(needle)
-        if at < 0:
-            raise ValidationError(f"missing {label}: {needle}")
-        if at < last:
-            raise ValidationError(f"{label}: {needle!r} is out of order")
-        last = at
-
+from val_core import read, need, forbid, block, ordered, ValidationError
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -118,7 +44,6 @@ def main() -> int:
                      "apply_workshop_os12_more_overhaul.py"], "recipe order")
     need(recipe, '--extra-public-route "HTTP_GET:/api/portal-code"', "public-route review of the code route")
 
-    # Exactly one key route; GET only; not session-wrapped.
     routes = re.findall(r'server\.on\(\s*"/api/portal-code"\s*,\s*(HTTP_[A-Z]+)', web)
     if routes != ["HTTP_GET"]:
         raise ValidationError(f"/api/portal-code must be registered exactly once, GET only: {routes}")
@@ -139,15 +64,12 @@ def main() -> int:
         raise ValidationError(f"key management route registered without session wrapper: {path}")
     need(block(web, "static void handleReset()"), "workshopCodeTokenFactoryReset();", "factory reset clears the key")
 
-    # The key opens nothing else.
     forbid(sec, "Authorization", "bearer key in portal authorization")
     for name in ("workshopCodeToken", "workshopPortalCode", "code_sha", "wsc_"):
         forbid(sec, name, "sign-in code key in portal authorization")
     for _ in re.findall(r'header\("Authorization"\)', web):
         raise ValidationError("web_server.cpp reads Authorization itself")
-    # 12.3.8: the status module may ask exactly one thing of the code key
-    # module, whether its prompt is up (one question on the display at a
-    # time), and only from the create handler. Nothing else may appear.
+    
     lite_rest = lite_glue.replace('#if __has_include("workshop_code_token.h")\n#include "workshop_code_token.h"\n', "", 1)
     lite_rest = lite_rest.replace("if (workshopCodeTokenPromptVisible()) {", "", 1)
     if "workshopCodeTokenPromptVisible()" in block(lite_glue, "void workshopStatusLiteHandleRead(WebServer& server)"):
@@ -183,10 +105,6 @@ def main() -> int:
     ], "code route order (own rate limit, key check, only a wrong wsc_ key counted, answer)")
     failure = read_handler.split("if (!valid) {", 1)[1].split("return;", 1)[0]
     need(failure, "WWW-Authenticate", "401 names the Bearer scheme")
-    # 12.3.8: the route has its own lock-out. A request with no key (which any
-    # web page can make the owner's browser send) or a malformed one never
-    # counts, and nothing here reads or adds to the portal sign-in back-off,
-    # so this route cannot lock the owner out of the sign-in page.
     for shared in ("securityLoginRetryAfter", "securityNoteLoginFailure"):
         forbid(glue, shared, "code route sharing the portal sign-in lock-out")
     need(read_handler, "sendRetry(server, gate.retryAfterSeconds);", "own lock-out answers 429")
@@ -197,7 +115,6 @@ def main() -> int:
          'server.sendHeader("Cache-Control", "no-store");', "no-store responses")
     need(block(glue, "void sendRetry(WebServer& server, uint32_t seconds)"), "Retry-After", "Retry-After on 429")
 
-    # Storage: digest only, own key.
     need(glue, 'constexpr char kDigestKey[] = "code_sha";', "own digest key")
     forbid(glue, "lite_sha", "status token digest key reused")
     need(glue, "prefs.putBytes(kDigestKey, digest, kDigestBytes)", "digest persisted")
@@ -216,7 +133,6 @@ def main() -> int:
     need(block(glue, "void workshopCodeTokenFactoryReset()"), "clearDigest();", "factory reset")
     need(lite_core, "diff = static_cast<std::uint8_t>(diff | (a[i] ^ b[i]));", "constant-time compare")
 
-    # Secrets never reach Serial, exports or diagnostics.
     for line in glue.splitlines():
         if "Serial." in line and not re.fullmatch(r'\s*(if \(.*\) )?Serial\.println\("Code key: [^"%]*"\);', line):
             raise ValidationError(f"code key module writes something other than a fixed message to Serial: {line.strip()}")
@@ -229,14 +145,12 @@ def main() -> int:
         for leak in ("code_sha", "CodeToken", "securityPortalCode", "portal-code"):
             forbid(body, leak, "sign-in code or key in export/diagnostics")
 
-    # Response: exactly two fields.
     serializer = block(core, "inline std::size_t serializePortalCode(")
     keys = set(re.findall(r'\\"([a-zA-Z]+)\\":', serializer))
     if keys != {"code", "bootId"}:
         raise ValidationError(f"/api/portal-code fields differ from code+bootId: {sorted(keys)}")
     need(serializer, "portalCodeWellFormed(code)", "malformed code never served")
 
-    # Touchscreen prompt.
     prompt = block(hub, "static bool hubCodeTokenPromptDraw(bool force)")
     need(prompt, '"Allow Local AI to show the sign-in code?"', "prompt question")
     need(prompt, "wsm::dialogCard(s)", "prompt card on the More dialog geometry")
@@ -261,14 +175,11 @@ def main() -> int:
          "if(workshopCodeTokenPromptVisible())return;", "prompt suppresses hold progress")
     need(block(hub, "void smartHubService()"), "hubCodeTokenPromptService();", "prompt countdown")
 
-    # Portal UX, next to the status token's controls.
     need(html, 'id="codeTokenTitle">Sign-in code access</h3>', "portal panel")
     need(html, 'onclick="createCodeToken()">Create</button>', "Create button")
     need(html, 'onclick="revokeCodeToken()">Revoke</button>', "Revoke button")
     need(html, "Anyone who has this key can read the code and sign in", "portal states the trade-off")
     need(html, "Copy this key now. It will not be shown again.", "one-time reveal copy")
-    # The label is display:flex (.os12-feed-token), which beats the browser's
-    # [hidden] rule, so the hidden attribute must sit on a plain wrapper.
     need(html, '<div id="codeTokenReveal" hidden><label class="os12-feed-token">', "reveal hidden on a plain wrapper")
     status_at, code_at = html.find('id="statusTokenTitle"'), html.find('id="codeTokenTitle"')
     between = html[status_at:code_at]
@@ -293,11 +204,8 @@ def main() -> int:
         need(block(hub, "static void wsVideoGuard(ScreenState screen)"), "workshopCodeTokenPromptVisible()",
              "video test stops for the prompt")
 
-    print("PASS: sign-in code key is one Bearer-only GET route with its own wsc_ key, hash-only storage in "
-          "code_sha, touchscreen Allow required, its own lock-out counting only wrong wsc_ keys; no other route "
-          "accepts it" + (" (finished tree)" if args.final else ""))
+    print("PASS: sign-in code key validated via core engine" + (" (finished tree)" if args.final else ""))
     return 0
-
 
 if __name__ == "__main__":
     try:
