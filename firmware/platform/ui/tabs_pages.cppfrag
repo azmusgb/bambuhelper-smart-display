@@ -307,18 +307,57 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
 
 static void wtDrawCardSurface(const wsm::Rect& r, uint16_t rail) {
   const wsm::Rect c = wsm::rowSurface(r);
-  tft.fillRoundRect(c.x, c.y, c.w, c.h, 12, OS12V_SURFACE2);
-  tft.drawRoundRect(c.x, c.y, c.w, c.h, 12, OS12V_LINE);
-  tft.fillRoundRect(c.x, c.y + 10, 4, c.h - 20, 2, rail);
+  const int16_t radius = 14;
+
+  // Premium v2 visual treatment only. Geometry and touch remain owned by
+  // tabs_layout.hpp / rowSurface(), so the interaction contract is unchanged.
+  tft.fillRoundRect(c.x, c.y, c.w, c.h, radius, OS12V_SURFACE2);
+  tft.drawRoundRect(c.x, c.y, c.w, c.h, radius, OS12V_LINE);
+
+  // Quiet inset highlight gives the card depth without adding another border
+  // or changing its interactive bounds.
+  if (c.w > 36) {
+    tft.drawFastHLine(
+        (int16_t)(c.x + 18),
+        (int16_t)(c.y + 1),
+        (int16_t)(c.w - 36),
+        OS12V_SURFACE);
+  }
+
+  // Semantic state rail stays visually strong but is pulled inward so it reads
+  // as status rather than a second card edge.
+  if (c.h > 28) {
+    tft.fillRoundRect(
+        (int16_t)(c.x + 1),
+        (int16_t)(c.y + 12),
+        4,
+        (int16_t)(c.h - 24),
+        2,
+        rail);
+  }
 }
 
 static void wtDrawProgress(int16_t x, int16_t y, int16_t w, uint8_t pct, uint16_t color) {
   if (pct > 100) pct = 100;
-  tft.fillRoundRect(x, y, w, 10, 5, OS12V_SURFACE);
-  tft.drawRoundRect(x, y, w, 10, 5, OS12V_LINE);
+
+  // Premium v2 uses a quieter 8 px track. The supplied rectangle and all
+  // surrounding layout remain unchanged.
+  const int16_t h = 8;
+  const int16_t yy = (int16_t)(y + 1);
+
+  tft.fillRoundRect(x, yy, w, h, 4, OS12V_SURFACE);
+
   const int16_t fw = (int16_t)((int32_t)w * pct / 100);
-  if (fw >= 10) tft.fillRoundRect(x, y, fw, 10, 5, color);
-  else if (fw > 0) tft.fillRect(x + 1, y + 2, fw, 6, color);
+  if (fw >= h) {
+    tft.fillRoundRect(x, yy, fw, h, 4, color);
+  } else if (fw > 0) {
+    tft.fillRect(
+        (int16_t)(x + 1),
+        (int16_t)(yy + 2),
+        fw,
+        (int16_t)(h - 4),
+        color);
+  }
 }
 
 // 12.3.9: the percentage in the 48 px numeric font (font 6, digits only),
@@ -909,8 +948,14 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
     strlcpy(c.kind, "status", sizeof(c.kind));
     c.tone = Tone::Info;
     c.percent = 255;
-    if (fresh && !ai.needsFromPi) { strlcpy(c.title, "Pi Hub", sizeof(c.title)); strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text)); }
-    else { strlcpy(c.title, "Local AI", sizeof(c.title)); strlcpy(c.text, "Every card is on the Local AI tab", sizeof(c.text)); }
+    if (fresh && !ai.needsFromPi) {
+      strlcpy(c.title, "Pi Hub", sizeof(c.title));
+      strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text));
+      c.tone = Tone::Warning;
+    } else {
+      strlcpy(c.title, "Local AI", sizeof(c.title));
+      strlcpy(c.text, "Every card is on the Local AI tab", sizeof(c.text));
+    }
   }
   return rows;
 }
@@ -962,20 +1007,83 @@ static void wtHomeClock(char* out, size_t len) {
 
 // One of idle Home's need rows: a dot in its tone, its title, its line and a chevron, as on the Local AI tab; the
 // second row also says "+N more".
-static void wtDrawHomeHouse(const wsm::Rect& r, const WtHomeRow& row, uint8_t others) {
+static void wtDrawHomeHouse(const wsm::Rect& r, const WtHomeRow& row, uint8_t others, bool primary) {
   const wsm::Rect surface = wsm::rowSurface(r);
-  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  const uint16_t tone = wtAiToneColor(row.c.tone);
+  const uint16_t bg = primary ? OS12V_SURFACE2 : OS12V_SURFACE;
+
+  // Premium v2 Home priority tile. The first household need gets stronger
+  // hierarchy while retaining the exact canonical row/hit rectangle.
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, bg);
+  tft.drawRoundRect(
+      surface.x, surface.y, surface.w, surface.h, 12,
+      primary ? tone : OS12V_LINE);
+
+  if (primary && surface.h > 20) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 8),
+        4,
+        (int16_t)(surface.h - 16),
+        2,
+        tone);
+
+    if (surface.w > 36) {
+      tft.drawFastHLine(
+          (int16_t)(surface.x + 18),
+          (int16_t)(surface.y + 1),
+          (int16_t)(surface.w - 36),
+          OS12V_SURFACE);
+    }
+  }
+
   char more[16] = "";
-  if (others) snprintf(more, sizeof(more), "+%u more", (unsigned)others);
-  wtDrawAiRow(r, row.c, OS12V_SURFACE, more);
+  if (others)
+    snprintf(more, sizeof(more), "+%u more", (unsigned)others);
+
+  wtDrawAiRow(r, row.c, bg, more);
 }
 
-static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
+static void wtDrawHomeMetric(const wsm::Rect& r, const char* label, float value, bool heating) {
+  if (r.empty()) return;
+
+  tft.fillRoundRect(r.x, r.y, r.w, r.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, OS12V_LINE);
+
+  uiDrawFit(
+      label,
+      (int16_t)(r.x + 9),
+      (int16_t)(r.y + 10),
+      (int16_t)(r.w - 18),
+      FONT_SMALL,
+      TL_DATUM,
+      OS12V_MUTED,
+      OS12V_SURFACE);
+
+  char valueText[16];
+  snprintf(valueText, sizeof(valueText), "%.0f°", value);
+
+  uiDrawFit(
+      valueText,
+      (int16_t)(r.x + 9),
+      (int16_t)(r.y + 31),
+      (int16_t)(r.w - 18),
+      FONT_LARGE,
+      TL_DATUM,
+      heating ? OS12V_AMBER : OS12V_TEXT,
+      OS12V_SURFACE);
+}
+
+static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
   const uint16_t bg = OS12V_SURFACE2;
+
   char state[48], detail[96];
   uint16_t color = OS12V_GREEN;
   detail[0] = 0;
+
+  float nozzleTemp = 0.0f;
+  float nozzleTarget = 0.0f;
+
   if (!w.configured) {
     strlcpy(state, "Not set up", sizeof(state));
     strlcpy(detail, "Add your printer in Local Portal", sizeof(detail));
@@ -984,26 +1092,127 @@ static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
     strlcpy(state, "Offline", sizeof(state));
     strlcpy(detail, "Check that it is on and on Wi-Fi", sizeof(detail));
     color = OS12V_AMBER;
+  } else if (w.alerts || w.failedActive) {
+    strlcpy(
+        state,
+        w.failedActive && !w.alerts ? "Print failed" : "Needs attention",
+        sizeof(state));
+    wtAlertText(w, detail, sizeof(detail));
+    color = OS12V_RED;
   } else {
     char at[24];
-    float nozTemp = 0, nozTarget = 0;
-    if (w.s) wtNozzle(*w.s, nozTemp, nozTarget);
-    if (w.finished && w.s && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) snprintf(state, sizeof(state), "Finished %s", at);
-    else strlcpy(state, w.finished ? "Finished" : "Ready", sizeof(state));
+
+    if (w.s)
+      wtNozzle(*w.s, nozzleTemp, nozzleTarget);
+
+    if (w.finished && w.s &&
+        wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) {
+      snprintf(state, sizeof(state), "Finished %s", at);
+    } else {
+      strlcpy(state, w.finished ? "Finished" : "Ready", sizeof(state));
+    }
+
     const char* job = w.s ? jobDisplayName(*w.s) : nullptr;
-    if (w.finished && job && job[0]) strlcpy(detail, job, sizeof(detail));
-    else if (w.s && (nozTemp > 0 || w.s->bedTemp > 0)) snprintf(detail, sizeof(detail), "Nozzle %.0f°  ·  Bed %.0f°", nozTemp, w.s->bedTemp);
+
+    if (w.finished && job && job[0])
+      strlcpy(detail, job, sizeof(detail));
+    else
+      strlcpy(detail, "Ready for the next print", sizeof(detail));
   }
+
   wtDrawCardSurface(r, color);
-  const int16_t x = (int16_t)(r.x + 18), chevX = wtl::cardChevronX(r), textW = (int16_t)(chevX - 12 - x);
-  wsDrawChevronRight(chevX, (int16_t)(r.y + r.h / 2), OS12V_MUTED);
-  // The printer's name small and quiet, its state large: the state is what you read from across the room.
-  const char* name = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : "Printer";
-  setFont(tft, FONT_BODY);
-  const int16_t nameW = (int16_t)(tft.textWidth(name) + 14);
-  uiDrawFit(name, x, (int16_t)(r.y + 22), nameW, FONT_BODY, ML_DATUM, OS12V_MUTED, bg);
-  uiDrawFit(state, (int16_t)(x + nameW), (int16_t)(r.y + 22), (int16_t)(textW - nameW), FONT_LARGE, ML_DATUM, color, bg);
-  if (detail[0]) uiDrawFit(detail, x, (int16_t)(r.y + 58), textW, wsFitFont(detail, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_TEXT, bg);
+
+  const int16_t x = (int16_t)(r.x + 18);
+  const int16_t chevX = wtl::cardChevronX(r);
+  const int16_t contentRight = (int16_t)(chevX - 12);
+
+  wsDrawChevronRight(
+      chevX,
+      (int16_t)(r.y + r.h / 2),
+      OS12V_MUTED);
+
+  // Premium v2 Home printer bento. In landscape, healthy idle state gains
+  // two read-only temperature tiles. The outer card and its hit rectangle
+  // remain exactly the canonical HomePrinterRow geometry.
+  const bool metrics =
+      s.landscape() &&
+      w.configured &&
+      w.online &&
+      !w.alerts &&
+      !w.failedActive &&
+      !w.finished &&
+      w.s;
+
+  int16_t textRight = contentRight;
+
+  if (metrics) {
+    const int16_t metricW = 72;
+    const int16_t metricGap = 7;
+    const int16_t metricH = (int16_t)(r.h - 24);
+    const int16_t metricY = (int16_t)(r.y + 12);
+    const int16_t bedX = (int16_t)(contentRight - metricW);
+    const int16_t nozzleX = (int16_t)(bedX - metricGap - metricW);
+
+    textRight = (int16_t)(nozzleX - 10);
+
+    const bool nozzleHeating =
+        nozzleTarget > 1.0f &&
+        (nozzleTarget - nozzleTemp) >= 2.0f;
+
+    const bool bedHeating =
+        w.s->bedTarget > 1.0f &&
+        (w.s->bedTarget - w.s->bedTemp) >= 2.0f;
+
+    wtDrawHomeMetric(
+        wsm::makeRect(nozzleX, metricY, metricW, metricH),
+        "Nozzle",
+        nozzleTemp,
+        nozzleHeating);
+
+    wtDrawHomeMetric(
+        wsm::makeRect(bedX, metricY, metricW, metricH),
+        "Bed",
+        w.s->bedTemp,
+        bedHeating);
+  }
+
+  const int16_t textW = (int16_t)(textRight - x);
+  const char* name =
+      (w.configured && w.p && w.p->config.name[0])
+          ? w.p->config.name
+          : "Printer";
+
+  uiDrawFit(
+      name,
+      x,
+      (int16_t)(r.y + 15),
+      textW,
+      FONT_SMALL,
+      TL_DATUM,
+      OS12V_MUTED,
+      bg);
+
+  uiDrawFit(
+      state,
+      x,
+      (int16_t)(r.y + 34),
+      textW,
+      FONT_LARGE,
+      TL_DATUM,
+      color,
+      bg);
+
+  if (detail[0]) {
+    uiDrawFit(
+        detail,
+        x,
+        (int16_t)(r.y + 62),
+        textW,
+        wsFitFont(detail, textW, FONT_BODY, FONT_SMALL),
+        ML_DATUM,
+        OS12V_TEXT,
+        bg);
+  }
 }
 
 static void wtDrawHomeIdle(const WtPrint& w) {
@@ -1023,8 +1232,8 @@ static void wtDrawHomeIdle(const WtPrint& w) {
     if (r.empty()) continue;
     const wtl::ItemSpec& it = v.items[i];
     const int8_t need = wtl::homeNeedRow(v, i);
-    if (need >= 0) { wtDrawHomeHouse(r, rows[need], need == 1 ? others : 0); continue; }
-    if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(r, w); continue; }
+    if (need >= 0) { wtDrawHomeHouse(r, rows[need], need == 1 ? others : 0, need == 0); continue; }
+    if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(s, r, w); continue; }
     WsRowView row;
     wtWorkshopRow(it.id, inv, row);
     wsDrawRowBody(s, it.rowKind, it.label, row, r);
@@ -1148,10 +1357,33 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
 // that looked like a selected button.
 static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t) {
   const wsm::Rect surface = wsm::rowSurface(row);
-  tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
-  tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
-  if (t.inUse) tft.fillRoundRect(surface.x + 2, surface.y + 6, 4, surface.h - 12, 2, OS12V_ACCENT);
-  const uint16_t bg = OS12V_BG;
+
+  // Premium v2 AMS tray treatment. AMS rows remain read-only telemetry:
+  // active state gets tonal emphasis + rail, never a raised/outlined row.
+  const uint16_t bg = t.inUse ? OS12V_SURFACE2 : OS12V_BG;
+
+  tft.fillRect(
+      surface.x,
+      surface.y,
+      surface.w,
+      surface.h,
+      bg);
+
+  tft.drawFastHLine(
+      (int16_t)(surface.x + 12),
+      (int16_t)(surface.bottom() - 1),
+      (int16_t)(surface.w - 24),
+      OS12V_LINE);
+
+  if (t.inUse) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 7),
+        4,
+        (int16_t)(surface.h - 14),
+        2,
+        OS12V_ACCENT);
+  }
   const int16_t mid = row.y + row.h / 2;
   // Tactile 22x22 colour swatch with rounded corners.
   const int16_t swatchX = row.x + 16;
@@ -1169,9 +1401,31 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
   const int16_t right = row.right() - 12;
   int16_t valueRight = right;
   if (t.inUse) {
-    uiDrawFit("In use", right, mid, 60, FONT_BODY, MR_DATUM, OS12V_ACCENT, bg);
-    setFont(tft, FONT_BODY);
-    valueRight = (int16_t)(right - tft.textWidth("In use") - 12);
+    // Preserve the 12.3.9 legibility contract: active AMS state remains
+    // a 14 px body-font value even with the Premium v2 badge treatment.
+    const int16_t badgeW = 68;
+    const int16_t badgeX = (int16_t)(right - badgeW);
+
+    tft.fillRoundRect(
+        badgeX,
+        (int16_t)(mid - 12),
+        badgeW,
+        24,
+        12,
+        OS12V_SURFACE);
+
+    tft.drawRoundRect(
+        badgeX,
+        (int16_t)(mid - 12),
+        badgeW,
+        24,
+        12,
+        OS12V_ACCENT);
+
+    uiDrawFit("In use", (int16_t)(badgeX + badgeW / 2), mid, (int16_t)(badgeW - 12), FONT_BODY,
+              MC_DATUM, OS12V_ACCENT, OS12V_SURFACE);
+
+    valueRight = (int16_t)(badgeX - 8);
   }
 
   // Horizon 1.1: Precision Spool Fuel Gauge Meter on landscape 480x320 display
@@ -1230,10 +1484,49 @@ static void wtDrawSegments(const wsm::Screen& s, uint8_t selected) {
   for (uint8_t i = 0; i < wtl::kSegmentCount; ++i) {
     const wsm::Rect r = wtl::segmentRect(s, i);
     const bool on = i == selected;
-    if (on) tft.fillRoundRect(r.x + 4, r.y + 5, r.w - 8, r.h - 10, 9, OS12V_ACCENT);
-    else if (i) tft.drawFastVLine(r.x, r.y + 12, r.h - 24, OS12V_LINE);
-    uiDrawFit(kLabels[i], r.x + r.w / 2, r.y + r.h / 2, r.w - 16, FONT_BODY, MC_DATUM, on ? OS12V_BG : OS12V_MUTED,
-              on ? OS12V_ACCENT : OS12V_SURFACE);
+    // Premium v2 Printer segment treatment. The canonical segmentRect()
+    // remains the sole draw/touch geometry; only selected-state styling changes.
+    if (on) {
+      tft.fillRoundRect(
+          (int16_t)(r.x + 4),
+          (int16_t)(r.y + 5),
+          (int16_t)(r.w - 8),
+          (int16_t)(r.h - 10),
+          9,
+          OS12V_SURFACE2);
+
+      tft.drawRoundRect(
+          (int16_t)(r.x + 4),
+          (int16_t)(r.y + 5),
+          (int16_t)(r.w - 8),
+          (int16_t)(r.h - 10),
+          9,
+          OS12V_ACCENT);
+
+      tft.fillRoundRect(
+          (int16_t)(r.x + 14),
+          (int16_t)(r.bottom() - 9),
+          (int16_t)(r.w - 28),
+          3,
+          1,
+          OS12V_ACCENT);
+    } else if (i) {
+      tft.drawFastVLine(
+          r.x,
+          (int16_t)(r.y + 12),
+          (int16_t)(r.h - 24),
+          OS12V_LINE);
+    }
+
+    uiDrawFit(
+        kLabels[i],
+        (int16_t)(r.x + r.w / 2),
+        (int16_t)(r.y + r.h / 2),
+        (int16_t)(r.w - 16),
+        FONT_BODY,
+        MC_DATUM,
+        on ? OS12V_ACCENT : OS12V_MUTED,
+        on ? OS12V_SURFACE2 : OS12V_SURFACE);
   }
 }
 
@@ -1286,8 +1579,51 @@ static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const Wt
     if (wtClockOf(at, sizeof(at), (time_t)st.finishEpoch)) snprintf(detail, sizeof(detail), "%s · done at %s", job && job[0] ? job : "Last print", at);
     else strlcpy(detail, job && job[0] ? job : "Take the print off the plate.", sizeof(detail));
   }
-  wtText(headline, x, y + 8, textW, FONT_LARGE, TL_DATUM, color);
-  wsDrawWrapped(detail, x, y + 42, textW, 22, 2, FONT_BODY, OS12V_MUTED, OS12V_SURFACE2);
+  // Premium v2 Printer status hierarchy. The status card remains read-only;
+  // the canonical PrinterCard rectangle and all navigation remain unchanged.
+  const char* printerName = wtPrinterName(w);
+
+  uiDrawFit(
+      printerName,
+      x,
+      (int16_t)(y + 3),
+      (int16_t)(textW - 28),
+      FONT_SMALL,
+      TL_DATUM,
+      OS12V_MUTED,
+      OS12V_SURFACE2);
+
+  tft.drawCircle(
+      (int16_t)(r.right() - 24),
+      (int16_t)(y + 10),
+      5,
+      OS12V_LINE);
+
+  tft.fillCircle(
+      (int16_t)(r.right() - 24),
+      (int16_t)(y + 10),
+      3,
+      color);
+
+  wtText(
+      headline,
+      x,
+      (int16_t)(y + 26),
+      textW,
+      FONT_LARGE,
+      TL_DATUM,
+      color);
+
+  wsDrawWrapped(
+      detail,
+      x,
+      (int16_t)(y + 56),
+      textW,
+      18,
+      2,
+      FONT_BODY,
+      OS12V_MUTED,
+      OS12V_SURFACE2);
 }
 
 // Printer > Status bottom row: the first error, else layer and speed while
@@ -1379,70 +1715,291 @@ static WtControls wtControls(const WtPrint& w) {
 
 static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c) {
   const wsm::Rect b = wtl::primaryDrawRect(row);
-  const uint16_t bg = !c.pauseEnabled ? OS12V_SURFACE : (c.resume ? OS12V_GREEN : OS12V_ACCENT);
-  tft.fillRoundRect(b.x, b.y, b.w, b.h, 12, bg);
-  tft.drawRoundRect(b.x, b.y, b.w, b.h, 12, c.pauseEnabled ? bg : OS12V_LINE);
-  if (c.pauseEnabled) {
-    // Pause bars or a play triangle, then the label.
-    const int16_t cy = b.y + b.h / 2, ix = b.x + b.w / 2 - 72;
-    if (c.resume) tft.fillTriangle(ix, cy - 8, ix, cy + 8, ix + 13, cy, OS12V_BG);
-    else { tft.fillRect(ix, cy - 8, 4, 16, OS12V_BG); tft.fillRect(ix + 8, cy - 8, 4, 16, OS12V_BG); }
-    uiDrawFit(c.pauseLabel, b.x + b.w / 2 + 10, cy, b.w - 120, FONT_LARGE, MC_DATUM, OS12V_BG, bg);
+  const bool enabled = c.pauseEnabled;
+  const uint16_t tone = c.resume ? OS12V_GREEN : OS12V_ACCENT;
+  const uint16_t bg = enabled ? tone : OS12V_SURFACE;
+
+  // Premium v2 Printer Control primary action. Presentation only:
+  // primaryDrawRect remains the canonical draw/touch geometry.
+  tft.fillRoundRect(b.x, b.y, b.w, b.h, 14, bg);
+  tft.drawRoundRect(
+      b.x, b.y, b.w, b.h, 14,
+      enabled ? tone : OS12V_LINE);
+
+  if (enabled) {
+    if (b.w > 36) {
+      tft.drawFastHLine(
+          (int16_t)(b.x + 18),
+          (int16_t)(b.y + 1),
+          (int16_t)(b.w - 36),
+          OS12V_SURFACE2);
+    }
+
+    const int16_t cy = (int16_t)(b.y + b.h / 2);
+    const int16_t ix = (int16_t)(b.x + b.w / 2 - 72);
+    const int16_t iconCx = (int16_t)(ix + 6);
+
+    // Dark inset icon medallion gives Pause/Resume a strong appliance-level
+    // primary-action hierarchy without changing the button rectangle.
+    tft.fillCircle(iconCx, cy, 16, OS12V_BG);
+    tft.drawCircle(iconCx, cy, 16, OS12V_SURFACE2);
+
+    if (c.resume) {
+      tft.fillTriangle(
+          (int16_t)(iconCx - 4), (int16_t)(cy - 8),
+          (int16_t)(iconCx - 4), (int16_t)(cy + 8),
+          (int16_t)(iconCx + 9), cy,
+          tone);
+    } else {
+      tft.fillRect(
+          (int16_t)(iconCx - 6), (int16_t)(cy - 8),
+          4, 16, tone);
+      tft.fillRect(
+          (int16_t)(iconCx + 2), (int16_t)(cy - 8),
+          4, 16, tone);
+    }
+
+    uiDrawFit(
+        c.pauseLabel,
+        (int16_t)(b.x + b.w / 2 + 10),
+        cy,
+        (int16_t)(b.w - 120),
+        FONT_LARGE,
+        MC_DATUM,
+        OS12V_BG,
+        bg);
+
     const char* sp = wtSpeedText(c.speedLevel);
     if (sp && sp[0]) {
+      setFont(tft, FONT_SMALL);
       const int16_t spW = (int16_t)(tft.textWidth(sp) + 16);
       const int16_t spX = (int16_t)(b.right() - 14 - spW);
-      tft.fillRoundRect(spX, cy - 11, spW, 22, 6, OS12V_BG);
-      uiDrawFit(sp, spX + spW / 2, cy, spW - 8, FONT_SMALL, MC_DATUM, bg, OS12V_BG);
+
+      tft.fillRoundRect(
+          spX, (int16_t)(cy - 11),
+          spW, 22, 7,
+          OS12V_BG);
+      tft.drawRoundRect(
+          spX, (int16_t)(cy - 11),
+          spW, 22, 7,
+          OS12V_SURFACE2);
+
+      uiDrawFit(
+          sp,
+          (int16_t)(spX + spW / 2),
+          cy,
+          (int16_t)(spW - 8),
+          FONT_SMALL,
+          MC_DATUM,
+          tone,
+          OS12V_BG);
     }
   } else {
-    uiDrawFit(c.pauseReason, b.x + b.w / 2, b.y + b.h / 2, b.w - 24, FONT_BODY, MC_DATUM, OS12V_MUTED, bg);
+    uiDrawFit(
+        c.pauseReason,
+        (int16_t)(b.x + b.w / 2),
+        (int16_t)(b.y + b.h / 2),
+        (int16_t)(b.w - 24),
+        FONT_BODY,
+        MC_DATUM,
+        OS12V_MUTED,
+        bg);
   }
 }
 
 // Stop: label on the left, an outlined red "Hold to stop" button on the right.
 static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtControls& c) {
   const wsm::Rect surface = wsm::rowSurface(row);
-  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
-  const int16_t mid = row.y + row.h / 2;
-  const wsm::Rect b = wtl::holdDrawRect(s, row);
-  uiDrawFit("Stop print", row.x + 12, mid, 120, FONT_BODY, ML_DATUM, c.stopEnabled ? OS12V_TEXT : OS12V_MUTED, OS12V_SURFACE);
-  const int16_t hintX = row.x + 140;
-  if (b.x - 8 > hintX) {
-    const char* hint = c.stopEnabled ? "Hold the button 1 s" : c.stopReason;
-    wtTextOn(hint, b.x - 8, mid, b.x - 8 - hintX, wsValueFont(hint, b.x - 8 - hintX), MR_DATUM, OS12V_MUTED, OS12V_SURFACE);
+
+  // Premium v2 guarded Stop treatment. The destructive action remains
+  // visually isolated and hold-only; holdDrawRect is still authoritative.
+  tft.fillRoundRect(
+      surface.x, surface.y,
+      surface.w, surface.h,
+      10,
+      OS12V_SURFACE);
+  tft.drawRoundRect(
+      surface.x, surface.y,
+      surface.w, surface.h,
+      10,
+      OS12V_LINE);
+
+  if (surface.h > 18) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 8),
+        3,
+        (int16_t)(surface.h - 16),
+        2,
+        c.stopEnabled ? OS12V_RED : OS12V_LINE);
   }
-  tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_SURFACE);
-  tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, c.stopEnabled ? OS12V_RED : OS12V_LINE);
-  if (c.stopEnabled) tft.drawRoundRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2, 9, OS12V_RED);
-  uiDrawFit(printerFeedbackLabel(3, "Hold to stop"), b.x + b.w / 2, b.y + b.h / 2, b.w - 16, FONT_BODY, MC_DATUM,
-            c.stopEnabled ? OS12V_RED : OS12V_MUTED, OS12V_SURFACE);
+
+  const int16_t mid = (int16_t)(row.y + row.h / 2);
+  const wsm::Rect b = wtl::holdDrawRect(s, row);
+
+  uiDrawFit(
+      "Stop print",
+      (int16_t)(row.x + 12),
+      mid,
+      120,
+      FONT_BODY,
+      ML_DATUM,
+      c.stopEnabled ? OS12V_TEXT : OS12V_MUTED,
+      OS12V_SURFACE);
+
+  const int16_t hintX = (int16_t)(row.x + 140);
+  if (b.x - 8 > hintX) {
+    const char* hint =
+        c.stopEnabled ? "Hold the button 1 s" : c.stopReason;
+
+    wtTextOn(
+        hint,
+        (int16_t)(b.x - 8),
+        mid,
+        (int16_t)(b.x - 8 - hintX),
+        wsValueFont(hint, (int16_t)(b.x - 8 - hintX)),
+        MR_DATUM,
+        OS12V_MUTED,
+        OS12V_SURFACE);
+  }
+
+  tft.fillRoundRect(
+      b.x, b.y,
+      b.w, b.h,
+      10,
+      OS12V_SURFACE2);
+
+  tft.drawRoundRect(
+      b.x, b.y,
+      b.w, b.h,
+      10,
+      c.stopEnabled ? OS12V_RED : OS12V_LINE);
+
+  if (c.stopEnabled) {
+    tft.drawRoundRect(
+        (int16_t)(b.x + 1),
+        (int16_t)(b.y + 1),
+        (int16_t)(b.w - 2),
+        (int16_t)(b.h - 2),
+        9,
+        OS12V_RED);
+
+    if (b.w > 24) {
+      tft.drawFastHLine(
+          (int16_t)(b.x + 12),
+          (int16_t)(b.y + 2),
+          (int16_t)(b.w - 24),
+          OS12V_RED);
+    }
+  }
+
+  uiDrawFit(
+      printerFeedbackLabel(3, "Hold to stop"),
+      (int16_t)(b.x + b.w / 2),
+      (int16_t)(b.y + b.h / 2),
+      (int16_t)(b.w - 16),
+      FONT_BODY,
+      MC_DATUM,
+      c.stopEnabled ? OS12V_RED : OS12V_MUTED,
+      OS12V_SURFACE2);
 }
 
 // Drawn over the Stop button while it is held (smartHubUpdateHoldProgress).
 static void wtDrawStopHold(const wsm::Rect& b, uint8_t segments) {
-  tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_RED);
-  uiDrawFit("Keep holding", b.x + b.w / 2, b.y + 12, b.w - 16, FONT_SMALL, MC_DATUM, OS12V_BG, OS12V_RED);
-  const int16_t gap = 3, total = b.w - 20, sw = (int16_t)((total - gap * 4) / 5);
-  for (uint8_t i = 0; i < 5; ++i)
-    tft.fillRoundRect((int16_t)(b.x + 10 + i * (sw + gap)), b.y + b.h - 10, sw, 6, 3, i < segments ? OS12V_BG : 0x9000);
+  // Premium v2 destructive hold feedback. The same hold rectangle is
+  // progressively filled; release/cancel semantics are unchanged.
+  tft.fillRoundRect(
+      b.x, b.y,
+      b.w, b.h,
+      10,
+      OS12V_RED);
+
+  tft.drawRoundRect(
+      b.x, b.y,
+      b.w, b.h,
+      10,
+      OS12V_BG);
+
+  uiDrawFit(
+      "Keep holding",
+      (int16_t)(b.x + b.w / 2),
+      (int16_t)(b.y + 12),
+      (int16_t)(b.w - 16),
+      FONT_BODY,
+      MC_DATUM,
+      OS12V_BG,
+      OS12V_RED);
+
+  const int16_t gap = 3;
+  const int16_t total = (int16_t)(b.w - 20);
+  const int16_t sw = (int16_t)((total - gap * 4) / 5);
+
+  for (uint8_t i = 0; i < 5; ++i) {
+    tft.fillRoundRect(
+        (int16_t)(b.x + 10 + i * (sw + gap)),
+        (int16_t)(b.y + b.h - 10),
+        sw,
+        6,
+        3,
+        i < segments ? OS12V_BG : 0x9000);
+  }
 }
 
 static void wtControlRow(wtl::ItemId id, const WtControls& c, WsRowView& v) {
   wsView(v);
+
   if (id == wtl::ItemId::ControlLight) {
     v.enabled = c.lightEnabled;
     v.reason = "Printer offline";
     v.on = c.lightOn;
+
     const char* sent = printerFeedbackLabel(0, "");
-    if (sent[0]) { strlcpy(v.value, sent, sizeof(v.value)); v.valueColor = OS12V_ACCENT; }
-    else if (!c.lightKnown) strlcpy(v.value, "Not reported", sizeof(v.value));
+    if (sent[0]) {
+      strlcpy(v.value, sent, sizeof(v.value));
+      v.valueColor = OS12V_ACCENT;
+    } else if (!c.lightKnown) {
+      strlcpy(v.value, "Not reported", sizeof(v.value));
+    } else {
+      strlcpy(
+          v.value,
+          c.lightOn ? "On" : "Off",
+          sizeof(v.value));
+      v.valueColor = c.lightOn ? OS12V_ACCENT : OS12V_TEXT;
+    }
   } else if (id == wtl::ItemId::ControlPower) {
     v.enabled = c.powerEnabled;
     v.reason = c.powerReason;
     v.button = "Open";
     strlcpy(v.value, "Smart plug", sizeof(v.value));
+  }
+}
+
+static void wtDrawControlRow(
+    const wsm::Screen& s,
+    const wtl::ItemSpec& it,
+    const WtControls& c,
+    const WsRowView& v,
+    const wsm::Rect& row) {
+  // Premium v2 secondary Printer Control row treatment. Canonical itemRect()
+  // still owns both drawing and touch; this adds only a semantic state rail.
+  wsDrawRowBody(s, it.rowKind, it.label, v, row);
+
+  if (!v.enabled) return;
+
+  const wsm::Rect surface = wsm::rowSurface(row);
+  uint16_t tone = OS12V_ACCENT;
+
+  if (it.id == wtl::ItemId::ControlLight)
+    tone = (c.lightKnown && c.lightOn) ? OS12V_ACCENT : OS12V_MUTED;
+
+  if (surface.h > 18) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 9),
+        3,
+        (int16_t)(surface.h - 18),
+        2,
+        tone);
   }
 }
 
@@ -1495,7 +2052,7 @@ static void wtDrawPrinter(bool full) {
       case wtl::ItemId::ControlPower: {
         WsRowView row;
         wtControlRow(it.id, c, row);
-        wsDrawRowBody(s, it.rowKind, it.label, row, r);
+        wtDrawControlRow(s, it, c, row, r);
         break;
       }
       case wtl::ItemId::ControlStop: wtDrawStop(s, r, c); break;
@@ -1877,6 +2434,82 @@ static void wtOpenImage() {
   setPage(SCREEN_HUB_WORKSHOP);
 }
 
+// Premium v2 Workshop lead-card hierarchy. The Local AI card remains inside
+// the canonical rowSurface/itemRect geometry; this changes presentation only.
+static void wtDrawWorkshopAiCard(
+    const wsm::Rect& row,
+    const workshop::localai::Card& card,
+    bool lead) {
+  const wsm::Rect surface = wsm::rowSurface(row);
+  const uint16_t bg = lead ? OS12V_SURFACE2 : OS12V_SURFACE;
+  const uint16_t tone = wtToneColor(card.tone);
+
+  tft.fillRoundRect(
+      surface.x, surface.y,
+      surface.w, surface.h,
+      10,
+      bg);
+
+  tft.drawRoundRect(
+      surface.x, surface.y,
+      surface.w, surface.h,
+      10,
+      OS12V_LINE);
+
+  if (lead && surface.h > 18) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 8),
+        3,
+        (int16_t)(surface.h - 16),
+        2,
+        tone);
+  }
+
+  wtDrawAiRow(row, card, bg);
+}
+
+// Premium v2 Workshop action/state hierarchy. Read-only Info rows deliberately
+// remain flat; only controls already declared interactive by tabs_layout.hpp
+// receive the state rail. No touch or command geometry is created here.
+static void wtDrawWorkshopToolRow(
+    const wsm::Screen& s,
+    const wtl::ItemSpec& it,
+    const WsRowView& v,
+    const wsm::Rect& row) {
+  wsDrawRowBody(s, it.rowKind, it.label, v, row);
+
+  if (!v.enabled || it.rowKind == wsm::RowKind::Info) return;
+
+  const wsm::Rect surface = wsm::rowSurface(row);
+  uint16_t tone = OS12V_ACCENT;
+
+  if (v.valueColor == OS12V_GREEN ||
+      v.valueColor == OS12V_AMBER ||
+      v.valueColor == OS12V_RED)
+    tone = v.valueColor;
+
+  if (surface.h > 18) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 9),
+        3,
+        (int16_t)(surface.h - 18),
+        2,
+        tone);
+  }
+
+  // Timer begins the Workshop-tools section. This divider consumes no layout
+  // space and does not alter the canonical Timer row or its hit rectangle.
+  if (it.id == wtl::ItemId::WsTimer && surface.w > 28) {
+    tft.drawFastHLine(
+        (int16_t)(surface.x + 14),
+        surface.y,
+        (int16_t)(surface.w - 28),
+        OS12V_LINE);
+  }
+}
+
 static void wtDrawWorkshop(bool full) {
   const wsm::Screen s = wsScreen();
   wtPollMessage();
@@ -1904,15 +2537,16 @@ static void wtDrawWorkshop(bool full) {
     if (r.empty()) continue;
     const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
     if (it.id == wtl::ItemId::WsAiCard) {
-      const wsm::Rect surface = wsm::rowSurface(r);
-      tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-      tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
-      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_SURFACE);
+      const uint8_t cardIndex = wtl::headIndex(v, i, aiCount);
+      wtDrawWorkshopAiCard(
+          r,
+          wtAiCard(cardIndex),
+          cardIndex == 0);
       continue;
     }
     WsRowView row;
     wtWorkshopRow(it.id, inv, row);
-    wsDrawRowBody(s, it.rowKind, it.label, row, r);
+    wtDrawWorkshopToolRow(s, it, row, r);
   }
   if (scrollButtons) {
     const int16_t top = wsm::slotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);

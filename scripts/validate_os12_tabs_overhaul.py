@@ -225,7 +225,27 @@ def validate_workshop(hub: str, fragment: str) -> None:
     for gone in ("hubOs12WorkshopActionRect", "hubOs12WorkshopSetupRect", "Set Up Inventory"):
         forbid(hub, gone, "12.0 Workshop geometry or giant set-up button")
     draw = block(hub, "static void wtDrawWorkshop(bool full)")
-    ordered(draw, ["wtDrawHeader(", "wtl::itemRect(", "wsDrawRowBody(", "uiBottomNav(2, nullptr);"], "Workshop draws header, rows, tab bar")
+    ordered(
+        draw,
+        [
+            "wtDrawHeader(",
+            "wtl::itemRect(",
+            "wtDrawWorkshopToolRow(",
+            "uiBottomNav(2, nullptr);",
+        ],
+        "Workshop draws header, rows, tab bar",
+    )
+    need(
+        draw,
+        "wtDrawWorkshopAiCard(",
+        "Workshop Local AI cards use the canonical Workshop card renderer",
+    )
+    tool_row = block(hub, "static void wtDrawWorkshopToolRow(")
+    need(
+        tool_row,
+        "wsDrawRowBody(",
+        "Workshop tool renderer delegates to the shared row body",
+    )
     # Useful without inventory: the timer and the note live on Workshop, and
     # set-up is one row that says where to go.
     rows = block(hub, "static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v)")
