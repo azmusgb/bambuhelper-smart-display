@@ -110,18 +110,30 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          ACTION: ${{ github.event.action || '' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BEFORE_SHA: ${{ github.event.before || '' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
 
           # Manual and platform-foundation pushes retain the complete regression
-          # build. Pull requests may take the fast path when every platform
-          # change is presentation-only under firmware/platform/ui/**.
+          # build. Pull requests may take the fast path when every newly pushed
+          # platform change is presentation-only under firmware/platform/ui/**.
+          #
+          # On PR open/reopen we classify the full PR. On synchronize we classify
+          # only before -> head so an earlier workflow-file change in the same PR
+          # does not permanently force every later UI commit through a second build.
           full_build=true
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             full_build=false
-            mapfile -t files < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+            diff_base="$BASE_SHA"
+            if [[ "$ACTION" == "synchronize" && -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+              diff_base="$BEFORE_SHA"
+            fi
+
+            echo "Classifying Platform Bridge delta: $diff_base..$HEAD_SHA"
+            mapfile -t files < <(git diff --name-only "$diff_base" "$HEAD_SHA")
 
             for f in "${files[@]}"; do
               case "$f" in
