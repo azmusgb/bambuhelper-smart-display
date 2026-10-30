@@ -307,18 +307,57 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
 
 static void wtDrawCardSurface(const wsm::Rect& r, uint16_t rail) {
   const wsm::Rect c = wsm::rowSurface(r);
-  tft.fillRoundRect(c.x, c.y, c.w, c.h, 12, OS12V_SURFACE2);
-  tft.drawRoundRect(c.x, c.y, c.w, c.h, 12, OS12V_LINE);
-  tft.fillRoundRect(c.x, c.y + 10, 4, c.h - 20, 2, rail);
+  const int16_t radius = 14;
+
+  // Premium v2 visual treatment only. Geometry and touch remain owned by
+  // tabs_layout.hpp / rowSurface(), so the interaction contract is unchanged.
+  tft.fillRoundRect(c.x, c.y, c.w, c.h, radius, OS12V_SURFACE2);
+  tft.drawRoundRect(c.x, c.y, c.w, c.h, radius, OS12V_LINE);
+
+  // Quiet inset highlight gives the card depth without adding another border
+  // or changing its interactive bounds.
+  if (c.w > 36) {
+    tft.drawFastHLine(
+        (int16_t)(c.x + 18),
+        (int16_t)(c.y + 1),
+        (int16_t)(c.w - 36),
+        OS12V_SURFACE);
+  }
+
+  // Semantic state rail stays visually strong but is pulled inward so it reads
+  // as status rather than a second card edge.
+  if (c.h > 28) {
+    tft.fillRoundRect(
+        (int16_t)(c.x + 1),
+        (int16_t)(c.y + 12),
+        4,
+        (int16_t)(c.h - 24),
+        2,
+        rail);
+  }
 }
 
 static void wtDrawProgress(int16_t x, int16_t y, int16_t w, uint8_t pct, uint16_t color) {
   if (pct > 100) pct = 100;
-  tft.fillRoundRect(x, y, w, 10, 5, OS12V_SURFACE);
-  tft.drawRoundRect(x, y, w, 10, 5, OS12V_LINE);
+
+  // Premium v2 uses a quieter 8 px track. The supplied rectangle and all
+  // surrounding layout remain unchanged.
+  const int16_t h = 8;
+  const int16_t yy = (int16_t)(y + 1);
+
+  tft.fillRoundRect(x, yy, w, h, 4, OS12V_SURFACE);
+
   const int16_t fw = (int16_t)((int32_t)w * pct / 100);
-  if (fw >= 10) tft.fillRoundRect(x, y, fw, 10, 5, color);
-  else if (fw > 0) tft.fillRect(x + 1, y + 2, fw, 6, color);
+  if (fw >= h) {
+    tft.fillRoundRect(x, yy, fw, h, 4, color);
+  } else if (fw > 0) {
+    tft.fillRect(
+        (int16_t)(x + 1),
+        (int16_t)(yy + 2),
+        fw,
+        (int16_t)(h - 4),
+        color);
+  }
 }
 
 // 12.3.9: the percentage in the 48 px numeric font (font 6, digits only),
