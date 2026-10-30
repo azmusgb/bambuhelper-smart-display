@@ -27,6 +27,7 @@ Audio
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -130,7 +131,11 @@ def validate(repo: Path, source_root: Path) -> None:
     need(row, "const bool raised = wsm::rowRaised(kind, v.enabled);", "flat read-only and disabled rows")
     need(layout, "inline bool rowRaised(RowKind kind, bool enabled) { return rowInteractive(kind) && enabled; }", "raised rule")
     tray = block(hub, "static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t)")
-    forbid(tray, "drawRoundRect(surface.x", "AMS tray drawn as a raised button")
+    if re.search(r"(?:fill|draw)RoundRect\s*\(\s*surface\.x", tray):
+        raise ValidationError(
+            "AMS read-only tray surface must stay flat; "
+            "a rounded tray surface looks interactive"
+        )
 
     # --- Audio: no codec power cycling without a PA pin -----------------------------
     tick = block(es, "void buzzerBackendTick()")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 
@@ -17,6 +18,25 @@ def need(text: str, token: str, label: str) -> None:
 def forbid(text: str, token: str, label: str) -> None:
     if token in text:
         raise ValidationError(f"forbidden {label}: {token}")
+
+
+def block(text: str, signature: str) -> str:
+    start = text.find(signature)
+    if start < 0:
+        raise ValidationError(f"missing function: {signature}")
+
+    brace = text.find("{", start + len(signature))
+    depth = 0
+
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+
+    raise ValidationError(f"unterminated function: {signature}")
 
 
 def main() -> int:
@@ -121,6 +141,15 @@ def main() -> int:
         'uiDrawFit("In use", right, mid, 60, FONT_BODY,',
         "14 px AMS active telemetry badge",
     )
+
+    tray = block(
+        pages,
+        "static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t)",
+    )
+    if re.search(r"(?:fill|draw)RoundRect\s*\(\s*surface\.x", tray):
+        raise ValidationError(
+            "AMS read-only tray surface must remain flat"
+        )
 
     # Reject the incomplete prototype patterns that broke c1802ec.
     forbidden_placeholders = {

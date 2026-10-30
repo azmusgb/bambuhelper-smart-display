@@ -1344,26 +1344,23 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
   const wsm::Rect surface = wsm::rowSurface(row);
 
   // Premium v2 AMS tray treatment. AMS rows remain read-only telemetry:
-  // the active tray is visually elevated without becoming button-like.
+  // active state gets tonal emphasis + rail, never a raised/outlined row.
   const uint16_t bg = t.inUse ? OS12V_SURFACE2 : OS12V_BG;
 
+  tft.fillRect(
+      surface.x,
+      surface.y,
+      surface.w,
+      surface.h,
+      bg);
+
+  tft.drawFastHLine(
+      (int16_t)(surface.x + 12),
+      (int16_t)(surface.bottom() - 1),
+      (int16_t)(surface.w - 24),
+      OS12V_LINE);
+
   if (t.inUse) {
-    tft.fillRoundRect(
-        surface.x,
-        surface.y,
-        surface.w,
-        surface.h,
-        10,
-        bg);
-
-    tft.drawRoundRect(
-        surface.x,
-        surface.y,
-        surface.w,
-        surface.h,
-        10,
-        OS12V_LINE);
-
     tft.fillRoundRect(
         (int16_t)(surface.x + 1),
         (int16_t)(surface.y + 7),
@@ -1371,19 +1368,6 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
         (int16_t)(surface.h - 14),
         2,
         OS12V_ACCENT);
-  } else {
-    tft.fillRect(
-        surface.x,
-        surface.y,
-        surface.w,
-        surface.h,
-        bg);
-
-    tft.drawFastHLine(
-        (int16_t)(surface.x + 12),
-        (int16_t)(surface.bottom() - 1),
-        (int16_t)(surface.w - 24),
-        OS12V_LINE);
   }
   const int16_t mid = row.y + row.h / 2;
   // Tactile 22x22 colour swatch with rounded corners.
