@@ -98,18 +98,102 @@ jobs:
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
+      - name: Classify platform impact
+        id: impact
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          # Manual and platform-foundation pushes retain the complete regression
+          # build. Pull requests may take the fast path when every platform
+          # change is presentation-only under firmware/platform/ui/**.
+          full_build=true
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            full_build=false
+            mapfile -t files < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+
+            for f in "${files[@]}"; do
+              case "$f" in
+                firmware/platform/ui/*|firmware/platform/ui/**/*)
+                  # UX Architecture is the authoritative exact-head compiler for
+                  # these files, so Platform Bridge need not compile them twice.
+                  ;;
+                firmware/platform/*|firmware/platform/**/*|\
+                apply_workshop_os12_platform_bridge.py|\
+                apply_workshop_os12_media_hardware.py|\
+                apply_workshop_os12_media_capture.py|\
+                apply_workshop_os12_media_runtime.py|\
+                apply_workshop_os12_media_signal_hardening.py|\
+                apply_workshop_os12_mqtt_camera_telemetry.py|\
+                apply_workshop_os12_media_ui.py|\
+                apply_workshop_os12_media_api.py|\
+                apply_workshop_os12_non_destructive_controls.py|\
+                apply_workshop_os12_guarded_stop.py|\
+                apply_workshop_os12_portal_login_hardening.py|\
+                apply_workshop_os12_inventory_api.py|\
+                apply_workshop_os12_device_update.py|\
+                apply_workshop_os12_inventory_service.py|\
+                apply_workshop_os12_release_identity.py|\
+                scripts/ensure-platformio.sh|\
+                scripts/run_os12_platform_local.sh|\
+                scripts/validate_os12_platform_bridge.py|\
+                scripts/validate_os12_media_hardware.py|\
+                scripts/validate_os12_media_capture.py|\
+                scripts/validate_os12_media_signal.py|\
+                scripts/validate_os12_mqtt_camera_telemetry.py|\
+                scripts/validate_os12_media_service.py|\
+                scripts/validate_os12_media_runtime.py|\
+                scripts/validate_os12_media_ui.py|\
+                scripts/validate_os12_media_api.py|\
+                scripts/validate_os12_non_destructive_controls.py|\
+                scripts/validate_os12_guarded_stop.py|\
+                scripts/validate_os12_control_boundary.py|\
+                scripts/validate_os12_portal_login.py|\
+                scripts/validate_os12_inventory_api.py|\
+                scripts/validate_os12_device_update.py|\
+                scripts/validate_os12_inventory_service.py|\
+                scripts/validate_os12_candidate_publisher.py|\
+                .github/workflows/os12-platform-bridge.yml)
+                  full_build=true
+                  break
+                  ;;
+                *)
+                  # Files outside the Platform Bridge trigger surface do not make
+                  # this workflow responsible for a second firmware build.
+                  ;;
+              esac
+            done
+          fi
+
+          echo "full_build=$full_build" >> "$GITHUB_OUTPUT"
+          echo "Platform full build required: $full_build"
+
+      - name: Record UI-only platform fast path
+        if: steps.impact.outputs.full_build != 'true'
+        run: |
+          echo 'Platform Bridge fast path: presentation-only firmware/platform/ui changes detected.'
+          echo 'The Workshop OS 12 UX Architecture workflow remains responsible for exact-head reconstruction, WS350 compile, cross-board compile, artifact identity, and X2D regression.'
+
       - name: Cache pinned PlatformIO toolchain
+        if: steps.impact.outputs.full_build == 'true'
         uses: actions/cache@v5
         with:
           path: .workshop-tools
           key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
 
       - name: Prepare pinned PlatformIO toolchain
+        if: steps.impact.outputs.full_build == 'true'
         run: |
           set -euo pipefail
           PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
@@ -126,6 +210,7 @@ jobs:
         run: python3 scripts/validate_os12_media_service.py
 
       - name: Reconstruct UI13 and apply OS12 platform
+        if: steps.impact.outputs.full_build == 'true'
         run: BUILD=/tmp/ws350-os12-platform-build bash scripts/run_os12_platform_local.sh --build
 
       - name: Validate runtime acceptance helper syntax
@@ -145,6 +230,7 @@ jobs:
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
 
       - name: Record intermediate platform-regression build identity
+        if: steps.impact.outputs.full_build == 'true'
         run: |
           set -euo pipefail
           BUILD=/tmp/ws350-os12-platform-build
@@ -191,6 +277,7 @@ jobs:
           cat "$OUT/BUILD-INFO.txt"
 
       - name: Upload platform-regression evidence
+        if: steps.impact.outputs.full_build == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: workshop-os12-platform-regression-evidence-${{ env.OS12_SOURCE_SHA }}
@@ -201,7 +288,11 @@ jobs:
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow proves the intermediate platform reconstruction/build only and publishes metadata evidence, not a flashable firmware candidate.'
+          if [[ "${{ steps.impact.outputs.full_build }}" == "true" ]]; then
+            echo 'This workflow proves the intermediate platform reconstruction/build only and publishes metadata evidence, not a flashable firmware candidate.'
+          else
+            echo 'This workflow took the UI-only fast path and intentionally did not repeat the authoritative UX Architecture firmware build.'
+          fi
           echo 'Media speaker/microphone/recording capability is not physically accepted by this workflow.'
           echo 'WS350 analog microphone signal-path hardening is implemented/tested but requires physical acceptance.'
           echo 'WS350-owned demo video and read-only printer camera telemetry are implemented/built/tested; physical video acceptance is not established by CI.'
