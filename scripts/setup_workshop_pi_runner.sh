@@ -125,6 +125,7 @@ Workshop Pi GitHub runner installed.
 
 Next:
   1. Confirm the runner is Online in GitHub > Settings > Actions > Runners.
-  2. Manually run the "Workshop Pi Fast Preflight" workflow once.
-  3. Keep the GitHub-hosted UX Architecture workflow as authoritative firmware candidate CI.
+  2. Set repository Actions variable WORKSHOP_PI_RUNNER=enabled.
+  3. Push/synchronize a same-repository PR; the Platform Bridge workflow will run the Pi fast preflight job automatically.
+  4. Keep the GitHub-hosted UX Architecture workflow as authoritative firmware candidate CI.
 EOF
