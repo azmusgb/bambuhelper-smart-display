@@ -107,7 +107,9 @@ def main():
     # later owning UI layers (tabs + glance) have been applied. Deferring this
     # earlier duplicate saves CI time without removing any final-tree coverage.
     github_full_reconstruction = (
-        args.repo is not None and os.environ.get("GITHUB_ACTIONS") == "true"
+        args.repo is not None
+        and os.environ.get("GITHUB_ACTIONS") == "true"
+        and os.environ.get("GITHUB_WORKFLOW") == "Workshop OS 12 UX Architecture"
     )
     if args.skip_host_smoke or github_full_reconstruction:
         print("Host layout smoke tests: deferred to later authoritative layout validators.")
