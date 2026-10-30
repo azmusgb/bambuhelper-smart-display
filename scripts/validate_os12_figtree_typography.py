@@ -6,12 +6,13 @@ Checks:
 - Pre-compiled Figtree VLW headers exist in firmware/platform/fonts/.
 - Headers carry the canonical Figtree metadata and PROGMEM symbols.
 - Byte budgets match expected memory boundaries for ESP32 flash.
-- Host layout smoke tests compile and pass unless explicitly skipped by a caller
-  that runs the same host suites later in the same authoritative pipeline.
+- Host layout smoke tests compile and pass unless explicitly deferred by the
+  authoritative GitHub reconstruction, which runs the same suites later.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -102,7 +103,13 @@ def main():
         repo_fonts = args.repo / "include" / "fonts"
         validate_headers(repo_fonts, f"{args.repo.name}/include/fonts")
 
-    if args.skip_host_smoke:
+    # The full OS12 GitHub reconstruction runs tabs/more host smoke again after
+    # later owning UI layers (tabs + glance) have been applied. Deferring this
+    # earlier duplicate saves CI time without removing any final-tree coverage.
+    github_full_reconstruction = (
+        args.repo is not None and os.environ.get("GITHUB_ACTIONS") == "true"
+    )
+    if args.skip_host_smoke or github_full_reconstruction:
         print("Host layout smoke tests: deferred to later authoritative layout validators.")
     else:
         run_host_smoke_tests()
