@@ -6,7 +6,8 @@ Checks:
 - Pre-compiled Figtree VLW headers exist in firmware/platform/fonts/.
 - Headers carry the canonical Figtree metadata and PROGMEM symbols.
 - Byte budgets match expected memory boundaries for ESP32 flash.
-- Host layout smoke tests compile and pass.
+- Host layout smoke tests compile and pass unless explicitly skipped by a caller
+  that runs the same host suites later in the same authoritative pipeline.
 """
 from __future__ import annotations
 
@@ -84,6 +85,14 @@ def run_host_smoke_tests() -> None:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, help="Optional reconstructed build tree to validate")
+    parser.add_argument(
+        "--skip-host-smoke",
+        action="store_true",
+        help=(
+            "Skip the duplicate host layout smoke suites. Use only when the caller "
+            "runs those same suites later in the same authoritative pipeline."
+        ),
+    )
     args = parser.parse_args()
 
     validate_source_assets()
@@ -93,7 +102,10 @@ def main():
         repo_fonts = args.repo / "include" / "fonts"
         validate_headers(repo_fonts, f"{args.repo.name}/include/fonts")
 
-    run_host_smoke_tests()
+    if args.skip_host_smoke:
+        print("Host layout smoke tests: deferred to later authoritative layout validators.")
+    else:
+        run_host_smoke_tests()
 
     print("\nFIGTREE BRAND TYPOGRAPHY VALIDATION: PASS")
 
