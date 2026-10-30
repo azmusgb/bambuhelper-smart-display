@@ -90,7 +90,7 @@ if [[ "$FLASH" -eq 1 && -z "$EXPECT_FIRMWARE_SHA256" ]]; then
 fi
 
 cd "$ROOT"
-[[ -d .git ]] || { echo "ERROR: not inside the Workshop OS git repository" >&2; exit 2; }
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ERROR: not inside the Workshop OS git repository" >&2; exit 2; }
 [[ -f scripts/run_os12_ux_local.sh ]] || { echo "ERROR: OS12 UX/control-plane build helper missing" >&2; exit 2; }
 [[ -f scripts/waveshare-usb.sh ]] || { echo "ERROR: WS350 USB resolver missing" >&2; exit 2; }
 [[ -f scripts/ensure-platformio.sh ]] || { echo "ERROR: PlatformIO setup helper missing" >&2; exit 2; }
