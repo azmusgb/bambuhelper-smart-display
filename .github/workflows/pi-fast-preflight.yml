@@ -49,7 +49,7 @@ jobs:
             scripts/validate_os12_glance_legibility.py \
             scripts/test_x2d_bridge_camera.py
           python3 scripts/validate_os12_premium_ui_v2.py --repo .
-          git diff --check HEAD^
+          git diff --check origin/main...HEAD
 
       - name: Build and run tabs layout smoke
         shell: bash
