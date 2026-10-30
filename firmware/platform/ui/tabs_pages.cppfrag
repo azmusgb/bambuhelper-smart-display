@@ -2419,6 +2419,82 @@ static void wtOpenImage() {
   setPage(SCREEN_HUB_WORKSHOP);
 }
 
+// Premium v2 Workshop lead-card hierarchy. The Local AI card remains inside
+// the canonical rowSurface/itemRect geometry; this changes presentation only.
+static void wtDrawWorkshopAiCard(
+    const wsm::Rect& row,
+    const workshop::localai::Card& card,
+    bool lead) {
+  const wsm::Rect surface = wsm::rowSurface(row);
+  const uint16_t bg = lead ? OS12V_SURFACE2 : OS12V_SURFACE;
+  const uint16_t tone = wtToneColor(card.tone);
+
+  tft.fillRoundRect(
+      surface.x, surface.y,
+      surface.w, surface.h,
+      10,
+      bg);
+
+  tft.drawRoundRect(
+      surface.x, surface.y,
+      surface.w, surface.h,
+      10,
+      OS12V_LINE);
+
+  if (lead && surface.h > 18) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 8),
+        3,
+        (int16_t)(surface.h - 16),
+        2,
+        tone);
+  }
+
+  wtDrawAiRow(row, card, bg);
+}
+
+// Premium v2 Workshop action/state hierarchy. Read-only Info rows deliberately
+// remain flat; only controls already declared interactive by tabs_layout.hpp
+// receive the state rail. No touch or command geometry is created here.
+static void wtDrawWorkshopToolRow(
+    const wsm::Screen& s,
+    const wtl::ItemSpec& it,
+    const WsRowView& v,
+    const wsm::Rect& row) {
+  wsDrawRowBody(s, it.rowKind, it.label, v, row);
+
+  if (!v.enabled || it.rowKind == wsm::RowKind::Info) return;
+
+  const wsm::Rect surface = wsm::rowSurface(row);
+  uint16_t tone = OS12V_ACCENT;
+
+  if (v.valueColor == OS12V_GREEN ||
+      v.valueColor == OS12V_AMBER ||
+      v.valueColor == OS12V_RED)
+    tone = v.valueColor;
+
+  if (surface.h > 18) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 9),
+        3,
+        (int16_t)(surface.h - 18),
+        2,
+        tone);
+  }
+
+  // Timer begins the Workshop-tools section. This divider consumes no layout
+  // space and does not alter the canonical Timer row or its hit rectangle.
+  if (it.id == wtl::ItemId::WsTimer && surface.w > 28) {
+    tft.drawFastHLine(
+        (int16_t)(surface.x + 14),
+        surface.y,
+        (int16_t)(surface.w - 28),
+        OS12V_LINE);
+  }
+}
+
 static void wtDrawWorkshop(bool full) {
   const wsm::Screen s = wsScreen();
   wtPollMessage();
@@ -2446,15 +2522,16 @@ static void wtDrawWorkshop(bool full) {
     if (r.empty()) continue;
     const wtl::ItemSpec& it = wtl::item(v, i, aiCount);
     if (it.id == wtl::ItemId::WsAiCard) {
-      const wsm::Rect surface = wsm::rowSurface(r);
-      tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-      tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
-      wtDrawAiRow(r, wtAiCard(wtl::headIndex(v, i, aiCount)), OS12V_SURFACE);
+      const uint8_t cardIndex = wtl::headIndex(v, i, aiCount);
+      wtDrawWorkshopAiCard(
+          r,
+          wtAiCard(cardIndex),
+          cardIndex == 0);
       continue;
     }
     WsRowView row;
     wtWorkshopRow(it.id, inv, row);
-    wsDrawRowBody(s, it.rowKind, it.label, row, r);
+    wtDrawWorkshopToolRow(s, it, row, r);
   }
   if (scrollButtons) {
     const int16_t top = wsm::slotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);

@@ -227,6 +227,68 @@ def main() -> int:
                 f"{command} command must remain routed exactly once; found {count}"
             )
 
+    # Slice 5: Workshop / Local AI root hierarchy remains presentation-only.
+    need(
+        pages,
+        "Premium v2 Workshop lead-card hierarchy.",
+        "Workshop lead-card hierarchy",
+    )
+    need(
+        pages,
+        "Premium v2 Workshop action/state hierarchy.",
+        "Workshop action/state hierarchy",
+    )
+    need(
+        pages,
+        "wtDrawWorkshopAiCard(",
+        "Workshop Local AI card renderer",
+    )
+    need(
+        pages,
+        "wtDrawWorkshopToolRow(s, it, row, r);",
+        "Workshop canonical-row presentation",
+    )
+
+    workshop_card = block(
+        pages,
+        "static void wtDrawWorkshopAiCard(",
+    )
+    need(
+        workshop_card,
+        "wsm::rowSurface(row)",
+        "canonical Workshop card surface",
+    )
+    forbid(
+        workshop_card,
+        "hitTest(",
+        "touch routing inside Workshop card renderer",
+    )
+
+    workshop_row = block(
+        pages,
+        "static void wtDrawWorkshopToolRow(",
+    )
+    need(
+        workshop_row,
+        "it.rowKind == wsm::RowKind::Info",
+        "flat read-only Workshop rows",
+    )
+    need(
+        workshop_row,
+        "wsm::rowSurface(row)",
+        "canonical Workshop row surface",
+    )
+    forbid(
+        workshop_row,
+        "workshopPlatformDispatchPrinterCommand",
+        "printer command routing inside Workshop renderer",
+    )
+    forbid(
+        workshop_row,
+        "hitTest(",
+        "touch routing inside Workshop renderer",
+    )
+
     # Reject the incomplete prototype patterns that broke c1802ec.
     forbidden_placeholders = {
         "... command routing ...": "placeholder command routing",
@@ -240,6 +302,7 @@ def main() -> int:
     print("PASS: Premium UI v2 Home glance/Bento hierarchy")
     print("PASS: Premium UI v2 Printer Status/AMS hierarchy")
     print("PASS: Premium UI v2 Printer Control hierarchy")
+    print("PASS: Premium UI v2 Workshop/Local AI hierarchy")
     print("PASS: canonical Hit/HitKind contract preserved")
     print("PASS: Printer segment geometry preserved")
     print("PASS: guarded Stop touch geometry preserved")
