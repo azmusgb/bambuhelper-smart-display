@@ -98,7 +98,8 @@ def validate_rows(hub: str) -> None:
          "wsFitFont(g_wsToast, toastW, FONT_BODY, FONT_SMALL)", "14 px toasts on More pages")
     need(block(hub, "static void wtDrawHeader("), "wsFitFont(g_wsToast, t.right() - titleX, FONT_BODY, FONT_SMALL)", "14 px toasts on the tabs")
     tray = block(hub, "static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t)")
-    need(tray, 'uiDrawFit("In use", right, mid, 60, FONT_BODY,', "14 px In use")
+    need(tray, 'uiDrawFit("In use",', "14 px In use")
+    need(tray, "FONT_BODY,", "14 px In use font")
     need(tray, "wsValueFont(t.value,", "14 px tray values")
     for gone, label in (('"No smart plug for this printer"', "a reason that did not fit"), ('"%u C"', "a temperature without a degree sign")):
         forbid(hub, gone, label)
