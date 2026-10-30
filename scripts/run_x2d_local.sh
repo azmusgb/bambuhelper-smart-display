@@ -16,6 +16,7 @@ BRIDGE_URL="${X2D_BRIDGE_URL:-}"
 RECONSTRUCT=0
 IN_PLACE=0
 DO_BUILD=0
+BUILD_TARGET=""
 FLASH=0
 CONFIRM_IDLE=0
 ALLOW_ACTIVE_PRINT=0
@@ -32,8 +33,12 @@ Options:
   --in-place              Apply the overlays directly to $BASE instead of a copy,
                           so the build is incremental. Only for throwaway trees
                           whose canonical artifacts were already packaged (CI).
-  --build                 Compile the ws_lcd_350 image in $BUILD.
-  --flash                 USB-flash the built image (implies --build). Captures
+  --build                 Compile both ws_lcd_350 and jc3248w535 regressions.
+  --build-ws350           Compile only the ws_lcd_350 X2D regression. Intended
+                          for CI fan-out; existing local --build behavior is unchanged.
+  --build-cross-board     Compile only the jc3248w535 X2D regression. Intended
+                          for CI fan-out; this target cannot be flashed.
+  --flash                 USB-flash the WS350 image (implies a WS350 build). Captures
                           partition table, NVS and otadata first and refuses on a
                           partition-layout mismatch. NVS is not erased.
   --confirm-printer-idle  Required with --flash. The live printer state is also
@@ -46,12 +51,33 @@ Environment: BASE, BUILD, X2D_BRIDGE_URL, WORKSHOP_OS_URL, PIO_BIN.
 EOF
 }
 
+set_build_target() {
+  local requested="$1"
+  if [[ -n "$BUILD_TARGET" && "$BUILD_TARGET" != "$requested" ]]; then
+    echo "ERROR: conflicting X2D build targets: $BUILD_TARGET and $requested" >&2
+    usage >&2
+    exit 64
+  fi
+  BUILD_TARGET="$requested"
+  DO_BUILD=1
+}
+
 while (( $# )); do
   case "$1" in
     --reconstruct) RECONSTRUCT=1 ;;
     --in-place) IN_PLACE=1 ;;
-    --build) DO_BUILD=1 ;;
-    --flash) FLASH=1; DO_BUILD=1 ;;
+    --build) set_build_target all ;;
+    --build-ws350) set_build_target ws_lcd_350 ;;
+    --build-cross-board) set_build_target jc3248w535 ;;
+    --flash)
+      FLASH=1
+      DO_BUILD=1
+      if [[ -n "$BUILD_TARGET" && "$BUILD_TARGET" == "jc3248w535" ]]; then
+        echo "ERROR: --flash cannot be combined with --build-cross-board." >&2
+        exit 64
+      fi
+      [[ -n "$BUILD_TARGET" ]] || BUILD_TARGET=ws_lcd_350
+      ;;
     --confirm-printer-idle) CONFIRM_IDLE=1 ;;
     --allow-active-print) ALLOW_ACTIVE_PRINT=1 ;;
     -h|--help) usage; exit 0 ;;
@@ -64,6 +90,9 @@ done
 if [[ "$FLASH" -eq 1 && "$CONFIRM_IDLE" -ne 1 ]]; then
   echo "ERROR: --flash requires --confirm-printer-idle." >&2
   exit 21
+fi
+if [[ "$DO_BUILD" -eq 1 && -z "$BUILD_TARGET" ]]; then
+  BUILD_TARGET=all
 fi
 
 cd "$ROOT"
@@ -90,25 +119,39 @@ python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
 
 PIO_BIN="${PIO_BIN:-$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")}"
 [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable' >&2; exit 1; }
-# Install library deps first: a build that also installs them can fail silently.
-# The PlatformIO registry occasionally drops a download (HTTPClientError);
-# retry instead of failing the whole build on one network hiccup.
-for attempt in 1 2 3; do
-  if (cd "$BUILD" && "$PIO_BIN" pkg install -e ws_lcd_350 >/dev/null); then break; fi
-  if [[ "$attempt" -eq 3 ]]; then echo "FAIL: pio pkg install failed 3 times" >&2; exit 1; fi
-  echo "pio pkg install failed (attempt $attempt of 3); retrying in $((attempt * 15)) s" >&2
-  sleep $((attempt * 15))
-done
-(cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
-FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
-PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"
-test -s "$FIRMWARE" || { echo 'FAIL: WS350 X2D image missing' >&2; exit 1; }
-echo "X2D firmware: $FIRMWARE"
-echo "X2D firmware SHA-256: $(shasum -a 256 "$FIRMWARE" | awk '{print $1}')"
 
-if [[ "$FLASH" -ne 1 ]]; then
+install_env_deps() {
+  local env_name="$1"
+  # Install library deps first: a build that also installs them can fail silently.
+  # The PlatformIO registry occasionally drops a download (HTTPClientError);
+  # retry instead of failing the whole build on one network hiccup.
+  for attempt in 1 2 3; do
+    if (cd "$BUILD" && "$PIO_BIN" pkg install -e "$env_name" >/dev/null); then
+      return 0
+    fi
+    if [[ "$attempt" -eq 3 ]]; then
+      echo "FAIL: pio pkg install failed 3 times for $env_name" >&2
+      return 1
+    fi
+    echo "pio pkg install failed for $env_name (attempt $attempt of 3); retrying in $((attempt * 15)) s" >&2
+    sleep $((attempt * 15))
+  done
+}
+
+if [[ "$BUILD_TARGET" == "all" || "$BUILD_TARGET" == "ws_lcd_350" ]]; then
+  install_env_deps ws_lcd_350
+  (cd "$BUILD" && "$PIO_BIN" run -e ws_lcd_350)
+  FIRMWARE="$BUILD/.pio/build/ws_lcd_350/firmware.bin"
+  PARTITIONS="$BUILD/.pio/build/ws_lcd_350/partitions.bin"
+  test -s "$FIRMWARE" || { echo 'FAIL: WS350 X2D image missing' >&2; exit 1; }
+  echo "X2D firmware: $FIRMWARE"
+  echo "X2D firmware SHA-256: $(shasum -a 256 "$FIRMWARE" | awk '{print $1}')"
+fi
+
+if [[ "$FLASH" -eq 0 && ( "$BUILD_TARGET" == "all" || "$BUILD_TARGET" == "jc3248w535" ) ]]; then
   # smart_hub.cpp is shared by every board; prove the overlays keep it compiling.
   echo "=== Cross-board compile regression ==="
+  install_env_deps jc3248w535
   (cd "$BUILD" && "$PIO_BIN" run -e jc3248w535)
 fi
 
