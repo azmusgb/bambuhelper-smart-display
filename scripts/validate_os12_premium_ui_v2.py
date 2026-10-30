@@ -151,6 +151,82 @@ def main() -> int:
             "AMS read-only tray surface must remain flat"
         )
 
+    # Slice 4: Printer Control presentation only. Command authority, hit
+    # geometry, hold guard and state gating remain canonical.
+    need(
+        pages,
+        "Premium v2 Printer Control primary action.",
+        "Printer Control primary hierarchy",
+    )
+    need(
+        pages,
+        "Premium v2 secondary Printer Control row treatment.",
+        "Printer Control secondary-row hierarchy",
+    )
+    need(
+        pages,
+        "Premium v2 guarded Stop treatment.",
+        "guarded Stop visual hierarchy",
+    )
+    need(
+        pages,
+        "Premium v2 destructive hold feedback.",
+        "guarded Stop hold feedback",
+    )
+    need(
+        pages,
+        "wtDrawControlRow(s, it, c, row, r);",
+        "Printer Control canonical-row presentation",
+    )
+
+    primary = block(
+        pages,
+        "static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c)",
+    )
+    need(
+        primary,
+        "wtl::primaryDrawRect(row)",
+        "canonical Pause/Resume draw rectangle",
+    )
+    forbid(
+        primary,
+        "workshopPlatformDispatchPrinterCommand",
+        "command dispatch inside Pause/Resume renderer",
+    )
+
+    stop = block(
+        pages,
+        "static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtControls& c)",
+    )
+    need(
+        stop,
+        "wtl::holdDrawRect(s, row)",
+        "canonical guarded Stop draw rectangle",
+    )
+    forbid(
+        stop,
+        "workshopPlatformDispatchPrinterCommand",
+        "command dispatch inside Stop renderer",
+    )
+
+    stop_hold = block(
+        pages,
+        "static void wtDrawStopHold(const wsm::Rect& b, uint8_t segments)",
+    )
+    need(
+        stop_hold,
+        'uiDrawFit(\n      "Keep holding",',
+        "14 px guarded Stop hold label",
+    )
+
+    for command in ("Pause", "Resume", "Stop"):
+        token = f"workshop::platform::PrinterCommand::{command}"
+        count = pages.count(token)
+        if count != 1:
+            raise ValidationError(
+                f"{command} command must remain routed exactly once; found {count}"
+            )
+
     # Reject the incomplete prototype patterns that broke c1802ec.
     forbidden_placeholders = {
         "... command routing ...": "placeholder command routing",
@@ -163,6 +239,7 @@ def main() -> int:
     print("PASS: Premium UI v2 visual foundation")
     print("PASS: Premium UI v2 Home glance/Bento hierarchy")
     print("PASS: Premium UI v2 Printer Status/AMS hierarchy")
+    print("PASS: Premium UI v2 Printer Control hierarchy")
     print("PASS: canonical Hit/HitKind contract preserved")
     print("PASS: Printer segment geometry preserved")
     print("PASS: guarded Stop touch geometry preserved")
