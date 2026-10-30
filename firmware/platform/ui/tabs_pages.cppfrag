@@ -1422,8 +1422,8 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
         12,
         OS12V_ACCENT);
 
-    uiDrawFit("In use", right, mid, 60, FONT_BODY,
-              MR_DATUM, OS12V_ACCENT, OS12V_SURFACE);
+    uiDrawFit("In use", (int16_t)(badgeX + badgeW / 2), mid, (int16_t)(badgeW - 12), FONT_BODY,
+              MC_DATUM, OS12V_ACCENT, OS12V_SURFACE);
 
     valueRight = (int16_t)(badgeX - 8);
   }

@@ -161,7 +161,7 @@ def main() -> int:
     )
     need(
         pages,
-        'uiDrawFit("In use", right, mid, 60, FONT_BODY,',
+        'uiDrawFit("In use", (int16_t)(badgeX + badgeW / 2), mid, (int16_t)(badgeW - 12), FONT_BODY,',
         "14 px AMS active telemetry badge",
     )
 
