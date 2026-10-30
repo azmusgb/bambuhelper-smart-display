@@ -256,11 +256,11 @@ jobs:
           {
             echo '### WS350 exact-head OS12 control-plane candidate'
             echo
-            echo "- Source SHA: `$OS12_SOURCE_SHA`"
-            echo "- Firmware SHA-256: `$FW_SHA`"
-            echo "- Firmware bytes: `$FW_SIZE`"
-            echo "- Partition SHA-256: `$PART_SHA`"
-            echo "- Partition bytes: `$PART_SIZE`"
+            printf -- '- Source SHA: `%s`\n' "$OS12_SOURCE_SHA"
+            printf -- '- Firmware SHA-256: `%s`\n' "$FW_SHA"
+            printf -- '- Firmware bytes: `%s`\n' "$FW_SIZE"
+            printf -- '- Partition SHA-256: `%s`\n' "$PART_SHA"
+            printf -- '- Partition bytes: `%s`\n' "$PART_SIZE"
             echo '- Artifact role: physical-acceptance-candidate'
             echo '- Candidate authority: os12-ux-architecture'
             echo '- Portal architecture: control-plane-v4'
@@ -279,22 +279,64 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Compile experimental X2D overlay candidate (not packaged)
-        run: |
-          set -euo pipefail
-          # Proves the reconstruction-only X2D overlays still apply to the real
-          # tree and compile. The canonical candidate was already copied out and
-          # uploaded above, so the overlays go straight onto the build tree for
-          # an incremental build instead of a full rebuild of a copy.
-          bash -n scripts/run_x2d_local.sh
-          BASE=/tmp/ws350-os12-ux-build \
-            X2D_BRIDGE_URL=http://10.0.0.16:8091/x2d/frame.jpg \
-            bash scripts/run_x2d_local.sh --in-place --build
-
       - name: Record non-promotion state
         if: always()
         run: |
-          echo 'This workflow is the sole CI authority for the flashable WS350 OS12 physical-acceptance candidate and proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
-          echo 'It does not establish runtime, physical, accepted, or stable state.'
+          echo 'This job is the sole CI authority for the flashable WS350 OS12 physical-acceptance candidate and proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
+          echo 'The parallel X2D job is required regression evidence but is not candidate authority and cannot mutate this candidate artifact.'
+          echo 'This workflow does not establish runtime, physical, accepted, or stable state.'
           echo 'Inventory facts remain authoritative only when supplied by the profile-scoped Filament Inventory device-feed contract.'
           echo 'Do not integrate this candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'
+
+  x2d-regression:
+    name: Experimental X2D compile regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OS12_RELEASE_VERSION: '12.8.0'
+      OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate X2D regression scripts
+        run: |
+          set -euo pipefail
+          bash -n scripts/run_os12_ux_local.sh
+          bash -n scripts/run_x2d_local.sh
+          python3 -m py_compile \
+            scripts/validate_os12_figtree_typography.py \
+            scripts/validate_os12_premium_ui_v2.py
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
+
+      - name: Prepare pinned PlatformIO toolchain
+        run: |
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          "$PIO_BIN" --version
+          "$(dirname "$PIO_BIN")/python" --version
+
+      - name: Reconstruct exact-head UX source for X2D
+        run: BUILD=/tmp/ws350-os12-x2d-build bash scripts/run_os12_ux_local.sh
+
+      - name: Compile required X2D regression
+        run: |
+          set -euo pipefail
+          BASE=/tmp/ws350-os12-x2d-build \
+            X2D_BRIDGE_URL=http://10.0.0.16:8091/x2d/frame.jpg \
+            bash scripts/run_x2d_local.sh --in-place --build
+
+      - name: Record X2D non-candidate state
+        if: always()
+        run: |
+          echo 'X2D is required compile-regression evidence for this workflow.'
+          echo 'It is reconstructed independently from the same exact source SHA and does not produce or modify the canonical WS350 physical-acceptance candidate.'
+          echo 'Candidate authority remains the Reconstruct and compile OS12 control plane job.'
