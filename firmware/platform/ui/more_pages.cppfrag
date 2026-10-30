@@ -1530,10 +1530,42 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
   }
 }
 
+// Premium v2 More/System semantic row hierarchy.
+// Presentation only: canonical rowSurface(), rowRaised(), row kinds and hit
+// rectangles remain owned by more_layout.hpp. Read-only Info/Code rows never
+// gain this treatment because rowRaised() rejects them.
+static bool wsPremiumV2StateColor(uint16_t color) {
+  return color == OS12V_GREEN ||
+         color == OS12V_AMBER ||
+         color == OS12V_RED;
+}
+
+static void wsDrawMoreRowState(
+    const wsm::RowSpec& spec,
+    const WsRowView& v,
+    const wsm::Rect& row) {
+  if (!wsm::rowRaised(spec.kind, v.enabled)) return;
+  if (!wsPremiumV2StateColor(v.valueColor)) return;
+
+  const wsm::Rect surface = wsm::rowSurface(row);
+  if (surface.h <= 18) return;
+
+  // A narrow semantic rail lives entirely inside the already-visible row
+  // surface. It adds no new affordance or touch target.
+  tft.fillRoundRect(
+      (int16_t)(surface.x + 1),
+      (int16_t)(surface.y + 9),
+      3,
+      (int16_t)(surface.h - 18),
+      2,
+      v.valueColor);
+}
+
 static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row) {
   WsRowView v;
   wsRowView(spec.id, v);
   wsDrawRowBody(s, spec.kind, spec.label, v, row);
+  wsDrawMoreRowState(spec, v, row);
 }
 
 
@@ -1606,6 +1638,24 @@ static uint16_t wsTileColor(wsm::PageId id) {
   }
 }
 
+// Premium v2 More root state hierarchy.
+// Every root tile is already tappable through tileRect(); this rail only
+// reflects the status colour the tile already reports.
+static void wsDrawRootTileState(
+    const wsm::Rect& tile,
+    uint16_t statusColor) {
+  if (!wsPremiumV2StateColor(statusColor)) return;
+  if (tile.h <= 24) return;
+
+  tft.fillRoundRect(
+      (int16_t)(tile.x + 1),
+      (int16_t)(tile.y + 11),
+      3,
+      (int16_t)(tile.h - 22),
+      2,
+      statusColor);
+}
+
 static void wsDrawRoot(const wsm::Screen& s) {
   for (uint8_t i = 0; i < wsm::kRootTileCount; ++i) {
     const wsm::PageId id = wsm::kRootTiles[i];
@@ -1621,6 +1671,7 @@ static void wsDrawRoot(const wsm::Screen& s) {
     uint16_t statusColor = OS12V_MUTED;
     const int16_t textX = t.x + 52, textW = t.w - 52 - 26;
     wsTileStatus(id, status, sizeof(status), textW, statusColor);
+    wsDrawRootTileState(t, statusColor);
     uiDrawFit(wsm::page(id).title, textX, t.y + t.h / 2 - 2, textW, FONT_BODY, BL_DATUM, OS12V_TEXT, OS12V_SURFACE);
     uiDrawFit(status, textX, t.y + t.h / 2 + 4, textW, FONT_SMALL, TL_DATUM, statusColor, OS12V_SURFACE);
     wsDrawChevronRight(t.right() - 14, t.y + t.h / 2, OS12V_MUTED);
