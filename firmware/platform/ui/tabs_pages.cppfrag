@@ -1001,20 +1001,83 @@ static void wtHomeClock(char* out, size_t len) {
 
 // One of idle Home's need rows: a dot in its tone, its title, its line and a chevron, as on the Local AI tab; the
 // second row also says "+N more".
-static void wtDrawHomeHouse(const wsm::Rect& r, const WtHomeRow& row, uint8_t others) {
+static void wtDrawHomeHouse(const wsm::Rect& r, const WtHomeRow& row, uint8_t others, bool primary) {
   const wsm::Rect surface = wsm::rowSurface(r);
-  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  const uint16_t tone = wtAiToneColor(row.c.tone);
+  const uint16_t bg = primary ? OS12V_SURFACE2 : OS12V_SURFACE;
+
+  // Premium v2 Home priority tile. The first household need gets stronger
+  // hierarchy while retaining the exact canonical row/hit rectangle.
+  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, bg);
+  tft.drawRoundRect(
+      surface.x, surface.y, surface.w, surface.h, 12,
+      primary ? tone : OS12V_LINE);
+
+  if (primary && surface.h > 20) {
+    tft.fillRoundRect(
+        (int16_t)(surface.x + 1),
+        (int16_t)(surface.y + 8),
+        4,
+        (int16_t)(surface.h - 16),
+        2,
+        tone);
+
+    if (surface.w > 36) {
+      tft.drawFastHLine(
+          (int16_t)(surface.x + 18),
+          (int16_t)(surface.y + 1),
+          (int16_t)(surface.w - 36),
+          OS12V_SURFACE);
+    }
+  }
+
   char more[16] = "";
-  if (others) snprintf(more, sizeof(more), "+%u more", (unsigned)others);
-  wtDrawAiRow(r, row.c, OS12V_SURFACE, more);
+  if (others)
+    snprintf(more, sizeof(more), "+%u more", (unsigned)others);
+
+  wtDrawAiRow(r, row.c, bg, more);
 }
 
-static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
+static void wtDrawHomeMetric(const wsm::Rect& r, const char* label, float value, bool heating) {
+  if (r.empty()) return;
+
+  tft.fillRoundRect(r.x, r.y, r.w, r.h, 10, OS12V_SURFACE);
+  tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, OS12V_LINE);
+
+  uiDrawFit(
+      label,
+      (int16_t)(r.x + 9),
+      (int16_t)(r.y + 10),
+      (int16_t)(r.w - 18),
+      FONT_SMALL,
+      TL_DATUM,
+      OS12V_MUTED,
+      OS12V_SURFACE);
+
+  char valueText[16];
+  snprintf(valueText, sizeof(valueText), "%.0f°", value);
+
+  uiDrawFit(
+      valueText,
+      (int16_t)(r.x + 9),
+      (int16_t)(r.y + 31),
+      (int16_t)(r.w - 18),
+      FONT_LARGE,
+      TL_DATUM,
+      heating ? OS12V_AMBER : OS12V_TEXT,
+      OS12V_SURFACE);
+}
+
+static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
   const uint16_t bg = OS12V_SURFACE2;
+
   char state[48], detail[96];
   uint16_t color = OS12V_GREEN;
   detail[0] = 0;
+
+  float nozzleTemp = 0.0f;
+  float nozzleTarget = 0.0f;
+
   if (!w.configured) {
     strlcpy(state, "Not set up", sizeof(state));
     strlcpy(detail, "Add your printer in Local Portal", sizeof(detail));
@@ -1025,24 +1088,116 @@ static void wtDrawHomePrinter(const wsm::Rect& r, const WtPrint& w) {
     color = OS12V_AMBER;
   } else {
     char at[24];
-    float nozTemp = 0, nozTarget = 0;
-    if (w.s) wtNozzle(*w.s, nozTemp, nozTarget);
-    if (w.finished && w.s && wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) snprintf(state, sizeof(state), "Finished %s", at);
-    else strlcpy(state, w.finished ? "Finished" : "Ready", sizeof(state));
+
+    if (w.s)
+      wtNozzle(*w.s, nozzleTemp, nozzleTarget);
+
+    if (w.finished && w.s &&
+        wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) {
+      snprintf(state, sizeof(state), "Finished %s", at);
+    } else {
+      strlcpy(state, w.finished ? "Finished" : "Ready", sizeof(state));
+    }
+
     const char* job = w.s ? jobDisplayName(*w.s) : nullptr;
-    if (w.finished && job && job[0]) strlcpy(detail, job, sizeof(detail));
-    else if (w.s && (nozTemp > 0 || w.s->bedTemp > 0)) snprintf(detail, sizeof(detail), "Nozzle %.0f°  ·  Bed %.0f°", nozTemp, w.s->bedTemp);
+
+    if (w.finished && job && job[0])
+      strlcpy(detail, job, sizeof(detail));
+    else
+      strlcpy(detail, "Ready for the next print", sizeof(detail));
   }
+
   wtDrawCardSurface(r, color);
-  const int16_t x = (int16_t)(r.x + 18), chevX = wtl::cardChevronX(r), textW = (int16_t)(chevX - 12 - x);
-  wsDrawChevronRight(chevX, (int16_t)(r.y + r.h / 2), OS12V_MUTED);
-  // The printer's name small and quiet, its state large: the state is what you read from across the room.
-  const char* name = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : "Printer";
-  setFont(tft, FONT_BODY);
-  const int16_t nameW = (int16_t)(tft.textWidth(name) + 14);
-  uiDrawFit(name, x, (int16_t)(r.y + 22), nameW, FONT_BODY, ML_DATUM, OS12V_MUTED, bg);
-  uiDrawFit(state, (int16_t)(x + nameW), (int16_t)(r.y + 22), (int16_t)(textW - nameW), FONT_LARGE, ML_DATUM, color, bg);
-  if (detail[0]) uiDrawFit(detail, x, (int16_t)(r.y + 58), textW, wsFitFont(detail, textW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_TEXT, bg);
+
+  const int16_t x = (int16_t)(r.x + 18);
+  const int16_t chevX = wtl::cardChevronX(r);
+  const int16_t contentRight = (int16_t)(chevX - 12);
+
+  wsDrawChevronRight(
+      chevX,
+      (int16_t)(r.y + r.h / 2),
+      OS12V_MUTED);
+
+  // Premium v2 Home printer bento. In landscape, healthy idle state gains
+  // two read-only temperature tiles. The outer card and its hit rectangle
+  // remain exactly the canonical HomePrinterRow geometry.
+  const bool metrics =
+      s.landscape() &&
+      w.configured &&
+      w.online &&
+      !w.finished &&
+      w.s;
+
+  int16_t textRight = contentRight;
+
+  if (metrics) {
+    const int16_t metricW = 72;
+    const int16_t metricGap = 7;
+    const int16_t metricH = (int16_t)(r.h - 24);
+    const int16_t metricY = (int16_t)(r.y + 12);
+    const int16_t bedX = (int16_t)(contentRight - metricW);
+    const int16_t nozzleX = (int16_t)(bedX - metricGap - metricW);
+
+    textRight = (int16_t)(nozzleX - 10);
+
+    const bool nozzleHeating =
+        nozzleTarget > 1.0f &&
+        (nozzleTarget - nozzleTemp) >= 2.0f;
+
+    const bool bedHeating =
+        w.s->bedTarget > 1.0f &&
+        (w.s->bedTarget - w.s->bedTemp) >= 2.0f;
+
+    wtDrawHomeMetric(
+        wsm::makeRect(nozzleX, metricY, metricW, metricH),
+        "Nozzle",
+        nozzleTemp,
+        nozzleHeating);
+
+    wtDrawHomeMetric(
+        wsm::makeRect(bedX, metricY, metricW, metricH),
+        "Bed",
+        w.s->bedTemp,
+        bedHeating);
+  }
+
+  const int16_t textW = (int16_t)(textRight - x);
+  const char* name =
+      (w.configured && w.p && w.p->config.name[0])
+          ? w.p->config.name
+          : "Printer";
+
+  uiDrawFit(
+      name,
+      x,
+      (int16_t)(r.y + 15),
+      textW,
+      FONT_SMALL,
+      TL_DATUM,
+      OS12V_MUTED,
+      bg);
+
+  uiDrawFit(
+      state,
+      x,
+      (int16_t)(r.y + 34),
+      textW,
+      FONT_LARGE,
+      TL_DATUM,
+      color,
+      bg);
+
+  if (detail[0]) {
+    uiDrawFit(
+        detail,
+        x,
+        (int16_t)(r.y + 62),
+        textW,
+        wsFitFont(detail, textW, FONT_BODY, FONT_SMALL),
+        ML_DATUM,
+        OS12V_TEXT,
+        bg);
+  }
 }
 
 static void wtDrawHomeIdle(const WtPrint& w) {
@@ -1062,8 +1217,8 @@ static void wtDrawHomeIdle(const WtPrint& w) {
     if (r.empty()) continue;
     const wtl::ItemSpec& it = v.items[i];
     const int8_t need = wtl::homeNeedRow(v, i);
-    if (need >= 0) { wtDrawHomeHouse(r, rows[need], need == 1 ? others : 0); continue; }
-    if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(r, w); continue; }
+    if (need >= 0) { wtDrawHomeHouse(r, rows[need], need == 1 ? others : 0, need == 0); continue; }
+    if (it.id == wtl::ItemId::HomePrinterRow) { wtDrawHomePrinter(s, r, w); continue; }
     WsRowView row;
     wtWorkshopRow(it.id, inv, row);
     wsDrawRowBody(s, it.rowKind, it.label, row, r);

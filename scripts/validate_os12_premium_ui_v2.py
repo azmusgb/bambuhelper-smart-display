@@ -78,6 +78,28 @@ def main() -> int:
         "shared progress renderer",
     )
 
+    # Slice 2: Home glance/Bento hierarchy remains presentation-only.
+    need(
+        pages,
+        "Premium v2 Home priority tile.",
+        "Home priority tile hierarchy",
+    )
+    need(
+        pages,
+        "Premium v2 Home printer bento.",
+        "Home printer Bento treatment",
+    )
+    need(
+        pages,
+        "static void wtDrawHomeMetric(",
+        "read-only Home printer metric renderer",
+    )
+    need(
+        pages,
+        "wtDrawHomePrinter(s, r, w)",
+        "Home printer canonical-row rendering",
+    )
+
     # Reject the incomplete prototype patterns that broke c1802ec.
     forbidden_placeholders = {
         "... command routing ...": "placeholder command routing",
@@ -88,6 +110,7 @@ def main() -> int:
         forbid(pages, token, label)
 
     print("PASS: Premium UI v2 visual foundation")
+    print("PASS: Premium UI v2 Home glance/Bento hierarchy")
     print("PASS: canonical Hit/HitKind contract preserved")
     print("PASS: Printer segment geometry preserved")
     print("PASS: guarded Stop touch geometry preserved")
