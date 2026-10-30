@@ -283,15 +283,23 @@ jobs:
         if: always()
         run: |
           echo 'This job is the sole CI authority for the flashable WS350 OS12 physical-acceptance candidate and proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
-          echo 'The parallel X2D job is required regression evidence but is not candidate authority and cannot mutate this candidate artifact.'
+          echo 'The parallel X2D jobs are required regression evidence but are not candidate authority and cannot mutate this candidate artifact.'
           echo 'This workflow does not establish runtime, physical, accepted, or stable state.'
           echo 'Inventory facts remain authoritative only when supplied by the profile-scoped Filament Inventory device-feed contract.'
           echo 'Do not integrate this candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'
 
   x2d-regression:
-    name: Experimental X2D compile regression
+    name: Experimental X2D compile regression (${{ matrix.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: WS350
+            build_flag: --build-ws350
+          - label: jc3248w535
+            build_flag: --build-cross-board
     env:
       OS12_RELEASE_VERSION: '12.8.0'
       OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -327,16 +335,16 @@ jobs:
       - name: Reconstruct exact-head UX source for X2D
         run: BUILD=/tmp/ws350-os12-x2d-build bash scripts/run_os12_ux_local.sh
 
-      - name: Compile required X2D regression
+      - name: Compile required X2D ${{ matrix.label }} regression
         run: |
           set -euo pipefail
           BASE=/tmp/ws350-os12-x2d-build \
             X2D_BRIDGE_URL=http://10.0.0.16:8091/x2d/frame.jpg \
-            bash scripts/run_x2d_local.sh --in-place --build
+            bash scripts/run_x2d_local.sh --in-place ${{ matrix.build_flag }}
 
       - name: Record X2D non-candidate state
         if: always()
         run: |
-          echo 'X2D is required compile-regression evidence for this workflow.'
+          echo 'X2D ${{ matrix.label }} is required compile-regression evidence for this workflow.'
           echo 'It is reconstructed independently from the same exact source SHA and does not produce or modify the canonical WS350 physical-acceptance candidate.'
           echo 'Candidate authority remains the Reconstruct and compile OS12 control plane job.'
