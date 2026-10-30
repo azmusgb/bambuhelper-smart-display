@@ -138,10 +138,8 @@ jobs:
 
       - name: Validate script syntax
         run: |
-          if ! command -v zsh >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y zsh
-          fi
+          # zsh capture-helper syntax is owned by Workshop OS 12 Tooling Checks,
+          # which is path-triggered by both that helper and this workflow.
           python3 -m py_compile \
             apply_workshop_os12_ux_architecture.py \
             apply_workshop_os12_ux_geometry.py \
@@ -203,7 +201,6 @@ jobs:
           python3 -m json.tool contracts/filament-inventory-device-feed-v1.schema.json >/dev/null
           bash -n scripts/ensure-platformio.sh
           bash -n scripts/run_os12_ux_local.sh
-          zsh -n scripts/capture-ws350-views.zsh
           bash -n scripts/bootstrap_ws350_os12_usb_macos.sh
           bash -n scripts/flash_os12_ci_candidate_macos.sh
           bash -n scripts/install_accept_os12_candidate_macos.sh
