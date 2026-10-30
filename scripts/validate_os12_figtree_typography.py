@@ -6,11 +6,13 @@ Checks:
 - Pre-compiled Figtree VLW headers exist in firmware/platform/fonts/.
 - Headers carry the canonical Figtree metadata and PROGMEM symbols.
 - Byte budgets match expected memory boundaries for ESP32 flash.
-- Host layout smoke tests compile and pass.
+- Host layout smoke tests compile and pass unless explicitly deferred by the
+  authoritative GitHub reconstruction, which runs the same suites later.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -84,6 +86,14 @@ def run_host_smoke_tests() -> None:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, help="Optional reconstructed build tree to validate")
+    parser.add_argument(
+        "--skip-host-smoke",
+        action="store_true",
+        help=(
+            "Skip the duplicate host layout smoke suites. Use only when the caller "
+            "runs those same suites later in the same authoritative pipeline."
+        ),
+    )
     args = parser.parse_args()
 
     validate_source_assets()
@@ -93,7 +103,18 @@ def main():
         repo_fonts = args.repo / "include" / "fonts"
         validate_headers(repo_fonts, f"{args.repo.name}/include/fonts")
 
-    run_host_smoke_tests()
+    # The full OS12 GitHub reconstruction runs tabs/more host smoke again after
+    # later owning UI layers (tabs + glance) have been applied. Deferring this
+    # earlier duplicate saves CI time without removing any final-tree coverage.
+    github_full_reconstruction = (
+        args.repo is not None
+        and os.environ.get("GITHUB_ACTIONS") == "true"
+        and os.environ.get("GITHUB_WORKFLOW") == "Workshop OS 12 UX Architecture"
+    )
+    if args.skip_host_smoke or github_full_reconstruction:
+        print("Host layout smoke tests: deferred to later authoritative layout validators.")
+    else:
+        run_host_smoke_tests()
 
     print("\nFIGTREE BRAND TYPOGRAPHY VALIDATION: PASS")
 
