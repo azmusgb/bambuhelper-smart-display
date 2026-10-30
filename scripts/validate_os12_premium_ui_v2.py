@@ -118,8 +118,8 @@ def main() -> int:
     )
     need(
         pages,
-        'const char* activeLabel = "IN USE";',
-        "AMS active telemetry badge",
+        'uiDrawFit(\n        "In use", right, mid, 60, FONT_BODY,',
+        "14 px AMS active telemetry badge",
     )
 
     # Reject the incomplete prototype patterns that broke c1802ec.

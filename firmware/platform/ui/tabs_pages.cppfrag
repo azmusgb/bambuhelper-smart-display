@@ -1402,39 +1402,30 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
   const int16_t right = row.right() - 12;
   int16_t valueRight = right;
   if (t.inUse) {
-    setFont(tft, FONT_SMALL);
-
-    const char* activeLabel = "IN USE";
-    const int16_t badgeW =
-        (int16_t)(tft.textWidth(activeLabel) + 18);
-    const int16_t badgeX =
-        (int16_t)(right - badgeW);
+    // Preserve the 12.3.9 legibility contract: active AMS state remains
+    // a 14 px body-font value even with the Premium v2 badge treatment.
+    const int16_t badgeW = 68;
+    const int16_t badgeX = (int16_t)(right - badgeW);
 
     tft.fillRoundRect(
         badgeX,
-        (int16_t)(mid - 11),
+        (int16_t)(mid - 12),
         badgeW,
-        22,
-        11,
+        24,
+        12,
         OS12V_SURFACE);
 
     tft.drawRoundRect(
         badgeX,
-        (int16_t)(mid - 11),
+        (int16_t)(mid - 12),
         badgeW,
-        22,
-        11,
+        24,
+        12,
         OS12V_ACCENT);
 
     uiDrawFit(
-        activeLabel,
-        (int16_t)(badgeX + badgeW / 2),
-        mid,
-        (int16_t)(badgeW - 8),
-        FONT_SMALL,
-        MC_DATUM,
-        OS12V_ACCENT,
-        OS12V_SURFACE);
+        "In use", right, mid, 60, FONT_BODY,
+        MR_DATUM, OS12V_ACCENT, OS12V_SURFACE);
 
     valueRight = (int16_t)(badgeX - 8);
   }
