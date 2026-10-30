@@ -16,6 +16,8 @@ BRIDGE_URL="${X2D_BRIDGE_URL:-}"
 RECONSTRUCT=0
 IN_PLACE=0
 DO_BUILD=0
+BUILD_ALL_REQUESTED=0
+SELECTIVE_TARGET=""
 BUILD_TARGET=""
 FLASH=0
 CONFIRM_IDLE=0
@@ -51,14 +53,14 @@ Environment: BASE, BUILD, X2D_BRIDGE_URL, WORKSHOP_OS_URL, PIO_BIN.
 EOF
 }
 
-set_build_target() {
+set_selective_build_target() {
   local requested="$1"
-  if [[ -n "$BUILD_TARGET" && "$BUILD_TARGET" != "$requested" ]]; then
-    echo "ERROR: conflicting X2D build targets: $BUILD_TARGET and $requested" >&2
+  if [[ -n "$SELECTIVE_TARGET" && "$SELECTIVE_TARGET" != "$requested" ]]; then
+    echo "ERROR: conflicting X2D selective build targets: $SELECTIVE_TARGET and $requested" >&2
     usage >&2
     exit 64
   fi
-  BUILD_TARGET="$requested"
+  SELECTIVE_TARGET="$requested"
   DO_BUILD=1
 }
 
@@ -66,17 +68,15 @@ while (( $# )); do
   case "$1" in
     --reconstruct) RECONSTRUCT=1 ;;
     --in-place) IN_PLACE=1 ;;
-    --build) set_build_target all ;;
-    --build-ws350) set_build_target ws_lcd_350 ;;
-    --build-cross-board) set_build_target jc3248w535 ;;
+    --build)
+      DO_BUILD=1
+      BUILD_ALL_REQUESTED=1
+      ;;
+    --build-ws350) set_selective_build_target ws_lcd_350 ;;
+    --build-cross-board) set_selective_build_target jc3248w535 ;;
     --flash)
       FLASH=1
       DO_BUILD=1
-      if [[ -n "$BUILD_TARGET" && "$BUILD_TARGET" == "jc3248w535" ]]; then
-        echo "ERROR: --flash cannot be combined with --build-cross-board." >&2
-        exit 64
-      fi
-      [[ -n "$BUILD_TARGET" ]] || BUILD_TARGET=ws_lcd_350
       ;;
     --confirm-printer-idle) CONFIRM_IDLE=1 ;;
     --allow-active-print) ALLOW_ACTIVE_PRINT=1 ;;
@@ -91,7 +91,20 @@ if [[ "$FLASH" -eq 1 && "$CONFIRM_IDLE" -ne 1 ]]; then
   echo "ERROR: --flash requires --confirm-printer-idle." >&2
   exit 21
 fi
-if [[ "$DO_BUILD" -eq 1 && -z "$BUILD_TARGET" ]]; then
+
+# Resolve the build target only after parsing every flag so legacy combinations
+# such as `--build --flash` and `--flash --build` remain order-independent.
+# Flashing always narrows compilation to the WS350 image. A selective CI target
+# wins over the generic `--build` request when no flash is requested.
+if [[ "$FLASH" -eq 1 ]]; then
+  if [[ "$SELECTIVE_TARGET" == "jc3248w535" ]]; then
+    echo "ERROR: --flash cannot be combined with --build-cross-board." >&2
+    exit 64
+  fi
+  BUILD_TARGET=ws_lcd_350
+elif [[ -n "$SELECTIVE_TARGET" ]]; then
+  BUILD_TARGET="$SELECTIVE_TARGET"
+elif [[ "$BUILD_ALL_REQUESTED" -eq 1 || "$DO_BUILD" -eq 1 ]]; then
   BUILD_TARGET=all
 fi
 
