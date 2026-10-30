@@ -222,8 +222,29 @@ jobs:
           "$PIO_BIN" --version
           "$(dirname "$PIO_BIN")/python" --version
 
-      - name: Reconstruct and build exact-head UX candidate
-        run: BUILD=/tmp/ws350-os12-ux-build bash scripts/run_os12_ux_local.sh --build
+      - name: Reconstruct exact-head UX source for candidate
+        run: BUILD=/tmp/ws350-os12-ux-build bash scripts/run_os12_ux_local.sh
+
+      - name: Build exact-head WS350 candidate
+        run: |
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          for attempt in 1 2 3; do
+            if (cd /tmp/ws350-os12-ux-build && "$PIO_BIN" pkg install -e ws_lcd_350 >/dev/null); then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo 'FAIL: pio pkg install failed 3 times for ws_lcd_350' >&2
+              exit 1
+            fi
+            echo "pio pkg install failed for ws_lcd_350 (attempt $attempt of 3); retrying in $((attempt * 15)) s" >&2
+            sleep $((attempt * 15))
+          done
+          (cd /tmp/ws350-os12-ux-build && "$PIO_BIN" run -e ws_lcd_350)
+          test -s /tmp/ws350-os12-ux-build/.pio/build/ws_lcd_350/firmware.bin || {
+            echo 'FAIL: WS350 exact-head candidate image missing' >&2
+            exit 1
+          }
 
       - name: Package exact WS350 physical candidate
         id: candidate
@@ -280,10 +301,74 @@ jobs:
         if: always()
         run: |
           echo 'This job is the sole CI authority for the flashable WS350 OS12 physical-acceptance candidate and proves reconstruction, hierarchy/geometry/navigation/control-plane validation, compile regression, and exact artifact identity only.'
-          echo 'The parallel X2D jobs are required regression evidence but are not candidate authority and cannot mutate this candidate artifact.'
+          echo 'The parallel canonical cross-board and X2D jobs are required regression evidence but are not candidate authority and cannot mutate this candidate artifact.'
           echo 'This workflow does not establish runtime, physical, accepted, or stable state.'
           echo 'Inventory facts remain authoritative only when supplied by the profile-scoped Filament Inventory device-feed contract.'
           echo 'Do not integrate this candidate into the canonical bootstrap/update path until physical 480x320 acceptance passes.'
+
+  canonical-cross-board:
+    name: Canonical jc3248w535 compile regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OS12_RELEASE_VERSION: '12.8.0'
+      OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Validate canonical regression scripts
+        run: |
+          set -euo pipefail
+          bash -n scripts/ensure-platformio.sh
+          bash -n scripts/run_os12_ux_local.sh
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
+
+      - name: Prepare pinned PlatformIO toolchain
+        run: |
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          "$PIO_BIN" --version
+          "$(dirname "$PIO_BIN")/python" --version
+
+      - name: Reconstruct exact-head UX source for canonical cross-board regression
+        run: BUILD=/tmp/ws350-os12-cross-board-build bash scripts/run_os12_ux_local.sh
+
+      - name: Compile canonical jc3248w535 regression
+        run: |
+          set -euo pipefail
+          PIO_BIN="$(ROOT="$PWD" bash scripts/ensure-platformio.sh)"
+          for attempt in 1 2 3; do
+            if (cd /tmp/ws350-os12-cross-board-build && "$PIO_BIN" pkg install -e jc3248w535 >/dev/null); then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo 'FAIL: pio pkg install failed 3 times for jc3248w535' >&2
+              exit 1
+            fi
+            echo "pio pkg install failed for jc3248w535 (attempt $attempt of 3); retrying in $((attempt * 15)) s" >&2
+            sleep $((attempt * 15))
+          done
+          (cd /tmp/ws350-os12-cross-board-build && "$PIO_BIN" run -e jc3248w535)
+          test -s /tmp/ws350-os12-cross-board-build/.pio/build/jc3248w535/firmware.bin || {
+            echo 'FAIL: canonical jc3248w535 regression image missing' >&2
+            exit 1
+          }
+
+      - name: Record canonical cross-board non-candidate state
+        if: always()
+        run: |
+          echo 'Canonical jc3248w535 is required exact-head compile-regression evidence for this workflow.'
+          echo 'It is reconstructed independently from the same exact source SHA and does not produce or modify the WS350 physical-acceptance candidate.'
+          echo 'Candidate authority remains the Reconstruct and compile OS12 control plane job.'
 
   x2d-regression:
     name: Experimental X2D compile regression (${{ matrix.label }})
