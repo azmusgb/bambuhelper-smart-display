@@ -21,9 +21,31 @@ esac
 
 : "${GITHUB_RUNNER_TOKEN:?Set GITHUB_RUNNER_TOKEN to a fresh repository runner registration token.}"
 
-for cmd in curl python3 tar sha256sum; do
+if ! command -v sudo >/dev/null 2>&1; then
+  echo "ERROR: sudo is required to install runner/build dependencies and the service." >&2
+  exit 2
+fi
+
+missing=()
+for cmd in curl python3 tar sha256sum git g++; do
+  command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+done
+
+if (( ${#missing[@]} )); then
+  if ! command -v apt-get >/dev/null 2>&1; then
+    printf 'ERROR: missing required commands: %s\n' "${missing[*]}" >&2
+    echo "       Install them before running this bootstrap." >&2
+    exit 2
+  fi
+
+  echo "Installing Pi runner/preflight prerequisites: ${missing[*]}"
+  sudo apt-get update
+  sudo apt-get install -y ca-certificates curl python3 git build-essential
+fi
+
+for cmd in curl python3 tar sha256sum git g++; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "ERROR: missing required command: $cmd" >&2
+    echo "ERROR: required command still unavailable after dependency setup: $cmd" >&2
     exit 2
   fi
 done
