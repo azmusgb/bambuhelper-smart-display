@@ -533,10 +533,12 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       if (u.busy) { v.enabled = false; v.reason = "Wait for the update to finish"; }
       break;
     }
-    case R::DateTimeNow:
+    case R::DateTimeNow: {
+      const time_t now = time(nullptr);
       wsDateTimeText(v.value, sizeof(v.value));
-      v.valueColor = OS12V_TEXT;
+      v.valueColor = now < 1700000000 ? OS12V_AMBER : OS12V_TEXT;
       break;
+    }
     case R::HealthNav: {
       const bool ok = hubTouchHealthy() && recoveryWebReady();
       strlcpy(v.value, ok ? "OK" : "Needs attention", sizeof(v.value));
@@ -754,7 +756,11 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       const bool playing = m.runtime.session == workshop::media::SessionState::PlayingRecording;
       v.button = recording ? "Stop" : "Record";
       v.buttonB = playing ? "Stop" : "Play";
-      if (!m.capabilities.microphoneAvailable || !m.capabilities.psramAvailable) { v.enabled = false; v.reason = "No microphone found"; }
+      if (!m.capabilities.microphoneAvailable) {
+        v.enabled = false; v.reason = "No microphone found";
+      } else if (!m.capabilities.psramAvailable) {
+        v.enabled = false; v.reason = "Recording needs PSRAM";
+      }
       if (!m.runtime.recordingAvailable && !playing) { v.enabledB = false; v.reasonB = "Record a clip first"; }
       if (recording) { strlcpy(v.value, "Recording...", sizeof(v.value)); v.valueColor = OS12V_AMBER; }
       else if (playing) { strlcpy(v.value, "Playing...", sizeof(v.value)); v.valueColor = OS12V_GREEN; }
@@ -873,8 +879,13 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       const workshop::media::Snapshot& m = workshopMediaSnapshot();
       const bool paused = m.runtime.session == workshop::media::SessionState::Paused;
       v.button = paused ? "Resume" : "Pause";
-      if (paused) strlcpy(v.value, "Paused", sizeof(v.value));
-      else if (wsVideoSessionActive()) { strlcpy(v.value, "Playing", sizeof(v.value)); v.valueColor = OS12V_GREEN; }
+      if (paused) {
+        strlcpy(v.value, "Paused", sizeof(v.value));
+        v.valueColor = OS12V_AMBER;
+      } else if (wsVideoSessionActive()) {
+        strlcpy(v.value, "Playing", sizeof(v.value));
+        v.valueColor = OS12V_GREEN;
+      }
       else { v.enabled = false; v.reason = g_wsVideoStartFailed ? (g_wsCameraMode ? "Camera not available" : "Video could not start") : "Not playing"; }
       break;
     }
@@ -1266,7 +1277,7 @@ static void wsDialogConfirm() {
 static const char* wsHeaderChip(wsm::PageId id) {
   using P = wsm::PageId;
   switch (id) {
-    case P::PrinterPower: return !wsPrinterConfigured() ? "Off" : (wsPrinterOnline() ? "Online" : "Offline");
+    case P::PrinterPower: return !wsPrinterConfigured() ? "Not set up" : (wsPrinterOnline() ? "Online" : "Offline");
     case P::Network: return workshopPlatformWifiOnline() ? "Online" : "Offline";
     case P::LocalPortal: return workshopPlatformWifiOnline() ? "Ready" : "Offline";
     case P::DeviceHealth: return (hubTouchHealthy() && recoveryWebReady()) ? "Ready" : "Needs attention";
@@ -1607,8 +1618,23 @@ static void wsTileStatus(wsm::PageId id, char* out, size_t len, int16_t maxW, ui
       break;
     case P::UpdatesAbout: {
       const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
-      snprintf(out, len, "LocalAI Terminal %s%s", WORKSHOP_OS_RELEASE_VERSION, wsUpdateInstallable(u) ? " · update ready" : "");
-      if (wsUpdateInstallable(u)) color = OS12V_GREEN;
+      using U = workshop::platform::UpdatePhase;
+
+      if (u.busy) {
+        if (u.phase == U::Checking)
+          strlcpy(out, "Checking for updates", len);
+        else
+          snprintf(out, len, "Installing %u%%", (unsigned)u.progressPercent);
+        color = OS12V_ACCENT;
+      } else if (wsUpdateInstallable(u)) {
+        snprintf(out, len, "LocalAI Terminal %s · update ready", WORKSHOP_OS_RELEASE_VERSION);
+        color = OS12V_GREEN;
+      } else if (u.phase == U::Failed) {
+        strlcpy(out, "Last update check failed", len);
+        color = OS12V_AMBER;
+      } else {
+        snprintf(out, len, "LocalAI Terminal %s", WORKSHOP_OS_RELEASE_VERSION);
+      }
       break;
     }
     default:

@@ -414,6 +414,114 @@ def main() -> int:
         "printer command routing inside More renderer",
     )
 
+    # Slice 7: acceptance-readiness states remain truth-preserving and
+    # presentation-only. No geometry, command, security or touch authority
+    # moves into these renderers.
+    home_top = block(
+        pages,
+        "static __attribute__((noinline)) uint8_t wtHomeTop(",
+    )
+    need(
+        home_top,
+        "strlcpy(c.text, \"Pi Hub isn't answering\", sizeof(c.text));",
+        "Pi Hub unavailable state",
+    )
+    need(
+        home_top,
+        "c.tone = Tone::Warning;",
+        "Pi Hub unavailable warning tone",
+    )
+
+    home_printer = block(
+        pages,
+        "static void wtDrawHomePrinter(",
+    )
+    need(
+        home_printer,
+        "w.alerts || w.failedActive",
+        "Home printer attention truth",
+    )
+    need(
+        home_printer,
+        'w.failedActive && !w.alerts ? "Print failed" : "Needs attention"',
+        "Home printer failure/attention wording",
+    )
+    need(
+        home_printer,
+        "!w.alerts",
+        "Home metrics suppressed during alerts",
+    )
+    need(
+        home_printer,
+        "!w.failedActive",
+        "Home metrics suppressed during failed-alert state",
+    )
+    forbid(
+        home_printer,
+        "hitTest(",
+        "touch routing inside Home printer readiness renderer",
+    )
+    forbid(
+        home_printer,
+        "workshopPlatformDispatchPrinterCommand",
+        "printer commands inside Home readiness renderer",
+    )
+
+    more_view = block(
+        more_pages,
+        "static void wsRowView(",
+    )
+    need(
+        more_view,
+        '"Recording needs PSRAM"',
+        "accurate Recorder capability reason",
+    )
+    need(
+        more_view,
+        "now < 1700000000 ? OS12V_AMBER : OS12V_TEXT",
+        "unset clock warning state",
+    )
+    need(
+        more_view,
+        'strlcpy(v.value, "Paused", sizeof(v.value));',
+        "video paused state",
+    )
+    need(
+        more_view,
+        "v.valueColor = OS12V_AMBER;",
+        "video paused warning tone",
+    )
+
+    more_header = block(
+        more_pages,
+        "static const char* wsHeaderChip(",
+    )
+    need(
+        more_header,
+        '"Not set up"',
+        "unconfigured printer header wording",
+    )
+
+    tile_status = block(
+        more_pages,
+        "static void wsTileStatus(",
+    )
+    need(
+        tile_status,
+        '"Checking for updates"',
+        "root update checking state",
+    )
+    need(
+        tile_status,
+        '"Last update check failed"',
+        "root update failure state",
+    )
+    need(
+        tile_status,
+        "wsUpdateInstallable(u)",
+        "root update-ready authority",
+    )
+
     # Reject the incomplete prototype patterns that broke c1802ec.
     forbidden_placeholders = {
         "... command routing ...": "placeholder command routing",
@@ -429,6 +537,7 @@ def main() -> int:
     print("PASS: Premium UI v2 Printer Control hierarchy")
     print("PASS: Premium UI v2 Workshop/Local AI hierarchy")
     print("PASS: Premium UI v2 More/System hierarchy")
+    print("PASS: Premium UI v2 Acceptance Readiness states")
     print("PASS: canonical Hit/HitKind contract preserved")
     print("PASS: Printer segment geometry preserved")
     print("PASS: guarded Stop touch geometry preserved")

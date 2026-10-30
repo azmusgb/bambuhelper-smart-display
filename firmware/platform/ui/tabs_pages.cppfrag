@@ -948,8 +948,14 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
     strlcpy(c.kind, "status", sizeof(c.kind));
     c.tone = Tone::Info;
     c.percent = 255;
-    if (fresh && !ai.needsFromPi) { strlcpy(c.title, "Pi Hub", sizeof(c.title)); strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text)); }
-    else { strlcpy(c.title, "Local AI", sizeof(c.title)); strlcpy(c.text, "Every card is on the Local AI tab", sizeof(c.text)); }
+    if (fresh && !ai.needsFromPi) {
+      strlcpy(c.title, "Pi Hub", sizeof(c.title));
+      strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text));
+      c.tone = Tone::Warning;
+    } else {
+      strlcpy(c.title, "Local AI", sizeof(c.title));
+      strlcpy(c.text, "Every card is on the Local AI tab", sizeof(c.text));
+    }
   }
   return rows;
 }
@@ -1086,6 +1092,13 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
     strlcpy(state, "Offline", sizeof(state));
     strlcpy(detail, "Check that it is on and on Wi-Fi", sizeof(detail));
     color = OS12V_AMBER;
+  } else if (w.alerts || w.failedActive) {
+    strlcpy(
+        state,
+        w.failedActive && !w.alerts ? "Print failed" : "Needs attention",
+        sizeof(state));
+    wtAlertText(w, detail, sizeof(detail));
+    color = OS12V_RED;
   } else {
     char at[24];
 
@@ -1125,6 +1138,8 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
       s.landscape() &&
       w.configured &&
       w.online &&
+      !w.alerts &&
+      !w.failedActive &&
       !w.finished &&
       w.s;
 
