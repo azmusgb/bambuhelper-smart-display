@@ -100,6 +100,28 @@ def main() -> int:
         "Home printer canonical-row rendering",
     )
 
+    # Slice 3: Printer Status / AMS presentation remains contract-safe.
+    need(
+        pages,
+        "Premium v2 Printer segment treatment.",
+        "Printer segment presentation",
+    )
+    need(
+        pages,
+        "Premium v2 AMS tray treatment.",
+        "AMS read-only premium presentation",
+    )
+    need(
+        pages,
+        "Premium v2 Printer status hierarchy.",
+        "Printer status hierarchy",
+    )
+    need(
+        pages,
+        'const char* activeLabel = "IN USE";',
+        "AMS active telemetry badge",
+    )
+
     # Reject the incomplete prototype patterns that broke c1802ec.
     forbidden_placeholders = {
         "... command routing ...": "placeholder command routing",
@@ -111,6 +133,7 @@ def main() -> int:
 
     print("PASS: Premium UI v2 visual foundation")
     print("PASS: Premium UI v2 Home glance/Bento hierarchy")
+    print("PASS: Premium UI v2 Printer Status/AMS hierarchy")
     print("PASS: canonical Hit/HitKind contract preserved")
     print("PASS: Printer segment geometry preserved")
     print("PASS: guarded Stop touch geometry preserved")
