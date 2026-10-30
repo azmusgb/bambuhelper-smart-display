@@ -188,6 +188,7 @@ jobs:
             scripts/validate_os12_touch_audio_fit.py \
             scripts/validate_os12_review_hardening.py \
             scripts/validate_os12_glance_legibility.py \
+            scripts/validate_os12_premium_ui_v2.py \
             scripts/accept_os12_retest_12_3_6.py \
             scripts/accept_os12_retest_12_3_9.py \
             scripts/accept_os12_status_lite_runtime.py \
@@ -207,6 +208,9 @@ jobs:
           bash -n scripts/flash_os12_ci_candidate_macos.sh
           bash -n scripts/install_accept_os12_candidate_macos.sh
           bash -n scripts/accept_os12_installed_candidate_macos.sh
+
+      - name: Validate Premium UI v2 contract
+        run: python3 scripts/validate_os12_premium_ui_v2.py --repo .
 
       - name: Cache pinned PlatformIO toolchain
         uses: actions/cache@v5
