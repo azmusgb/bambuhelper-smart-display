@@ -19,7 +19,9 @@ trap 'rm -rf "$TMP"' EXIT
 v1="https://raw.githubusercontent.com/azmusgb/filamentinventory/741a6f0651fb4e20d8e2674f2c0ce726b0d7bdf9/.bambuhelper-validation"
 v3="https://raw.githubusercontent.com/azmusgb/filamentinventory/07ce909fa7dd485abfc556eaf9addfbbd82e3cb3/.bambuhelper-validation"
 v6="https://raw.githubusercontent.com/azmusgb/filamentinventory/c1a6cdf389be14b18f26eecefd5c5a62b5d1e7dc/.bambuhelper-validation"
-v72="https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/smart-home-v7-2-display-stability"
+# v7.1/v7.2 come from this repo's own smart-home-v7-2-display-stability branch (b1c9909), copied into vendor/
+# because the repo is private and raw downloads of it need credentials.
+v72="$ROOT/vendor/smart-home-v7-2"
 
 curl -fsSL "$v1/installer.zlib.b64" -o "$TMP/installer.b64"
 for n in 0 1 2 3; do
@@ -31,9 +33,9 @@ curl -fsSL "$v3/v3.zlib.b64" -o "$TMP/v3.b64"
 curl -fsSL "$v6/v4.zlib.b64" -o "$TMP/v4.b64"
 curl -fsSL "$v6/v5.zlib.b64" -o "$TMP/v5.b64"
 curl -fsSL "$v6/v6.zlib.b64" -o "$TMP/v6.b64"
-curl -fsSL "$v72/.bambuhelper-validation/v7-home.zlib.b64" -o "$TMP/v7-home.b64"
-curl -fsSL "$v72/apply_smart_home_ux_v7_1.py" -o "$TMP/apply_smart_home_ux_v7_1.py"
-curl -fsSL "$v72/apply_smart_home_display_stability_v7_2.py" -o "$TMP/apply_smart_home_display_stability_v7_2.py"
+cp "$v72/v7-home.zlib.b64" "$TMP/v7-home.b64"
+cp "$v72/apply_smart_home_ux_v7_1.py" "$TMP/apply_smart_home_ux_v7_1.py"
+cp "$v72/apply_smart_home_display_stability_v7_2.py" "$TMP/apply_smart_home_display_stability_v7_2.py"
 
 python - "$TMP" <<'PY'
 from pathlib import Path
