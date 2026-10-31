@@ -44,12 +44,12 @@ function v116IsPrinting(d){
   return !!(d&&d.printing)||s==='RUNNING'||s==='PRINTING'||s==='PAUSE'||s==='PAUSED';
 }
 function v116StateLabel(d){
-  if(!d.configured)return 'SETUP REQUIRED';
-  if(!d.connected)return 'PRINTER OFFLINE';
+  if(!d.configured)return 'Setup Required';
+  if(!d.connected)return 'Printer Offline';
   var s=String(d.state||'READY').toUpperCase();
-  if(s==='FINISH'||s==='FINISHED')return 'PRINT COMPLETE';
-  if(s==='IDLE')return 'READY';
-  return s;
+  if(s==='FINISH'||s==='FINISHED')return 'Print Complete';
+  if(s==='IDLE')return 'Ready';
+  return s.toLowerCase().replace(/(^|[\s_-])([a-z])/g,function(m,a,c){return (a==='_'?' ':a)+c.toUpperCase()});
 }
 function v116JobLabel(d){
   if(!d.connected)return d.configured?'Printer unavailable':'Configure a printer';
@@ -68,7 +68,7 @@ function v116SetConnectionState(connected,configured,label){
   var chip=document.getElementById('wk116Connection');
   if(!chip)return;
   chip.className='wk116-live-chip '+(connected?'ok':(configured?'bad':'warn'));
-  chip.textContent=label||(connected?'LOCAL · LIVE':(configured?'OFFLINE':'SETUP'));
+  chip.textContent=label||(connected?'Local · Live':(configured?'Offline':'Setup'));
 }
 function v116DisableControls(){
   var ids=['wkLightBtn','wk116PauseBtn','wk116PowerBtn'];
@@ -165,7 +165,7 @@ function v103RefreshWorkshop(manual){
     v103WorkshopData={};
     v116DisableControls();
     v116Set('wkUpdated','Syncing selected printer…');
-    v116SetConnectionState(false,false,'SYNCING');
+    v116SetConnectionState(false,false,'Syncing');
   }
   fetch('/status?slot='+slot+'&_='+Date.now(),{cache:'no-store'}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -187,7 +187,7 @@ function v103RefreshWorkshop(manual){
     if(dot)dot.className=connected?'ok':(d.configured?'bad':'warn');
 
     v116Set('wkProgress',p+'%');
-    v116Set('wkProgressSub',printing?(paused?'PAUSED':'CURRENT JOB'):'PRINTER STATUS');
+    v116Set('wkProgressSub',printing?(paused?'Paused':'Current Job'):'Printer Status');
     v116Set('wk116Job',v116JobLabel(d));
     var bar=document.getElementById('wk116ProgressBar');
     if(bar){
@@ -224,7 +224,7 @@ function v103RefreshWorkshop(manual){
     var units=Math.max(0,Math.round(v116Finite(ams.units,0)));
     v116Set('wkAmsState',ams.present?(units+' AMS unit'+(units===1?'':'s')):(ams.externalPresent?'External spool':'No AMS'));
     var readyCount=trays.length;
-    v116Set('wkLoadedEyebrow',active?'ACTIVE MATERIAL':(readyCount?'AMS READY':'MATERIAL STATUS'));
+    v116Set('wkLoadedEyebrow',active?'Active Material':(readyCount?'AMS Ready':'Material Status'));
     v116Set('wkLoadedName',active?(active.type||'Loaded filament'):(readyCount?(readyCount+' material'+(readyCount===1?'':'s')+' ready'):'No material detected'));
     var activeSlot=v116Finite(active&&active.slot,-1);
     var activeRemain=v116Finite(active&&active.remain,-1);
@@ -239,7 +239,7 @@ function v103RefreshWorkshop(manual){
     v116WorkshopSlot=-1;
     v103WorkshopData={};
     v116DisableControls();
-    v116Set('wkState','UNAVAILABLE');
+    v116Set('wkState','Unavailable');
     v116Set('wkUpdated','Device status could not be read');
     v116SetConnectionState(false,true);
     var dot=document.getElementById('wkDot');
