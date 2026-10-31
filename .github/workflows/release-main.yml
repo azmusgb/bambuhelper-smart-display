@@ -64,7 +64,7 @@ jobs:
           assert d['schemaVersion'] == 1
           assert d['board'] == 'ws_lcd_350'
           assert d['authority'] == 'azmusgb/bambuhelper-smart-display'
-          assert d['artifactBaseUrl'] == 'https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/'
+          assert d['artifactBaseUrl'] == 'https://updates.home.arpa/'
           stable = d['channels']['stable']
           assert stable['status'] == 'published'
           assert stable['release'] == r['release']

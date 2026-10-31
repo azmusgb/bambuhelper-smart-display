@@ -2,14 +2,23 @@
 
 `releases/device-update.json` is the machine-readable discovery contract for a WS350 that is already running a compatible Workshop OS partition layout.
 
-Workshop OS 12 now has one device-native online-update authority: `UpdateService`. It reads this manifest from the repository's raw `main` URL, exposes normalized update state through `WorkshopState`, and owns check/download/verify/stage/reboot behavior. The historical URL-driven `/ota/auto` route is deliberately not registered by the OS12 reconstruction. Manual local OTA remains a maintenance/bootstrap fallback.
+Workshop OS 12 now has one device-native online-update authority: `UpdateService`. It reads this manifest from the Pi update host (see below), exposes normalized update state through `WorkshopState`, and owns check/download/verify/stage/reboot behavior. The historical URL-driven `/ota/auto` route is deliberately not registered by the OS12 reconstruction. Manual local OTA remains a maintenance/bootstrap fallback.
 
 Implementation/build validation is not physical acceptance. Until the new updater is installed and exercised on the WS350, this capability remains below `runtime validated`.
 
+## Update host
+
+The repository is private, so the display cannot read GitHub. Updates come from the Pi on the LAN instead:
+
+- `git push pi main` (remote `pi:/srv/bambuhelper-smart-display.git`) runs the bare repo's `post-receive` hook, which copies `releases/` and `firmware/*.bin` from that commit into `/srv/bambuhelper-updates/publish-<sha>` and swaps the `current` symlink to it. The previous publish is kept.
+- Caddy (configured in the pi-hub repo, `deploy/caddy/Caddyfile`) serves `current` at `https://updates.home.arpa/` with its local CA. The site is not behind the hub sign-in.
+- The router's DNS does not resolve `home.arpa`, so `UpdateHostClient` in the firmware maps `updates.home.arpa` to `10.0.0.30` itself and still verifies the certificate against that name. It trusts only the Caddy local root (valid to 2036-09-02) and refuses any other host. A new Caddy CA, or a new Pi address, needs a USB flash.
+- Push `main` to `pi` after every release change that should reach the display; GitHub alone no longer updates it.
+
 ## Required device behavior
 
-1. Fetch `releases/device-update.json` from this repository's raw `main` URL over certificate-validated HTTPS. There is no `setInsecure` fallback.
-2. Require `schemaVersion == 1`, `authority == azmusgb/bambuhelper-smart-display`, `board == ws_lcd_350`, and the canonical raw-`main` `artifactBaseUrl`.
+1. Fetch `releases/device-update.json` from `https://updates.home.arpa/` over certificate-validated HTTPS. There is no `setInsecure` fallback.
+2. Require `schemaVersion == 1`, `authority == azmusgb/bambuhelper-smart-display`, `board == ws_lcd_350`, and the canonical `https://updates.home.arpa/` `artifactBaseUrl`.
 3. Resolve repository-root artifact paths against `artifactBaseUrl`. Do not resolve `ota.path` relative to the `releases/` manifest directory and reject absolute, traversal, backslash, or alternate-host paths.
 4. Select the configured `stable` or `candidate` channel. Stable is the default; Candidate is an explicit opt-in hardware-acceptance channel.
 5. Treat `status != published`, missing fields, malformed metadata, board/authority mismatch, an unknown schema, or an OTA image larger than the inactive application partition as **no installable update**.
@@ -97,7 +106,7 @@ It does not erase NVS. A partition mismatch is a recovery/migration boundary: pr
 
 The repository-owned build toolchain prefers Python 3.12 and intentionally rejects Python 3.13+ for this PlatformIO/SCons image-generation path because a real macOS bootstrap reproduced a command-rendering failure under Python 3.13. The toolchain is isolated under `.workshop-tools/` and is not allowed to fall back to an arbitrary global PlatformIO installation.
 
-After the bootstrap installation and reboot, future ordinary candidates can be checked and installed directly from GitHub on the device, subject to the manifest and acceptance rules above. The bootstrap image itself is not the GitHub-OTA acceptance event; exercise formal OTA acceptance with a strictly newer published candidate so release versions are never reused for different bytes.
+After the bootstrap installation and reboot, future ordinary candidates can be checked and installed directly from the Pi update host on the device, subject to the manifest and acceptance rules above. The bootstrap image itself is not the GitHub-OTA acceptance event; exercise formal OTA acceptance with a strictly newer published candidate so release versions are never reused for different bytes.
 
 ## Preparing a candidate
 

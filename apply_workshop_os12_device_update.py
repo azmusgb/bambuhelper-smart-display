@@ -187,9 +187,11 @@ def patch_service(repo: Path, source_root: Path) -> None:
         raise PatchError("update service must not describe the HTTPS manifest as cryptographically signed")
 
     required = (
-        "raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json",
+        "https://updates.home.arpa/releases/device-update.json",
         'constexpr char kBoard[] = "ws_lcd_350";',
-        "setCACertBundle(rootca_crt_bundle_start)",
+        "setCACert(kUpdateHostRootCa)",
+        "class UpdateHostClient : public WiFiClientSecure",
+        "if (std::strcmp(host, kUpdateHost) != 0) return 0;",
         "HTTPC_DISABLE_FOLLOW_REDIRECTS",
         "safeArtifactPath",
         "esp_ota_get_next_update_partition",

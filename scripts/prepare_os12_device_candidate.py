@@ -25,7 +25,7 @@ VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED_AUTHORITY = "azmusgb/bambuhelper-smart-display"
 EXPECTED_BOARD = "ws_lcd_350"
-EXPECTED_BASE = "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/"
+EXPECTED_BASE = "https://updates.home.arpa/"
 
 
 class PublishError(RuntimeError):

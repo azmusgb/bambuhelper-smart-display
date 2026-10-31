@@ -28,12 +28,15 @@ using workshop::platform::UpdateChannel;
 using workshop::platform::UpdatePhase;
 using workshop::platform::UpdateState;
 
-constexpr char kManifestUrl[] =
-    "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json";
+// Updates come from the Pi on the LAN (bare repo /srv/bambuhelper-smart-display.git publishes main to
+// https://updates.home.arpa/). The router's DNS does not serve home.arpa, so the client below pins the name to the
+// Pi's address and still verifies the certificate against that name.
+constexpr char kUpdateHost[] = "updates.home.arpa";
+constexpr std::uint8_t kUpdateHostIp[4] = {10, 0, 0, 30};
+constexpr char kManifestUrl[] = "https://updates.home.arpa/releases/device-update.json";
 constexpr char kAuthority[] = "azmusgb/bambuhelper-smart-display";
 constexpr char kBoard[] = "ws_lcd_350";
-constexpr char kArtifactBaseUrl[] =
-    "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/";
+constexpr char kArtifactBaseUrl[] = "https://updates.home.arpa/";
 constexpr std::uint32_t kManifestMaxBytes = 24U * 1024U;
 constexpr std::uint32_t kDownloadNoProgressTimeoutMs = 20000U;
 constexpr std::uint32_t kRebootDelayMs = 4000U;
@@ -41,7 +44,32 @@ constexpr std::size_t kDownloadBufferBytes = 4096U;
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
 constexpr bool kOtaSupported = true;
-extern const std::uint8_t rootca_crt_bundle_start[] asm("_binary_x509_crt_bundle_start");
+// The Pi's Caddy local root (CN=Caddy Local Authority - 2026 ECC Root, valid to 2036-09-02). It is the only trust
+// anchor for update traffic. Never delete /var/lib/caddy on the Pi: a new CA means reflashing this.
+constexpr char kUpdateHostRootCa[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIBpDCCAUqgAwIBAgIRAP5paAYDpb3cULCP5jF/VYUwCgYIKoZIzj0EAwIwMDEu\n"
+    "MCwGA1UEAxMlQ2FkZHkgTG9jYWwgQXV0aG9yaXR5IC0gMjAyNiBFQ0MgUm9vdDAe\n"
+    "Fw0yNjEwMjUwMzIxMzBaFw0zNjA5MDIwMzIxMzBaMDAxLjAsBgNVBAMTJUNhZGR5\n"
+    "IExvY2FsIEF1dGhvcml0eSAtIDIwMjYgRUNDIFJvb3QwWTATBgcqhkjOPQIBBggq\n"
+    "hkjOPQMBBwNCAATUVLXQlr4XSLd9b3eh+7M8KOm1nzZyQ0FJSDW5ToQP0vMQprJd\n"
+    "w8sg7FDIF+Q6kGYIyPz9cMC8STKpTQK1WFgKo0UwQzAOBgNVHQ8BAf8EBAMCAQYw\n"
+    "EgYDVR0TAQH/BAgwBgEB/wIBATAdBgNVHQ4EFgQU/31/iB4AqG0cAhSshaD53UuL\n"
+    "FqYwCgYIKoZIzj0EAwIDSAAwRQIhAKJ/L9jmQ6ms4pUJXkI4645OJZULH1TINsSQ\n"
+    "FbaNl23NAiAoVCGA3+d1i0rUUxnBrjKLNPjORwpKpFpn5yuWOFEcDQ==\n"
+    "-----END CERTIFICATE-----\n";
+
+// Resolves kUpdateHost to the Pi without DNS and refuses every other host, so HTTPClient can keep using the URL.
+class UpdateHostClient : public WiFiClientSecure {
+public:
+    UpdateHostClient() { setCACert(kUpdateHostRootCa); }
+    int connect(const char* host, uint16_t port, int32_t timeout) override {
+        if (std::strcmp(host, kUpdateHost) != 0) return 0;
+        _timeout = timeout;
+        const IPAddress ip(kUpdateHostIp[0], kUpdateHostIp[1], kUpdateHostIp[2], kUpdateHostIp[3]);
+        return WiFiClientSecure::connect(ip, port, host, kUpdateHostRootCa, nullptr, nullptr);
+    }
+};
 #else
 constexpr bool kOtaSupported = false;
 #endif
@@ -212,8 +240,7 @@ void publishRuntimeToPlatform(const WorkshopUpdateRuntimeSnapshot& snap) {
 }
 
 #if defined(BOARD_IS_WS350) && defined(ENABLE_OTA_AUTO)
-bool beginHttps(HTTPClient& http, WiFiClientSecure& client, const char* url) {
-    client.setCACertBundle(rootca_crt_bundle_start);
+bool beginHttps(HTTPClient& http, UpdateHostClient& client, const char* url) {
     http.setTimeout(15000);
     http.setConnectTimeout(10000);
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
@@ -223,26 +250,26 @@ bool beginHttps(HTTPClient& http, WiFiClientSecure& client, const char* url) {
 
 bool fetchManifest(CandidateMetadata& out, String& error) {
     if (WiFi.status() != WL_CONNECTED || isAPMode()) {
-        error = "Internet connection required to check GitHub for updates.";
+        error = "Wi-Fi connection required to check the update server.";
         return false;
     }
 
-    WiFiClientSecure client;
+    UpdateHostClient client;
     HTTPClient http;
     if (!beginHttps(http, client, kManifestUrl)) {
-        error = "Could not initialize the GitHub manifest request.";
+        error = "Could not initialize the update manifest request.";
         return false;
     }
 
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
-        error = String("GitHub manifest request failed (HTTP ") + code + ").";
+        error = String("update manifest request failed (HTTP ") + code + ").";
         http.end();
         return false;
     }
     const int contentLength = http.getSize();
     if (contentLength <= 0 || static_cast<std::uint32_t>(contentLength) > kManifestMaxBytes) {
-        error = "GitHub manifest size is missing or outside the accepted limit.";
+        error = "update manifest size is missing or outside the accepted limit.";
         http.end();
         return false;
     }
@@ -251,7 +278,7 @@ bool fetchManifest(CandidateMetadata& out, String& error) {
     const DeserializationError jsonError = deserializeJson(doc, http.getStream());
     http.end();
     if (jsonError) {
-        error = String("GitHub manifest JSON is invalid: ") + jsonError.c_str();
+        error = String("update manifest JSON is invalid: ") + jsonError.c_str();
         return false;
     }
 
@@ -265,14 +292,14 @@ bool fetchManifest(CandidateMetadata& out, String& error) {
     if (std::strcmp(board, kBoard) != 0 ||
         std::strcmp(authority, kAuthority) != 0 ||
         std::strcmp(artifactBase, kArtifactBaseUrl) != 0) {
-        error = "GitHub manifest authority, board, or artifact base does not match Workshop OS policy.";
+        error = "update manifest authority, board, or artifact base does not match Workshop OS policy.";
         return false;
     }
 
     const WorkshopUpdateRuntimeSnapshot snap = workshopUpdateSnapshot();
     JsonObject channel = doc["channels"][channelKey(snap.channel)].as<JsonObject>();
     if (channel.isNull()) {
-        error = "Selected update channel is missing from the GitHub manifest.";
+        error = "Selected update channel is missing from the update manifest.";
         return false;
     }
     const char* status = channel["status"] | "";
@@ -369,14 +396,14 @@ bool downloadAndStage(const CandidateMetadata& meta, String& error) {
         return false;
     }
     if (WiFi.status() != WL_CONNECTED || isAPMode()) {
-        error = "Internet connection was lost before the OTA download started.";
+        error = "Wi-Fi connection was lost before the OTA download started.";
         return false;
     }
 
     char url[sizeof(kArtifactBaseUrl) + sizeof(meta.path) + 8] = {};
     snprintf(url, sizeof(url), "%s%s", kArtifactBaseUrl, meta.path);
 
-    WiFiClientSecure client;
+    UpdateHostClient client;
     HTTPClient http;
     if (!beginHttps(http, client, url)) {
         error = "Could not initialize the OTA download.";
@@ -453,13 +480,13 @@ bool downloadAndStage(const CandidateMetadata& meta, String& error) {
             const std::uint8_t progress = static_cast<std::uint8_t>((received * 100ULL) / meta.size);
             if (progress != lastProgress) {
                 lastProgress = progress;
-                setRuntimeState(UpdatePhase::Downloading, progress, true, "Downloading verified GitHub OTA image…");
+                setRuntimeState(UpdatePhase::Downloading, progress, true, "Downloading verified OTA image…");
             }
             continue;
         }
 
         if (!http.connected()) {
-            error = "GitHub closed the OTA connection before the declared image size was received.";
+            error = "The update server closed the OTA connection before the declared image size was received.";
             break;
         }
         if (static_cast<std::uint32_t>(millis() - lastDataAt) > kDownloadNoProgressTimeoutMs) {
@@ -490,7 +517,7 @@ bool downloadAndStage(const CandidateMetadata& meta, String& error) {
     mbedtls_sha256_free(&sha);
 
     if (std::memcmp(actualSha, expectedSha, sizeof(actualSha)) != 0) {
-        error = "OTA SHA-256 does not match the GitHub manifest. Inactive image was rejected.";
+        error = "OTA SHA-256 does not match the update manifest. Inactive image was rejected.";
         esp_ota_abort(otaHandle);
         http.end();
         return false;
@@ -549,11 +576,11 @@ void performCheck() {
     copyText(g_runtime.sourceCommit, sizeof(g_runtime.sourceCommit), discovered.sourceCommit);
     copyText(g_runtime.artifactSha256, sizeof(g_runtime.artifactSha256), discovered.sha256);
     g_runtime.artifactSize = discovered.size;
-    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "A newer GitHub OTA image is available.");
+    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "A newer OTA image is available.");
     bumpRevisionLocked();
     portEXIT_CRITICAL(&g_updateMux);
 #else
-    setRuntimeFailure("Device-native GitHub OTA is supported only on the WS350 target in this OS12 slice.", false);
+    setRuntimeFailure("Device-native OTA is supported only on the WS350 target in this OS12 slice.", false);
 #endif
 }
 
@@ -583,7 +610,7 @@ void performInstall() {
     delay(kRebootDelayMs);
     ESP.restart();
 #else
-    setRuntimeFailure("Device-native GitHub OTA is unavailable on this target.", true);
+    setRuntimeFailure("Device-native OTA is unavailable on this target.", true);
 #endif
 }
 
@@ -654,8 +681,8 @@ void workshopUpdateServiceBegin() {
     copyText(g_runtime.runningVersion, sizeof(g_runtime.runningVersion), SMART_HOME_VERSION);
     copyText(g_runtime.statusMessage,
              sizeof(g_runtime.statusMessage),
-             kOtaSupported ? "Ready to check GitHub for Workshop OS updates." :
-                             "Device-native GitHub OTA is unavailable on this target.");
+             kOtaSupported ? "Ready to check for Workshop OS updates." :
+                             "Device-native OTA is unavailable on this target.");
     g_taskActive = false;
     g_pendingOperation = PendingOperation::None;
     g_mqttReinitPending = false;
@@ -703,7 +730,7 @@ bool workshopUpdateSetChannel(UpdateChannel channel) {
     g_runtime.progressPercent = 0;
     g_runtime.busy = false;
     clearCandidateLocked();
-    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Channel changed. Check GitHub for updates.");
+    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Channel changed. Check for updates.");
     bumpRevisionLocked();
     portEXIT_CRITICAL(&g_updateMux);
     return true;
@@ -711,7 +738,7 @@ bool workshopUpdateSetChannel(UpdateChannel channel) {
 
 bool workshopUpdateRequestCheck() {
     if (!kOtaSupported) {
-        setRuntimeFailure("Device-native GitHub OTA is unavailable on this target.", false);
+        setRuntimeFailure("Device-native OTA is unavailable on this target.", false);
         return false;
     }
     if (WiFi.status() != WL_CONNECTED || isAPMode()) {
@@ -729,7 +756,7 @@ bool workshopUpdateRequestCheck() {
     g_runtime.manifestFreshness = Freshness::Unknown;
     g_runtime.progressPercent = 0;
     g_runtime.busy = true;
-    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Checking the authoritative GitHub update manifest…");
+    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Checking the update server manifest…");
     bumpRevisionLocked();
     portEXIT_CRITICAL(&g_updateMux);
 
@@ -738,7 +765,7 @@ bool workshopUpdateRequestCheck() {
 
 bool workshopUpdateRequestInstall() {
     if (!kOtaSupported) {
-        setRuntimeFailure("Device-native GitHub OTA is unavailable on this target.", true);
+        setRuntimeFailure("Device-native OTA is unavailable on this target.", true);
         return false;
     }
 
@@ -774,7 +801,7 @@ bool workshopUpdateRequestInstall() {
     g_runtime.progressPercent = 0;
     g_runtime.busy = true;
     g_runtime.artifactIdentityVerified = false;
-    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Starting verified GitHub OTA download…");
+    copyText(g_runtime.statusMessage, sizeof(g_runtime.statusMessage), "Starting verified OTA download…");
     bumpRevisionLocked();
     portEXIT_CRITICAL(&g_updateMux);
 

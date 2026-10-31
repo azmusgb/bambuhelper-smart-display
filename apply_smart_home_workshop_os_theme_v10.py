@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import urllib.request
 from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
@@ -11,16 +10,16 @@ if str(_here) not in _sys.path:
     _sys.path.insert(0, str(_here))
 from scripts.smart_home_patch_utils import PatchError
 
-CORE_URL = "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/eecddd896a3836da42bf8cbbb2c3723cca62b29a/apply_smart_home_workshop_os_theme_v10.py"
+# The v10 core as of eecddd896, copied into vendor/ because this repo is private and raw downloads need credentials.
+CORE_PATH = Path(__file__).resolve().parent / "vendor" / "theme-v10" / "apply_smart_home_workshop_os_theme_v10_core.py"
 
 
 
 
 def load_core():
-    with urllib.request.urlopen(CORE_URL, timeout=30) as r:
-        source = r.read().decode("utf-8")
-    ns = {"__name__": "v10_theme_core", "__file__": CORE_URL}
-    exec(compile(source, CORE_URL, "exec"), ns, ns)
+    source = CORE_PATH.read_text(encoding="utf-8")
+    ns = {"__name__": "v10_theme_core", "__file__": str(CORE_PATH)}
+    exec(compile(source, str(CORE_PATH), "exec"), ns, ns)
     if "apply" not in ns:
         raise PatchError("v10 core apply() missing")
     return ns

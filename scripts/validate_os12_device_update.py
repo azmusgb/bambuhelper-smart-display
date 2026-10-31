@@ -44,10 +44,12 @@ def validate_source(source_root: Path) -> None:
         require(header, needle, "UpdateService API")
 
     for needle in (
-        "raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/releases/device-update.json",
+        "https://updates.home.arpa/releases/device-update.json",
         'constexpr char kAuthority[] = "azmusgb/bambuhelper-smart-display";',
         'constexpr char kBoard[] = "ws_lcd_350";',
-        "setCACertBundle(rootca_crt_bundle_start)",
+        "setCACert(kUpdateHostRootCa)",
+        "class UpdateHostClient : public WiFiClientSecure",
+        "if (std::strcmp(host, kUpdateHost) != 0) return 0;",
         "HTTPC_DISABLE_FOLLOW_REDIRECTS",
         "safeArtifactPath",
         "esp_ota_get_next_update_partition",
@@ -118,8 +120,8 @@ def validate_source(source_root: Path) -> None:
         if manifest.get("authority") != "azmusgb/bambuhelper-smart-display":
             raise ValidationError("device-update manifest authority mismatch")
         base = manifest.get("artifactBaseUrl", "")
-        if base != "https://raw.githubusercontent.com/azmusgb/bambuhelper-smart-display/main/":
-            raise ValidationError("device-update artifactBaseUrl must stay pinned to raw main")
+        if base != "https://updates.home.arpa/":
+            raise ValidationError("device-update artifactBaseUrl must stay pinned to the Pi update host")
         rules = manifest.get("rules", {})
         if rules.get("normalDeviceUpdateUsesOtaOnly") is not True:
             raise ValidationError("normal OTA-only rule missing")
@@ -145,7 +147,7 @@ def validate_reconstructed(repo: Path) -> None:
         "state.progressPercent = snap.progressPercent",
         "state.updateAvailable = snap.updateAvailable",
         "esp_ota_set_boot_partition",
-        "setCACertBundle(rootca_crt_bundle_start)",
+        "setCACert(kUpdateHostRootCa)",
         "g_runtime.runningSourceCommit",
         "WORKSHOP_OS_SOURCE_SHA",
     ):
