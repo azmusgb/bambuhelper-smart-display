@@ -54,7 +54,7 @@ def patch(root:Path):
         'v116PauseResume','v116TogglePower','v116RenderTrays',
         "v116Post('/printer/control'", "v116Post('/printer/power'",
         'v116WorkshopSlot','v116StatusSeq','v116PowerSeq','v116PowerState.slot',
-        "v116SetConnectionState(false,false,'SYNCING')",
+        "v116SetConnectionState(false,false,'Syncing')",
         'slot!==v116CurrentSlot()','v116WorkshopSlot!==slot'
       ],
     }
