@@ -71,7 +71,7 @@ def keychain_secret(account: str, service: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "Configure the display's feed.").splitlines()[0])
     parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
     parser.add_argument("--backend", choices=("localai", "pihub"), default="localai",
                         help="the service the display takes its feed from (pihub: Pi Hub; its CA is Pi Hub's home-ca.crt)")
@@ -88,14 +88,18 @@ def main() -> int:
     address, name = DEFAULTS[args.backend]
     args.address = args.address or address
     args.name = args.name or name
-    ca_pem = ""
-    if not args.clear:  # checked before the display is contacted
+    ca_pem = key = ""
+    if not args.clear:  # checked before the display is contacted (31 Oct 2026: the key too)
         ca_path = args.ca or default_ca(args.backend)
         if ca_path is None:
             sys.exit(f"FAIL: {PIHUB_NEEDS_CA}")
         if ca_path == CA_PATH and not ca_path.is_file():
             sys.exit(f"FAIL: missing {CA_PATH}; run Local AI's host/claude-chat/install.sh first")
         ca_pem = read_ca(ca_path)
+        key = keychain_secret(*KEYCHAIN[args.backend])
+        if not key.startswith(KEY_PREFIX[args.backend]):
+            where = "Local AI's host/workshop-display/set-key.sh" if args.backend == "localai" else "Pi Hub's display key into the Keychain"
+            sys.exit(f"FAIL: no {args.backend} display key in the Keychain (service {KEYCHAIN[args.backend][1]}); put {where} first")
 
     client = Client(args.base_url)
     establish_portal_session(client)
@@ -105,10 +109,6 @@ def main() -> int:
         print(f"clear: HTTP {r.status}")
         return 0 if r.status == 200 else 1
 
-    key = keychain_secret(*KEYCHAIN[args.backend])
-    if not key.startswith(KEY_PREFIX[args.backend]):
-        where = "Local AI's host/workshop-display/set-key.sh" if args.backend == "localai" else "Pi Hub's display key into the Keychain"
-        sys.exit(f"FAIL: no {args.backend} display key in the Keychain (service {KEYCHAIN[args.backend][1]}); put {where} first")
     form = {"address": args.address, "name": args.name, "key": key, "ca": ca_pem, "backend": args.backend}
     r = client.request("/os12/localai/config", method="POST", form=form, headers=headers)
     del key, form
@@ -116,6 +116,7 @@ def main() -> int:
         sys.exit(f"FAIL: the display refused the settings (HTTP {r.status}): {r.body[:200]!r}")
     print(f"Saved on the display. Waiting for the first {'Pi Hub' if args.backend == 'pihub' else 'Local AI'} cards…")
     deadline = time.time() + 90
+    s: dict = {}
     while time.time() < deadline:
         time.sleep(5)
         s = json.loads(client.request("/os12/localai/status", headers=headers).body)

@@ -12,6 +12,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("configure_localai_feed", ROOT / "scripts/configure_localai_feed.py")
+if spec is None or spec.loader is None:
+    raise ImportError("cannot load scripts/configure_localai_feed.py")
 configure = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(configure)
 
@@ -52,6 +54,17 @@ class CaTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     run("--backend", "pihub", "--ca", str(bad))
 
+    def test_missing_key_refuses_before_contacting_the_display(self) -> None:
+        # 31 Oct 2026: the Keychain key is read before the display is contacted, like the CA.
+        with tempfile.TemporaryDirectory() as td:
+            ca = Path(td) / "home-ca.crt"
+            ca.write_text(PEM, encoding="ascii")
+            with mock.patch.object(configure, "Client", side_effect=AssertionError("contacted the display")), \
+                 mock.patch.object(configure, "keychain_secret", lambda a, s: ""):
+                with self.assertRaises(SystemExit) as caught:
+                    run("--backend", "pihub", "--ca", str(ca))
+            self.assertIn("no pihub display key in the Keychain (service pihub-display-key)", str(caught.exception.code))
+
     def test_pihub_with_ca_sends_it_and_the_backend(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             ca = Path(td) / "home-ca.crt"
@@ -68,7 +81,7 @@ class CaTests(unittest.TestCase):
 
                 def request(self, path: str, method: str = "GET", form=None, headers=None):
                     if path == "/os12/localai/config":
-                        sent.update(form)
+                        sent.update(form or {})
                         return Reply(202, "{}")
                     return Reply(200, '{"lastSuccessAgoS": 1, "cards": []}')
 
