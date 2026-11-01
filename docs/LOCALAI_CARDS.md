@@ -54,6 +54,8 @@ shows one card from Local AI under its print status line, and a different card e
 | A problem (Heads up / Worth a look) | the Local AI watchdog found one: a full disk, the display or printer, the camera bridge |
 | **Working on** | Local AI is running something |
 | **Weather** | Local AI's home location is set (Local AI › Health › Home location) |
+| **Printer** (`printer`) | connected to Pi Hub: the printer's state, from Pi Hub |
+| **AI unavailable — PC asleep** (`ai`) | connected to Pi Hub while Pi Hub can't reach Local AI (the PC sleeps); gone when it wakes |
 
 Without cards (Local AI not set up, or nothing heard from it for 10 minutes) the calm screen is exactly as before.
 The cards are display only: tapping anywhere still just wakes the screen.
@@ -116,14 +118,17 @@ flash's spare `spiffs` partition), so restarts and updates keep them. The WS350'
 
 ## How it works
 
-- Once a minute, a background task fetches `GET /api/display/feed` from Local AI (see LocalAI
-  `docs/WORKSHOP-DISPLAY.md` › Local AI cards). While Local AI doesn't answer, it waits 2, then 4, then 8, then 10
-  minutes between tries.
-- The connection goes to Local AI's IP address. The certificate is checked against Local AI's CA and the name
-  `localai.home.arpa`, because the ESP32's TLS library can't match an IP address in a certificate. It never skips the
-  check.
-- The request is HTTP/1.0, because Local AI's HTTPS front answers HTTP/1.1 in chunks. It carries the display key
-  (`X-LocalAI-Display-Key`), which signs the display in for that one route.
+- Once a minute, a background task fetches `GET /api/display/feed` from the service the display is paired with, Local
+  AI or Pi Hub (see LocalAI `docs/WORKSHOP-DISPLAY.md` › Local AI cards). While it doesn't answer, it waits 2, then 4,
+  then 8, then 10 minutes between tries.
+- The connection goes to the service's IP address. The certificate is checked against that service's CA and the name
+  on its certificate, because the ESP32's TLS library can't match an IP address in a certificate: Local AI
+  `localai.home.arpa`, Pi Hub `home.home.arpa`. It never skips the check.
+- The request is HTTP/1.0, because the HTTPS fronts answer HTTP/1.1 in chunks. It carries the display key in the
+  service's own header, which signs the display in for those routes: Local AI `X-LocalAI-Display-Key` (a `wsd_` key),
+  Pi Hub `X-Hub-Display-Key` (a `hubd_` key).
+- When a service says no, the display shows its own words (a 4xx or 5xx body's `error`, or FastAPI's `detail`), except
+  for a 401, which says the key was turned down.
 
 Portal routes:
 
@@ -176,6 +181,9 @@ Read `GET /os12/localai/status` and look at `status`:
 |---|---|
 | "Local AI isn't answering, or its certificate didn't match." | Local AI is down (the watchdog's Mac notice says so), or the CA changed: re-run `configure_localai_feed.py`. |
 | "Local AI turned the display key down (HTTP 401/403)." | Local AI's sign-in is enforced and the key fingerprint is missing: re-run `set-key.sh`, then `configure_localai_feed.py`. |
+| "Pi Hub isn't answering, or its certificate didn't match." | Pi Hub (10.0.0.30) is down or off the network, or its CA changed: pair again from the display or the portal (pairing fetches the CA again). |
+| "Pi Hub turned the display key down (HTTP 401)." | Pi Hub no longer knows the key (unpaired there, or its display key was reset): pair again (Pi Hub › System › Workshop display › Pair display). |
+| "AI unavailable — PC asleep" (on Ask, approvals or pictures; also the `ai` card) | Connected to Pi Hub and the PC with Local AI sleeps or doesn't answer. Printer, Needs you, Clear plate, Judge it and now playing keep working; wake the PC for the AI. Nothing to fix on the display. |
 | "Waiting for Wi-Fi." | The display is off Wi-Fi. |
 | "Cards are not set up." after a restart | Firmware 12.3.10 or 12.3.11 kept the settings only until a restart: update to 12.3.12, then re-run `configure_localai_feed.py`. |
 
