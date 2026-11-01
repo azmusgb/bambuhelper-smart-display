@@ -1,6 +1,7 @@
 #pragma once
 
 // Workshop OS 12.3.10: Local AI cards for the calm idle screen (rules: workshop_localai_feed_core.hpp).
+// 31 Oct 2026: the same feed from Local AI or Pi Hub, whichever the display is paired with (see Backend).
 
 #include "workshop_localai_feed_core.hpp"
 
@@ -27,6 +28,10 @@ struct WorkshopLocalAiFeedSnapshot {
     std::uint32_t lastSuccessAtMs{0};
     std::uint32_t lastAttemptAtMs{0};
     std::uint8_t failures{0};
+    // 31 Oct 2026: which service the cards come from, and the feed's ai.available (-1 the feed didn't say, as Local AI
+    // never does; 0 the AI is away; 1 it is there).
+    workshop::localai::Backend backend{workshop::localai::Backend::LocalAi};
+    std::int8_t aiAvailable{-1};
     char status[96]{};
 };
 
@@ -38,6 +43,8 @@ struct WorkshopLocalAiFeedStatus {
     std::uint8_t count{0};
     std::uint8_t needCount{0};
     bool needsFromPi{false};
+    workshop::localai::Backend backend{workshop::localai::Backend::LocalAi};
+    std::int8_t aiAvailable{-1};
     char status[96]{};
 };
 
@@ -85,9 +92,11 @@ struct WorkshopLocalAiExtras {
 
 void workshopLocalAiFeedBegin();
 void workshopLocalAiFeedLoop();
-// address: Local AI's IPv4 address; tlsName: the name on its certificate; key: the wsd_ display key; caPem: Local
-// AI's CA certificate (PEM). False when any is not acceptable; nothing is saved then.
-bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem);
+// address: the service's IPv4 address; tlsName: the name on its certificate; key: its display key (Local AI: wsd_,
+// Pi Hub: hubd_); caPem: its CA certificate (PEM); backend: which service it is (31 Oct 2026). False when any is not
+// acceptable; nothing is saved then.
+bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem,
+                                  workshop::localai::Backend backend = workshop::localai::Backend::LocalAi);
 void workshopLocalAiFeedClear();
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
 WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus();
@@ -119,9 +128,13 @@ bool workshopLocalAiFeedJudgeSend(const char* body, const char* requestId);
 bool workshopLocalAiFeedClearPrinter();
 // 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);
 // on success the settings are saved as by the portal. False when the address or code is not acceptable, or busy.
-bool workshopLocalAiFeedPair(const char* address, const char* code);
-// The saved Local AI address ("" when not set up).
+// 31 Oct 2026: or with Pi Hub (backend PiHub), the same way: its CA, its certificate name, its key.
+bool workshopLocalAiFeedPair(const char* address, const char* code,
+                             workshop::localai::Backend backend = workshop::localai::Backend::LocalAi);
+// The saved address ("" when not set up).
 void workshopLocalAiFeedAddress(char* out, std::size_t len);
+// 31 Oct 2026: the saved backend (Local AI when not set up).
+workshop::localai::Backend workshopLocalAiFeedBackend();
 // The downloaded JPEG, valid until the next workshopLocalAiFeedFetchImage(); false while one is running.
 bool workshopLocalAiFeedImage(const std::uint8_t** data, std::size_t* len);
 // Free entries in the default NVS partition (32 bytes each), for the portal's status.
