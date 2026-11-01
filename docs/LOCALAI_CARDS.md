@@ -68,8 +68,12 @@ a file without it means Local AI, so existing displays are unchanged.
 2. On the display's pairing screen (**Local AI tab › Local AI connection**) or in the Local Portal (**More › Local AI
    on the display**), choose **Pi Hub** and type the code.
 3. The display reads Pi Hub's CA from `http://10.0.0.30/home-ca.crt`, sends the code over HTTPS pinned to it (name
-   `home.home.arpa`) and saves the new key, which starts `hubd_`, with the CA. From the Mac,
-   `configure_localai_feed.py --backend pihub --ca <path to Pi Hub's CA>` does the same.
+   `home.home.arpa`) and saves the new key, which starts `hubd_`, with the CA.
+
+Pairing on the display or in the portal is the way to connect to Pi Hub. The Mac script
+(`configure_localai_feed.py --backend pihub --ca <path to Pi Hub's CA>`) does not pair: it only sends a `hubd_` key
+already saved in the Mac's login Keychain (service `pihub-display-key`, account `ws350`). Pi Hub keeps only the key's
+SHA-256, so there is normally no such key to send. `--ca` is required for Pi Hub.
 
 **What changes:** one key (`X-Hub-Display-Key`) and one feed from Pi Hub, which also brings in Local AI's cards. The
 card cap is 8 (was 6). Two card kinds are new: `printer` (the printer, from Pi Hub) and `ai`. The `ai` card, "AI
