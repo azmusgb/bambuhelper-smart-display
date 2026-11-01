@@ -40,7 +40,7 @@ from urllib.parse import quote, urlsplit
 DEFAULT_CAMERA_ROOT = Path.home() / "Library/Application Support/BambuStudio/cameratools"
 DEFAULT_PLUGIN_ROOT = Path.home() / "Library/Application Support/BambuStudio/plugins"
 DEFAULT_URL_FILE = DEFAULT_CAMERA_ROOT / "url.txt"
-MAX_JPEG_BYTES = 384 * 1024
+MAX_JPEG_BYTES = 1024 * 1024
 # A pipeline that has exited, or produced no frame for this long, is restarted.
 STALL_SECONDS = 15.0
 RESTART_BACKOFF_SECONDS = (2.0, 5.0, 15.0, 30.0, 60.0)
@@ -98,10 +98,14 @@ class CameraPipeline:
         rtsp_url_file: Optional[Path] = None,
         latest_detect: Optional[LatestFrame] = None,
         detect_fps: int = 1,
+        latest_hd: Optional[LatestFrame] = None,
+        hd_fps: int = 2,
     ) -> None:
         self.latest = latest
         self.latest_detect = latest_detect
         self.detect_fps = detect_fps
+        self.latest_hd = latest_hd
+        self.hd_fps = hd_fps
         self.camera_root = camera_root
         self.plugin_root = plugin_root
         self.url_file = url_file
@@ -115,8 +119,11 @@ class CameraPipeline:
         self.encoder: Optional[subprocess.Popen[bytes]] = None
         self._detect_r: Optional[int] = None
         self._detect_w: Optional[int] = None
+        self._hd_r: Optional[int] = None
+        self._hd_w: Optional[int] = None
         self.thread: Optional[threading.Thread] = None
         self.detect_thread: Optional[threading.Thread] = None
+        self.hd_thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.last_error: Optional[str] = None
         self.restarts = 0
@@ -152,21 +159,33 @@ class CameraPipeline:
             if not path.is_file():
                 raise RuntimeError(f"missing {label}: {path}")
 
-    def encoder_args(self, input_args: list[str], detect_pipe: Optional[int] = None) -> list[str]:
-        if detect_pipe is None or self.latest_detect is None:
+    def encoder_args(self, input_args: list[str], detect_pipe: Optional[int] = None, hd_pipe: Optional[int] = None) -> list[str]:
+        if detect_pipe is not None and hd_pipe is not None:
             return [
                 self.ffmpeg, "-hide_banner", "-loglevel", "warning", *input_args, "-an",
-                "-vf", f"fps={self.fps},scale={self.width}:-2:flags=fast_bilinear",
-                "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
+                "-filter_complex",
+                f"[0:v]split=3[v_disp][v_det][v_hd];"
+                f"[v_disp]fps={self.fps},scale={self.width}:-2:flags=fast_bilinear[out_disp];"
+                f"[v_det]fps={self.detect_fps},crop=in_h:in_h:(in_w*0.16):0,scale=416:416:flags=fast_bilinear[out_det];"
+                f"[v_hd]fps={self.hd_fps},scale=1280:-2:flags=bicubic[out_hd]",
+                "-map", "[out_disp]", "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
+                "-map", "[out_det]", "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", f"pipe:{detect_pipe}",
+                "-map", "[out_hd]", "-c:v", "mjpeg", "-q:v", "3", "-f", "image2pipe", f"pipe:{hd_pipe}",
+            ]
+        if detect_pipe is not None:
+            return [
+                self.ffmpeg, "-hide_banner", "-loglevel", "warning", *input_args, "-an",
+                "-filter_complex",
+                f"[0:v]split=2[v_disp][v_det];"
+                f"[v_disp]fps={self.fps},scale={self.width}:-2:flags=fast_bilinear[out_disp];"
+                f"[v_det]fps={self.detect_fps},crop=in_h:in_h:(in_w*0.16):0,scale=416:416:flags=fast_bilinear[out_det]",
+                "-map", "[out_disp]", "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
+                "-map", "[out_det]", "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", f"pipe:{detect_pipe}",
             ]
         return [
             self.ffmpeg, "-hide_banner", "-loglevel", "warning", *input_args, "-an",
-            "-filter_complex",
-            f"[0:v]split=2[v_disp][v_det];"
-            f"[v_disp]fps={self.fps},scale={self.width}:-2:flags=fast_bilinear[out_disp];"
-            f"[v_det]fps={self.detect_fps},crop=in_h:in_h:(in_w*0.16):0,scale=416:416:flags=fast_bilinear[out_det]",
-            "-map", "[out_disp]", "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
-            "-map", "[out_det]", "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", f"pipe:{detect_pipe}",
+            "-vf", f"fps={self.fps},scale={self.width}:-2:flags=fast_bilinear",
+            "-c:v", "mjpeg", "-q:v", "5", "-f", "image2pipe", "pipe:1",
         ]
 
     def _read_p1s_frames(self) -> None:
@@ -232,11 +251,17 @@ class CameraPipeline:
         self.validate()
         self.stop_event = threading.Event()
         detect_pipe = None
-        pass_fds = ()
+        hd_pipe = None
+        pass_fds = []
         if self.latest_detect is not None:
             self._detect_r, self._detect_w = os.pipe()
             detect_pipe = self._detect_w
-            pass_fds = (self._detect_w,)
+            pass_fds.append(self._detect_w)
+        if self.latest_hd is not None:
+            self._hd_r, self._hd_w = os.pipe()
+            hd_pipe = self._hd_w
+            pass_fds.append(self._hd_w)
+        pass_fds_tuple = tuple(pass_fds)
 
         if self.rtsp_url_file is not None:
             url = self.rtsp_url()
@@ -248,6 +273,12 @@ class CameraPipeline:
                 if self._detect_r is not None:
                     os.close(self._detect_r)
                     self._detect_r = None
+                if self._hd_w is not None:
+                    os.close(self._hd_w)
+                    self._hd_w = None
+                if self._hd_r is not None:
+                    os.close(self._hd_r)
+                    self._hd_r = None
                 self._is_p1s = True
                 self.source = None
                 self.encoder = None
@@ -258,29 +289,35 @@ class CameraPipeline:
             # One FFmpeg reads the printer's stream over TCP (the printer's certificate is self-signed).
             self.source = None
             self.encoder = subprocess.Popen(
-                self.encoder_args(["-rtsp_transport", "tcp", "-timeout", "10000000", "-i", self.rtsp_url()], detect_pipe=detect_pipe),
+                self.encoder_args(["-rtsp_transport", "tcp", "-timeout", "10000000", "-i", self.rtsp_url()], detect_pipe=detect_pipe, hd_pipe=hd_pipe),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                pass_fds=pass_fds,
+                pass_fds=pass_fds_tuple,
                 bufsize=0,
             )
             if self._detect_w is not None:
                 os.close(self._detect_w)
                 self._detect_w = None
+            if self._hd_w is not None:
+                os.close(self._hd_w)
+                self._hd_w = None
             threading.Thread(target=_forward_redacted, args=(self.encoder.stderr,), name="x2d-ffmpeg-log", daemon=True).start()
             self.thread = threading.Thread(target=self._read_frames, name="x2d-jpeg-reader", daemon=True)
             self.thread.start()
             if self.latest_detect is not None and self._detect_r is not None:
                 self.detect_thread = threading.Thread(target=self._read_detect_frames, name="x2d-detect-reader", daemon=True)
                 self.detect_thread.start()
+            if self.latest_hd is not None and self._hd_r is not None:
+                self.hd_thread = threading.Thread(target=self._read_hd_frames, name="x2d-hd-reader", daemon=True)
+                self.hd_thread.start()
             return
         source_path = self.camera_root / "bambu_source"
         encoded_path = quote(str(self.url_file.resolve()), safe="/")
         camera_uri = f"bambu:///camera/{encoded_path}"
 
         source_cmd = [str(source_path), camera_uri]
-        ffmpeg_cmd = self.encoder_args(["-fflags", "+genpts", "-f", "h264", "-r", "30", "-i", "pipe:0"], detect_pipe=detect_pipe)
+        ffmpeg_cmd = self.encoder_args(["-fflags", "+genpts", "-f", "h264", "-r", "30", "-i", "pipe:0"], detect_pipe=detect_pipe, hd_pipe=hd_pipe)
 
         self.source = subprocess.Popen(
             source_cmd,
@@ -296,6 +333,12 @@ class CameraPipeline:
             if self._detect_r is not None:
                 os.close(self._detect_r)
                 self._detect_r = None
+            if self._hd_w is not None:
+                os.close(self._hd_w)
+                self._hd_w = None
+            if self._hd_r is not None:
+                os.close(self._hd_r)
+                self._hd_r = None
             raise RuntimeError("bambu_source stdout pipe unavailable")
 
         self.encoder = subprocess.Popen(
@@ -303,17 +346,23 @@ class CameraPipeline:
             stdin=self.source.stdout,
             stdout=subprocess.PIPE,
             stderr=None,
-            pass_fds=pass_fds,
+            pass_fds=pass_fds_tuple,
             bufsize=0,
         )
         self.source.stdout.close()
         if self._detect_w is not None:
             os.close(self._detect_w)
             self._detect_w = None
+        if self._hd_w is not None:
+            os.close(self._hd_w)
+            self._hd_w = None
         if self.encoder.stdout is None:
             if self._detect_r is not None:
                 os.close(self._detect_r)
                 self._detect_r = None
+            if self._hd_r is not None:
+                os.close(self._hd_r)
+                self._hd_r = None
             raise RuntimeError("FFmpeg stdout pipe unavailable")
 
         self.thread = threading.Thread(target=self._read_frames, name="x2d-jpeg-reader", daemon=True)
@@ -321,6 +370,9 @@ class CameraPipeline:
         if self.latest_detect is not None and self._detect_r is not None:
             self.detect_thread = threading.Thread(target=self._read_detect_frames, name="x2d-detect-reader", daemon=True)
             self.detect_thread.start()
+        if self.latest_hd is not None and self._hd_r is not None:
+            self.hd_thread = threading.Thread(target=self._read_hd_frames, name="x2d-hd-reader", daemon=True)
+            self.hd_thread.start()
 
     def _read_detect_frames(self) -> None:
         if self._detect_r is None:
@@ -361,6 +413,46 @@ class CameraPipeline:
                 pass
             if self._detect_r == fd:
                 self._detect_r = None
+
+    def _read_hd_frames(self) -> None:
+        if self._hd_r is None:
+            return
+        fd = self._hd_r
+        buffer = bytearray()
+        try:
+            while not self.stop_event.is_set():
+                chunk = os.read(fd, 64 * 1024)
+                if not chunk:
+                    break
+                buffer.extend(chunk)
+
+                while True:
+                    start = buffer.find(b"\xff\xd8")
+                    if start < 0:
+                        if len(buffer) > 2:
+                            del buffer[:-2]
+                        break
+                    if start > 0:
+                        del buffer[:start]
+                    end = buffer.find(b"\xff\xd9", 2)
+                    if end < 0:
+                        if len(buffer) > MAX_JPEG_BYTES:
+                            buffer.clear()
+                        break
+                    end += 2
+                    frame = bytes(buffer[:end])
+                    del buffer[:end]
+                    if self.latest_hd is not None:
+                        self.latest_hd.update(frame)
+        except Exception:
+            pass
+        finally:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+            if self._hd_r == fd:
+                self._hd_r = None
 
     def _read_frames(self) -> None:
         assert self.encoder is not None and self.encoder.stdout is not None
@@ -495,10 +587,12 @@ class BridgeServer(ThreadingHTTPServer):
         latest: LatestFrame,
         pipeline: CameraPipeline,
         latest_detect: Optional[LatestFrame] = None,
+        latest_hd: Optional[LatestFrame] = None,
     ):
         super().__init__(address, BridgeHandler)
         self.latest = latest
         self.latest_detect = latest_detect
+        self.latest_hd = latest_hd
         self.pipeline = pipeline
         self.started_monotonic = time.monotonic()
 
@@ -526,6 +620,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if path == "/x2d/detect.jpg":
             self._frame(self.server.latest_detect or self.server.latest)
+            return
+        if path in ("/x2d/hd.jpg", "/x2d/hd-frame.jpg"):
+            self._frame(self.server.latest_hd or self.server.latest)
             return
         if path == "/x2d/health.json":
             self._health()
@@ -604,6 +701,7 @@ def main() -> int:
     args = parse_args()
     latest = LatestFrame()
     latest_detect = LatestFrame()
+    latest_hd = LatestFrame()
     pipeline = CameraPipeline(
         latest=latest,
         camera_root=args.camera_root.expanduser(),
@@ -614,9 +712,10 @@ def main() -> int:
         width=args.width,
         rtsp_url_file=args.rtsp_url_file.expanduser() if args.rtsp_url_file else None,
         latest_detect=latest_detect,
+        latest_hd=latest_hd,
     )
     pipeline.start()
-    server = BridgeServer((args.bind, args.port), latest, pipeline, latest_detect=latest_detect)
+    server = BridgeServer((args.bind, args.port), latest, pipeline, latest_detect=latest_detect, latest_hd=latest_hd)
 
     stop_requested = threading.Event()
 
@@ -634,6 +733,7 @@ def main() -> int:
 
     print(f"X2D JPEG bridge listening on http://{args.bind}:{args.port}/x2d/frame.jpg")
     print(f"Failure detection crop: http://{args.bind}:{args.port}/x2d/detect.jpg")
+    print(f"High-definition frame: http://{args.bind}:{args.port}/x2d/hd.jpg")
     print("Health: /x2d/health.json")
     print("LAN/VPN only; do not port-forward this service to the public Internet.")
     try:
