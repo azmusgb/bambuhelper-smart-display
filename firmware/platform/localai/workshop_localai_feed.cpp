@@ -159,6 +159,11 @@ const char* labelNow() {
     return lai::backendInfo(b).label;
 }
 
+// 31 Oct 2026: the backend the task's last request went to (one request at a time, like g_lastCode), so a message
+// about its answer names that service even when the display was paired again meanwhile.
+lai::Backend g_requestBackend = lai::Backend::LocalAi;
+const char* requestLabel() { return lai::backendInfo(g_requestBackend).label; }
+
 // The long poll gives way to anything the person is waiting for.
 bool somethingWaits() {
     portENTER_CRITICAL(&g_mux);
@@ -178,6 +183,7 @@ bool openRequestTo(WiFiClientSecure& client, lai::Backend backend, const char* a
                    char* contentType, size_t contentTypeLen, char* error, size_t errorLen, std::uint32_t waitMs,
                    bool yieldToPerson) {
     const lai::BackendInfo& info = lai::backendInfo(backend);
+    g_requestBackend = backend;
     contentLength = 0;
     g_lastCode = 0;
     if (contentType && contentTypeLen) contentType[0] = 0;
@@ -270,10 +276,10 @@ bool getJson(const char* method, const char* path, const char* body, JsonDocumen
     WiFiClientSecure client;
     size_t contentLength = 0;
     if (!openRequest(client, method, path, "application/json", body, contentLength, nullptr, 0, error, errorLen, waitMs, yieldToPerson)) return false;
-    if (contentLength > kMaxBodyBytes) { snprintf(error, errorLen, "%s's answer was too large.", labelNow()); client.stop(); return false; }
+    if (contentLength > kMaxBodyBytes) { snprintf(error, errorLen, "%s's answer was too large.", requestLabel()); client.stop(); return false; }
     const DeserializationError err = deserializeJson(doc, client);
     client.stop();
-    if (err) { snprintf(error, errorLen, "%s's answer was not valid JSON.", labelNow()); return false; }
+    if (err) { snprintf(error, errorLen, "%s's answer was not valid JSON.", requestLabel()); return false; }
     return true;
 }
 
@@ -388,7 +394,7 @@ bool ask(const char* question, char* answer, size_t answerLen) {
     JsonDocument doc;
     if (!getJson("GET", path, nullptr, doc, answer, answerLen)) return false;
     const char* text = doc["answer"] | "";
-    if (!text[0]) { snprintf(answer, answerLen, "%s's answer was not valid.", labelNow()); return false; }
+    if (!text[0]) { snprintf(answer, answerLen, "%s's answer was not valid.", requestLabel()); return false; }
     copyText(answer, answerLen, text);
     return true;
 }
@@ -402,7 +408,7 @@ bool downloadImage(const char* path, char* error, size_t errorLen) {
     size_t contentLength = 0;
     char type[40];
     if (!openGet(client, path, "image/jpeg", contentLength, type, sizeof(type), error, errorLen)) return false;
-    if (strncmp(type, "image/jpeg", 10) != 0) { snprintf(error, errorLen, "%s sent a picture the display can't draw.", labelNow()); client.stop(); return false; }
+    if (strncmp(type, "image/jpeg", 10) != 0) { snprintf(error, errorLen, "%s sent a picture the display can't draw.", requestLabel()); client.stop(); return false; }
     // Caddy answers HTTP/1.0 without a length (the body ends when the connection closes): then read to the end.
     if (contentLength > lai::kMaxImageBytes) { copyText(error, errorLen, "The picture is too large for the display."); client.stop(); return false; }
     const size_t limit = contentLength ? contentLength : lai::kMaxImageBytes;
@@ -528,6 +534,7 @@ void runFeed(std::uint32_t generation) {
             if (r.newestSeq > g_lastSeq) g_lastSeq = r.newestSeq;
         } else {
             if (g_snap.failures < 8) ++g_snap.failures;
+            g_snap.aiAvailable = -1;  // 31 Oct 2026: unheard, so not said (never a stale "there" or "away")
             copyText(g_snap.status, sizeof(g_snap.status), error);
         }
         g_nextAtMs = now + lai::nextDelayMs(g_snap.failures);
@@ -599,7 +606,7 @@ void runDecide() {
 // end of the connection. False (with `error`) when it is larger or stops early.
 bool readBody(WiFiClientSecure& client, size_t contentLength, char* buf, size_t cap, size_t& got, char* error, size_t errorLen) {
     got = 0;
-    if (contentLength >= cap) { snprintf(error, errorLen, "%s's answer was too large.", labelNow()); return false; }
+    if (contentLength >= cap) { snprintf(error, errorLen, "%s's answer was too large.", requestLabel()); return false; }
     const size_t limit = contentLength ? contentLength : cap - 1;
     std::uint32_t lastByteAt = millis();
     while (millis() - lastByteAt < 8000UL) {
@@ -610,13 +617,13 @@ bool readBody(WiFiClientSecure& client, size_t contentLength, char* buf, size_t 
             delay(5);
             continue;
         }
-        if (got >= limit) { snprintf(error, errorLen, "%s's answer was too large.", labelNow()); return false; }
+        if (got >= limit) { snprintf(error, errorLen, "%s's answer was too large.", requestLabel()); return false; }
         const size_t want = limit - got < (size_t)avail ? limit - got : (size_t)avail;
         const int n = client.read(reinterpret_cast<std::uint8_t*>(buf) + got, want);
         if (n > 0) { got += (size_t)n; lastByteAt = millis(); }
     }
     buf[got] = 0;
-    if (contentLength && got != contentLength) { snprintf(error, errorLen, "%s's answer didn't finish.", labelNow()); return false; }
+    if (contentLength && got != contentLength) { snprintf(error, errorLen, "%s's answer didn't finish.", requestLabel()); return false; }
     return true;
 }
 
@@ -641,7 +648,7 @@ void runJudgeLoad() {
         }
         if (ok) {
             ok = workshop::lab::parseSheet(body, got, g_judgeSheet) && !strcmp(g_judgeSheet.run, run);
-            if (!ok) snprintf(error, sizeof(error), "%s's answer was not a Judge it sheet.", labelNow());
+            if (!ok) snprintf(error, sizeof(error), "%s's answer was not a Judge it sheet.", requestLabel());
         }
     }
     portENTER_CRITICAL(&g_mux);
@@ -674,7 +681,7 @@ void runVerdict() {
                             !deserializeJson(doc, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4));
         client.stop();
         ok = parsed && workshop::lab::verdictAccepted(g_lastCode, g_verdictId, doc["id"] | "");
-        if (!ok) snprintf(error, sizeof(error), "%s's answer was not a queued verdict.", labelNow());
+        if (!ok) snprintf(error, sizeof(error), "%s's answer was not a queued verdict.", requestLabel());
     }
     portENTER_CRITICAL(&g_mux);
     g_verdictPending = false;
@@ -1205,6 +1212,31 @@ WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus() {
     memcpy(s.status, g_snap.status, sizeof(s.status));
     portEXIT_CRITICAL(&g_mux);
     return s;
+}
+
+void workshopLocalAiFeedHome(const char* hiddenCardId, bool withWeather, WorkshopLocalAiFeedHome* out) {
+    if (!out) return;
+    const std::uint32_t now = millis();
+    portENTER_CRITICAL(&g_mux);
+    out->fresh = lai::fresh(now, g_snap.lastSuccessAtMs);
+    out->needsFromPi = g_snap.needsFromPi;
+    out->count = out->fresh ? g_snap.count : 0;
+    const std::uint8_t nn = out->fresh ? g_snap.needCount : 0;
+    // Pi Hub's list when the feed carried it (even empty: then nothing needs you); the cards only when it didn't.
+    lai::homeTop(g_snap.needs, nn, out->fresh && g_snap.needsFromPi, g_snap.cards, out->count, hiddenCardId, g_snap.needsTotal,
+                 out->top);
+    out->weather[0] = 0;
+    for (std::uint8_t i = 0; withWeather && i < out->count; ++i)
+        if (!strcmp(g_snap.cards[i].kind, "weather")) { lai::weatherShort(out->weather, sizeof(out->weather), g_snap.cards[i].text); break; }
+    portEXIT_CRITICAL(&g_mux);
+}
+
+std::uint32_t workshopLocalAiFeedPairSeq(bool* busy) {
+    portENTER_CRITICAL(&g_mux);
+    const std::uint32_t seq = g_extras.pairSeq;
+    if (busy) *busy = g_extras.pairBusy;
+    portEXIT_CRITICAL(&g_mux);
+    return seq;
 }
 
 bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out) {

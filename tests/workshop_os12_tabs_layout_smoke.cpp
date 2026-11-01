@@ -527,6 +527,22 @@ void checkAiOverlays(Screen s, const char* o) {
   }
   check(pairChoiceRect(s, 0).right() < pairChoiceRect(s, 1).x, "pair choices apart", o);
   check(pairInfoRect(s).w >= 200 && pairInfoRect(s).h >= 100 && inside(pairInfoRect(s), more::contentBand(s)), "room for the code and the steps", o, pairInfoRect(s).w, pairInfoRect(s).h);
+  // 31 Oct 2026 (final review 12, 14): the panel's insides follow pairInfoRect in both orientations: the steps, then
+  // the code boxes, then the status lines, all inside it; three status lines in landscape (as before the choice), two
+  // in portrait, so the longest Pi Hub detail ("That code isn't right or has run out. Ask for a new one.", 57
+  // characters; ~60 allowed) fits at about 7 px a character in FONT_SMALL.
+  {
+    const Rect info = pairInfoRect(s), st = pairStatusRect(s);
+    const uint8_t steps = pairStepLines(s);
+    check(steps == (s.landscape() ? 3 : 2), "pair steps: three lines in landscape, two in portrait", o, steps);
+    check(pairStepsY(s) >= info.y && pairStepsY(s) + steps * kPairLineH <= pairBoxesY(s), "pair steps above the code boxes", o, pairBoxesY(s));
+    check(pairBoxesY(s) + kPairBoxH + 4 == st.y && pairBoxesY(s) + kPairBoxH <= info.bottom(), "code boxes, then the status", o, st.y);
+    check(inside(st, info) && st.bottom() == info.bottom(), "pair status inside the panel, to its bottom", o, st.y, st.h);
+    const uint8_t lines = pairStatusLines(s);
+    check(lines * kPairLineH <= st.h, "pair status lines fit their rect", o, lines, st.h);
+    check(lines == (s.landscape() ? 3 : 2), "pair status: three lines in landscape, two in portrait", o, lines);
+    check(lines * (st.w / 7) >= 60 + lines * 8, "the longest Pi Hub detail fits the status lines (word-wrap slack)", o, lines, st.w);
+  }
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 

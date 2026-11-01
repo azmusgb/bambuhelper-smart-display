@@ -146,6 +146,12 @@ def validate(repo: Path) -> None:
     runFeedFailBranch = block(after_ok, "else {")
     forbid(runFeedFailBranch, "workshopLocalAiFeedClear", "a failure (even 401) never forgets the key")
     need(runFeedFailBranch, "++g_snap.failures", "a failure backs off")
+    # Fix 9 (31 Oct 2026): a message about an answer names the service the request went to, not the one saved now.
+    need(fetch, "g_requestBackend = backend;", "the request's backend is kept for its messages")
+    if feed.count("labelNow()") != 3:
+        raise ValidationError("labelNow() only where no request ran (no picture yet, the task could not start); "
+                              "answers use requestLabel()")
+    need(runFeedFailBranch, "g_snap.aiAvailable = -1;", "fix 8: a failed feed forgets ai.available (never stale)")
     need(block(feed, "lai::Backend workshopLocalAiFeedBackend()"), "g_snap.configured ? g_backend : lai::Backend::LocalAi",
          "the saved backend, Local AI when not set up")
     need(pair, "memset(key, 0, sizeof(key));", "12.7: the key copy is wiped")
@@ -183,13 +189,17 @@ def validate(repo: Path) -> None:
     need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsFromPi = r.needsFromPi;", "needs reach the snapshot")
     need(fetch_fn, 'doc["needsCount"] | -1L', "the feed's needsCount (Pi Hub's whole list) is read")
     need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsTotal = r.needsTotal;", "needsCount reaches the snapshot")
-    top = block(hub, "static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others)")
-    need(top, "const bool needsPresent = fresh && ai.needsFromPi;", "Pi Hub's list wins whenever the feed carried it, even empty")
-    need(top, "workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal)",
-         "idle Home's two rows: needs first, else cards (less the judge card Later hid here); \"+N more\" counts Pi Hub's whole list")
-    forbid(top, "workshopLocalAiFeedSnapshot()", "wtHomeTop uses the caller's one snapshot")
+    top = block(hub, "static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedHome& h, WtHomeRow out[2], uint8_t& others)")
+    # Final review fix 7 (31 Oct 2026): the feed picks Home's rows under its lock; no UI code copies the whole snapshot.
+    home_fn = block(feed, "void workshopLocalAiFeedHome(const char* hiddenCardId, bool withWeather, WorkshopLocalAiFeedHome* out)")
+    need(home_fn, "lai::homeTop(g_snap.needs, nn, out->fresh && g_snap.needsFromPi, g_snap.cards, out->count, hiddenCardId, g_snap.needsTotal,",
+         "idle Home's two rows: Pi Hub's list whenever the feed carried it (even empty), else cards, less the judge card Later hid; "
+         "\"+N more\" counts Pi Hub's whole list")
+    need(home_fn, "portENTER_CRITICAL(&g_mux);", "Home's rows are picked under the feed's lock")
     need(block(hub, "static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen)"),
-         "workshopLocalAiFeedSnapshot()", "one snapshot per Home frame or touch, in a leaf")
+         "workshopLocalAiFeedHome(wtJudgeHidden(), weather != nullptr, &h);", "one small read per Home frame or touch, in a leaf")
+    forbid(hub, "workshopLocalAiFeedSnapshot()", "no screen copies the whole feed snapshot (8 KB loop stack)")
+    forbid(web, "workshopLocalAiFeedSnapshot()", "no portal handler copies the whole feed snapshot")
     forbid(block(hub, "static void wtDrawHomeIdle(const WtPrint& w)"), "workshopLocalAiFeedSnapshot()", "no snapshot held while idle Home draws its rows")
     for fn in ("static uint8_t wtAiCount()", "static workshop::localai::Card wtAiCard(uint8_t i)", "static int8_t wtLabExtraIndex()",
                "static void wtDrawCalm(const WtPrint& w)"):
@@ -252,10 +262,19 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     need(hub, f"static const {lai}Backend kWtPairChoices[wtl::kPairChoices] = {{{lai}Backend::PiHub, {lai}Backend::LocalAi}};",
          "two choices: Pi Hub, then Local AI")
     opener = block(hub, "static void wtOpenPair() {")
-    need(opener, f"st.configured ? st.backend : {lai}Backend::PiHub", "the first time: Pi Hub when nothing is paired, else the saved one")
+    need(opener, f"if (!busy) wtPairChoose(st.configured ? st.backend : {lai}Backend::PiHub);",
+         "fix 13: every opening follows the saved service (Pi Hub when nothing is paired), unless a pairing runs")
+    forbid(hub, "g_wtPairBackendSet", "fix 13: no first-time-only choice")
+    choose = block(hub, f"static void wtPairChoose({lai}Backend b) {{")
+    need(choose, "g_wtPairSeenSeq = workshopLocalAiFeedPairSeq(nullptr);", "fix 11: a new choice hides the earlier result")
     draw = block(hub, "static void wtDrawPair(const wsm::Screen& s) {")
-    need(draw, "wsDrawButton(wtl::pairChoiceRect(s, i), lai::backendInfo(kWtPairChoices[i]).label, true, kWtPairChoices[i] == g_wtPairBackend, OS12V_BG);",
-         "both choices drawn with their labels, the chosen one in the accent")
+    need(draw, "wsDrawButton(wtl::pairChoiceRect(s, i), lai::backendInfo(kWtPairChoices[i]).label, !e.pairBusy, kWtPairChoices[i] == g_wtPairBackend, OS12V_BG);",
+         "both choices drawn with their labels, the chosen one in the accent; fix 10: not live while pairing runs")
+    need(draw, "const bool result = e.pairSeq && e.pairSeq != g_wtPairSeenSeq;", "fix 11: only a result since the choice changed")
+    need(draw, "else if (result && e.pairOk && st.configured && st.backend == g_wtPairBackend) {",
+         "fix 11: Paired with X only while X is saved and chosen")
+    for fn in ("wtl::pairStepsY(s)", "wtl::pairBoxesY(s)", "wtl::pairStatusRect(s)", "wtl::pairStatusLines(s)"):
+        need(draw, fn, "fix 12/14: the panel's offsets come from tabs_layout.hpp (checked by the layout smoke)")
     need(draw, 'snprintf(title, sizeof(title), "Pair with %s", info.label);', "the header names the chosen service")
     need(draw, '"In Pi Hub: System, Workshop display, Pair display. Then type its code here."', "Pi Hub's steps")
     need(draw, '"In Local AI: Services, Workshop display, Pair display. Then type its code here."', "Local AI's steps, unchanged")
@@ -274,7 +293,7 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     need(block(hub, "static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {"),
          "if (wtl::pairChoiceRect(s, i).contains(x, y)) { out = wtl::pairChoiceRect(s, i); return true; }", "a press outlines the choice")
     need(hub, 'const bool piHub = strncmp(name, "localai-pairhub", 15) == 0;', "capture localai-pairhub[-123456[-go]] chooses Pi Hub")
-    need(hub, f"g_wtPairBackend = piHub ? {lai}Backend::PiHub : {lai}Backend::LocalAi;", "capture localai-pair[-...] stays Local AI")
+    need(hub, f"wtPairChoose(piHub ? {lai}Backend::PiHub : {lai}Backend::LocalAi);", "capture localai-pair[-...] stays Local AI")
     # The portal: an optional backend on pair and config, and the status names it.
     status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200) {")
     need(status, 'doc["backend"] = workshop::localai::backendId(st.backend);', "status names the service")
@@ -288,6 +307,9 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     need(pages, '<option value="pihub">Pi Hub</option><option value="localai">Local AI</option>', "Pi Hub first, then Local AI")
     need(app_js, "var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.30',localai:'10.0.0.21'};", "the choice fills the address")
     need(app_js, "'&backend='+encodeURIComponent(backend)", "the pairing request names the service")
+    need(app_js, "return (localAiLinkConfigured&&backend===localAiLinkBackend&&localAiLinkAddress)||LOCAL_AI_PAIR_ADDRESS[backend]||'';",
+         "fix 15: the saved service's own address when it is chosen again")
+    need(app_js, "addr.value=localAiPairAddressFor(sel.value);", "fix 15: the choice fills the address through the saved one")
     forbid(app_js, "'Paired with Local AI.'", "the paired line is the service's own words or the chosen label")
     script = (ROOT / "scripts/configure_localai_feed.py").read_text(encoding="utf-8")
     need(script, 'parser.add_argument("--backend", choices=("localai", "pihub"), default="localai"', "the script's --backend")

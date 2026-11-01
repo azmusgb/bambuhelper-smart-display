@@ -167,12 +167,21 @@ static Card card(const char* kind) {
   return c;
 }
 
+// 31 Oct 2026: a fixture beside this source file (tests/fixtures/<name>), so the smoke runs from any directory when
+// built with the source's full path (as the validator does).
+static std::string fixturePath(const char* name) {
+  const std::string self = __FILE__;
+  const size_t slash = self.find_last_of("/\\");
+  return (slash == std::string::npos ? std::string(".") : self.substr(0, slash)) + "/fixtures/" + name;
+}
+
 // The `"kind"` values of a fixture's `cards` array, in order (a plain scan: no JSON library on the host). Stops at the
-// next top-level key, so `needs` and `images` (which have no kind) are never read. false when the file can't be read.
-static bool fixtureKinds(const char* path, std::string kinds[], size_t max, size_t& n) {
+// next top-level key, so `needs` and `images` (which have no kind) are never read. false when the file can't be read
+// (31 Oct 2026: then it says so, apart from a mismatch).
+static bool fixtureKinds(const std::string& path, std::string kinds[], size_t max, size_t& n) {
   n = 0;
-  std::FILE* f = std::fopen(path, "rb");
-  if (!f) return false;
+  std::FILE* f = std::fopen(path.c_str(), "rb");
+  if (!f) { std::printf("FAIL cannot read %s\n", path.c_str()); return false; }
   std::string body;
   char buf[1024];
   size_t got;
@@ -188,6 +197,29 @@ static bool fixtureKinds(const char* path, std::string kinds[], size_t max, size
     kinds[n++] = body.substr(from, to - from);
   }
   return true;
+}
+
+// 31 Oct 2026: idle Home's rows as drawn (homeTop): picked where the feed lives, so the UI never copies the snapshot.
+static void checkHomeTop() {
+  HomeTop t;
+  const Need n[3] = {need("pi:disk", Tone::Bad, "Disk full"), need("localai:watch-1", Tone::Attention, "Watch it"),
+                     need("printer:plate", Tone::Warning, "Clear the plate")};
+  Card c[3] = {};
+  copyUtf8(c[0].kind, sizeof(c[0].kind), "weather");
+  copyUtf8(c[1].kind, sizeof(c[1].kind), "watch"); copyUtf8(c[1].id, sizeof(c[1].id), "watch-1"); c[1].tone = Tone::Attention;
+  copyUtf8(c[2].kind, sizeof(c[2].kind), "running"); c[2].tone = Tone::Busy;
+  homeTop(n, 3, true, c, 3, nullptr, 5, t);
+  CHECK(t.rows == 2 && t.fromNeeds && t.others == 3, "home_top: Pi Hub's first two, +3 more (needsCount 5)");
+  CHECK(!strcmp(t.row[0].kind, "needs") && !strcmp(t.row[0].title, "Disk full") && !strcmp(t.row[0].id, "pi:disk") &&
+        t.row[0].tone == Tone::Bad && t.row[0].percent == 255 && t.card[0] == -1, "home_top: a need becomes a needs row, no card");
+  CHECK(t.card[1] == 1 && !strcmp(t.row[1].title, "Watch it"), "home_top: localai:<id> opens the tab at that card");
+  homeTop(n, 3, true, c, 3, "watch-1", 0, t);
+  CHECK(t.rows == 2 && !strcmp(t.row[1].id, "printer:plate") && t.card[1] == -1, "home_top: Later hides the judge item");
+  homeTop(nullptr, 0, false, c, 3, nullptr, 0, t);
+  CHECK(t.rows == 2 && !t.fromNeeds && t.card[0] == 1 && t.card[1] == 2 && !strcmp(t.row[0].kind, "watch"), "home_top: cards, best first");
+  homeTop(n, 0, true, c, 3, nullptr, 0, t);
+  CHECK(t.rows == 0 && t.fromNeeds && t.card[0] == -1 && t.card[1] == -1 && !t.row[0].kind[0] && !t.row[1].kind[0],
+        "home_top: an empty list leaves both rows empty (All clear is the UI's)");
 }
 
 // Display on Pi Hub, step 2: the second backend, its key, pictures, and the eight-card cap.
@@ -246,10 +278,10 @@ static void checkPiHub() {
   // fixtures_match_the_arrays: the fixtures are Pi Hub's real feed; the arrays above can't drift from them
   std::string kinds[16];
   size_t n = 0;
-  bool ok = fixtureKinds("tests/fixtures/pihub_feed_v2_pc_asleep.json", kinds, 16, n) && n == 8;
+  bool ok = fixtureKinds(fixturePath("pihub_feed_v2_pc_asleep.json"), kinds, 16, n) && n == 8;
   for (size_t i = 0; ok && i < n; ++i) ok = kinds[i] == asleep[i];
   CHECK(ok, "pc_asleep fixture kinds match");
-  ok = fixtureKinds("tests/fixtures/pihub_feed_v2_pc_awake.json", kinds, 16, n) && n == 12;
+  ok = fixtureKinds(fixturePath("pihub_feed_v2_pc_awake.json"), kinds, 16, n) && n == 12;
   for (size_t i = 0; ok && i < n; ++i) ok = kinds[i] == awake[i];
   CHECK(ok, "pc_awake fixture kinds match");
 }
@@ -359,6 +391,7 @@ int main() {
   }
   checkNeedsAndLab();
   checkPiHub();
+  checkHomeTop();
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }

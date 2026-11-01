@@ -51,6 +51,17 @@ struct WorkshopLocalAiFeedStatus {
     char status[96]{};
 };
 
+// 31 Oct 2026: what idle Home draws from the feed, chosen under the feed's lock (workshop::localai::homeTop): its two
+// rows, whether the cards are fresh and Pi Hub's list came with them, how many fresh cards, and the header's weather.
+// About 480 bytes, instead of the whole snapshot.
+struct WorkshopLocalAiFeedHome {
+    workshop::localai::HomeTop top{};
+    bool fresh{false};
+    bool needsFromPi{false};
+    std::uint8_t count{0};  // fresh cards (0 when stale)
+    char weather[24]{};     // "66° Sunny"; empty without a fresh weather card
+};
+
 // 12.4.2: the Local AI tab's ask buttons and its latest image. One request at a time runs on the feed's task.
 struct WorkshopLocalAiExtras {
     bool askBusy{false};
@@ -105,6 +116,9 @@ WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
 WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus();
 // Card `i` of the last feed into *out; false when there is no such card.
 bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out);
+// 31 Oct 2026: idle Home's rows into *out, leaving out the card Later hid (`hiddenCardId`, nullptr for none); the
+// weather only when `withWeather`.
+void workshopLocalAiFeedHome(const char* hiddenCardId, bool withWeather, WorkshopLocalAiFeedHome* out);
 // Asks one of the fixed questions (needs, running, health; 12.6: today, next, weather); false when not set up, busy,
 // or not a question.
 bool workshopLocalAiFeedAsk(const char* question);
@@ -136,6 +150,9 @@ bool workshopLocalAiFeedPair(const char* address, const char* code,
                              workshop::localai::Backend backend = workshop::localai::Backend::LocalAi);
 // The saved address ("" when not set up).
 void workshopLocalAiFeedAddress(char* out, std::size_t len);
+// 31 Oct 2026: how many pairings have finished, and (when `busy` is given) whether one runs, without copying the
+// extras (about 800 bytes).
+std::uint32_t workshopLocalAiFeedPairSeq(bool* busy);
 // 31 Oct 2026: the saved backend (Local AI when not set up).
 workshop::localai::Backend workshopLocalAiFeedBackend();
 // The downloaded JPEG, valid until the next workshopLocalAiFeedFetchImage(); false while one is running.

@@ -281,6 +281,39 @@ inline uint8_t homeSummaryTop(const Need* needs, uint8_t n, bool needsPresent, c
   return (uint8_t)((out[0] >= 0) + (out[1] >= 0));
 }
 
+// 31 Oct 2026: idle Home's two rows as the UI draws them, chosen where the feed keeps its cards and needs, so the UI
+// never copies the whole feed (about 3 KB) onto the 8 KB loop task: homeSummaryTop's rows, a need turned into a
+// "needs" row card, and card[k] the Local AI tab's row for row k (-1 when it has none: Pi Hub's "localai:<card id>"
+// items open the tab at that card). Unused rows are empty with card -1.
+struct HomeTop {
+  Card row[2];
+  int8_t card[2];
+  uint8_t rows;
+  uint8_t others;
+  bool fromNeeds;
+};
+inline void homeTop(const Need* needs, uint8_t nn, bool needsPresent, const Card* cards, uint8_t nc, const char* hiddenCardId,
+                    uint16_t needsTotal, HomeTop& t) {
+  t = HomeTop{};
+  t.card[0] = t.card[1] = -1;
+  int8_t idx[2];
+  t.rows = homeSummaryTop(needs, nn, needsPresent, cards, nc, idx, t.fromNeeds, t.others, hiddenCardId, needsTotal);
+  for (uint8_t k = 0; k < t.rows; ++k) {
+    Card& c = t.row[k];
+    if (!t.fromNeeds) { c = cards[idx[k]]; t.card[k] = idx[k]; continue; }
+    const Need& n = needs[idx[k]];
+    copyUtf8(c.kind, sizeof(c.kind), "needs");
+    copyUtf8(c.title, sizeof(c.title), n.title);
+    copyUtf8(c.text, sizeof(c.text), n.detail);
+    copyUtf8(c.id, sizeof(c.id), n.id);
+    c.tone = n.tone;
+    c.percent = 255;
+    const char* cardId = !strncmp(n.id, "localai:", 8) ? n.id + 8 : nullptr;
+    for (uint8_t i = 0; cardId && i < nc; ++i)
+      if (cards[i].id[0] && !strcmp(cards[i].id, cardId)) { t.card[k] = (int8_t)i; break; }
+  }
+}
+
 // The calm screen's rotation without the card Later hid (`hidden`, its index; -1 for none): shown position k is card
 // calmIndex(k, hidden).
 inline uint8_t calmIndex(uint8_t k, int8_t hidden) {

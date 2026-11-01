@@ -169,12 +169,16 @@ PORTAL_JS = r'''
 /* Workshop OS 12.7: Local AI on the display (status, pairing, unpairing); 31 Oct 2026: with Pi Hub or Local AI */
 var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.30',localai:'10.0.0.21'};
 var LOCAL_AI_PAIR_LABEL={pihub:'Pi Hub',localai:'Local AI'};
-var localAiPairPicked=false,localAiLinkBackend='localai';
+var localAiPairPicked=false,localAiLinkBackend='localai',localAiLinkConfigured=false,localAiLinkAddress='';
+/* 31 Oct 2026: the saved service's own address when it is chosen again; else that service's usual one */
+function localAiPairAddressFor(backend){
+  return (localAiLinkConfigured&&backend===localAiLinkBackend&&localAiLinkAddress)||LOCAL_AI_PAIR_ADDRESS[backend]||'';
+}
 function localAiPairBackendChanged(){
   var sel=document.getElementById('localAiPairBackend'),addr=document.getElementById('localAiPairAddress');
   if(!sel||!addr)return;
   localAiPairPicked=true;
-  addr.value=LOCAL_AI_PAIR_ADDRESS[sel.value]||'';
+  addr.value=localAiPairAddressFor(sel.value);
   addr.placeholder=LOCAL_AI_PAIR_ADDRESS[sel.value]||'';
 }
 async function loadLocalAiLink(){
@@ -187,6 +191,7 @@ async function loadLocalAiLink(){
     var fresh=d.lastSuccessAgoS>=0&&d.lastSuccessAgoS<=600;
     state.textContent=!d.configured?'Not paired':fresh?(d.live?'Connected · live':'Connected'):(d.lastSuccessAgoS<0?'Connecting':'Not answering');
     localAiLinkBackend=LOCAL_AI_PAIR_LABEL[d.backend]?d.backend:'localai';
+    localAiLinkConfigured=!!d.configured;localAiLinkAddress=d.address||'';
     document.getElementById('localAiLinkAddress').textContent=d.configured?LOCAL_AI_PAIR_LABEL[localAiLinkBackend]+(d.address?' · '+d.address:''):'—';
     document.getElementById('localAiLinkCards').textContent=d.configured?((d.cards||[]).map(function(c){return c.title;}).join(' · ')||'none')+(d.lastSuccessAgoS>=0?' ('+d.lastSuccessAgoS+' s ago)':''):'—';
     document.getElementById('localAiLinkMore').textContent=d.configured?(d.pictures||0)+' · '+(d.approvalsWaiting<0?'open the Local AI tab to check':d.approvalsWaiting+' waiting'):'—';
@@ -194,7 +199,7 @@ async function loadLocalAiLink(){
     if(sel&&addr&&!localAiPairPicked){  // the first time: the paired service, else Pi Hub (as on the display)
       localAiPairPicked=true;
       sel.value=d.configured?localAiLinkBackend:'pihub';
-      addr.value=(d.configured&&d.address)||LOCAL_AI_PAIR_ADDRESS[sel.value];
+      addr.value=localAiPairAddressFor(sel.value);
       addr.placeholder=LOCAL_AI_PAIR_ADDRESS[sel.value];
     }
     if(d.pairStatus)document.getElementById('localAiLinkStatus').textContent=d.pairing?'Pairing…':d.pairStatus;
