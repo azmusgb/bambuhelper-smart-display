@@ -2420,8 +2420,8 @@ static void wtDrawPair(const wsm::Screen& s) {
   g_dirty = false;
 }
 
-// Opens pairing with the saved service chosen (Pi Hub when nothing is paired); a different choice than last time hides
-// the earlier result.
+// Makes `b` the overlay's choice; a change hides the earlier pairing result (it was for the other choice, or before
+// it changed).
 static void wtPairChoose(workshop::localai::Backend b) {
   if (b == g_wtPairBackend) return;
   g_wtPairBackend = b;

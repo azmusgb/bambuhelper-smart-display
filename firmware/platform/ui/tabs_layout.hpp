@@ -578,17 +578,20 @@ inline Rect approvalRejectRect(Screen s, uint8_t i) { const Rect r = approvalRow
 inline Rect approvalApproveRect(Screen s, uint8_t i) { const Rect r = approvalRowRect(s, i); return makeRect(r.right() - 92 - 8 - 100, r.y + 2, 100, 44); }
 // 12.7: pairing: the code and what to do on one side, a keypad (1-9, delete, 0, Pair) on the other (under it in
 // portrait).
-// 31 Oct 2026: keys 44 tall, rows 4 apart (were 46 and 6), so portrait's panel keeps two status lines under the choice.
+// 31 Oct 2026: landscape keeps keys 46 tall, rows 6 apart; portrait's are 44 tall, rows 4 apart (the most that fits),
+// so its panel keeps two status lines under the Pi Hub / Local AI choice.
 static const uint8_t kPairKeys = 12;
-static const int kPairKeyW = 76, kPairKeyH = 44, kPairKeyGapX = 6, kPairKeyGapY = 4;
+static const int kPairKeyW = 76, kPairKeyGapX = 6;
+inline int pairKeyH(Screen s) { return s.landscape() ? 46 : 44; }
+inline int pairKeyGapY(Screen s) { return s.landscape() ? 6 : 4; }
 inline Rect pairKeypadArea(Screen s) {
-  const int w = 3 * kPairKeyW + 2 * kPairKeyGapX, h = 4 * kPairKeyH + 3 * kPairKeyGapY;
+  const int w = 3 * kPairKeyW + 2 * kPairKeyGapX, h = 4 * pairKeyH(s) + 3 * pairKeyGapY(s);
   if (s.landscape()) return makeRect(s.w - more::kMarginX - w, more::kHeaderH + 8, w, h);
   return makeRect((s.w - w) / 2, s.h - more::kTabH - 8 - h, w, h);
 }
 inline Rect pairKeyRect(Screen s, uint8_t i) {
   const Rect a = pairKeypadArea(s);
-  return makeRect(a.x + (i % 3) * (kPairKeyW + kPairKeyGapX), a.y + (i / 3) * (kPairKeyH + kPairKeyGapY), kPairKeyW, kPairKeyH);
+  return makeRect(a.x + (i % 3) * (kPairKeyW + kPairKeyGapX), a.y + (i / 3) * (pairKeyH(s) + pairKeyGapY(s)), kPairKeyW, pairKeyH(s));
 }
 // 31 Oct 2026: which service to pair with: two choices (0 Pi Hub, 1 Local AI) side by side over the info panel's
 // width, above it; the info panel starts under them.

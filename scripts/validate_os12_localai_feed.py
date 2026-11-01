@@ -128,6 +128,14 @@ def validate(repo: Path) -> None:
         need(switch, step, "switching service clears the gallery and any pending picture")
     if configure.find("portENTER_CRITICAL(&g_mux);") > configure.find("if (backend != g_backend) {"):
         raise ValidationError("the gallery is cleared under g_mux")
+    # Re-review N1 (31 Oct 2026): Unpair clears the same, under g_mux.
+    clear = block(feed, "void workshopLocalAiFeedClear() {")
+    for step in ("memset(g_pictures, 0, sizeof(g_pictures));", "g_imageWant[0] = g_imageLoaded[0] = 0;",
+                 "if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }", "g_extras.imageCount = 0;",
+                 "g_extras.imageIndex = 0;", "g_extras.hasImage = false;"):
+        need(clear, step, "Unpair clears the gallery and any pending picture")
+        if clear.find("portENTER_CRITICAL(&g_mux);") > clear.find(step):
+            raise ValidationError("Unpair clears the gallery under g_mux")
     need(block(feed, "void runImage() {"), "if (generation != g_generation) { ok = false; error[0] = 0; }",
          "a picture downloaded under old settings is discarded")
     need(block(feed, "bool configuredLocked()"), "lai::validKeyFor(g_backend, g_key)", "set up means a key for the saved backend")

@@ -542,6 +542,11 @@ void checkAiOverlays(Screen s, const char* o) {
     check(lines * kPairLineH <= st.h, "pair status lines fit their rect", o, lines, st.h);
     check(lines == (s.landscape() ? 3 : 2), "pair status: three lines in landscape, two in portrait", o, lines);
     check(lines * (st.w / 7) >= 60 + lines * 8, "the longest Pi Hub detail fits the status lines (word-wrap slack)", o, lines, st.w);
+    // Landscape keeps its 46 px keys (6 px apart), as before the choice; portrait's are at least the 44 px minimum.
+    for (uint8_t i = 0; i < kPairKeys; ++i)
+      check(pairKeyRect(s, i).h >= (s.landscape() ? 46 : kMinTouch), "pair keys: 46 px in landscape", o, i, pairKeyRect(s, i).h);
+    check(!s.landscape() || pairKeyRect(s, 3).y - pairKeyRect(s, 0).bottom() == 6, "landscape key rows 6 apart", o);
+    check(pairKeypadArea(s).bottom() <= (s.landscape() ? info.bottom() : s.h - more::kTabH), "keypad within its band", o, pairKeypadArea(s).bottom());
   }
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }

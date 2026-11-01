@@ -998,10 +998,15 @@ void workshopLocalAiFeedClear() {
     ++g_generation;
     g_snap = WorkshopLocalAiFeedSnapshot{};  // backend Local AI, aiAvailable -1
     copyText(g_snap.status, sizeof(g_snap.status), "Cards are not set up.");
+    // 31 Oct 2026: the gallery and any picture waiting go too, as when the service changes (a running download is
+    // discarded by runImage).
+    memset(g_pictures, 0, sizeof(g_pictures));
     g_imageWant[0] = g_imageLoaded[0] = 0;
+    if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }
     g_extras.hasImage = false;
     g_extras.imageReady = false;
     g_extras.imageCount = 0;
+    g_extras.imageIndex = 0;
     g_extras.approvalCount = g_extras.approvalTotal = 0;
     g_messageCount = 0;
     g_sig[0] = 0;
