@@ -1,10 +1,11 @@
 #pragma once
 
-// Workshop OS 12.3.10: rules for the Local AI cards on the calm idle screen.
+// Workshop OS 12.3.10: rules for the cards on the calm idle screen.
 //
 // Plain C++11, no Arduino, so tests/workshop_os12_localai_feed_smoke.cpp checks them on the host. The service
 // (workshop_localai_feed.cpp) fetches GET /api/display/feed from Local AI (docs: LocalAI docs/WORKSHOP-DISPLAY.md ›
-// Local AI cards); the calm screen draws one card at a time from what these functions say.
+// Local AI cards) or, since the display can pair with Pi Hub instead, from Pi Hub (same feed v2, same rules; only the
+// connection differs: see Backend); the calm screen draws one card at a time from what these functions say.
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,7 +15,7 @@
 namespace workshop {
 namespace localai {
 
-static const uint8_t kMaxCards = 6;
+static const uint8_t kMaxCards = 8;  // Pi Hub: seven household cards and one AI card (Local AI sends fewer)
 static const uint32_t kPollMs = 60000UL;           // one request a minute while it answers
 static const uint32_t kMaxBackoffMs = 600000UL;     // 10 minutes when it doesn't (Local AI down, PC off)
 static const uint32_t kFreshMs = 600000UL;          // cards older than this are not shown
@@ -87,13 +88,43 @@ inline Tone toneFrom(const char* s) {
   return Tone::Info;
 }
 
+// Which service the display pairs with, and how it talks to it: the feed is the same, the connection is not.
+enum class Backend : uint8_t { LocalAi = 0, PiHub = 1 };
+struct BackendInfo {
+  const char* label;           // what the screens call it
+  const char* keyHeader;       // the request header that carries the display key
+  const char* caPath;          // the CA certificate on the SD card
+  const char* defaultAddress;  // its address on the home network
+  const char* defaultName;     // the TLS name its certificate carries
+};
+inline const BackendInfo& backendInfo(Backend b) {
+  static const BackendInfo kLocalAi = {"Local AI", "X-LocalAI-Display-Key", "/localai-ca.crt", "10.0.0.21", "localai.home.arpa"};
+  static const BackendInfo kPiHub = {"Pi Hub", "X-Hub-Display-Key", "/home-ca.crt", "10.0.0.30", "home.home.arpa"};
+  return b == Backend::PiHub ? kPiHub : kLocalAi;
+}
+// The settings value: "pihub" or anything else (not set, "", a typo) for Local AI, what every display did before.
+inline Backend backendFrom(const char* s) { return s && !strcmp(s, "pihub") ? Backend::PiHub : Backend::LocalAi; }
+inline const char* backendId(Backend b) { return b == Backend::PiHub ? "pihub" : "localai"; }
+
 // Cards the calm screen can draw: text only (the image card needs a picture this screen does not have room for).
 inline bool shownKind(const char* kind) {
   return kind && (!strcmp(kind, "needs") || !strcmp(kind, "watch") || !strcmp(kind, "running") || !strcmp(kind, "weather") ||
                   !strcmp(kind, "done") || !strcmp(kind, "disk") ||  // 12.6: finished work and the fullest disk
                   !strcmp(kind, "playing") || !strcmp(kind, "home") ||  // 12.8: Plex on the Pi, and the Pi hub's issue
                   !strcmp(kind, "materials") ||  // LocalAI Materials: active spools & inventory health
+                  !strcmp(kind, "printer") || !strcmp(kind, "ai") ||  // Pi Hub: the printer's state, and "AI unavailable — PC asleep"
                   !strcmp(kind, "lab"));  // 26 Oct 2026: the Print lab card (printing) and its Judge it nudge
+}
+
+// Which of the feed's cards the display keeps, in feed order: the ones it can draw, at most kMaxCards. Pi Hub sends the
+// household cards first, so a full feed loses AI cards from the tail, never the house. `outIndex` holds at least
+// kMaxCards entries; returns how many were kept.
+inline uint8_t keepCards(const char* const* kinds, uint8_t n, uint8_t* outIndex) {
+  if (!kinds || !outIndex) return 0;
+  uint8_t kept = 0;
+  for (uint8_t i = 0; i < n && kept < kMaxCards; ++i)
+    if (shownKind(kinds[i])) outIndex[kept++] = i;
+  return kept;
 }
 
 // Wait before the next request: a minute after an answer; after failures 2, 4, 8 minutes, then 10.
@@ -119,6 +150,15 @@ inline bool validKey(const char* k) {
     if (!((*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'f'))) return false;
   return true;
 }
+
+// The display key Pi Hub makes for a display: "hubd_" and 32 URL-safe characters (letters, digits, '-', '_').
+inline bool validHubKey(const char* k) {
+  if (!k || strncmp(k, "hubd_", 5) != 0 || strlen(k) != 37) return false;
+  for (const char* p = k + 5; *p; ++p)
+    if (!((*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '-' || *p == '_')) return false;
+  return true;
+}
+inline bool validKeyFor(Backend b, const char* k) { return b == Backend::PiHub ? validHubKey(k) : validKey(k); }
 
 // A dotted IPv4 address on a private network (10/8, 172.16/12, 192.168/16): Local AI's address on the home network.
 inline bool validPrivateIp(const char* s) {
@@ -168,7 +208,7 @@ inline const char* askFor(const Card& c) {
   if (validQuestion(c.ask)) return c.ask;
   if (!strcmp(c.kind, "needs")) return "needs";
   if (!strcmp(c.kind, "running")) return "running";
-  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk") || !strcmp(c.kind, "materials")) return "health";
+  if (!strcmp(c.kind, "watch") || !strcmp(c.kind, "disk") || !strcmp(c.kind, "materials") || !strcmp(c.kind, "printer")) return "health";
   if (!strcmp(c.kind, "done")) return "today";
   if (!strcmp(c.kind, "weather")) return "weather";
   return nullptr;
@@ -327,11 +367,18 @@ static const uint32_t kEventsHoldMs = 30000UL;
 // 12.4.2: the latest image. The display fetches only Local AI's own image route, as a JPEG of at most this size.
 static const size_t kMaxImageBytes = 600UL * 1024UL;
 static const size_t kImagePathLen = 256;
+// Pi Hub's pictures: /api/display/images/<0-5> or /api/display/images/poster, nothing after.
+inline bool hubImagePath(const char* p) {
+  static const char kHub[] = "/api/display/images/";
+  if (!p || strncmp(p, kHub, sizeof(kHub) - 1) != 0) return false;
+  const char* rest = p + sizeof(kHub) - 1;
+  return (rest[0] >= '0' && rest[0] <= '5' && !rest[1]) || !strcmp(rest, "poster");
+}
 inline bool validImagePath(const char* p) {
   static const char kPrefix[] = "/api/images/view?";
   static const char kPoster[] = "/api/display/poster?";  // 12.8: what Plex on the Pi is playing, through Local AI
   if (!p || strlen(p) >= kImagePathLen) return false;
-  if (strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 && strncmp(p, kPoster, sizeof(kPoster) - 1) != 0) return false;
+  if (strncmp(p, kPrefix, sizeof(kPrefix) - 1) != 0 && strncmp(p, kPoster, sizeof(kPoster) - 1) != 0 && !hubImagePath(p)) return false;
   for (const char* c = p; *c; ++c)
     if ((unsigned char)*c <= ' ' || (unsigned char)*c >= 127) return false;  // one request line: no spaces or CR/LF
   return true;

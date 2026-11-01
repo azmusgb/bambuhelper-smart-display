@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 using namespace workshop::localai;
 static int failures = 0, checks = 0;
@@ -160,6 +161,99 @@ static void checkNeedsAndLab() {
   }
 }
 
+static Card card(const char* kind) {
+  Card c{};
+  copyUtf8(c.kind, sizeof(c.kind), kind);
+  return c;
+}
+
+// The `"kind"` values of a fixture's `cards` array, in order (a plain scan: no JSON library on the host). Stops at the
+// next top-level key, so `needs` and `images` (which have no kind) are never read. false when the file can't be read.
+static bool fixtureKinds(const char* path, std::string kinds[], size_t max, size_t& n) {
+  n = 0;
+  std::FILE* f = std::fopen(path, "rb");
+  if (!f) return false;
+  std::string body;
+  char buf[1024];
+  size_t got;
+  while ((got = std::fread(buf, 1, sizeof(buf), f)) > 0) body.append(buf, got);
+  std::fclose(f);
+  const size_t start = body.find("\"cards\": [");
+  const size_t end = body.find("\n  \"needs\":", start);
+  if (start == std::string::npos || end == std::string::npos) return false;
+  for (size_t at = body.find("\"kind\": \"", start); at != std::string::npos && at < end;
+       at = body.find("\"kind\": \"", at + 1)) {
+    const size_t from = at + 9, to = body.find('"', from);
+    if (to == std::string::npos || n >= max) return false;
+    kinds[n++] = body.substr(from, to - from);
+  }
+  return true;
+}
+
+// Display on Pi Hub, step 2: the second backend, its key, pictures, and the eight-card cap.
+static void checkPiHub() {
+  CHECK(backendFrom(nullptr) == Backend::LocalAi && backendFrom("") == Backend::LocalAi &&
+        backendFrom("pihub") == Backend::PiHub && backendFrom("PiHub") == Backend::LocalAi, "backend ids");
+  CHECK(!strcmp(backendId(Backend::LocalAi), "localai") && !strcmp(backendId(Backend::PiHub), "pihub"), "backend names");
+  CHECK(!strcmp(backendInfo(Backend::PiHub).keyHeader, "X-Hub-Display-Key") &&
+        !strcmp(backendInfo(Backend::PiHub).caPath, "/home-ca.crt") &&
+        !strcmp(backendInfo(Backend::PiHub).defaultName, "home.home.arpa"), "pi hub connection");
+  CHECK(!strcmp(backendInfo(Backend::PiHub).label, "Pi Hub") && !strcmp(backendInfo(Backend::PiHub).defaultAddress, "10.0.0.30"),
+        "pi hub label and address");
+  CHECK(!strcmp(backendInfo(Backend::LocalAi).label, "Local AI") && !strcmp(backendInfo(Backend::LocalAi).keyHeader, "X-LocalAI-Display-Key") &&
+        !strcmp(backendInfo(Backend::LocalAi).caPath, "/localai-ca.crt") && !strcmp(backendInfo(Backend::LocalAi).defaultAddress, "10.0.0.21") &&
+        !strcmp(backendInfo(Backend::LocalAi).defaultName, "localai.home.arpa"), "local ai connection");
+
+  // key_per_backend
+  const char* hub = "hubd_AbC-_0123456789abcdefghijklmnopq";  // 5 + 32
+  const char* wsd = "wsd_" "0123456789abcdef0123456789abcdef0123456789abcdef";
+  CHECK(validKeyFor(Backend::PiHub, hub), "hub key ok");
+  CHECK(!validKeyFor(Backend::LocalAi, hub), "hub key not for Local AI");
+  CHECK(validKeyFor(Backend::LocalAi, wsd), "wsd key for Local AI");
+  CHECK(!validKeyFor(Backend::PiHub, wsd), "wsd key not for hub");
+  CHECK(!validHubKey(nullptr) && !validHubKey(""), "no hub key");
+  CHECK(!validHubKey("hubd_AbC-_0123456789abcdefghijklmnop"), "31 chars");
+  CHECK(!validHubKey("hubd_AbC-_0123456789abcdefghijklmno+q"), "not url-safe");
+  CHECK(!validHubKey("hubd_AbC-_0123456789abcdefghijklmnopqr"), "33 chars");
+
+  // hub_image_paths
+  CHECK(validImagePath("/api/display/images/0") && validImagePath("/api/display/images/5") &&
+        validImagePath("/api/display/images/poster"), "hub pictures");
+  CHECK(!validImagePath("/api/display/images/6") && !validImagePath("/api/display/images/12") &&
+        !validImagePath("/api/display/images/0?x") && !validImagePath("/api/display/images/") &&
+        !validImagePath("/api/display/images/poster2"), "only hub's own picture paths");
+  CHECK(validImagePath("/api/images/view?id=1") && validImagePath("/api/display/poster?x=1"), "Local AI's picture paths still valid");
+
+  CHECK(kMaxCards == 8, "eight cards");
+  CHECK(shownKind("printer") && shownKind("ai") && !shownKind("image"), "printer and ai cards are shown");
+  CHECK(askFor(card("printer")) && !strcmp(askFor(card("printer")), "health") && !askFor(card("ai")), "asks");
+  Card own = card("printer");
+  copyUtf8(own.ask, sizeof(own.ask), "today");
+  CHECK(!strcmp(askFor(own), "today"), "a card's own ask wins");
+
+  // pihub_sample_all_kept: kinds from tests/fixtures/pihub_feed_v2_pc_asleep.json, in order
+  const char* asleep[] = {"needs", "printer", "lab", "home", "playing", "materials", "weather", "ai"};
+  uint8_t idx[16];
+  CHECK(keepCards(asleep, 8, idx) == 8 && idx[1] == 1 && idx[7] == 7, "asleep: all eight kept");
+  // cap_drops_tail: pc_awake order (Pi Hub's real order: watch, running, done, image, disk)
+  const char* awake[] = {"needs", "printer", "lab", "home", "playing", "materials", "weather", "watch", "running", "done", "image", "disk"};
+  CHECK(keepCards(awake, 12, idx) == 8 && idx[7] == 7, "awake: household first, then one AI card");
+  const char* withImage[] = {"needs", "image", "bogus", "weather"};
+  CHECK(keepCards(withImage, 4, idx) == 2 && idx[0] == 0 && idx[1] == 3, "image and unknown kinds skipped, indexes kept");
+  CHECK(keepCards(nullptr, 0, idx) == 0 && keepCards(withImage, 0, idx) == 0, "nothing in, nothing kept");
+  static_assert(sizeof(Card) * kMaxCards <= 1900, "eight cards stay in the snapshot budget");
+
+  // fixtures_match_the_arrays: the fixtures are Pi Hub's real feed; the arrays above can't drift from them
+  std::string kinds[16];
+  size_t n = 0;
+  bool ok = fixtureKinds("tests/fixtures/pihub_feed_v2_pc_asleep.json", kinds, 16, n) && n == 8;
+  for (size_t i = 0; ok && i < n; ++i) ok = kinds[i] == asleep[i];
+  CHECK(ok, "pc_asleep fixture kinds match");
+  ok = fixtureKinds("tests/fixtures/pihub_feed_v2_pc_awake.json", kinds, 16, n) && n == 12;
+  for (size_t i = 0; ok && i < n; ++i) ok = kinds[i] == awake[i];
+  CHECK(ok, "pc_awake fixture kinds match");
+}
+
 int main() {
   CHECK(nextDelayMs(0) == 60000UL, "a minute after an answer");
   CHECK(nextDelayMs(1) == 120000UL && nextDelayMs(2) == 240000UL && nextDelayMs(3) == 480000UL, "doubling backoff");
@@ -264,6 +358,7 @@ int main() {
     CHECK(w[0] == 0, "no text");
   }
   checkNeedsAndLab();
+  checkPiHub();
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }
