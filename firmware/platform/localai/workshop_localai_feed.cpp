@@ -227,10 +227,14 @@ bool openRequestTo(WiFiClientSecure& client, lai::Backend backend, const char* a
         if (code >= 400 && code < 500 && code != 401 && contentLength <= 2048) {
             JsonDocument filter;
             filter["error"] = true;
+            filter["detail"] = true;  // 31 Oct 2026: Pi Hub (FastAPI) says why in `detail`
             JsonDocument why;
-            if (!deserializeJson(why, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4)) &&
-                (why["error"] | "")[0])
-                lai::copyUtf8(error, errorLen, why["error"] | "");
+            if (!deserializeJson(why, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4))) {
+                // `error` first; else `detail` when it is a string (FastAPI's 422 `detail` is a list: ignored).
+                const char* words = why["error"] | "";
+                if (!words[0]) words = why["detail"] | "";
+                if (words[0]) lai::copyUtf8(error, errorLen, words);
+            }
         }
         client.stop();
         return false;

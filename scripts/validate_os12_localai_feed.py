@@ -211,7 +211,10 @@ def validate(repo: Path) -> None:
     need(verdict, "DeserializationOption::Filter(filter)", "only id and status are read from the answer")
     need(block(feed, "bool somethingWaits() {"), "g_judgeLoadPending || g_verdictPending", "the long poll gives way to Judge it")
     need(fetch, "if (code < 200 || code > 299) {", "the verdict route's 202 is a success")
-    need(fetch, 'lai::copyUtf8(error, errorLen, why["error"] | "");', "Local AI's words are cut whole-character")
+    need(fetch, "lai::copyUtf8(error, errorLen, words);", "the service's words are cut whole-character")
+    need(fetch, 'filter["detail"] = true;', "Pi Hub's (FastAPI) detail is read from a 4xx body")
+    need(fetch, 'const char* words = why["error"] | "";\n                if (!words[0]) words = why["detail"] | "";',
+         "error first, then a string detail (a 422 detail list is ignored)")
     print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card, Judge it)")
 
 
