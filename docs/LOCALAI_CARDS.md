@@ -58,6 +58,33 @@ shows one card from Local AI under its print status line, and a different card e
 Without cards (Local AI not set up, or nothing heard from it for 10 minutes) the calm screen is exactly as before.
 The cards are display only: tapping anywhere still just wakes the screen.
 
+## Pi Hub connection
+
+The display's one connection can go to Local AI (the default) or to Pi Hub. `backend` in `/localai.json` says which;
+a file without it means Local AI, so existing displays are unchanged.
+
+**Pair with Pi Hub:**
+1. On Pi Hub, open **System › Workshop display › Pair display**. It shows a 6-digit code for 10 minutes.
+2. On the display's pairing screen (**Local AI tab › Local AI connection**) or in the Local Portal (**More › Local AI
+   on the display**), choose **Pi Hub** and type the code.
+3. The display reads Pi Hub's CA from `http://10.0.0.30/home-ca.crt`, sends the code over HTTPS pinned to it (name
+   `home.home.arpa`) and saves the new key, which starts `hubd_`, with the CA. From the Mac,
+   `configure_localai_feed.py --backend pihub --ca <path to Pi Hub's CA>` does the same.
+
+**What changes:** one key (`X-Hub-Display-Key`) and one feed from Pi Hub, which also brings in Local AI's cards. The
+card cap is 8 (was 6). Two card kinds are new: `printer` (the printer, from Pi Hub) and `ai`. The `ai` card, "AI
+unavailable — PC asleep", shows when Pi Hub can't reach Local AI; the printer, Needs you, Clear plate, Judge it and
+now playing keep working. When the PC wakes, the AI cards return without pairing again.
+
+**Roll back:** pair with Local AI again (**Services › Workshop display › Pair display** in Local AI). The new key
+replaces Pi Hub's and `backend` goes back to Local AI.
+
+**Next:** step 3 switches the workshop display to Pi Hub and runs the PC-asleep acceptance; step 4 retires Local
+AI's display routes after a week on Pi Hub. Until then Local AI stays the default and the rollback.
+
+Captures: `/hub/show localai-pairhub`, `localai-pairhub-<digits>` (digits typed), `localai-pairhub-go` (pairing
+under way).
+
 ## Set up (once)
 
 **Since 12.7: pair.** In Local AI, open **Services › Workshop display › Pair display**; it shows a 6-digit code for
@@ -98,8 +125,8 @@ Portal routes:
 
 | Route | What it does |
 |---|---|
-| `GET /os12/localai/status` | the cards the display last got, when, and why not |
-| `POST /os12/localai/config` | form fields `address`, `name`, `key`, `ca` |
+| `GET /os12/localai/status` | the cards the display last got, when, and why not; also `backend` and `aiAvailable` |
+| `POST /os12/localai/config` | form fields `address`, `name`, `key`, `ca`, and `backend` (`localai` or `pihub`; missing means Local AI) |
 | `POST /os12/localai/clear` | forgets the settings |
 
 The status route never sends the key or the CA back.
@@ -146,7 +173,7 @@ Read `GET /os12/localai/status` and look at `status`:
 | "Local AI isn't answering, or its certificate didn't match." | Local AI is down (the watchdog's Mac notice says so), or the CA changed: re-run `configure_localai_feed.py`. |
 | "Local AI turned the display key down (HTTP 401/403)." | Local AI's sign-in is enforced and the key fingerprint is missing: re-run `set-key.sh`, then `configure_localai_feed.py`. |
 | "Waiting for Wi-Fi." | The display is off Wi-Fi. |
-| "Local AI cards are not set up." after a restart | Firmware 12.3.10 or 12.3.11 kept the settings only until a restart: update to 12.3.12, then re-run `configure_localai_feed.py`. |
+| "Cards are not set up." after a restart | Firmware 12.3.10 or 12.3.11 kept the settings only until a restart: update to 12.3.12, then re-run `configure_localai_feed.py`. |
 
 
 ## Household ownership and action results — 28 October server integration
