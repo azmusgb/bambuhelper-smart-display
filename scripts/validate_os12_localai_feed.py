@@ -73,6 +73,16 @@ def validate(repo: Path) -> None:
     status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200)")
     for secret in ('doc["key"]', 'doc["ca"]', "g_key", "caPem"):
         forbid(status, secret, "the status route never sends the key or CA")
+    # Final review fix 2 (31 Oct 2026): the small status and one card at a time, never the ~3 KB snapshot, on the web
+    # handler's stack; busy and failures come with the status.
+    forbid(status, "workshopLocalAiFeedSnapshot()", "the status route never copies the whole feed snapshot")
+    need(status, "const WorkshopLocalAiFeedStatus st = workshopLocalAiFeedStatus();", "the status route reads the small status")
+    need(status, "workshopLocalAiFeedCard(i, &card)", "the status route reads one card at a time")
+    for field in ('doc["busy"] = st.busy;', 'doc["failures"] = st.failures;'):
+        need(status, field, "the status JSON keeps its fields")
+    status_fn = block(feed, "WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus() {")
+    for field in ("s.busy = g_snap.busy;", "s.failures = g_snap.failures;"):
+        need(status_fn, field, "the small status carries busy and failures")
     fetch = block(feed, "bool openRequestTo(WiFiClientSecure& client, lai::Backend backend, const char* address, const char* name, const char* ca,")
     need(fetch, "client.connect(ip, 443, name, ca, nullptr, nullptr)", "TLS to Local AI's address, pinned to its CA and certificate name")
     need(fetch, "%s %s HTTP/1.0", "one HTTP/1.0 request (no chunked body)")
@@ -110,6 +120,16 @@ def validate(repo: Path) -> None:
     configure = block(feed, "bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem, lai::Backend backend)")
     need(configure, 'doc["backend"] = lai::backendId(backend)', "the backend is saved")
     need(configure, "lai::validKeyFor(backend, key)", "only that backend's key is accepted")
+    # Final review fix 5 (31 Oct 2026): a new backend drops the old one's gallery and any picture waiting, under g_mux.
+    switch = block(configure, "if (backend != g_backend) {")
+    for step in ("memset(g_pictures, 0, sizeof(g_pictures));", "g_imageWant[0] = g_imageLoaded[0] = 0;",
+                 "if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }", "g_extras.imageCount = 0;",
+                 "g_extras.hasImage = false;"):
+        need(switch, step, "switching service clears the gallery and any pending picture")
+    if configure.find("portENTER_CRITICAL(&g_mux);") > configure.find("if (backend != g_backend) {"):
+        raise ValidationError("the gallery is cleared under g_mux")
+    need(block(feed, "void runImage() {"), "if (generation != g_generation) { ok = false; error[0] = 0; }",
+         "a picture downloaded under old settings is discarded")
     need(block(feed, "bool configuredLocked()"), "lai::validKeyFor(g_backend, g_key)", "set up means a key for the saved backend")
     fetchCaBlock = block(feed, "bool fetchCa(lai::Backend backend, const char* address, char* ca, size_t caLen, char* error, size_t errorLen)")
     need(fetchCaBlock, "info.caPath", "the CA comes from the backend's own path")
@@ -214,6 +234,9 @@ def validate(repo: Path) -> None:
     need(fetch, "if (code < 200 || code > 299) {", "the verdict route's 202 is a success")
     need(fetch, "lai::copyUtf8(error, errorLen, words);", "the service's words are cut whole-character")
     need(fetch, 'filter["detail"] = true;', "Pi Hub's (FastAPI) detail is read from a 4xx body")
+    # Final review fix 1 (31 Oct 2026): any 4xx/5xx but 401 is read, so Pi Hub's 503 "AI unavailable — PC asleep" shows.
+    need(fetch, "if (code >= 400 && code != 401 && contentLength <= 2048) {", "the service's words on a 5xx too (Pi Hub's 503)")
+    forbid(fetch, "code < 500", "a 5xx body is not skipped")
     need(fetch, 'const char* words = why["error"] | "";\n                if (!words[0]) words = why["detail"] | "";',
          "error first, then a string detail (a 422 detail list is ignored)")
     validate_pair_choice(hub, web, (repo / "include/web_pages.h").read_text(encoding="utf-8"),
@@ -254,8 +277,8 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     need(hub, f"g_wtPairBackend = piHub ? {lai}Backend::PiHub : {lai}Backend::LocalAi;", "capture localai-pair[-...] stays Local AI")
     # The portal: an optional backend on pair and config, and the status names it.
     status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200) {")
-    need(status, 'doc["backend"] = workshop::localai::backendId(snap.backend);', "status names the service")
-    need(status, 'doc["aiAvailable"] = snap.aiAvailable;', "status carries ai.available (-1, 0, 1)")
+    need(status, 'doc["backend"] = workshop::localai::backendId(st.backend);', "status names the service")
+    need(status, 'doc["aiAvailable"] = st.aiAvailable;', "status carries ai.available (-1, 0, 1)")
     for fn in ("static void handleWorkshopLocalAiConfig() {", "static void handleWorkshopLocalAiPair() {"):
         need(block(web, fn), 'workshop::localai::backendFrom(server.hasArg("backend") ? server.arg("backend").c_str() : "")',
              "an optional backend field (missing: Local AI)")

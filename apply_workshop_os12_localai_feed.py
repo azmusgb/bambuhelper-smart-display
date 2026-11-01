@@ -51,25 +51,28 @@ HANDLERS = r'''
 // ---------------------------------------------------------------------------
 // Workshop OS 12.3.10 -> Local AI cards for the calm idle screen
 // ---------------------------------------------------------------------------
+// 31 Oct 2026: the feed's small status and one card at a time, never the whole snapshot (about 3 KB) on the web
+// handler's stack.
 static void sendWorkshopLocalAiStatus(int httpCode = 200) {
-  const WorkshopLocalAiFeedSnapshot snap = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus st = workshopLocalAiFeedStatus();
   JsonDocument doc;
-  doc["configured"] = snap.configured;
-  doc["busy"] = snap.busy;
-  doc["failures"] = snap.failures;
-  doc["lastSuccessAgoS"] = snap.lastSuccessAtMs ? (long)((millis() - snap.lastSuccessAtMs) / 1000UL) : -1L;
-  doc["status"] = snap.status;
+  doc["configured"] = st.configured;
+  doc["busy"] = st.busy;
+  doc["failures"] = st.failures;
+  doc["lastSuccessAgoS"] = st.lastSuccessAtMs ? (long)((millis() - st.lastSuccessAtMs) / 1000UL) : -1L;
+  doc["status"] = st.status;
   // 31 Oct 2026: which service the display is paired with ("localai" when not set up) and the feed's ai.available
   // (-1 not said, 0 away, 1 there).
-  doc["backend"] = workshop::localai::backendId(snap.backend);
-  doc["aiAvailable"] = snap.aiAvailable;
+  doc["backend"] = workshop::localai::backendId(st.backend);
+  doc["aiAvailable"] = st.aiAvailable;
   doc["nvsFreeEntries"] = (unsigned)workshopLocalAiFeedNvsFreeEntries();
   JsonArray cards = doc["cards"].to<JsonArray>();
-  for (uint8_t i = 0; i < snap.count; ++i) {
+  workshop::localai::Card card;
+  for (uint8_t i = 0; i < st.count && workshopLocalAiFeedCard(i, &card); ++i) {
     JsonObject c = cards.add<JsonObject>();
-    c["kind"] = snap.cards[i].kind;
-    c["title"] = snap.cards[i].title;
-    c["text"] = snap.cards[i].text;
+    c["kind"] = card.kind;
+    c["title"] = card.title;
+    c["text"] = card.text;
   }
   // 12.7: the Local Portal's Local AI panel (never the key or the CA).
   const WorkshopLocalAiExtras extras = workshopLocalAiFeedExtras();

@@ -534,7 +534,7 @@ static bool wtFinishedRecently(const WtPrint& w) {
 // Local AI (12.4.0): its cards lead the third tab, take Home's bottom row and
 // the calm screen's top card. One place decides what to say with no cards.
 // ---------------------------------------------------------------------------
-// 26 Oct 2026: these read the feed's small status and one card, not the whole snapshot (about 2.6 KB with Pi Hub's
+// 26 Oct 2026: these read the feed's small status and one card, not the whole snapshot (about 3 KB with Pi Hub's
 // needs): they run inside draw and touch paths on the 8 KB loop task.
 static uint8_t wtAiCount() {
   const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
@@ -963,7 +963,7 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
 static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len);
 
 // The one snapshot for a Home frame or touch: both need rows and (when `weather` is given) the header's weather. A
-// leaf: the snapshot (about 2.6 KB) lives only while this runs, never under the row drawing (noinline keeps it out of
+// leaf: the snapshot (about 3 KB) lives only while this runs, never under the row drawing (noinline keeps it out of
 // the callers' frames on the 8 KB loop task).
 static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen) {
   const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();

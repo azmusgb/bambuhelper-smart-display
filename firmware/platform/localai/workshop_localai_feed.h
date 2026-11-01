@@ -36,9 +36,12 @@ struct WorkshopLocalAiFeedSnapshot {
 };
 
 // 26 Oct 2026: the snapshot's small fields, for the UI's many "is it set up / fresh / how many" questions; the whole
-// snapshot (about 2.6 KB with the needs) is copied only where the cards or needs themselves are read.
+// snapshot (about 3 KB: eight cards and six needs, 31 Oct 2026) is copied only where the cards or needs themselves are
+// read. 31 Oct 2026: busy and failures too, so the portal's status route reads this and one card at a time.
 struct WorkshopLocalAiFeedStatus {
     bool configured{false};
+    bool busy{false};
+    std::uint8_t failures{0};
     std::uint32_t lastSuccessAtMs{0};
     std::uint8_t count{0};
     std::uint8_t needCount{0};

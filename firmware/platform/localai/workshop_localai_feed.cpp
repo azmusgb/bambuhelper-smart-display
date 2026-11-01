@@ -223,8 +223,9 @@ bool openRequestTo(WiFiClientSecure& client, lai::Backend backend, const char* a
         snprintf(error, errorLen, code == 401 || code == 403 ? "%s turned the display key down (HTTP %d)." : "%s answered HTTP %d.",
                  info.label, code);
         // The service's own words, when it sent any (pairing says why a code was refused; 26 Oct 2026: the verdict route
-        // why a verdict was). Only `error` is kept, cut on a character boundary.
-        if (code >= 400 && code < 500 && code != 401 && contentLength <= 2048) {
+        // why a verdict was; 31 Oct 2026: Pi Hub's 503 "AI unavailable — PC asleep" on the AI routes). `error`, else a
+        // string `detail`, is kept, cut on a character boundary; a body that isn't JSON keeps the message above.
+        if (code >= 400 && code != 401 && contentLength <= 2048) {
             JsonDocument filter;
             filter["error"] = true;
             filter["detail"] = true;  // 31 Oct 2026: Pi Hub (FastAPI) says why in `detail`
@@ -456,10 +457,13 @@ void runImage() {
     portENTER_CRITICAL(&g_mux);
     copyText(path, sizeof(path), g_imageWant);
     g_imagePending = false;
+    const std::uint32_t generation = g_generation;
     portEXIT_CRITICAL(&g_mux);
-    const bool ok = path[0] && downloadImage(path, error, sizeof(error));
+    bool ok = path[0] && downloadImage(path, error, sizeof(error));
     if (!path[0]) snprintf(error, sizeof(error), "%s has no image yet.", labelNow());
     portENTER_CRITICAL(&g_mux);
+    // 31 Oct 2026: settings changed while it downloaded: the picture is not this connection's.
+    if (generation != g_generation) { ok = false; error[0] = 0; }
     copyText(g_imageLoaded, sizeof(g_imageLoaded), ok ? path : "");
     g_extras.imageReady = ok;
     copyText(g_extras.imageStatus, sizeof(g_extras.imageStatus), ok ? "" : error);
@@ -949,6 +953,17 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
     copyText(g_tlsName, sizeof(g_tlsName), tlsName);
     copyText(g_key, sizeof(g_key), key);
     copyText(g_ca, kMaxCaBytes, caPem);
+    // 31 Oct 2026: another service's picture paths mean nothing to this one: the gallery and any picture waiting to
+    // download go, as the generation bump below discards the cards (a download already running is discarded by runImage).
+    if (backend != g_backend) {
+        memset(g_pictures, 0, sizeof(g_pictures));
+        g_imageWant[0] = g_imageLoaded[0] = 0;
+        if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }
+        g_extras.hasImage = false;
+        g_extras.imageReady = false;
+        g_extras.imageCount = 0;
+        g_extras.imageIndex = 0;
+    }
     g_backend = backend;
     ++g_generation;
     g_snap.configured = true;
@@ -1179,6 +1194,8 @@ WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus() {
     WorkshopLocalAiFeedStatus s;
     portENTER_CRITICAL(&g_mux);
     s.configured = g_snap.configured;
+    s.busy = g_snap.busy;
+    s.failures = g_snap.failures;
     s.lastSuccessAtMs = g_snap.lastSuccessAtMs;
     s.count = g_snap.count;
     s.needCount = g_snap.needCount;

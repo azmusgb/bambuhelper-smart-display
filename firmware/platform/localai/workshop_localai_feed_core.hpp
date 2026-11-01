@@ -93,7 +93,7 @@ enum class Backend : uint8_t { LocalAi = 0, PiHub = 1 };
 struct BackendInfo {
   const char* label;           // what the screens call it
   const char* keyHeader;       // the request header that carries the display key
-  const char* caPath;          // the CA certificate on the SD card
+  const char* caPath;          // where the service serves its CA certificate over plain HTTP (port 80), for pairing
   const char* defaultAddress;  // its address on the home network
   const char* defaultName;     // the TLS name its certificate carries
 };
