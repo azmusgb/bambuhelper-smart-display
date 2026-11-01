@@ -82,8 +82,8 @@ replaces Pi Hub's and `backend` goes back to Local AI.
 **Next:** step 3 switches the workshop display to Pi Hub and runs the PC-asleep acceptance; step 4 retires Local
 AI's display routes after a week on Pi Hub. Until then Local AI stays the default and the rollback.
 
-Captures: `/hub/show localai-pairhub`, `localai-pairhub-<digits>` (digits typed), `localai-pairhub-go` (pairing
-under way).
+Captures: `/hub/show localai-pairhub` (the pairing screen with Pi Hub chosen), `localai-pairhub-<digits>` (digits typed),
+`localai-pairhub-<6 digits>-go` (also presses Pair; `-go` only works after exactly six digits, like `localai-pair-123456-go`).
 
 ## Set up (once)
 
