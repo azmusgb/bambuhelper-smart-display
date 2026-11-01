@@ -588,10 +588,20 @@ inline Rect pairKeyRect(Screen s, uint8_t i) {
   const Rect a = pairKeypadArea(s);
   return makeRect(a.x + (i % 3) * (76 + 6), a.y + (i / 3) * (46 + 6), 76, 46);
 }
+// 31 Oct 2026: which service to pair with: two choices (0 Pi Hub, 1 Local AI) side by side over the info panel's
+// width, above it; the info panel starts under them.
+static const uint8_t kPairChoices = 2;
+static const int kPairChoiceH = 44;
+inline Rect pairChoiceRect(Screen s, uint8_t i) {
+  const Rect a = pairKeypadArea(s);
+  const int gap = 6, w = s.landscape() ? a.x - 12 - more::kMarginX : s.w - 2 * more::kMarginX, cw = (w - gap) / 2;
+  return makeRect(more::kMarginX + i * (cw + gap), more::kHeaderH + 8, cw, kPairChoiceH);
+}
 inline Rect pairInfoRect(Screen s) {
   const Rect a = pairKeypadArea(s);
-  if (s.landscape()) return makeRect(more::kMarginX, more::kHeaderH + 8, a.x - 12 - more::kMarginX, s.h - more::kTabH - 8 - more::kHeaderH - 8);
-  return makeRect(more::kMarginX, more::kHeaderH + 8, s.w - 2 * more::kMarginX, a.y - 8 - more::kHeaderH - 8);
+  const int top = more::kHeaderH + 8 + kPairChoiceH + 6;
+  if (s.landscape()) return makeRect(more::kMarginX, top, a.x - 12 - more::kMarginX, s.h - more::kTabH - 8 - top);
+  return makeRect(more::kMarginX, top, s.w - 2 * more::kMarginX, a.y - 8 - top);
 }
 
 inline Rect approvalStatusRect(Screen s) {

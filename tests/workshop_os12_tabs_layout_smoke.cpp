@@ -516,7 +516,17 @@ void checkAiOverlays(Screen s, const char* o) {
     check(!intersects(pairKeyRect(s, i), pairInfoRect(s)), "keys clear of the code", o, i);
     for (uint8_t j = i + 1; j < kPairKeys; ++j) check(!intersects(pairKeyRect(s, i), pairKeyRect(s, j)), "keys apart", o, i * 16 + j);
   }
-  check(pairInfoRect(s).w >= 200 && pairInfoRect(s).h >= 120 && inside(pairInfoRect(s), more::contentBand(s)), "room for the code and the steps", o, pairInfoRect(s).w, pairInfoRect(s).h);
+  // 31 Oct 2026: the Pi Hub / Local AI choice: two touch-sized buttons above the info panel, apart, clear of the
+  // keypad and Done. The panel under them keeps two lines of steps, the six boxes and a status line (portrait).
+  for (uint8_t i = 0; i < kPairChoices; ++i) {
+    const Rect c = pairChoiceRect(s, i);
+    check(c.h >= kMinTouch && c.w >= 88 && inside(c, more::contentBand(s)), "pair choice is touch-sized, on the screen", o, i, c.w);
+    check(!intersects(c, pairInfoRect(s)) && c.bottom() < pairInfoRect(s).y, "pair choice above the info panel", o, i);
+    check(!intersects(c, askDoneTouch(s)), "pair choice clear of Done", o, i);
+    for (uint8_t k = 0; k < kPairKeys; ++k) check(!intersects(c, pairKeyRect(s, k)), "pair choice clear of the keypad", o, i * 16 + k);
+  }
+  check(pairChoiceRect(s, 0).right() < pairChoiceRect(s, 1).x, "pair choices apart", o);
+  check(pairInfoRect(s).w >= 200 && pairInfoRect(s).h >= 100 && inside(pairInfoRect(s), more::contentBand(s)), "room for the code and the steps", o, pairInfoRect(s).w, pairInfoRect(s).h);
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 

@@ -215,7 +215,60 @@ def validate(repo: Path) -> None:
     need(fetch, 'filter["detail"] = true;', "Pi Hub's (FastAPI) detail is read from a 4xx body")
     need(fetch, 'const char* words = why["error"] | "";\n                if (!words[0]) words = why["detail"] | "";',
          "error first, then a string detail (a 422 detail list is ignored)")
-    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card, Judge it)")
+    validate_pair_choice(hub, web, (repo / "include/web_pages.h").read_text(encoding="utf-8"),
+                         (repo / "web/app.js").read_text(encoding="utf-8"))
+    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card, Judge it,"
+          " pairing with Pi Hub or Local AI)")
+
+
+def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
+    """31 Oct 2026 (display on Pi Hub, step 2): pairing chooses Pi Hub or Local AI on the screen, the portal and the script."""
+    lai = "workshop::localai::"
+    need(hub, f"static {lai}Backend g_wtPairBackend = {lai}Backend::PiHub;", "the overlay's choice lives in a static")
+    need(hub, f"static const {lai}Backend kWtPairChoices[wtl::kPairChoices] = {{{lai}Backend::PiHub, {lai}Backend::LocalAi}};",
+         "two choices: Pi Hub, then Local AI")
+    opener = block(hub, "static void wtOpenPair() {")
+    need(opener, f"st.configured ? st.backend : {lai}Backend::PiHub", "the first time: Pi Hub when nothing is paired, else the saved one")
+    draw = block(hub, "static void wtDrawPair(const wsm::Screen& s) {")
+    need(draw, "wsDrawButton(wtl::pairChoiceRect(s, i), lai::backendInfo(kWtPairChoices[i]).label, true, kWtPairChoices[i] == g_wtPairBackend, OS12V_BG);",
+         "both choices drawn with their labels, the chosen one in the accent")
+    need(draw, 'snprintf(title, sizeof(title), "Pair with %s", info.label);', "the header names the chosen service")
+    need(draw, '"In Pi Hub: System, Workshop display, Pair display. Then type its code here."', "Pi Hub's steps")
+    need(draw, '"In Local AI: Services, Workshop display, Pair display. Then type its code here."', "Local AI's steps, unchanged")
+    need(draw, 'snprintf(line, sizeof(line), "%s at %s", info.label, address);', "the address line names the chosen service")
+    forbid(draw, '"Pair with Local AI"', "no fixed Local AI header in the overlay (the tab's row keeps its words)")
+    address = block(hub, "static void wtPairAddress(char* out, size_t len) {")
+    need(address, "workshopLocalAiFeedBackend() == g_wtPairBackend", "the saved address only for the saved service")
+    need(address, "lai::backendInfo(g_wtPairBackend).defaultAddress", "else the chosen service's usual address")
+    forbid(address, '"10.0.0.21"', "no fixed Local AI address")
+    forbid(hub, "workshopLocalAiFeedPair(address, g_wtPairCode)", "every pairing names the chosen service")
+    if hub.count("workshopLocalAiFeedPair(address, g_wtPairCode, g_wtPairBackend)") != 2:
+        raise ValidationError("the keypad's Pair and the capture's -go both pair with the chosen service")
+    touch = block(hub, "static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {")
+    choice = block(touch, "if (wtl::pairChoiceRect(s, i).contains(x, y)) {")
+    need(choice, "g_wtPairCode[0] = 0;", "changing the choice clears the typed digits")
+    need(block(hub, "static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {"),
+         "if (wtl::pairChoiceRect(s, i).contains(x, y)) { out = wtl::pairChoiceRect(s, i); return true; }", "a press outlines the choice")
+    need(hub, 'const bool piHub = strncmp(name, "localai-pairhub", 15) == 0;', "capture localai-pairhub[-123456[-go]] chooses Pi Hub")
+    need(hub, f"g_wtPairBackend = piHub ? {lai}Backend::PiHub : {lai}Backend::LocalAi;", "capture localai-pair[-...] stays Local AI")
+    # The portal: an optional backend on pair and config, and the status names it.
+    status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200) {")
+    need(status, 'doc["backend"] = workshop::localai::backendId(snap.backend);', "status names the service")
+    need(status, 'doc["aiAvailable"] = snap.aiAvailable;', "status carries ai.available (-1, 0, 1)")
+    for fn in ("static void handleWorkshopLocalAiConfig() {", "static void handleWorkshopLocalAiPair() {"):
+        need(block(web, fn), 'workshop::localai::backendFrom(server.hasArg("backend") ? server.arg("backend").c_str() : "")',
+             "an optional backend field (missing: Local AI)")
+    need(block(web, "static void handleWorkshopLocalAiPair() {"), "workshopLocalAiFeedPair(server.arg(\"address\").c_str(), server.arg(\"code\").c_str(), backend)",
+         "the portal pairs with the chosen service")
+    need(pages, '<select id="localAiPairBackend"', "the portal's Pi Hub / Local AI choice")
+    need(pages, '<option value="pihub">Pi Hub</option><option value="localai">Local AI</option>', "Pi Hub first, then Local AI")
+    need(app_js, "var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.30',localai:'10.0.0.21'};", "the choice fills the address")
+    need(app_js, "'&backend='+encodeURIComponent(backend)", "the pairing request names the service")
+    forbid(app_js, "'Paired with Local AI.'", "the paired line is the service's own words or the chosen label")
+    script = (ROOT / "scripts/configure_localai_feed.py").read_text(encoding="utf-8")
+    need(script, 'parser.add_argument("--backend", choices=("localai", "pihub"), default="localai"', "the script's --backend")
+    need(script, '"pihub": ("10.0.0.30", "home.home.arpa")', "Pi Hub's address and name defaults")
+    need(script, '"backend": args.backend', "the script sends the backend")
 
 
 def main() -> int:

@@ -6,6 +6,10 @@ signed-in portal, then waits for the first cards. The key is read from the Mac's
 service localai-display-key, made by Local AI's host/workshop-display/set-key.sh) and the CA from
 ~/.claude/localai-chat/localai-ca.crt (made by host/claude-chat/install.sh). Neither is printed.
 
+31 Oct 2026: --backend pihub points it at Pi Hub instead (address 10.0.0.30, name home.home.arpa unless --address or
+--name say otherwise). The key is then Pi Hub's display key (hubd_, Keychain service pihub-display-key), and the CA
+must be Pi Hub's (home-ca.crt), put at the same CA path; pairing from the display or the portal fetches both itself.
+
   WORKSHOP_OS_COOKIE_JAR=<jar> python3 scripts/configure_localai_feed.py
   python3 scripts/configure_localai_feed.py --clear
 """
@@ -20,7 +24,10 @@ from pathlib import Path
 
 from accept_os12_portal_runtime import Client, establish_portal_session
 
-KEYCHAIN = ("ws350", "localai-display-key")
+KEYCHAIN = {"localai": ("ws350", "localai-display-key"), "pihub": ("ws350", "pihub-display-key")}
+KEY_PREFIX = {"localai": "wsd_", "pihub": "hubd_"}
+# The address and certificate name each backend has on the home network (firmware: backendInfo()).
+DEFAULTS = {"localai": ("10.0.0.21", "localai.home.arpa"), "pihub": ("10.0.0.30", "home.home.arpa")}
 CA_PATH = Path.home() / ".claude" / "localai-chat" / "localai-ca.crt"
 
 
@@ -46,10 +53,15 @@ def keychain_secret(account: str, service: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
-    parser.add_argument("--address", default="10.0.0.21", help="Local AI's IPv4 address on the home network")
-    parser.add_argument("--name", default="localai.home.arpa", help="the name on Local AI's certificate")
+    parser.add_argument("--backend", choices=("localai", "pihub"), default="localai",
+                        help="the service the display takes its feed from (pihub: Pi Hub; its CA is Pi Hub's home-ca.crt)")
+    parser.add_argument("--address", default=None, help="the service's IPv4 address (default: 10.0.0.21 Local AI, 10.0.0.30 Pi Hub)")
+    parser.add_argument("--name", default=None, help="the name on its certificate (default: localai.home.arpa, home.home.arpa)")
     parser.add_argument("--clear", action="store_true", help="forget the settings on the display")
     args = parser.parse_args()
+    address, name = DEFAULTS[args.backend]
+    args.address = args.address or address
+    args.name = args.name or name
 
     client = Client(args.base_url)
     establish_portal_session(client)
@@ -59,17 +71,18 @@ def main() -> int:
         print(f"clear: HTTP {r.status}")
         return 0 if r.status == 200 else 1
 
-    key = keychain_secret(*KEYCHAIN)
-    if not key.startswith("wsd_"):
-        sys.exit("FAIL: no display key in the Keychain; run Local AI's host/workshop-display/set-key.sh first")
+    key = keychain_secret(*KEYCHAIN[args.backend])
+    if not key.startswith(KEY_PREFIX[args.backend]):
+        where = "Local AI's host/workshop-display/set-key.sh" if args.backend == "localai" else "Pi Hub's display key into the Keychain"
+        sys.exit(f"FAIL: no {args.backend} display key in the Keychain (service {KEYCHAIN[args.backend][1]}); put {where} first")
     if not CA_PATH.is_file():
         sys.exit(f"FAIL: missing {CA_PATH}; run Local AI's host/claude-chat/install.sh first")
-    form = {"address": args.address, "name": args.name, "key": key, "ca": CA_PATH.read_text(encoding="ascii")}
+    form = {"address": args.address, "name": args.name, "key": key, "ca": CA_PATH.read_text(encoding="ascii"), "backend": args.backend}
     r = client.request("/os12/localai/config", method="POST", form=form, headers=headers)
     del key, form
     if r.status != 202:
         sys.exit(f"FAIL: the display refused the settings (HTTP {r.status}): {r.body[:200]!r}")
-    print("Saved on the display. Waiting for the first Local AI cards…")
+    print(f"Saved on the display. Waiting for the first {'Pi Hub' if args.backend == 'pihub' else 'Local AI'} cards…")
     deadline = time.time() + 90
     while time.time() < deadline:
         time.sleep(5)
