@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -269,6 +270,17 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     need(script, 'parser.add_argument("--backend", choices=("localai", "pihub"), default="localai"', "the script's --backend")
     need(script, '"pihub": ("10.0.0.30", "home.home.arpa")', "Pi Hub's address and name defaults")
     need(script, '"backend": args.backend', "the script sends the backend")
+    # Fix round 1: the CA sent is the chosen service's: Local AI's default path is unchanged; Pi Hub has none and the
+    # script refuses without --ca, before contacting the display; the file must hold a PEM certificate.
+    need(script, 'CA_PATH = Path.home() / ".claude" / "localai-chat" / "localai-ca.crt"', "Local AI's default CA unchanged")
+    need(script, 'return CA_PATH if backend == "localai" else None', "no default CA for Pi Hub")
+    need(script, "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.30/home-ca.crt), or pair from the display or the portal.",
+         "Pi Hub without --ca says what to do")
+    need(script, '"-----BEGIN CERTIFICATE-----" not in text', "the CA file must be a PEM certificate")
+    test = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/test_configure_localai_feed.py")], check=False,
+                          capture_output=True, text=True)
+    if test.returncode != 0:
+        raise ValidationError("scripts/test_configure_localai_feed.py failed:\n" + test.stderr[-2000:])
 
 
 def main() -> int:

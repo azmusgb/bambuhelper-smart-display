@@ -7,8 +7,11 @@ service localai-display-key, made by Local AI's host/workshop-display/set-key.sh
 ~/.claude/localai-chat/localai-ca.crt (made by host/claude-chat/install.sh). Neither is printed.
 
 31 Oct 2026: --backend pihub points it at Pi Hub instead (address 10.0.0.30, name home.home.arpa unless --address or
---name say otherwise). The key is then Pi Hub's display key (hubd_, Keychain service pihub-display-key), and the CA
-must be Pi Hub's (home-ca.crt), put at the same CA path; pairing from the display or the portal fetches both itself.
+--name say otherwise). The key is then Pi Hub's display key (hubd_), read from Keychain service pihub-display-key if
+one was stored there, and the CA must be Pi Hub's, given with --ca (there is no default for Pi Hub). Pairing from the
+display or the portal is the normal route: it fetches the key and the CA itself.
+
+  python3 scripts/configure_localai_feed.py --backend pihub --ca ~/Downloads/home-ca.crt
 
   WORKSHOP_OS_COOKIE_JAR=<jar> python3 scripts/configure_localai_feed.py
   python3 scripts/configure_localai_feed.py --clear
@@ -29,6 +32,23 @@ KEY_PREFIX = {"localai": "wsd_", "pihub": "hubd_"}
 # The address and certificate name each backend has on the home network (firmware: backendInfo()).
 DEFAULTS = {"localai": ("10.0.0.21", "localai.home.arpa"), "pihub": ("10.0.0.30", "home.home.arpa")}
 CA_PATH = Path.home() / ".claude" / "localai-chat" / "localai-ca.crt"
+PIHUB_NEEDS_CA = "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.30/home-ca.crt), or pair from the display or the portal."
+
+
+def default_ca(backend: str) -> Path | None:
+    """Local AI's CA where its installer puts it; none for Pi Hub (its CA must be named, never guessed)."""
+    return CA_PATH if backend == "localai" else None
+
+
+def read_ca(path: Path) -> str:
+    """The CA file's PEM text; exits when it is missing or holds no certificate."""
+    try:
+        text = path.read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError) as exc:
+        sys.exit(f"FAIL: cannot read the CA {path}: {exc}")
+    if "-----BEGIN CERTIFICATE-----" not in text:
+        sys.exit(f"FAIL: {path} is not a PEM certificate (no -----BEGIN CERTIFICATE-----)")
+    return text
 
 
 def keychain_secret(account: str, service: str) -> str:
@@ -57,11 +77,25 @@ def main() -> int:
                         help="the service the display takes its feed from (pihub: Pi Hub; its CA is Pi Hub's home-ca.crt)")
     parser.add_argument("--address", default=None, help="the service's IPv4 address (default: 10.0.0.21 Local AI, 10.0.0.30 Pi Hub)")
     parser.add_argument("--name", default=None, help="the name on its certificate (default: localai.home.arpa, home.home.arpa)")
+    parser.add_argument("--ca", type=Path, default=None,
+                        help=f"the service's CA certificate (PEM). Local AI default: {CA_PATH}; Pi Hub: required "
+                             "(http://10.0.0.30/home-ca.crt)")
     parser.add_argument("--clear", action="store_true", help="forget the settings on the display")
+    parser.epilog = ("Keys come from the login Keychain, account ws350: service localai-display-key (Local AI) or "
+                     "pihub-display-key (where a Pi Hub key would be stored; pairing from the display or the portal "
+                     "is the normal route for Pi Hub).")
     args = parser.parse_args()
     address, name = DEFAULTS[args.backend]
     args.address = args.address or address
     args.name = args.name or name
+    ca_pem = ""
+    if not args.clear:  # checked before the display is contacted
+        ca_path = args.ca or default_ca(args.backend)
+        if ca_path is None:
+            sys.exit(f"FAIL: {PIHUB_NEEDS_CA}")
+        if ca_path == CA_PATH and not ca_path.is_file():
+            sys.exit(f"FAIL: missing {CA_PATH}; run Local AI's host/claude-chat/install.sh first")
+        ca_pem = read_ca(ca_path)
 
     client = Client(args.base_url)
     establish_portal_session(client)
@@ -75,9 +109,7 @@ def main() -> int:
     if not key.startswith(KEY_PREFIX[args.backend]):
         where = "Local AI's host/workshop-display/set-key.sh" if args.backend == "localai" else "Pi Hub's display key into the Keychain"
         sys.exit(f"FAIL: no {args.backend} display key in the Keychain (service {KEYCHAIN[args.backend][1]}); put {where} first")
-    if not CA_PATH.is_file():
-        sys.exit(f"FAIL: missing {CA_PATH}; run Local AI's host/claude-chat/install.sh first")
-    form = {"address": args.address, "name": args.name, "key": key, "ca": CA_PATH.read_text(encoding="ascii"), "backend": args.backend}
+    form = {"address": args.address, "name": args.name, "key": key, "ca": ca_pem, "backend": args.backend}
     r = client.request("/os12/localai/config", method="POST", form=form, headers=headers)
     del key, form
     if r.status != 202:
