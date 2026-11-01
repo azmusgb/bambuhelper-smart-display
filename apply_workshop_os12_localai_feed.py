@@ -5,7 +5,7 @@ Copies firmware/platform/localai (the rules header, the fetch service) into the 
 main.cpp beside Filament Inventory, includes it where the calm screen is drawn, and adds three portal routes:
 
   GET  /os12/localai/status   what the display last got (cards, when, why not); never the key or CA
-  POST /os12/localai/config   address, name, key, ca (form fields); scripts/configure_localai_feed.py sends them
+  POST /os12/localai/config   address, name, key, ca, optional backend (localai/pihub); scripts/configure_localai_feed.py sends them
   POST /os12/localai/clear    forget the settings
 
 The calm screen's drawing is in firmware/platform/ui/tabs_pages.cppfrag (wtDrawCalm, wtDrawCalmAiCard). Run after
@@ -51,21 +51,28 @@ HANDLERS = r'''
 // ---------------------------------------------------------------------------
 // Workshop OS 12.3.10 -> Local AI cards for the calm idle screen
 // ---------------------------------------------------------------------------
+// 31 Oct 2026: the feed's small status and one card at a time, never the whole snapshot (about 3 KB) on the web
+// handler's stack.
 static void sendWorkshopLocalAiStatus(int httpCode = 200) {
-  const WorkshopLocalAiFeedSnapshot snap = workshopLocalAiFeedSnapshot();
+  const WorkshopLocalAiFeedStatus st = workshopLocalAiFeedStatus();
   JsonDocument doc;
-  doc["configured"] = snap.configured;
-  doc["busy"] = snap.busy;
-  doc["failures"] = snap.failures;
-  doc["lastSuccessAgoS"] = snap.lastSuccessAtMs ? (long)((millis() - snap.lastSuccessAtMs) / 1000UL) : -1L;
-  doc["status"] = snap.status;
+  doc["configured"] = st.configured;
+  doc["busy"] = st.busy;
+  doc["failures"] = st.failures;
+  doc["lastSuccessAgoS"] = st.lastSuccessAtMs ? (long)((millis() - st.lastSuccessAtMs) / 1000UL) : -1L;
+  doc["status"] = st.status;
+  // 31 Oct 2026: which service the display is paired with ("localai" when not set up) and the feed's ai.available
+  // (-1 not said, 0 away, 1 there).
+  doc["backend"] = workshop::localai::backendId(st.backend);
+  doc["aiAvailable"] = st.aiAvailable;
   doc["nvsFreeEntries"] = (unsigned)workshopLocalAiFeedNvsFreeEntries();
   JsonArray cards = doc["cards"].to<JsonArray>();
-  for (uint8_t i = 0; i < snap.count; ++i) {
+  workshop::localai::Card card;
+  for (uint8_t i = 0; i < st.count && workshopLocalAiFeedCard(i, &card); ++i) {
     JsonObject c = cards.add<JsonObject>();
-    c["kind"] = snap.cards[i].kind;
-    c["title"] = snap.cards[i].title;
-    c["text"] = snap.cards[i].text;
+    c["kind"] = card.kind;
+    c["title"] = card.title;
+    c["text"] = card.text;
   }
   // 12.7: the Local Portal's Local AI panel (never the key or the CA).
   const WorkshopLocalAiExtras extras = workshopLocalAiFeedExtras();
@@ -96,17 +103,28 @@ static void handleWorkshopLocalAiConfig() {
   for (const char* field : {"address", "name", "key", "ca"}) {
     if (!server.hasArg(field)) { server.send(400, "application/json", "{\"error\":\"address, name, key and ca are required\"}"); return; }
   }
+  // 31 Oct 2026: an optional backend field ("pihub"; missing or anything else: Local AI, as before).
+  const workshop::localai::Backend backend = workshop::localai::backendFrom(server.hasArg("backend") ? server.arg("backend").c_str() : "");
   const bool ok = workshopLocalAiFeedConfigure(server.arg("address").c_str(), server.arg("name").c_str(),
-                                               server.arg("key").c_str(), server.arg("ca").c_str());
+                                               server.arg("key").c_str(), server.arg("ca").c_str(), backend);
   if (!ok) { sendWorkshopLocalAiStatus(400); return; }  // status says why: invalid settings, or storage full
   sendWorkshopLocalAiStatus(202);
 }
 
 // 12.7: pair from the Local Portal: address and the 6-digit code Local AI shows (Services › Workshop display).
+// 31 Oct 2026: or Pi Hub's (System › Workshop display), with backend=pihub; missing: Local AI.
 static void handleWorkshopLocalAiPair() {
   if (!server.hasArg("address") || !server.hasArg("code")) { server.send(400, "application/json", "{\"error\":\"address and code are required\"}"); return; }
-  if (!workshopLocalAiFeedPair(server.arg("address").c_str(), server.arg("code").c_str())) {
-    server.send(400, "application/json", "{\"error\":\"Use Local AI's address on this network and its 6-digit code (or wait: pairing is running).\"}");
+  const workshop::localai::Backend backend = workshop::localai::backendFrom(server.hasArg("backend") ? server.arg("backend").c_str() : "");
+  if (!workshopLocalAiFeedPair(server.arg("address").c_str(), server.arg("code").c_str(), backend)) {
+    JsonDocument why;
+    char words[112];
+    snprintf(words, sizeof(words), "Use %s's address on this network and its 6-digit code (or wait: pairing is running).",
+             workshop::localai::backendInfo(backend).label);
+    why["error"] = words;
+    String json;
+    serializeJson(why, json);
+    server.send(400, "application/json", json);
     return;
   }
   sendWorkshopLocalAiStatus(202);
@@ -144,11 +162,25 @@ ROUTES = '''  SECURE_GET("/os12/localai/status", handleWorkshopLocalAiStatus);
 
 # 12.7: a Local AI panel in the Local Portal, beside the other Local AI keys: the link's state, pairing and unpairing.
 PORTAL_ANCHOR = '  <section class="os12-integration" aria-labelledby="fiDeviceFeedTitle">'
-PORTAL_PANEL = '''  <section class="os12-integration os12-localai-link" aria-labelledby="localAiLinkTitle"><small>LOCAL AI</small><h3 id="localAiLinkTitle">Local AI on the display</h3><p>Local AI's cards, answers, pictures, messages and approvals come to the display over this link. To connect, open Local AI's Services, Workshop display, Pair display, and type its 6-digit code here or on the display (Local AI tab, Local AI connection).</p><div class="os12-contract-row"><span>Connection</span><strong id="localAiLinkState">Checking…</strong></div><div class="os12-contract-row"><span>Local AI</span><strong id="localAiLinkAddress">—</strong></div><div class="os12-contract-row"><span>Cards</span><strong id="localAiLinkCards">—</strong></div><div class="os12-contract-row"><span>Pictures · approvals</span><strong id="localAiLinkMore">—</strong></div><form class="os12-feed-actions" style="align-items:center" onsubmit="pairLocalAi(event)"><input id="localAiPairAddress" type="text" inputmode="decimal" autocomplete="off" placeholder="10.0.0.21" aria-label="Local AI address" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;width:10rem"><input id="localAiPairCode" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" aria-label="Pairing code" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;width:9rem;letter-spacing:.15em"><button type="submit" class="btn btn-primary btn-sm" id="localAiPairButton">Pair</button><button type="button" class="btn btn-danger btn-sm" onclick="unpairLocalAi()">Unpair</button></form><p class="small text-dim" id="localAiLinkStatus" role="status" aria-live="polite"></p></section>
+PORTAL_PANEL = '''  <section class="os12-integration os12-localai-link" aria-labelledby="localAiLinkTitle"><small>LOCAL AI</small><h3 id="localAiLinkTitle">Local AI on the display</h3><p>Cards, answers, pictures, messages and approvals come to the display over this link, from Pi Hub or Local AI. To connect, choose one, open Pi Hub's System, Workshop display, Pair display (Local AI: Services, Workshop display, Pair display), and type its 6-digit code here or on the display (Local AI tab, Local AI connection).</p><div class="os12-contract-row"><span>Connection</span><strong id="localAiLinkState">Checking…</strong></div><div class="os12-contract-row"><span>Paired with</span><strong id="localAiLinkAddress">—</strong></div><div class="os12-contract-row"><span>Cards</span><strong id="localAiLinkCards">—</strong></div><div class="os12-contract-row"><span>Pictures · approvals</span><strong id="localAiLinkMore">—</strong></div><form class="os12-feed-actions" style="align-items:center" onsubmit="pairLocalAi(event)"><select id="localAiPairBackend" aria-label="Pair with" onchange="localAiPairBackendChanged()" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit"><option value="pihub">Pi Hub</option><option value="localai">Local AI</option></select><input id="localAiPairAddress" type="text" inputmode="decimal" autocomplete="off" placeholder="10.0.0.30" aria-label="Address" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;width:10rem"><input id="localAiPairCode" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" aria-label="Pairing code" style="min-height:44px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface);color:var(--text);padding:0 12px;font:inherit;width:9rem;letter-spacing:.15em"><button type="submit" class="btn btn-primary btn-sm" id="localAiPairButton">Pair</button><button type="button" class="btn btn-danger btn-sm" onclick="unpairLocalAi()">Unpair</button></form><p class="small text-dim" id="localAiLinkStatus" role="status" aria-live="polite"></p></section>
 '''
 PORTAL_JS = r'''
 
-/* Workshop OS 12.7: Local AI on the display (status, pairing, unpairing) */
+/* Workshop OS 12.7: Local AI on the display (status, pairing, unpairing); 31 Oct 2026: with Pi Hub or Local AI */
+var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.30',localai:'10.0.0.21'};
+var LOCAL_AI_PAIR_LABEL={pihub:'Pi Hub',localai:'Local AI'};
+var localAiPairPicked=false,localAiLinkBackend='localai',localAiLinkConfigured=false,localAiLinkAddress='';
+/* 31 Oct 2026: the saved service's own address when it is chosen again; else that service's usual one */
+function localAiPairAddressFor(backend){
+  return (localAiLinkConfigured&&backend===localAiLinkBackend&&localAiLinkAddress)||LOCAL_AI_PAIR_ADDRESS[backend]||'';
+}
+function localAiPairBackendChanged(){
+  var sel=document.getElementById('localAiPairBackend'),addr=document.getElementById('localAiPairAddress');
+  if(!sel||!addr)return;
+  localAiPairPicked=true;
+  addr.value=localAiPairAddressFor(sel.value);
+  addr.placeholder=LOCAL_AI_PAIR_ADDRESS[sel.value]||'';
+}
 async function loadLocalAiLink(){
   var state=document.getElementById('localAiLinkState');
   if(!state)return null;
@@ -158,11 +190,18 @@ async function loadLocalAiLink(){
     var d=await r.json();
     var fresh=d.lastSuccessAgoS>=0&&d.lastSuccessAgoS<=600;
     state.textContent=!d.configured?'Not paired':fresh?(d.live?'Connected · live':'Connected'):(d.lastSuccessAgoS<0?'Connecting':'Not answering');
-    document.getElementById('localAiLinkAddress').textContent=d.address||'—';
+    localAiLinkBackend=LOCAL_AI_PAIR_LABEL[d.backend]?d.backend:'localai';
+    localAiLinkConfigured=!!d.configured;localAiLinkAddress=d.address||'';
+    document.getElementById('localAiLinkAddress').textContent=d.configured?LOCAL_AI_PAIR_LABEL[localAiLinkBackend]+(d.address?' · '+d.address:''):'—';
     document.getElementById('localAiLinkCards').textContent=d.configured?((d.cards||[]).map(function(c){return c.title;}).join(' · ')||'none')+(d.lastSuccessAgoS>=0?' ('+d.lastSuccessAgoS+' s ago)':''):'—';
     document.getElementById('localAiLinkMore').textContent=d.configured?(d.pictures||0)+' · '+(d.approvalsWaiting<0?'open the Local AI tab to check':d.approvalsWaiting+' waiting'):'—';
-    var addr=document.getElementById('localAiPairAddress');
-    if(addr&&!addr.value)addr.value=d.address||'10.0.0.21';
+    var addr=document.getElementById('localAiPairAddress'),sel=document.getElementById('localAiPairBackend');
+    if(sel&&addr&&!localAiPairPicked){  // the first time: the paired service, else Pi Hub (as on the display)
+      localAiPairPicked=true;
+      sel.value=d.configured?localAiLinkBackend:'pihub';
+      addr.value=localAiPairAddressFor(sel.value);
+      addr.placeholder=LOCAL_AI_PAIR_ADDRESS[sel.value];
+    }
     if(d.pairStatus)document.getElementById('localAiLinkStatus').textContent=d.pairing?'Pairing…':d.pairStatus;
     return d;
   }catch(e){state.textContent='Unavailable';return null;}
@@ -171,17 +210,18 @@ async function pairLocalAi(ev){
   ev.preventDefault();
   var status=document.getElementById('localAiLinkStatus'),btn=document.getElementById('localAiPairButton');
   var address=document.getElementById('localAiPairAddress').value.trim(),code=document.getElementById('localAiPairCode').value.trim();
+  var sel=document.getElementById('localAiPairBackend'),backend=sel&&LOCAL_AI_PAIR_LABEL[sel.value]?sel.value:'localai';
   if(!/^[0-9]{6}$/.test(code)){status.textContent='The code is 6 digits.';return;}
   btn.disabled=true;status.textContent='Pairing…';
   try{
-    var r=await fetch('/os12/localai/pair',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'address='+encodeURIComponent(address)+'&code='+encodeURIComponent(code),credentials:'same-origin'});
+    var r=await fetch('/os12/localai/pair',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'address='+encodeURIComponent(address)+'&code='+encodeURIComponent(code)+'&backend='+encodeURIComponent(backend),credentials:'same-origin'});
     var d=await r.json().catch(function(){return {};});
     if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
     document.getElementById('localAiPairCode').value='';
     for(var i=0;i<30;i++){
       await new Promise(function(res){setTimeout(res,1000);});
       var s=await loadLocalAiLink();
-      if(s&&!s.pairing){status.textContent=s.pairOk?'Paired with Local AI.':(s.pairStatus||'Pairing failed.');return;}
+      if(s&&!s.pairing){status.textContent=s.pairOk?(s.pairStatus||'Paired with '+LOCAL_AI_PAIR_LABEL[backend]+'.'):(s.pairStatus||'Pairing failed.');return;}
     }
     status.textContent='Still pairing. Check again in a moment.';
   }catch(e){status.textContent='Could not pair: '+e.message;}
@@ -189,7 +229,7 @@ async function pairLocalAi(ev){
 }
 async function unpairLocalAi(){
   var status=document.getElementById('localAiLinkStatus');
-  if(!status||!confirm('Unpair the display from Local AI? Its cards stop until you pair again.'))return;
+  if(!status||!confirm('Unpair the display from '+LOCAL_AI_PAIR_LABEL[localAiLinkBackend]+'? Its cards stop until you pair again.'))return;
   try{
     var r=await fetch('/os12/localai/clear',{method:'POST',credentials:'same-origin'});
     if(!r.ok)throw new Error('HTTP '+r.status);

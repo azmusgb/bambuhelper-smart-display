@@ -23,6 +23,14 @@
 // judge card's run (GET /api/display/lab/judge, read whole into a static buffer and parsed by the bounded reader in
 // workshop_lab_judge.hpp) and the verdict (POST /api/display/lab/verdict, answered 202), both with the display key and
 // both jobs a person waits for.
+//
+// 31 Oct 2026: Pi Hub connection (display on Pi Hub, step 2). The display pairs with either Local AI or Pi Hub
+// (lai::Backend, saved as "backend" in /localai.json; settings without it are Local AI's, as every display's were).
+// The feed and its routes are the same; the connection is not: each backend has its own key header (X-LocalAI-Display-Key
+// or X-Hub-Display-Key), key form (wsd_ or hubd_), CA path for pairing, default certificate name, and the name the
+// messages use. The cards kept follow lai::keepCards (Pi Hub sends up to eight, the house first), and the feed's
+// ai.available ("AI unavailable — PC asleep") reaches the snapshot as aiAvailable. A failure, even a 401, never
+// forgets the key: it only backs off.
 
 #include "workshop_localai_feed.h"
 #include "workshop_lab_judge.hpp"
@@ -65,7 +73,8 @@ portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 WorkshopLocalAiFeedSnapshot g_snap;
 char g_address[16] = {};
 char g_tlsName[64] = {};
-char g_key[56] = {};
+char g_key[56] = {};  // Local AI's keys are 52 characters, Pi Hub's 37
+lai::Backend g_backend = lai::Backend::LocalAi;  // 31 Oct 2026: which service the settings are for
 char* g_ca = nullptr;  // PSRAM or heap, kMaxCaBytes
 std::uint32_t g_generation = 0;
 std::uint32_t g_nextAtMs = 0;
@@ -75,6 +84,7 @@ bool g_taskActive = false;
 enum class Job : std::uint8_t { Pair, Ask, Decide, LabVerdict, LabJudge, Clear, Approvals, Image, Feed, Heartbeat, Events };
 char g_pairAddress[16] = {};
 char g_pairCode[8] = {};
+lai::Backend g_pairBackend = lai::Backend::LocalAi;
 WorkshopLocalAiExtras g_extras;
 char g_askPending[12] = {};
 bool g_imagePending = false;
@@ -138,8 +148,21 @@ bool ensureCaBuffer() {
 }
 
 bool configuredLocked() {
-    return lai::validPrivateIp(g_address) && lai::validTlsName(g_tlsName) && lai::validKey(g_key) && g_ca && g_ca[0];
+    return lai::validPrivateIp(g_address) && lai::validTlsName(g_tlsName) && lai::validKeyFor(g_backend, g_key) && g_ca && g_ca[0];
 }
+
+// 31 Oct 2026: the saved backend's name, for the messages ("Local AI" or "Pi Hub").
+const char* labelNow() {
+    portENTER_CRITICAL(&g_mux);
+    const lai::Backend b = g_backend;
+    portEXIT_CRITICAL(&g_mux);
+    return lai::backendInfo(b).label;
+}
+
+// 31 Oct 2026: the backend the task's last request went to (one request at a time, like g_lastCode), so a message
+// about its answer names that service even when the display was paired again meanwhile.
+lai::Backend g_requestBackend = lai::Backend::LocalAi;
+const char* requestLabel() { return lai::backendInfo(g_requestBackend).label; }
 
 // The long poll gives way to anything the person is waiting for.
 bool somethingWaits() {
@@ -153,30 +176,34 @@ bool somethingWaits() {
 // Caddy). Sends it with the display key (and `body`, as JSON, for a POST) and reads the status line and headers; on
 // HTTP 2xx (26 Oct 2026: the verdict route answers 202) the body is next on `client`; g_lastCode keeps the status. False with `error` set otherwise (the connection is closed then). It waits up
 // to `waitMs` for the answer to start, and (when `yieldToPerson`) stops waiting when someone asks for something.
-// To Local AI at `address`, checking its certificate against `ca` and `name`; with the display key when `key` is set.
-bool openRequestTo(WiFiClientSecure& client, const char* address, const char* name, const char* ca, char* key, const char* method,
-                   const char* path, const char* accept, const char* body, size_t& contentLength, char* contentType,
-                   size_t contentTypeLen, char* error, size_t errorLen, std::uint32_t waitMs, bool yieldToPerson) {
+// To `backend` (31 Oct 2026: Local AI or Pi Hub) at `address`, checking its certificate against `ca` and `name`; with
+// the display key, in that backend's own header, when `key` is set.
+bool openRequestTo(WiFiClientSecure& client, lai::Backend backend, const char* address, const char* name, const char* ca,
+                   char* key, const char* method, const char* path, const char* accept, const char* body, size_t& contentLength,
+                   char* contentType, size_t contentTypeLen, char* error, size_t errorLen, std::uint32_t waitMs,
+                   bool yieldToPerson) {
+    const lai::BackendInfo& info = lai::backendInfo(backend);
+    g_requestBackend = backend;
     contentLength = 0;
     g_lastCode = 0;
     if (contentType && contentTypeLen) contentType[0] = 0;
     if (WiFi.status() != WL_CONNECTED) { copyText(error, errorLen, "Waiting for Wi-Fi."); if (key) memset(key, 0, 56); return false; }
     IPAddress ip;
-    if (!ip.fromString(address)) { copyText(error, errorLen, "Local AI's address is not valid."); if (key) memset(key, 0, 56); return false; }
+    if (!ip.fromString(address)) { snprintf(error, errorLen, "%s's address is not valid.", info.label); if (key) memset(key, 0, 56); return false; }
     client.setHandshakeTimeout(10);  // seconds
     if (!client.connect(ip, 443, name, ca, nullptr, nullptr)) {
-        copyText(error, errorLen, "Local AI isn't answering, or its certificate didn't match.");
+        snprintf(error, errorLen, "%s isn't answering, or its certificate didn't match.", info.label);
         if (key) memset(key, 0, 56);
         return false;
     }
     const size_t bodyLen = body ? strlen(body) : 0;
     client.printf("%s %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: Workshop-Display/12 ESP32HTTPClient\r\n"
                   "Accept: %s\r\nConnection: close\r\n", method, path, name, accept);
-    if (key) { client.printf("X-LocalAI-Display-Key: %s\r\n", key); memset(key, 0, 56); }
+    if (key) { client.printf("%s: %s\r\n", info.keyHeader, key); memset(key, 0, 56); }
     if (body) client.printf("Content-Type: application/json\r\nContent-Length: %u\r\n\r\n%s", (unsigned)bodyLen, body);
     else client.print("\r\n");
 
-    // Wait for the first bytes of the answer (Stream reads give up after 1 s; Local AI may take longer to start).
+    // Wait for the first bytes of the answer (Stream reads give up after 1 s; the service may take longer to start).
     const std::uint32_t sentAt = millis();
     while (!client.available() && client.connected() && millis() - sentAt < waitMs) {
         if (yieldToPerson && somethingWaits()) { client.stop(); copyText(error, errorLen, "gave way"); return false; }
@@ -199,16 +226,22 @@ bool openRequestTo(WiFiClientSecure& client, const char* address, const char* na
         }
     }
     if (code < 200 || code > 299) {
-        snprintf(error, errorLen, code == 401 || code == 403 ? "Local AI turned the display key down (HTTP %d)." : "Local AI answered HTTP %d.", code);
-        // Local AI's own words, when it sent any (pairing says why a code was refused; 26 Oct 2026: the verdict route
-        // why a verdict was). Only `error` is kept, cut on a character boundary.
-        if (code >= 400 && code < 500 && code != 401 && contentLength <= 2048) {
+        snprintf(error, errorLen, code == 401 || code == 403 ? "%s turned the display key down (HTTP %d)." : "%s answered HTTP %d.",
+                 info.label, code);
+        // The service's own words, when it sent any (pairing says why a code was refused; 26 Oct 2026: the verdict route
+        // why a verdict was; 31 Oct 2026: Pi Hub's 503 "AI unavailable — PC asleep" on the AI routes). `error`, else a
+        // string `detail`, is kept, cut on a character boundary; a body that isn't JSON keeps the message above.
+        if (code >= 400 && code != 401 && contentLength <= 2048) {
             JsonDocument filter;
             filter["error"] = true;
+            filter["detail"] = true;  // 31 Oct 2026: Pi Hub (FastAPI) says why in `detail`
             JsonDocument why;
-            if (!deserializeJson(why, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4)) &&
-                (why["error"] | "")[0])
-                lai::copyUtf8(error, errorLen, why["error"] | "");
+            if (!deserializeJson(why, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4))) {
+                // `error` first; else `detail` when it is a string (FastAPI's 422 `detail` is a list: ignored).
+                const char* words = why["error"] | "";
+                if (!words[0]) words = why["detail"] | "";
+                if (words[0]) lai::copyUtf8(error, errorLen, words);
+            }
         }
         client.stop();
         return false;
@@ -222,13 +255,14 @@ bool openRequest(WiFiClientSecure& client, const char* method, const char* path,
     char address[16], name[64], key[56];
     static char ca[kMaxCaBytes];  // one request at a time (the task)
     portENTER_CRITICAL(&g_mux);
+    const lai::Backend backend = g_backend;
     memcpy(address, g_address, sizeof(address));
     memcpy(name, g_tlsName, sizeof(name));
     memcpy(key, g_key, sizeof(key));
     copyText(ca, sizeof(ca), g_ca);
     portEXIT_CRITICAL(&g_mux);
-    return openRequestTo(client, address, name, ca, key, method, path, accept, body, contentLength, contentType, contentTypeLen,
-                         error, errorLen, waitMs, yieldToPerson);
+    return openRequestTo(client, backend, address, name, ca, key, method, path, accept, body, contentLength, contentType,
+                         contentTypeLen, error, errorLen, waitMs, yieldToPerson);
 }
 
 bool openGet(WiFiClientSecure& client, const char* path, const char* accept, size_t& contentLength, char* contentType,
@@ -242,10 +276,10 @@ bool getJson(const char* method, const char* path, const char* body, JsonDocumen
     WiFiClientSecure client;
     size_t contentLength = 0;
     if (!openRequest(client, method, path, "application/json", body, contentLength, nullptr, 0, error, errorLen, waitMs, yieldToPerson)) return false;
-    if (contentLength > kMaxBodyBytes) { copyText(error, errorLen, "Local AI's answer was too large."); client.stop(); return false; }
+    if (contentLength > kMaxBodyBytes) { snprintf(error, errorLen, "%s's answer was too large.", requestLabel()); client.stop(); return false; }
     const DeserializationError err = deserializeJson(doc, client);
     client.stop();
-    if (err) { copyText(error, errorLen, "Local AI's answer was not valid JSON."); return false; }
+    if (err) { snprintf(error, errorLen, "%s's answer was not valid JSON.", requestLabel()); return false; }
     return true;
 }
 
@@ -256,6 +290,7 @@ struct FeedResult {
     std::uint8_t needCount;
     bool needsFromPi;
     std::uint16_t needsTotal;  // the feed's needsCount: Pi Hub's whole list (0: not said)
+    std::int8_t aiAvailable;   // 31 Oct 2026: the feed's ai.available (-1 not said)
     Picture pictures[lai::kMaxImages];
     std::uint8_t pictureCount;
     lai::Message messages[lai::kMaxMessages];
@@ -268,19 +303,27 @@ bool fetch(FeedResult& r, char* error, size_t errorLen) {
     JsonDocument doc;
     if (!getJson("GET", "/api/display/feed", nullptr, doc, error, errorLen)) return false;
     Picture fromCard{};
-    for (JsonObject c : doc["cards"].as<JsonArray>()) {
+    // 31 Oct 2026: the cards kept are lai::keepCards's (the ones the screen draws, in feed order, at most kMaxCards);
+    // the kinds are read from the first kMaxFeedCards entries.
+    constexpr std::uint8_t kMaxFeedCards = 32;
+    JsonArray cards = doc["cards"].as<JsonArray>();
+    const char* kinds[kMaxFeedCards];
+    std::uint8_t feedCount = 0;
+    for (JsonObject c : cards) {
         const char* kind = c["kind"] | "";
-        if (!strcmp(kind, "image")) {
-            if (!fromCard.path[0] && lai::validImagePath(c["imageUrl"] | "")) {
-                copyText(fromCard.path, sizeof(fromCard.path), c["imageUrl"] | "");
-                copyText(fromCard.title, sizeof(fromCard.title), c["text"] | "");
-                fromCard.at = c["at"] | 0U;
-            }
-            continue;
+        if (feedCount < kMaxFeedCards) kinds[feedCount++] = kind;
+        if (!strcmp(kind, "image") && !fromCard.path[0] && lai::validImagePath(c["imageUrl"] | "")) {
+            copyText(fromCard.path, sizeof(fromCard.path), c["imageUrl"] | "");
+            copyText(fromCard.title, sizeof(fromCard.title), c["text"] | "");
+            fromCard.at = c["at"] | 0U;
         }
-        if (!lai::shownKind(kind) || r.count >= lai::kMaxCards) continue;
+    }
+    std::uint8_t keep[lai::kMaxCards];
+    const std::uint8_t kept = lai::keepCards(kinds, feedCount, keep);
+    for (std::uint8_t k = 0; k < kept; ++k) {
+        JsonObject c = cards[keep[k]].as<JsonObject>();
         Card& out = r.cards[r.count++];
-        copyText(out.kind, sizeof(out.kind), kind);
+        copyText(out.kind, sizeof(out.kind), kinds[keep[k]]);
         lai::copyUtf8(out.title, sizeof(out.title), c["title"] | "");  // whole characters ("Lab · E-021")
         lai::copyUtf8(out.text, sizeof(out.text), c["text"] | "");
         copyText(out.id, sizeof(out.id), c["id"] | "");
@@ -291,6 +334,9 @@ bool fetch(FeedResult& r, char* error, size_t errorLen) {
         out.percent = percent >= 0 && percent <= 100 ? (std::uint8_t)percent : 255;
         out.tone = lai::toneFrom(c["tone"] | "");
     }
+    // 31 Oct 2026: whether the AI is there (Pi Hub says; Local AI, being the AI, doesn't).
+    JsonVariantConst available = doc["ai"]["available"];
+    r.aiAvailable = available.is<bool>() ? (available.as<bool>() ? 1 : 0) : -1;
     // 26 Oct 2026: Pi Hub's one "Needs you" list, in its order. Absent when Pi Hub didn't answer Local AI.
     JsonArray needs = doc["needs"].as<JsonArray>();
     r.needsFromPi = !needs.isNull();
@@ -348,7 +394,7 @@ bool ask(const char* question, char* answer, size_t answerLen) {
     JsonDocument doc;
     if (!getJson("GET", path, nullptr, doc, answer, answerLen)) return false;
     const char* text = doc["answer"] | "";
-    if (!text[0]) { copyText(answer, answerLen, "Local AI's answer was not valid."); return false; }
+    if (!text[0]) { snprintf(answer, answerLen, "%s's answer was not valid.", requestLabel()); return false; }
     copyText(answer, answerLen, text);
     return true;
 }
@@ -362,7 +408,7 @@ bool downloadImage(const char* path, char* error, size_t errorLen) {
     size_t contentLength = 0;
     char type[40];
     if (!openGet(client, path, "image/jpeg", contentLength, type, sizeof(type), error, errorLen)) return false;
-    if (strncmp(type, "image/jpeg", 10) != 0) { copyText(error, errorLen, "Local AI sent a picture the display can't draw."); client.stop(); return false; }
+    if (strncmp(type, "image/jpeg", 10) != 0) { snprintf(error, errorLen, "%s sent a picture the display can't draw.", requestLabel()); client.stop(); return false; }
     // Caddy answers HTTP/1.0 without a length (the body ends when the connection closes): then read to the end.
     if (contentLength > lai::kMaxImageBytes) { copyText(error, errorLen, "The picture is too large for the display."); client.stop(); return false; }
     const size_t limit = contentLength ? contentLength : lai::kMaxImageBytes;
@@ -417,10 +463,13 @@ void runImage() {
     portENTER_CRITICAL(&g_mux);
     copyText(path, sizeof(path), g_imageWant);
     g_imagePending = false;
+    const std::uint32_t generation = g_generation;
     portEXIT_CRITICAL(&g_mux);
-    const bool ok = path[0] && downloadImage(path, error, sizeof(error));
-    if (!path[0]) copyText(error, sizeof(error), "Local AI has no image yet.");
+    bool ok = path[0] && downloadImage(path, error, sizeof(error));
+    if (!path[0]) snprintf(error, sizeof(error), "%s has no image yet.", labelNow());
     portENTER_CRITICAL(&g_mux);
+    // 31 Oct 2026: settings changed while it downloaded: the picture is not this connection's.
+    if (generation != g_generation) { ok = false; error[0] = 0; }
     copyText(g_imageLoaded, sizeof(g_imageLoaded), ok ? path : "");
     g_extras.imageReady = ok;
     copyText(g_extras.imageStatus, sizeof(g_extras.imageStatus), ok ? "" : error);
@@ -455,9 +504,10 @@ void runFeed(std::uint32_t generation) {
             g_snap.needCount = r.needCount;
             g_snap.needsFromPi = r.needsFromPi;
             g_snap.needsTotal = r.needsTotal;
+            g_snap.aiAvailable = r.aiAvailable;
             g_snap.lastSuccessAtMs = now;
             g_snap.failures = 0;
-            copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are current.");
+            snprintf(g_snap.status, sizeof(g_snap.status), "%s cards are current.", lai::backendInfo(g_backend).label);
             // The gallery: keep showing the picture the UI is on when it is still there.
             char current[lai::kImagePathLen];
             copyText(current, sizeof(current), g_imageWant);
@@ -484,6 +534,7 @@ void runFeed(std::uint32_t generation) {
             if (r.newestSeq > g_lastSeq) g_lastSeq = r.newestSeq;
         } else {
             if (g_snap.failures < 8) ++g_snap.failures;
+            g_snap.aiAvailable = -1;  // 31 Oct 2026: unheard, so not said (never a stale "there" or "away")
             copyText(g_snap.status, sizeof(g_snap.status), error);
         }
         g_nextAtMs = now + lai::nextDelayMs(g_snap.failures);
@@ -555,7 +606,7 @@ void runDecide() {
 // end of the connection. False (with `error`) when it is larger or stops early.
 bool readBody(WiFiClientSecure& client, size_t contentLength, char* buf, size_t cap, size_t& got, char* error, size_t errorLen) {
     got = 0;
-    if (contentLength >= cap) { copyText(error, errorLen, "Local AI's answer was too large."); return false; }
+    if (contentLength >= cap) { snprintf(error, errorLen, "%s's answer was too large.", requestLabel()); return false; }
     const size_t limit = contentLength ? contentLength : cap - 1;
     std::uint32_t lastByteAt = millis();
     while (millis() - lastByteAt < 8000UL) {
@@ -566,13 +617,13 @@ bool readBody(WiFiClientSecure& client, size_t contentLength, char* buf, size_t 
             delay(5);
             continue;
         }
-        if (got >= limit) { copyText(error, errorLen, "Local AI's answer was too large."); return false; }
+        if (got >= limit) { snprintf(error, errorLen, "%s's answer was too large.", requestLabel()); return false; }
         const size_t want = limit - got < (size_t)avail ? limit - got : (size_t)avail;
         const int n = client.read(reinterpret_cast<std::uint8_t*>(buf) + got, want);
         if (n > 0) { got += (size_t)n; lastByteAt = millis(); }
     }
     buf[got] = 0;
-    if (contentLength && got != contentLength) { copyText(error, errorLen, "Local AI's answer didn't finish."); return false; }
+    if (contentLength && got != contentLength) { snprintf(error, errorLen, "%s's answer didn't finish.", requestLabel()); return false; }
     return true;
 }
 
@@ -597,7 +648,7 @@ void runJudgeLoad() {
         }
         if (ok) {
             ok = workshop::lab::parseSheet(body, got, g_judgeSheet) && !strcmp(g_judgeSheet.run, run);
-            if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a Judge it sheet.");
+            if (!ok) snprintf(error, sizeof(error), "%s's answer was not a Judge it sheet.", requestLabel());
         }
     }
     portENTER_CRITICAL(&g_mux);
@@ -630,7 +681,7 @@ void runVerdict() {
                             !deserializeJson(doc, client, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(4));
         client.stop();
         ok = parsed && workshop::lab::verdictAccepted(g_lastCode, g_verdictId, doc["id"] | "");
-        if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a queued verdict.");
+        if (!ok) snprintf(error, sizeof(error), "%s's answer was not a queued verdict.", requestLabel());
     }
     portENTER_CRITICAL(&g_mux);
     g_verdictPending = false;
@@ -699,14 +750,16 @@ void runEvents() {
 }
 
 // 12.7: Local AI's CA from http://<address>/localai-ca.crt (plain HTTP: the display can't check anything yet; the
-// code, sent next over HTTPS pinned to this CA, is what proves both ends).
-bool fetchCa(const char* address, char* ca, size_t caLen, char* error, size_t errorLen) {
+// code, sent next over HTTPS pinned to this CA, is what proves both ends). 31 Oct 2026: the backend's own CA path
+// (Pi Hub: /home-ca.crt).
+bool fetchCa(lai::Backend backend, const char* address, char* ca, size_t caLen, char* error, size_t errorLen) {
+    const lai::BackendInfo& info = lai::backendInfo(backend);
     IPAddress ip;
-    if (!ip.fromString(address)) { copyText(error, errorLen, "Local AI's address is not valid."); return false; }
+    if (!ip.fromString(address)) { snprintf(error, errorLen, "%s's address is not valid.", info.label); return false; }
     WiFiClient client;
     client.setTimeout(5);
-    if (!client.connect(ip, 80)) { copyText(error, errorLen, "Local AI isn't answering at that address."); return false; }
-    client.printf("GET /localai-ca.crt HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", address);
+    if (!client.connect(ip, 80)) { snprintf(error, errorLen, "%s isn't answering at that address.", info.label); return false; }
+    client.printf("GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", info.caPath, address);
     const std::uint32_t start = millis();
     while (!client.available() && client.connected() && millis() - start < 5000UL) delay(10);
     const String status = client.readStringUntil('\n');
@@ -720,7 +773,7 @@ bool fetchCa(const char* address, char* ca, size_t caLen, char* error, size_t er
     ca[n] = 0;
     client.stop();
     if (!status.startsWith("HTTP/1.") || status.substring(9, 12).toInt() != 200 || !strstr(ca, "-----BEGIN CERTIFICATE-----")) {
-        copyText(error, errorLen, "Local AI's certificate authority could not be read.");
+        snprintf(error, errorLen, "%s's certificate authority could not be read.", info.label);
         return false;
     }
     return true;
@@ -731,30 +784,33 @@ void runPair() {
     portENTER_CRITICAL(&g_mux);
     copyText(address, sizeof(address), g_pairAddress);
     copyText(code, sizeof(code), g_pairCode);
+    const lai::Backend backend = g_pairBackend;
     g_pairCode[0] = 0;
     portEXIT_CRITICAL(&g_mux);
+    const lai::BackendInfo& info = lai::backendInfo(backend);
     static char ca[kMaxCaBytes];
-    bool ok = fetchCa(address, ca, sizeof(ca), error, sizeof(error));
-    char key[56] = {}, name[64] = "localai.home.arpa";
+    bool ok = fetchCa(backend, address, ca, sizeof(ca), error, sizeof(error));
+    char key[56] = {}, name[64];
+    copyText(name, sizeof(name), info.defaultName);
     if (ok) {
         char body[32];
         snprintf(body, sizeof(body), "{\"code\":\"%s\"}", code);
         WiFiClientSecure client;
         size_t contentLength = 0;
-        ok = openRequestTo(client, address, name, ca, nullptr, "POST", "/api/display/pair", "application/json", body, contentLength,
-                           nullptr, 0, error, sizeof(error), 15000UL, false);
+        ok = openRequestTo(client, backend, address, name, ca, nullptr, "POST", "/api/display/pair", "application/json", body,
+                           contentLength, nullptr, 0, error, sizeof(error), 15000UL, false);
         if (ok) {
             JsonDocument doc;
             const DeserializationError err = deserializeJson(doc, client);
             client.stop();
             copyText(key, sizeof(key), doc["key"] | "");
             if (lai::validTlsName(doc["tlsName"] | "")) copyText(name, sizeof(name), doc["tlsName"] | "");
-            ok = !err && lai::validKey(key);
-            if (!ok) copyText(error, sizeof(error), "Local AI's answer was not a display key.");
+            ok = !err && lai::validKeyFor(backend, key);
+            if (!ok) snprintf(error, sizeof(error), "%s's answer was not a display key.", info.label);
         }
     }
-    if (ok) ok = workshopLocalAiFeedConfigure(address, name, key, ca);
-    if (ok) copyText(error, sizeof(error), "Paired with Local AI.");
+    if (ok) ok = workshopLocalAiFeedConfigure(address, name, key, ca, backend);
+    if (ok) snprintf(error, sizeof(error), "Paired with %s.", info.label);
     else if (!error[0]) copyText(error, sizeof(error), "Could not save the pairing.");
     memset(key, 0, sizeof(key));
     memset(code, 0, sizeof(code));
@@ -806,13 +862,16 @@ void workshopLocalAiFeedBegin() {
             copyText(g_tlsName, sizeof(g_tlsName), doc["name"] | "");
             copyText(g_key, sizeof(g_key), doc["key"] | "");
             copyText(g_ca, kMaxCaBytes, doc["ca"] | "");
+            g_backend = lai::backendFrom(doc["backend"] | "");  // 31 Oct 2026: absent (older settings): Local AI
         }
         if (f) f.close();
     }
     portENTER_CRITICAL(&g_mux);
     g_snap = WorkshopLocalAiFeedSnapshot{};
     g_snap.configured = configuredLocked();
-    copyText(g_snap.status, sizeof(g_snap.status), g_snap.configured ? "Waiting for the first Local AI cards." : "Local AI cards are not set up.");
+    g_snap.backend = g_snap.configured ? g_backend : lai::Backend::LocalAi;
+    if (g_snap.configured) snprintf(g_snap.status, sizeof(g_snap.status), "Waiting for the first %s cards.", lai::backendInfo(g_backend).label);
+    else copyText(g_snap.status, sizeof(g_snap.status), "Cards are not set up.");
     g_nextAtMs = millis() + 15000UL;  // let Wi-Fi and the clock settle first
     g_nextBeatAtMs = millis() + 60000UL;
     portEXIT_CRITICAL(&g_mux);
@@ -864,12 +923,16 @@ void workshopLocalAiFeedLoop() {
             case Job::Pair: g_pairCode[0] = 0; g_extras.pairBusy = false; copyText(g_extras.pairStatus, sizeof(g_extras.pairStatus), "Could not start pairing."); ++g_extras.pairSeq; break;
         }
         portEXIT_CRITICAL(&g_mux);
-        if (job == Job::Feed) setStatus("Could not start the Local AI request.");
+        if (job == Job::Feed) {
+            char msg[96];
+            snprintf(msg, sizeof(msg), "Could not start the %s request.", labelNow());
+            setStatus(msg);
+        }
     }
 }
 
-bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem) {
-    if (!lai::validPrivateIp(address) || !lai::validTlsName(tlsName) || !lai::validKey(key) ||
+bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem, lai::Backend backend) {
+    if (!lai::validPrivateIp(address) || !lai::validTlsName(tlsName) || !lai::validKeyFor(backend, key) ||
         !caPem || strlen(caPem) >= kMaxCaBytes || !strstr(caPem, "-----BEGIN CERTIFICATE-----")) {
         setStatus("Not saved: the address, certificate name, key or CA is not valid.");
         return false;
@@ -882,6 +945,7 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
     doc["name"] = tlsName;
     doc["key"] = key;
     doc["ca"] = caPem;
+    doc["backend"] = lai::backendId(backend);
     File f = LittleFS.open("/localai.tmp", "w");
     const size_t want = measureJson(doc);
     const bool written = f && serializeJson(doc, f) == want;
@@ -896,8 +960,22 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
     copyText(g_tlsName, sizeof(g_tlsName), tlsName);
     copyText(g_key, sizeof(g_key), key);
     copyText(g_ca, kMaxCaBytes, caPem);
+    // 31 Oct 2026: another service's picture paths mean nothing to this one: the gallery and any picture waiting to
+    // download go, as the generation bump below discards the cards (a download already running is discarded by runImage).
+    if (backend != g_backend) {
+        memset(g_pictures, 0, sizeof(g_pictures));
+        g_imageWant[0] = g_imageLoaded[0] = 0;
+        if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }
+        g_extras.hasImage = false;
+        g_extras.imageReady = false;
+        g_extras.imageCount = 0;
+        g_extras.imageIndex = 0;
+    }
+    g_backend = backend;
     ++g_generation;
     g_snap.configured = true;
+    g_snap.backend = backend;
+    g_snap.aiAvailable = -1;
     g_snap.count = 0;
     g_snap.needCount = 0;
     g_snap.needsFromPi = false;
@@ -905,7 +983,7 @@ bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, cons
     g_snap.failures = 0;
     g_nextAtMs = millis();
     g_sig[0] = 0;
-    copyText(g_snap.status, sizeof(g_snap.status), "Saved. Asking Local AI for cards.");
+    snprintf(g_snap.status, sizeof(g_snap.status), "Saved. Asking %s for cards.", lai::backendInfo(backend).label);
     portEXIT_CRITICAL(&g_mux);
     return true;
 }
@@ -916,13 +994,19 @@ void workshopLocalAiFeedClear() {
     memset(g_key, 0, sizeof(g_key));
     g_address[0] = g_tlsName[0] = 0;
     if (g_ca) g_ca[0] = 0;
+    g_backend = lai::Backend::LocalAi;
     ++g_generation;
-    g_snap = WorkshopLocalAiFeedSnapshot{};
-    copyText(g_snap.status, sizeof(g_snap.status), "Local AI cards are not set up.");
+    g_snap = WorkshopLocalAiFeedSnapshot{};  // backend Local AI, aiAvailable -1
+    copyText(g_snap.status, sizeof(g_snap.status), "Cards are not set up.");
+    // 31 Oct 2026: the gallery and any picture waiting go too, as when the service changes (a running download is
+    // discarded by runImage).
+    memset(g_pictures, 0, sizeof(g_pictures));
     g_imageWant[0] = g_imageLoaded[0] = 0;
+    if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }
     g_extras.hasImage = false;
     g_extras.imageReady = false;
     g_extras.imageCount = 0;
+    g_extras.imageIndex = 0;
     g_extras.approvalCount = g_extras.approvalTotal = 0;
     g_messageCount = 0;
     g_sig[0] = 0;
@@ -1059,7 +1143,7 @@ bool workshopLocalAiFeedClearPrinter() {
     return ok;
 }
 
-bool workshopLocalAiFeedPair(const char* address, const char* code) {
+bool workshopLocalAiFeedPair(const char* address, const char* code, lai::Backend backend) {
     if (!lai::validPrivateIp(address) || !code || strlen(code) != 6) return false;
     for (const char* c = code; *c; ++c) if (*c < '0' || *c > '9') return false;
     portENTER_CRITICAL(&g_mux);
@@ -1067,6 +1151,7 @@ bool workshopLocalAiFeedPair(const char* address, const char* code) {
     if (ok) {
         copyText(g_pairAddress, sizeof(g_pairAddress), address);
         copyText(g_pairCode, sizeof(g_pairCode), code);
+        g_pairBackend = backend;
         g_extras.pairBusy = true;
         g_extras.pairOk = false;
         copyText(g_extras.pairStatus, sizeof(g_extras.pairStatus), "Pairing...");
@@ -1079,6 +1164,13 @@ void workshopLocalAiFeedAddress(char* out, std::size_t len) {
     portENTER_CRITICAL(&g_mux);
     copyText(out, len, g_address);
     portEXIT_CRITICAL(&g_mux);
+}
+
+lai::Backend workshopLocalAiFeedBackend() {
+    portENTER_CRITICAL(&g_mux);
+    const lai::Backend b = g_snap.configured ? g_backend : lai::Backend::LocalAi;
+    portEXIT_CRITICAL(&g_mux);
+    return b;
 }
 
 WorkshopLocalAiExtras workshopLocalAiFeedExtras() {
@@ -1114,13 +1206,42 @@ WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus() {
     WorkshopLocalAiFeedStatus s;
     portENTER_CRITICAL(&g_mux);
     s.configured = g_snap.configured;
+    s.busy = g_snap.busy;
+    s.failures = g_snap.failures;
     s.lastSuccessAtMs = g_snap.lastSuccessAtMs;
     s.count = g_snap.count;
     s.needCount = g_snap.needCount;
     s.needsFromPi = g_snap.needsFromPi;
+    s.backend = g_snap.backend;
+    s.aiAvailable = g_snap.aiAvailable;
     memcpy(s.status, g_snap.status, sizeof(s.status));
     portEXIT_CRITICAL(&g_mux);
     return s;
+}
+
+void workshopLocalAiFeedHome(const char* hiddenCardId, bool withWeather, WorkshopLocalAiFeedHome* out) {
+    if (!out) return;
+    const std::uint32_t now = millis();
+    portENTER_CRITICAL(&g_mux);
+    out->fresh = lai::fresh(now, g_snap.lastSuccessAtMs);
+    out->needsFromPi = g_snap.needsFromPi;
+    out->count = out->fresh ? g_snap.count : 0;
+    const std::uint8_t nn = out->fresh ? g_snap.needCount : 0;
+    // Pi Hub's list when the feed carried it (even empty: then nothing needs you); the cards only when it didn't.
+    lai::homeTop(g_snap.needs, nn, out->fresh && g_snap.needsFromPi, g_snap.cards, out->count, hiddenCardId, g_snap.needsTotal,
+                 out->top);
+    out->weather[0] = 0;
+    for (std::uint8_t i = 0; withWeather && i < out->count; ++i)
+        if (!strcmp(g_snap.cards[i].kind, "weather")) { lai::weatherShort(out->weather, sizeof(out->weather), g_snap.cards[i].text); break; }
+    portEXIT_CRITICAL(&g_mux);
+}
+
+std::uint32_t workshopLocalAiFeedPairSeq(bool* busy) {
+    portENTER_CRITICAL(&g_mux);
+    const std::uint32_t seq = g_extras.pairSeq;
+    if (busy) *busy = g_extras.pairBusy;
+    portEXIT_CRITICAL(&g_mux);
+    return seq;
 }
 
 bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out) {

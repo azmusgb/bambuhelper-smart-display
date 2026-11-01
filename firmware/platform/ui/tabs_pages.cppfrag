@@ -534,7 +534,7 @@ static bool wtFinishedRecently(const WtPrint& w) {
 // Local AI (12.4.0): its cards lead the third tab, take Home's bottom row and
 // the calm screen's top card. One place decides what to say with no cards.
 // ---------------------------------------------------------------------------
-// 26 Oct 2026: these read the feed's small status and one card, not the whole snapshot (about 2.6 KB with Pi Hub's
+// 26 Oct 2026: these read the feed's small status and one card, not the whole snapshot (about 3 KB with Pi Hub's
 // needs): they run inside draw and touch paths on the 8 KB loop task.
 static uint8_t wtAiCount() {
   const WorkshopLocalAiFeedStatus ai = workshopLocalAiFeedStatus();
@@ -903,36 +903,14 @@ struct WtHomeRow {
   int8_t card;
 };
 
-// `ai` is the caller's one snapshot for this frame or touch (never copied again below).
-static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others) {
+// `h` is the feed's choice for this frame or touch (workshopLocalAiFeedHome: the rows, never the whole snapshot);
+// 31 Oct 2026: the rows are picked under the feed's lock (workshop::localai::homeTop), the words for none here.
+static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedHome& h, WtHomeRow out[2], uint8_t& others) {
   using workshop::localai::Tone;
-  others = 0;
-  out[0] = WtHomeRow{};
-  out[1] = WtHomeRow{};
-  out[0].card = out[1].card = -1;
-  const bool fresh = workshop::localai::fresh(millis(), ai.lastSuccessAtMs);
-  const uint8_t nc = fresh ? ai.count : 0, nn = fresh ? ai.needCount : 0;
-  // Pi Hub's list when the feed carried it (even empty: then nothing needs you); the cards only when it didn't.
-  const bool needsPresent = fresh && ai.needsFromPi;
-  int8_t idx[2];
-  bool fromNeeds = false;
-  // Later on the Judge it sheet hides the judge card here for 2 h (it stays on the other screens).
-  const uint8_t rows = workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal);
-  for (uint8_t k = 0; k < rows; ++k) {
-    WtHomeRow& r = out[k];
-    if (!fromNeeds) { r.c = ai.cards[idx[k]]; r.card = idx[k]; continue; }
-    const workshop::localai::Need& n = ai.needs[idx[k]];
-    strlcpy(r.c.kind, "needs", sizeof(r.c.kind));
-    strlcpy(r.c.title, n.title, sizeof(r.c.title));
-    strlcpy(r.c.text, n.detail, sizeof(r.c.text));
-    strlcpy(r.c.id, n.id, sizeof(r.c.id));
-    r.c.tone = n.tone;
-    r.c.percent = 255;
-    // Local AI's own items are "localai:<card id>" in Pi Hub's list: open the tab at that card.
-    const char* cardId = !strncmp(n.id, "localai:", 8) ? n.id + 8 : nullptr;
-    for (uint8_t i = 0; cardId && i < nc; ++i)
-      if (ai.cards[i].id[0] && !strcmp(ai.cards[i].id, cardId)) { r.card = (int8_t)i; break; }
-  }
+  others = h.top.others;
+  const uint8_t rows = h.top.rows, nc = h.count;
+  const bool fromNeeds = h.top.fromNeeds, fresh = h.fresh;
+  for (uint8_t k = 0; k < 2; ++k) { out[k].c = h.top.row[k]; out[k].card = h.top.card[k]; }
   if (rows == 0) {
     if (fromNeeds || nc) {  // Pi Hub's list is empty, or fresh cards but only information: nothing needs you
       strlcpy(out[0].c.kind, "status", sizeof(out[0].c.kind));
@@ -948,7 +926,7 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
     strlcpy(c.kind, "status", sizeof(c.kind));
     c.tone = Tone::Info;
     c.percent = 255;
-    if (fresh && !ai.needsFromPi) {
+    if (fresh && !h.needsFromPi) {
       strlcpy(c.title, "Pi Hub", sizeof(c.title));
       strlcpy(c.text, "Pi Hub isn't answering", sizeof(c.text));
       c.tone = Tone::Warning;
@@ -960,15 +938,15 @@ static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnap
   return rows;
 }
 
-static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len);
-
-// The one snapshot for a Home frame or touch: both need rows and (when `weather` is given) the header's weather. A
-// leaf: the snapshot (about 2.6 KB) lives only while this runs, never under the row drawing (noinline keeps it out of
-// the callers' frames on the 8 KB loop task).
+// One read of the feed for a Home frame or touch: both need rows and (when `weather` is given) the header's weather.
+// 31 Oct 2026: the feed picks the rows under its lock (about 480 bytes here), never a copy of the whole snapshot; a
+// leaf (noinline keeps it out of the callers' frames on the 8 KB loop task). Later on the Judge it sheet hides the
+// judge card here for 2 h (it stays on the other screens).
 static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen) {
-  const WorkshopLocalAiFeedSnapshot ai = workshopLocalAiFeedSnapshot();
-  if (weather) wtHomeWeather(ai, weather, weatherLen);
-  return wtHomeTop(ai, rows, others);
+  WorkshopLocalAiFeedHome h;
+  workshopLocalAiFeedHome(wtJudgeHidden(), weather != nullptr, &h);
+  if (weather && weatherLen) strlcpy(weather, h.weather, weatherLen);
+  return wtHomeTop(h, rows, others);
 }
 
 // The most important item (idle Home's first row), for the printing Home's extra row.
@@ -986,14 +964,6 @@ static int8_t wtLabExtraIndex() {
   for (uint8_t i = 0; i < n; ++i)
     if (workshopLocalAiFeedCard(i, &c) && workshop::localai::printingExtraIndex(&c, 1) == 0) return (int8_t)i;
   return -1;
-}
-
-// The weather card's temperature and sky for the header ("66° Sunny"); empty without a fresh weather card.
-static void wtHomeWeather(const WorkshopLocalAiFeedSnapshot& ai, char* out, size_t len) {
-  out[0] = 0;
-  if (!workshop::localai::fresh(millis(), ai.lastSuccessAtMs)) return;
-  for (uint8_t i = 0; i < ai.count; ++i)
-    if (!strcmp(ai.cards[i].kind, "weather")) { workshop::localai::weatherShort(out, len, ai.cards[i].text); return; }
 }
 
 // The time for Home's header; "Home" until the clock is set over Wi-Fi.
@@ -2083,6 +2053,13 @@ static uint8_t g_wtWorkshopScroll = 0;
 // 4 pairing (12.7), 5 Judge it (26 Oct 2026, lab_judge.cppfrag).
 static uint8_t g_wtAiOverlay = 0;
 static char g_wtPairCode[7] = {};  // 12.7: the digits typed so far (overlay 4)
+// 31 Oct 2026: which service overlay 4 pairs with: chosen the first time it opens (Pi Hub when nothing is paired, else
+// the saved one), then kept while the display is on.
+// 31 Oct 2026 (fix 13): follows the saved service whenever the overlay opens with no digits typed (it always opens
+// empty), so Unpair or a portal pairing shows; g_wtPairSeenSeq is the pairing count when the choice last changed.
+static workshop::localai::Backend g_wtPairBackend = workshop::localai::Backend::PiHub;
+static uint32_t g_wtPairSeenSeq = 0;
+static const workshop::localai::Backend kWtPairChoices[wtl::kPairChoices] = {workshop::localai::Backend::PiHub, workshop::localai::Backend::LocalAi};
 static int8_t g_wtApprovalArmed = -1;  // 12.6: row * 2 + (1 approve, 0 reject) waiting for its second tap
 static uint32_t g_wtApprovalArmedAt = 0;
 static const uint32_t kWtImageRedraw = 0xFFFFFFFFUL;
@@ -2373,42 +2350,65 @@ static void wtDrawApprovals(const wsm::Screen& s) {
 }
 
 // 12.7 Pairing: Local AI shows a 6-digit code (Services › Workshop display › Pair display); type it here.
+// 31 Oct 2026: or Pi Hub (System › Workshop display › Pair display). The saved address only for the saved service;
+// else the chosen service's usual address on this network.
 static void wtPairAddress(char* out, size_t len) {
-  workshopLocalAiFeedAddress(out, len);
-  if (!workshop::localai::validPrivateIp(out)) strlcpy(out, "10.0.0.21", len);  // Local AI's usual address on this network
+  namespace lai = workshop::localai;
+  if (!out || !len) return;
+  out[0] = 0;
+  if (workshopLocalAiFeedBackend() == g_wtPairBackend) workshopLocalAiFeedAddress(out, len);
+  if (!lai::validPrivateIp(out)) strlcpy(out, lai::backendInfo(g_wtPairBackend).defaultAddress, len);
 }
 
 static void wtDrawPair(const wsm::Screen& s) {
+  namespace lai = workshop::localai;
   const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+  const lai::BackendInfo& info = lai::backendInfo(g_wtPairBackend);
   tft.fillScreen(OS12V_BG);
-  wtDrawHeader(s, "Pair with Local AI", nullptr, OS12V_MUTED, false, 0, 0);
+  char title[32];
+  snprintf(title, sizeof(title), "Pair with %s", info.label);
+  wtDrawHeader(s, title, nullptr, OS12V_MUTED, false, 0, 0);
   wsDrawButton(wtl::askDoneRect(s), "Done", true, false, OS12V_BG);
-  const wsm::Rect info = wtl::pairInfoRect(s);
-  const int16_t cx = (int16_t)(info.x + info.w / 2);
-  wsDrawWrapped("In Local AI: Services, Workshop display, Pair display. Then type its code here.", info.x, (int16_t)(info.y + 2), info.w, 18, 3,
-                FONT_SMALL, OS12V_MUTED, OS12V_BG);
+  // Which service: Pi Hub or Local AI; the chosen one in the accent.
+  // 31 Oct 2026 (fix 10): not live while pairing runs (a tap then does nothing).
+  for (uint8_t i = 0; i < wtl::kPairChoices; ++i)
+    wsDrawButton(wtl::pairChoiceRect(s, i), lai::backendInfo(kWtPairChoices[i]).label, !e.pairBusy, kWtPairChoices[i] == g_wtPairBackend, OS12V_BG);
+  const wsm::Rect area = wtl::pairInfoRect(s);
+  const int16_t cx = (int16_t)(area.x + area.w / 2);
+  // Under the choice the panel is shorter: three lines of steps where it is tall (landscape), two where not (portrait);
+  // every offset comes from tabs_layout.hpp (pairStepsY, pairBoxesY, pairStatusRect), so the smoke test checks them.
+  const char* steps = g_wtPairBackend == lai::Backend::PiHub
+                          ? "In Pi Hub: System, Workshop display, Pair display. Then type its code here."
+                          : "In Local AI: Services, Workshop display, Pair display. Then type its code here.";
+  wsDrawWrapped(steps, area.x, (int16_t)wtl::pairStepsY(s), area.w, wtl::kPairLineH, wtl::pairStepLines(s), FONT_SMALL, OS12V_MUTED, OS12V_BG);
   // Six boxes for the digits; the next one to fill is outlined in blue.
   const uint8_t len = (uint8_t)strlen(g_wtPairCode);
-  const int16_t box = 28, gap = 6, total = (int16_t)(6 * box + 5 * gap + 10), x0 = (int16_t)(cx - total / 2), y0 = (int16_t)(info.y + 62);
+  const int16_t box = 28, gap = 6, total = (int16_t)(6 * box + 5 * gap + 10), x0 = (int16_t)(cx - total / 2),
+                y0 = (int16_t)wtl::pairBoxesY(s);
   for (uint8_t i = 0; i < 6; ++i) {
     const int16_t bx = (int16_t)(x0 + i * (box + gap) + (i >= 3 ? 10 : 0));
     const bool next = i == len && !e.pairBusy;
-    tft.fillRoundRect(bx, y0, box, 40, 6, OS12V_SURFACE);
-    tft.drawRoundRect(bx, y0, box, 40, 6, next ? OS12V_ACCENT : OS12V_LINE);
+    tft.fillRoundRect(bx, y0, box, wtl::kPairBoxH, 6, OS12V_SURFACE);
+    tft.drawRoundRect(bx, y0, box, wtl::kPairBoxH, 6, next ? OS12V_ACCENT : OS12V_LINE);
     if (i < len) {
       const char d[2] = {g_wtPairCode[i], 0};
-      uiDrawFit(d, (int16_t)(bx + box / 2), (int16_t)(y0 + 20), box, FONT_LARGE, MC_DATUM, OS12V_TEXT, OS12V_SURFACE);
+      uiDrawFit(d, (int16_t)(bx + box / 2), (int16_t)(y0 + wtl::kPairBoxH / 2), box, FONT_LARGE, MC_DATUM, OS12V_TEXT, OS12V_SURFACE);
     }
   }
   char address[16], line[64];
   wtPairAddress(address, sizeof(address));
   const char* status;
   uint16_t color = OS12V_MUTED;
+  // 31 Oct 2026 (fix 11): a result only when it came after the choice last changed; "Paired with X." only while X is
+  // the saved service and the chosen one (not after Unpair, not under the other choice). Else the target line.
+  const WorkshopLocalAiFeedStatus st = workshopLocalAiFeedStatus();
+  const bool result = e.pairSeq && e.pairSeq != g_wtPairSeenSeq;
   if (e.pairBusy) status = "Pairing...";
-  else if (e.pairSeq && e.pairOk) { status = e.pairStatus; color = OS12V_GREEN; }
-  else if (e.pairSeq && e.pairStatus[0] && len == 0) { status = e.pairStatus; color = OS12V_AMBER; }
-  else { snprintf(line, sizeof(line), "Local AI at %s", address); status = line; }
-  wsDrawWrapped(status, info.x, (int16_t)(y0 + 54), info.w, 18, 3, FONT_SMALL, color, OS12V_BG);
+  else if (result && e.pairOk && st.configured && st.backend == g_wtPairBackend) { status = e.pairStatus; color = OS12V_GREEN; }
+  else if (result && !e.pairOk && e.pairStatus[0] && len == 0) { status = e.pairStatus; color = OS12V_AMBER; }
+  else { snprintf(line, sizeof(line), "%s at %s", info.label, address); status = line; }
+  const wsm::Rect st_ = wtl::pairStatusRect(s);
+  wsDrawWrapped(status, st_.x, st_.y, st_.w, wtl::kPairLineH, wtl::pairStatusLines(s), FONT_SMALL, color, OS12V_BG);
   static const char* const kKeys[12] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "Delete", "0", "Pair"};
   for (uint8_t i = 0; i < wtl::kPairKeys; ++i) {
     const bool pairKey = i == 11;
@@ -2420,8 +2420,20 @@ static void wtDrawPair(const wsm::Screen& s) {
   g_dirty = false;
 }
 
+// Makes `b` the overlay's choice; a change hides the earlier pairing result (it was for the other choice, or before
+// it changed).
+static void wtPairChoose(workshop::localai::Backend b) {
+  if (b == g_wtPairBackend) return;
+  g_wtPairBackend = b;
+  g_wtPairSeenSeq = workshopLocalAiFeedPairSeq(nullptr);
+}
+
 static void wtOpenPair() {
   g_wtPairCode[0] = 0;
+  bool busy = false;
+  workshopLocalAiFeedPairSeq(&busy);
+  const WorkshopLocalAiFeedStatus st = workshopLocalAiFeedStatus();
+  if (!busy) wtPairChoose(st.configured ? st.backend : workshop::localai::Backend::PiHub);  // a running pairing keeps its choice
   g_wtAiOverlay = 4;
   setPage(SCREEN_HUB_WORKSHOP);
 }
@@ -2604,15 +2616,20 @@ static bool wtShowPrinterView(const char* name) {
       g_wtAiOverlay = 2;
       g_wtImageDrawnKey = kWtImageRedraw;
     } else if (strncmp(name, "localai-pair", 12) == 0) {  // 12.7: "localai-pair-123" also types digits, for captures
+      // 31 Oct 2026: "localai-pairhub[-123[-go]]" the same with Pi Hub chosen; "localai-pair..." chooses Local AI.
+      const bool piHub = strncmp(name, "localai-pairhub", 15) == 0;
+      const char* rest = name + (piHub ? 15 : 12);
+      if (*rest && *rest != '-') return false;
+      wtPairChoose(piHub ? workshop::localai::Backend::PiHub : workshop::localai::Backend::LocalAi);
       g_wtPairCode[0] = 0;
-      if (name[12] == '-') strlcpy(g_wtPairCode, name + 13, sizeof(g_wtPairCode));
+      if (*rest == '-') strlcpy(g_wtPairCode, rest + 1, sizeof(g_wtPairCode));
       for (const char* c = g_wtPairCode; *c; ++c) if (*c < '0' || *c > '9') { g_wtPairCode[0] = 0; return false; }
       g_wtAiOverlay = 4;
       // "localai-pair-123456-go" also presses Pair (the signed-in portal's test of the whole pairing).
-      if (strlen(g_wtPairCode) == 6 && !strcmp(name + 19, "-go")) {
+      if (strlen(g_wtPairCode) == 6 && !strcmp(rest + 7, "-go")) {
         char address[16];
         wtPairAddress(address, sizeof(address));
-        if (!workshopLocalAiFeedPair(address, g_wtPairCode)) return false;
+        if (!workshopLocalAiFeedPair(address, g_wtPairCode, g_wtPairBackend)) return false;
         g_wtPairCode[0] = 0;
       }
     } else if (strcmp(name, "localai-approvals") == 0) {  // 12.6
@@ -2857,6 +2874,18 @@ static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {
   if (wtl::askDoneTouch(s).contains(x, y)) { g_wtAiOverlay = 0; wsClick(); return true; }
   if (g_wtAiOverlay == 4) {  // 12.7: the pairing keypad
     const WorkshopLocalAiExtras e = workshopLocalAiFeedExtras();
+    for (uint8_t i = 0; i < wtl::kPairChoices; ++i) {
+      if (wtl::pairChoiceRect(s, i).contains(x, y)) {  // 31 Oct 2026: Pi Hub or Local AI; a new choice starts the code again
+        if (e.pairBusy) return true;
+        if (kWtPairChoices[i] != g_wtPairBackend) {
+          wtPairChoose(kWtPairChoices[i]);
+          g_wtPairCode[0] = 0;
+        }
+        wsClick();
+        g_dirty = true;
+        return true;
+      }
+    }
     for (uint8_t i = 0; i < wtl::kPairKeys; ++i) {
       if (!wtl::pairKeyRect(s, i).contains(x, y)) continue;
       if (e.pairBusy) return true;
@@ -2866,7 +2895,7 @@ static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {
         if (len != 6) return true;
         char address[16];
         wtPairAddress(address, sizeof(address));
-        if (!workshopLocalAiFeedPair(address, g_wtPairCode)) { wsToast("Could not start pairing"); return true; }
+        if (!workshopLocalAiFeedPair(address, g_wtPairCode, g_wtPairBackend)) { wsToast("Could not start pairing"); return true; }
         g_wtPairCode[0] = 0;
       } else if (len < 6) {
         g_wtPairCode[len] = (char)(i == 10 ? '0' : '1' + i);
@@ -3035,7 +3064,9 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   } else if (cur == SCREEN_HUB_WORKSHOP) {
     if (g_wtAiOverlay == 2) return false;  // the picture: no targets, a tap anywhere closes it
     if (g_wtAiOverlay == 5) return wtJudgePressRect(s, x, y, out);  // 26 Oct 2026: Judge it
-    if (g_wtAiOverlay == 4) {  // 12.7: the keypad, Done and the tabs
+    if (g_wtAiOverlay == 4) {  // 12.7: the keypad, Done and the tabs; 31 Oct 2026: the Pi Hub / Local AI choice
+      for (uint8_t i = 0; i < wtl::kPairChoices; ++i)
+        if (wtl::pairChoiceRect(s, i).contains(x, y)) { out = wtl::pairChoiceRect(s, i); return true; }
       for (uint8_t i = 0; i < wtl::kPairKeys; ++i)
         if (wtl::pairKeyRect(s, i).contains(x, y)) { out = wtl::pairKeyRect(s, i); return true; }
       if (wtl::askDoneTouch(s).contains(x, y)) { out = wtl::askDoneRect(s); return true; }

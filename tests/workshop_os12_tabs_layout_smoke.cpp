@@ -516,7 +516,38 @@ void checkAiOverlays(Screen s, const char* o) {
     check(!intersects(pairKeyRect(s, i), pairInfoRect(s)), "keys clear of the code", o, i);
     for (uint8_t j = i + 1; j < kPairKeys; ++j) check(!intersects(pairKeyRect(s, i), pairKeyRect(s, j)), "keys apart", o, i * 16 + j);
   }
-  check(pairInfoRect(s).w >= 200 && pairInfoRect(s).h >= 120 && inside(pairInfoRect(s), more::contentBand(s)), "room for the code and the steps", o, pairInfoRect(s).w, pairInfoRect(s).h);
+  // 31 Oct 2026: the Pi Hub / Local AI choice: two touch-sized buttons above the info panel, apart, clear of the
+  // keypad and Done. The panel under them keeps two lines of steps, the six boxes and a status line (portrait).
+  for (uint8_t i = 0; i < kPairChoices; ++i) {
+    const Rect c = pairChoiceRect(s, i);
+    check(c.h >= kMinTouch && c.w >= 88 && inside(c, more::contentBand(s)), "pair choice is touch-sized, on the screen", o, i, c.w);
+    check(!intersects(c, pairInfoRect(s)) && c.bottom() < pairInfoRect(s).y, "pair choice above the info panel", o, i);
+    check(!intersects(c, askDoneTouch(s)), "pair choice clear of Done", o, i);
+    for (uint8_t k = 0; k < kPairKeys; ++k) check(!intersects(c, pairKeyRect(s, k)), "pair choice clear of the keypad", o, i * 16 + k);
+  }
+  check(pairChoiceRect(s, 0).right() < pairChoiceRect(s, 1).x, "pair choices apart", o);
+  check(pairInfoRect(s).w >= 200 && pairInfoRect(s).h >= 100 && inside(pairInfoRect(s), more::contentBand(s)), "room for the code and the steps", o, pairInfoRect(s).w, pairInfoRect(s).h);
+  // 31 Oct 2026 (final review 12, 14): the panel's insides follow pairInfoRect in both orientations: the steps, then
+  // the code boxes, then the status lines, all inside it; three status lines in landscape (as before the choice), two
+  // in portrait, so the longest Pi Hub detail ("That code isn't right or has run out. Ask for a new one.", 57
+  // characters; ~60 allowed) fits at about 7 px a character in FONT_SMALL.
+  {
+    const Rect info = pairInfoRect(s), st = pairStatusRect(s);
+    const uint8_t steps = pairStepLines(s);
+    check(steps == (s.landscape() ? 3 : 2), "pair steps: three lines in landscape, two in portrait", o, steps);
+    check(pairStepsY(s) >= info.y && pairStepsY(s) + steps * kPairLineH <= pairBoxesY(s), "pair steps above the code boxes", o, pairBoxesY(s));
+    check(pairBoxesY(s) + kPairBoxH + 4 == st.y && pairBoxesY(s) + kPairBoxH <= info.bottom(), "code boxes, then the status", o, st.y);
+    check(inside(st, info) && st.bottom() == info.bottom(), "pair status inside the panel, to its bottom", o, st.y, st.h);
+    const uint8_t lines = pairStatusLines(s);
+    check(lines * kPairLineH <= st.h, "pair status lines fit their rect", o, lines, st.h);
+    check(lines == (s.landscape() ? 3 : 2), "pair status: three lines in landscape, two in portrait", o, lines);
+    check(lines * (st.w / 7) >= 60 + lines * 8, "the longest Pi Hub detail fits the status lines (word-wrap slack)", o, lines, st.w);
+    // Landscape keeps its 46 px keys (6 px apart), as before the choice; portrait's are at least the 44 px minimum.
+    for (uint8_t i = 0; i < kPairKeys; ++i)
+      check(pairKeyRect(s, i).h >= (s.landscape() ? 46 : kMinTouch), "pair keys: 46 px in landscape", o, i, pairKeyRect(s, i).h);
+    check(!s.landscape() || pairKeyRect(s, 3).y - pairKeyRect(s, 0).bottom() == 6, "landscape key rows 6 apart", o);
+    check(pairKeypadArea(s).bottom() <= (s.landscape() ? info.bottom() : s.h - more::kTabH), "keypad within its band", o, pairKeypadArea(s).bottom());
+  }
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 

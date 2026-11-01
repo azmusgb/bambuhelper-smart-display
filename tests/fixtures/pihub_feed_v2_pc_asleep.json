@@ -1,0 +1,106 @@
+{
+  "v": 2,
+  "at": "2026-10-31T15:00:00.000Z",
+  "cards": [
+    {
+      "kind": "needs",
+      "title": "Needs you",
+      "text": "Movies drive",
+      "tone": "attention",
+      "count": 3,
+      "ask": "needs",
+      "id": "needs-3"
+    },
+    {
+      "kind": "printer",
+      "title": "Printer",
+      "text": "Printing HEX_TILE_v72, 40% · Layer 5 / 100",
+      "tone": "busy",
+      "stale": false,
+      "percent": 40,
+      "id": "printer-printing"
+    },
+    {
+      "kind": "lab",
+      "title": "Judge E-021",
+      "text": "Look at the top face.",
+      "tone": "attention",
+      "ask": "lab-judge",
+      "run": "E-021",
+      "id": "judge-E-021"
+    },
+    {
+      "kind": "home",
+      "title": "Movies drive",
+      "text": "The movies drive is missing. Unplug it, wait 10 seconds and plug it back in.",
+      "tone": "attention",
+      "id": "home-Movies drive"
+    },
+    {
+      "kind": "playing",
+      "title": "Now playing",
+      "text": "The Matrix · 42% · Living room TV",
+      "tone": "busy",
+      "percent": 42,
+      "id": "playing-The Matrix"
+    },
+    {
+      "kind": "materials",
+      "title": "Materials",
+      "text": "1 spool low",
+      "tone": "warning",
+      "ask": "health",
+      "id": "materials-low"
+    },
+    {
+      "kind": "weather",
+      "title": "Weather",
+      "text": "Right now: 54 degrees and cloudy, high 61°.",
+      "tone": "info",
+      "ask": "weather",
+      "id": "weather"
+    },
+    {
+      "kind": "ai",
+      "id": "ai-off",
+      "title": "AI unavailable — PC asleep",
+      "tone": "info"
+    }
+  ],
+  "needs": [
+    {
+      "id": "pi:Movies drive",
+      "tone": "bad",
+      "title": "Movies drive",
+      "detail": "Movies may not play because the storage drive disconnected.",
+      "source": "Pi Hub"
+    },
+    {
+      "id": "pi:lab:hex-tile:E-021",
+      "tone": "attention",
+      "title": "E-021: Judge the print",
+      "detail": "Look at the top face.",
+      "source": "Print lab"
+    },
+    {
+      "id": "localai:needs-2",
+      "tone": "attention",
+      "title": "Needs you",
+      "detail": "2 approvals wait.",
+      "source": "Local AI"
+    },
+    {
+      "id": "pi:Movie copy from the PC",
+      "tone": "warn",
+      "title": "Movie copy from the PC",
+      "detail": "No reading",
+      "source": "Pi Hub"
+    }
+  ],
+  "needsCount": 4,
+  "messages": [],
+  "ai": {
+    "available": false,
+    "checkedAt": 1793458800
+  }
+}

@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 using namespace workshop::localai;
 static int failures = 0, checks = 0;
@@ -160,6 +161,131 @@ static void checkNeedsAndLab() {
   }
 }
 
+static Card card(const char* kind) {
+  Card c{};
+  copyUtf8(c.kind, sizeof(c.kind), kind);
+  return c;
+}
+
+// 31 Oct 2026: a fixture beside this source file (tests/fixtures/<name>), so the smoke runs from any directory when
+// built with the source's full path (as the validator does).
+static std::string fixturePath(const char* name) {
+  const std::string self = __FILE__;
+  const size_t slash = self.find_last_of("/\\");
+  return (slash == std::string::npos ? std::string(".") : self.substr(0, slash)) + "/fixtures/" + name;
+}
+
+// The `"kind"` values of a fixture's `cards` array, in order (a plain scan: no JSON library on the host). Stops at the
+// next top-level key, so `needs` and `images` (which have no kind) are never read. false when the file can't be read
+// (31 Oct 2026: then it says so, apart from a mismatch).
+static bool fixtureKinds(const std::string& path, std::string kinds[], size_t max, size_t& n) {
+  n = 0;
+  std::FILE* f = std::fopen(path.c_str(), "rb");
+  if (!f) { std::printf("FAIL cannot read %s\n", path.c_str()); return false; }
+  std::string body;
+  char buf[1024];
+  size_t got;
+  while ((got = std::fread(buf, 1, sizeof(buf), f)) > 0) body.append(buf, got);
+  std::fclose(f);
+  const size_t start = body.find("\"cards\": [");
+  const size_t end = body.find("\n  \"needs\":", start);
+  if (start == std::string::npos || end == std::string::npos) return false;
+  for (size_t at = body.find("\"kind\": \"", start); at != std::string::npos && at < end;
+       at = body.find("\"kind\": \"", at + 1)) {
+    const size_t from = at + 9, to = body.find('"', from);
+    if (to == std::string::npos || n >= max) return false;
+    kinds[n++] = body.substr(from, to - from);
+  }
+  return true;
+}
+
+// 31 Oct 2026: idle Home's rows as drawn (homeTop): picked where the feed lives, so the UI never copies the snapshot.
+static void checkHomeTop() {
+  HomeTop t;
+  const Need n[3] = {need("pi:disk", Tone::Bad, "Disk full"), need("localai:watch-1", Tone::Attention, "Watch it"),
+                     need("printer:plate", Tone::Warning, "Clear the plate")};
+  Card c[3] = {};
+  copyUtf8(c[0].kind, sizeof(c[0].kind), "weather");
+  copyUtf8(c[1].kind, sizeof(c[1].kind), "watch"); copyUtf8(c[1].id, sizeof(c[1].id), "watch-1"); c[1].tone = Tone::Attention;
+  copyUtf8(c[2].kind, sizeof(c[2].kind), "running"); c[2].tone = Tone::Busy;
+  homeTop(n, 3, true, c, 3, nullptr, 5, t);
+  CHECK(t.rows == 2 && t.fromNeeds && t.others == 3, "home_top: Pi Hub's first two, +3 more (needsCount 5)");
+  CHECK(!strcmp(t.row[0].kind, "needs") && !strcmp(t.row[0].title, "Disk full") && !strcmp(t.row[0].id, "pi:disk") &&
+        t.row[0].tone == Tone::Bad && t.row[0].percent == 255 && t.card[0] == -1, "home_top: a need becomes a needs row, no card");
+  CHECK(t.card[1] == 1 && !strcmp(t.row[1].title, "Watch it"), "home_top: localai:<id> opens the tab at that card");
+  homeTop(n, 3, true, c, 3, "watch-1", 0, t);
+  CHECK(t.rows == 2 && !strcmp(t.row[1].id, "printer:plate") && t.card[1] == -1, "home_top: Later hides the judge item");
+  homeTop(nullptr, 0, false, c, 3, nullptr, 0, t);
+  CHECK(t.rows == 2 && !t.fromNeeds && t.card[0] == 1 && t.card[1] == 2 && !strcmp(t.row[0].kind, "watch"), "home_top: cards, best first");
+  homeTop(n, 0, true, c, 3, nullptr, 0, t);
+  CHECK(t.rows == 0 && t.fromNeeds && t.card[0] == -1 && t.card[1] == -1 && !t.row[0].kind[0] && !t.row[1].kind[0],
+        "home_top: an empty list leaves both rows empty (All clear is the UI's)");
+}
+
+// Display on Pi Hub, step 2: the second backend, its key, pictures, and the eight-card cap.
+static void checkPiHub() {
+  CHECK(backendFrom(nullptr) == Backend::LocalAi && backendFrom("") == Backend::LocalAi &&
+        backendFrom("pihub") == Backend::PiHub && backendFrom("PiHub") == Backend::LocalAi, "backend ids");
+  CHECK(!strcmp(backendId(Backend::LocalAi), "localai") && !strcmp(backendId(Backend::PiHub), "pihub"), "backend names");
+  CHECK(!strcmp(backendInfo(Backend::PiHub).keyHeader, "X-Hub-Display-Key") &&
+        !strcmp(backendInfo(Backend::PiHub).caPath, "/home-ca.crt") &&
+        !strcmp(backendInfo(Backend::PiHub).defaultName, "home.home.arpa"), "pi hub connection");
+  CHECK(!strcmp(backendInfo(Backend::PiHub).label, "Pi Hub") && !strcmp(backendInfo(Backend::PiHub).defaultAddress, "10.0.0.30"),
+        "pi hub label and address");
+  CHECK(!strcmp(backendInfo(Backend::LocalAi).label, "Local AI") && !strcmp(backendInfo(Backend::LocalAi).keyHeader, "X-LocalAI-Display-Key") &&
+        !strcmp(backendInfo(Backend::LocalAi).caPath, "/localai-ca.crt") && !strcmp(backendInfo(Backend::LocalAi).defaultAddress, "10.0.0.21") &&
+        !strcmp(backendInfo(Backend::LocalAi).defaultName, "localai.home.arpa"), "local ai connection");
+
+  // key_per_backend
+  const char* hub = "hubd_AbC-_0123456789abcdefghijklmnopq";  // 5 + 32
+  const char* wsd = "wsd_" "0123456789abcdef0123456789abcdef0123456789abcdef";
+  CHECK(validKeyFor(Backend::PiHub, hub), "hub key ok");
+  CHECK(!validKeyFor(Backend::LocalAi, hub), "hub key not for Local AI");
+  CHECK(validKeyFor(Backend::LocalAi, wsd), "wsd key for Local AI");
+  CHECK(!validKeyFor(Backend::PiHub, wsd), "wsd key not for hub");
+  CHECK(!validHubKey(nullptr) && !validHubKey(""), "no hub key");
+  CHECK(!validHubKey("hubd_AbC-_0123456789abcdefghijklmnop"), "31 chars");
+  CHECK(!validHubKey("hubd_AbC-_0123456789abcdefghijklmno+q"), "not url-safe");
+  CHECK(!validHubKey("hubd_AbC-_0123456789abcdefghijklmnopqr"), "33 chars");
+
+  // hub_image_paths
+  CHECK(validImagePath("/api/display/images/0") && validImagePath("/api/display/images/5") &&
+        validImagePath("/api/display/images/poster"), "hub pictures");
+  CHECK(!validImagePath("/api/display/images/6") && !validImagePath("/api/display/images/12") &&
+        !validImagePath("/api/display/images/0?x") && !validImagePath("/api/display/images/") &&
+        !validImagePath("/api/display/images/poster2"), "only hub's own picture paths");
+  CHECK(validImagePath("/api/images/view?id=1") && validImagePath("/api/display/poster?x=1"), "Local AI's picture paths still valid");
+
+  CHECK(kMaxCards == 8, "eight cards");
+  CHECK(shownKind("printer") && shownKind("ai") && !shownKind("image"), "printer and ai cards are shown");
+  CHECK(askFor(card("printer")) && !strcmp(askFor(card("printer")), "health") && !askFor(card("ai")), "asks");
+  Card own = card("printer");
+  copyUtf8(own.ask, sizeof(own.ask), "today");
+  CHECK(!strcmp(askFor(own), "today"), "a card's own ask wins");
+
+  // pihub_sample_all_kept: kinds from tests/fixtures/pihub_feed_v2_pc_asleep.json, in order
+  const char* asleep[] = {"needs", "printer", "lab", "home", "playing", "materials", "weather", "ai"};
+  uint8_t idx[16];
+  CHECK(keepCards(asleep, 8, idx) == 8 && idx[1] == 1 && idx[7] == 7, "asleep: all eight kept");
+  // cap_drops_tail: pc_awake order (Pi Hub's real order: watch, running, done, image, disk)
+  const char* awake[] = {"needs", "printer", "lab", "home", "playing", "materials", "weather", "watch", "running", "done", "image", "disk"};
+  CHECK(keepCards(awake, 12, idx) == 8 && idx[7] == 7, "awake: household first, then one AI card");
+  const char* withImage[] = {"needs", "image", "bogus", "weather"};
+  CHECK(keepCards(withImage, 4, idx) == 2 && idx[0] == 0 && idx[1] == 3, "image and unknown kinds skipped, indexes kept");
+  CHECK(keepCards(nullptr, 0, idx) == 0 && keepCards(withImage, 0, idx) == 0, "nothing in, nothing kept");
+  static_assert(sizeof(Card) * kMaxCards <= 1900, "eight cards stay in the snapshot budget");
+
+  // fixtures_match_the_arrays: the fixtures are Pi Hub's real feed; the arrays above can't drift from them
+  std::string kinds[16];
+  size_t n = 0;
+  bool ok = fixtureKinds(fixturePath("pihub_feed_v2_pc_asleep.json"), kinds, 16, n) && n == 8;
+  for (size_t i = 0; ok && i < n; ++i) ok = kinds[i] == asleep[i];
+  CHECK(ok, "pc_asleep fixture kinds match");
+  ok = fixtureKinds(fixturePath("pihub_feed_v2_pc_awake.json"), kinds, 16, n) && n == 12;
+  for (size_t i = 0; ok && i < n; ++i) ok = kinds[i] == awake[i];
+  CHECK(ok, "pc_awake fixture kinds match");
+}
+
 int main() {
   CHECK(nextDelayMs(0) == 60000UL, "a minute after an answer");
   CHECK(nextDelayMs(1) == 120000UL && nextDelayMs(2) == 240000UL && nextDelayMs(3) == 480000UL, "doubling backoff");
@@ -264,6 +390,8 @@ int main() {
     CHECK(w[0] == 0, "no text");
   }
   checkNeedsAndLab();
+  checkPiHub();
+  checkHomeTop();
   std::printf("localai-feed smoke: %s (%d checks)\n", failures ? "FAIL" : "PASS", checks);
   return failures ? 1 : 0;
 }

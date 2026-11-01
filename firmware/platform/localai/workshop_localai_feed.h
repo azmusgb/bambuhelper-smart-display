@@ -1,6 +1,7 @@
 #pragma once
 
 // Workshop OS 12.3.10: Local AI cards for the calm idle screen (rules: workshop_localai_feed_core.hpp).
+// 31 Oct 2026: the same feed from Local AI or Pi Hub, whichever the display is paired with (see Backend).
 
 #include "workshop_localai_feed_core.hpp"
 
@@ -27,18 +28,38 @@ struct WorkshopLocalAiFeedSnapshot {
     std::uint32_t lastSuccessAtMs{0};
     std::uint32_t lastAttemptAtMs{0};
     std::uint8_t failures{0};
+    // 31 Oct 2026: which service the cards come from, and the feed's ai.available (-1 the feed didn't say, as Local AI
+    // never does; 0 the AI is away; 1 it is there).
+    workshop::localai::Backend backend{workshop::localai::Backend::LocalAi};
+    std::int8_t aiAvailable{-1};
     char status[96]{};
 };
 
 // 26 Oct 2026: the snapshot's small fields, for the UI's many "is it set up / fresh / how many" questions; the whole
-// snapshot (about 2.6 KB with the needs) is copied only where the cards or needs themselves are read.
+// snapshot (about 3 KB: eight cards and six needs, 31 Oct 2026) is copied only where the cards or needs themselves are
+// read. 31 Oct 2026: busy and failures too, so the portal's status route reads this and one card at a time.
 struct WorkshopLocalAiFeedStatus {
     bool configured{false};
+    bool busy{false};
+    std::uint8_t failures{0};
     std::uint32_t lastSuccessAtMs{0};
     std::uint8_t count{0};
     std::uint8_t needCount{0};
     bool needsFromPi{false};
+    workshop::localai::Backend backend{workshop::localai::Backend::LocalAi};
+    std::int8_t aiAvailable{-1};
     char status[96]{};
+};
+
+// 31 Oct 2026: what idle Home draws from the feed, chosen under the feed's lock (workshop::localai::homeTop): its two
+// rows, whether the cards are fresh and Pi Hub's list came with them, how many fresh cards, and the header's weather.
+// About 480 bytes, instead of the whole snapshot.
+struct WorkshopLocalAiFeedHome {
+    workshop::localai::HomeTop top{};
+    bool fresh{false};
+    bool needsFromPi{false};
+    std::uint8_t count{0};  // fresh cards (0 when stale)
+    char weather[24]{};     // "66° Sunny"; empty without a fresh weather card
 };
 
 // 12.4.2: the Local AI tab's ask buttons and its latest image. One request at a time runs on the feed's task.
@@ -85,14 +106,19 @@ struct WorkshopLocalAiExtras {
 
 void workshopLocalAiFeedBegin();
 void workshopLocalAiFeedLoop();
-// address: Local AI's IPv4 address; tlsName: the name on its certificate; key: the wsd_ display key; caPem: Local
-// AI's CA certificate (PEM). False when any is not acceptable; nothing is saved then.
-bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem);
+// address: the service's IPv4 address; tlsName: the name on its certificate; key: its display key (Local AI: wsd_,
+// Pi Hub: hubd_); caPem: its CA certificate (PEM); backend: which service it is (31 Oct 2026). False when any is not
+// acceptable; nothing is saved then.
+bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem,
+                                  workshop::localai::Backend backend = workshop::localai::Backend::LocalAi);
 void workshopLocalAiFeedClear();
 WorkshopLocalAiFeedSnapshot workshopLocalAiFeedSnapshot();
 WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus();
 // Card `i` of the last feed into *out; false when there is no such card.
 bool workshopLocalAiFeedCard(std::uint8_t i, workshop::localai::Card* out);
+// 31 Oct 2026: idle Home's rows into *out, leaving out the card Later hid (`hiddenCardId`, nullptr for none); the
+// weather only when `withWeather`.
+void workshopLocalAiFeedHome(const char* hiddenCardId, bool withWeather, WorkshopLocalAiFeedHome* out);
 // Asks one of the fixed questions (needs, running, health; 12.6: today, next, weather); false when not set up, busy,
 // or not a question.
 bool workshopLocalAiFeedAsk(const char* question);
@@ -119,9 +145,16 @@ bool workshopLocalAiFeedJudgeSend(const char* body, const char* requestId);
 bool workshopLocalAiFeedClearPrinter();
 // 12.7: pairs with Local AI at `address` with the 6-digit code it shows (Services › Workshop display › Pair display);
 // on success the settings are saved as by the portal. False when the address or code is not acceptable, or busy.
-bool workshopLocalAiFeedPair(const char* address, const char* code);
-// The saved Local AI address ("" when not set up).
+// 31 Oct 2026: or with Pi Hub (backend PiHub), the same way: its CA, its certificate name, its key.
+bool workshopLocalAiFeedPair(const char* address, const char* code,
+                             workshop::localai::Backend backend = workshop::localai::Backend::LocalAi);
+// The saved address ("" when not set up).
 void workshopLocalAiFeedAddress(char* out, std::size_t len);
+// 31 Oct 2026: how many pairings have finished, and (when `busy` is given) whether one runs, without copying the
+// extras (about 800 bytes).
+std::uint32_t workshopLocalAiFeedPairSeq(bool* busy);
+// 31 Oct 2026: the saved backend (Local AI when not set up).
+workshop::localai::Backend workshopLocalAiFeedBackend();
 // The downloaded JPEG, valid until the next workshopLocalAiFeedFetchImage(); false while one is running.
 bool workshopLocalAiFeedImage(const std::uint8_t** data, std::size_t* len);
 // Free entries in the default NVS partition (32 bytes each), for the portal's status.

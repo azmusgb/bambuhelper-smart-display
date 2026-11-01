@@ -1,0 +1,172 @@
+{
+  "v": 2,
+  "at": "2026-10-31T15:00:00.000Z",
+  "cards": [
+    {
+      "kind": "needs",
+      "title": "Needs you",
+      "text": "Movies drive",
+      "tone": "attention",
+      "count": 5,
+      "ask": "needs",
+      "id": "needs-5"
+    },
+    {
+      "kind": "printer",
+      "title": "Printer",
+      "text": "Printing HEX_TILE_v72, 40% · Layer 5 / 100",
+      "tone": "busy",
+      "stale": false,
+      "percent": 40,
+      "id": "printer-printing"
+    },
+    {
+      "kind": "lab",
+      "title": "Judge E-021",
+      "text": "Look at the top face.",
+      "tone": "attention",
+      "ask": "lab-judge",
+      "run": "E-021",
+      "id": "judge-E-021"
+    },
+    {
+      "kind": "home",
+      "title": "Movies drive",
+      "text": "The movies drive is missing. Unplug it, wait 10 seconds and plug it back in.",
+      "tone": "attention",
+      "id": "home-Movies drive"
+    },
+    {
+      "kind": "playing",
+      "title": "Now playing",
+      "text": "The Matrix · 42% · Living room TV",
+      "tone": "busy",
+      "percent": 42,
+      "id": "playing-The Matrix"
+    },
+    {
+      "kind": "materials",
+      "title": "Materials",
+      "text": "1 spool low",
+      "tone": "warning",
+      "ask": "health",
+      "id": "materials-low"
+    },
+    {
+      "kind": "weather",
+      "title": "Weather",
+      "text": "Right now: 54 degrees and cloudy, high 61°.",
+      "tone": "info",
+      "ask": "weather",
+      "id": "weather"
+    },
+    {
+      "kind": "watch",
+      "title": "Heads up",
+      "text": "Mac disk is 91% full",
+      "tone": "attention",
+      "at": 1793455200,
+      "id": "watch-mac-disk",
+      "ask": "health"
+    },
+    {
+      "kind": "running",
+      "title": "Working on",
+      "text": "Summarize the logs · 1 more",
+      "count": 2,
+      "tone": "busy",
+      "at": 1793458500,
+      "id": "running-run-41",
+      "ask": "running"
+    },
+    {
+      "kind": "done",
+      "title": "Finished",
+      "text": "Translate the manual · 12 min ago",
+      "tone": "ok",
+      "at": 1793458080,
+      "id": "done-run-40",
+      "ask": "today"
+    },
+    {
+      "kind": "image",
+      "title": "Latest image",
+      "text": "A lighthouse at dusk",
+      "imageUrl": "/api/display/images/0",
+      "tone": "info",
+      "at": 1793458200,
+      "id": "image-1793458200"
+    },
+    {
+      "kind": "disk",
+      "title": "Disk",
+      "text": "C: · 120 GB free of 1000 GB",
+      "tone": "warning",
+      "percent": 88,
+      "id": "disk-C:",
+      "ask": "health"
+    }
+  ],
+  "needs": [
+    {
+      "id": "pi:Movies drive",
+      "tone": "bad",
+      "title": "Movies drive",
+      "detail": "Movies may not play because the storage drive disconnected.",
+      "source": "Pi Hub"
+    },
+    {
+      "id": "pi:lab:hex-tile:E-021",
+      "tone": "attention",
+      "title": "E-021: Judge the print",
+      "detail": "Look at the top face.",
+      "source": "Print lab"
+    },
+    {
+      "id": "localai:needs-2",
+      "tone": "attention",
+      "title": "Needs you",
+      "detail": "2 approvals wait.",
+      "source": "Local AI"
+    },
+    {
+      "id": "pi:Movie copy from the PC",
+      "tone": "warn",
+      "title": "Movie copy from the PC",
+      "detail": "No reading",
+      "source": "Pi Hub"
+    }
+  ],
+  "needsCount": 4,
+  "images": [
+    {
+      "title": "A lighthouse at dusk",
+      "imageUrl": "/api/display/images/0",
+      "at": 1793458200
+    },
+    {
+      "title": "A red fox",
+      "imageUrl": "/api/display/images/1",
+      "at": 1793457600
+    }
+  ],
+  "messages": [
+    {
+      "seq": 1793458795000,
+      "title": "Print finished",
+      "text": "The hex tile is done.",
+      "tone": "ok",
+      "chime": true,
+      "action": {
+        "type": "show",
+        "page": "printer"
+      },
+      "source": "api",
+      "at": 1793458795
+    }
+  ],
+  "ai": {
+    "available": true,
+    "checkedAt": 1793458800
+  }
+}

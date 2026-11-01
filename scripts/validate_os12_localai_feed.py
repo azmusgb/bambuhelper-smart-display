@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -72,13 +73,27 @@ def validate(repo: Path) -> None:
     status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200)")
     for secret in ('doc["key"]', 'doc["ca"]', "g_key", "caPem"):
         forbid(status, secret, "the status route never sends the key or CA")
-    fetch = block(feed, "bool openRequestTo(WiFiClientSecure& client, const char* address, const char* name, const char* ca, char* key, const char* method,")
+    # Final review fix 2 (31 Oct 2026): the small status and one card at a time, never the ~3 KB snapshot, on the web
+    # handler's stack; busy and failures come with the status.
+    forbid(status, "workshopLocalAiFeedSnapshot()", "the status route never copies the whole feed snapshot")
+    need(status, "const WorkshopLocalAiFeedStatus st = workshopLocalAiFeedStatus();", "the status route reads the small status")
+    need(status, "workshopLocalAiFeedCard(i, &card)", "the status route reads one card at a time")
+    for field in ('doc["busy"] = st.busy;', 'doc["failures"] = st.failures;'):
+        need(status, field, "the status JSON keeps its fields")
+    status_fn = block(feed, "WorkshopLocalAiFeedStatus workshopLocalAiFeedStatus() {")
+    for field in ("s.busy = g_snap.busy;", "s.failures = g_snap.failures;"):
+        need(status_fn, field, "the small status carries busy and failures")
+    fetch = block(feed, "bool openRequestTo(WiFiClientSecure& client, lai::Backend backend, const char* address, const char* name, const char* ca,")
     need(fetch, "client.connect(ip, 443, name, ca, nullptr, nullptr)", "TLS to Local AI's address, pinned to its CA and certificate name")
     need(fetch, "%s %s HTTP/1.0", "one HTTP/1.0 request (no chunked body)")
     need(fetch, "while (!client.available() && client.connected() && millis() - sentAt < waitMs) {",
          "waits for the answer before reading it (12.3.11: a read straight away gave HTTP 0)")
     need(fetch, "if (yieldToPerson && somethingWaits())", "12.6: the long poll gives way to a person at once")
-    need(fetch, "X-LocalAI-Display-Key: %s", "the display key signs the request in")
+    # 31 Oct 2026: one connection to Local AI or Pi Hub (display on Pi Hub, step 2).
+    need(fetch, '"%s: %s\\r\\n", info.keyHeader', "the backend's key header signs the request in")
+    forbid(fetch, "X-LocalAI-Display-Key: %s", "no hard-coded key header")
+    forbid(fetch, '"Local AI', "the request's words name the backend it went to")
+    forbid(feed, "lai::validKey(", "a key is checked against its own backend (validKeyFor)")
     need(fetch, "memset(key, 0, 56);", "the key copy is wiped after the request")
     need(block(feed, "bool fetch(FeedResult& r, char* error, size_t errorLen)"), '"/api/display/feed"', "the feed route")
     # 12.4.2 ask buttons and pictures; 12.6 feed v2: messages, approvals, heartbeat, long poll.
@@ -95,10 +110,58 @@ def validate(repo: Path) -> None:
     need(feed, '"/api/display/heartbeat"', "12.6: the heartbeat")
     forbid(feed, 'beat["key"]', "the heartbeat never carries the key")
     pair = block(feed, "void runPair()")
-    need(pair, "fetchCa(address, ca, sizeof(ca), error, sizeof(error))", "12.7: pairing reads Local AI's CA first")
-    need(pair, 'openRequestTo(client, address, name, ca, nullptr, "POST", "/api/display/pair"', "12.7: the code goes over HTTPS pinned to that CA, with no key")
-    need(pair, "lai::validKey(key)", "12.7: only a display key is saved")
-    need(pair, "workshopLocalAiFeedConfigure(address, name, key, ca)", "12.7: saved as by the portal")
+    need(pair, "fetchCa(backend, address, ca, sizeof(ca), error, sizeof(error))", "12.7: pairing reads the backend's CA first")
+    need(pair, 'openRequestTo(client, backend, address, name, ca, nullptr, "POST", "/api/display/pair"', "12.7: the code goes over HTTPS pinned to that CA, with no key")
+    need(pair, "lai::validKeyFor(backend, key)", "only that backend's key is saved")
+    need(pair, "workshopLocalAiFeedConfigure(address, name, key, ca, backend)", "saved as by the portal")
+    need(pair, "copyText(name, sizeof(name), info.defaultName);", "pairing starts from the backend's own certificate name")
+    begin = block(feed, "void workshopLocalAiFeedBegin()")
+    need(begin, 'lai::backendFrom(doc["backend"] | "")', "legacy settings are Local AI")
+    configure = block(feed, "bool workshopLocalAiFeedConfigure(const char* address, const char* tlsName, const char* key, const char* caPem, lai::Backend backend)")
+    need(configure, 'doc["backend"] = lai::backendId(backend)', "the backend is saved")
+    need(configure, "lai::validKeyFor(backend, key)", "only that backend's key is accepted")
+    # Final review fix 5 (31 Oct 2026): a new backend drops the old one's gallery and any picture waiting, under g_mux.
+    switch = block(configure, "if (backend != g_backend) {")
+    for step in ("memset(g_pictures, 0, sizeof(g_pictures));", "g_imageWant[0] = g_imageLoaded[0] = 0;",
+                 "if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }", "g_extras.imageCount = 0;",
+                 "g_extras.hasImage = false;"):
+        need(switch, step, "switching service clears the gallery and any pending picture")
+    if configure.find("portENTER_CRITICAL(&g_mux);") > configure.find("if (backend != g_backend) {"):
+        raise ValidationError("the gallery is cleared under g_mux")
+    # Re-review N1 (31 Oct 2026): Unpair clears the same, under g_mux.
+    clear = block(feed, "void workshopLocalAiFeedClear() {")
+    for step in ("memset(g_pictures, 0, sizeof(g_pictures));", "g_imageWant[0] = g_imageLoaded[0] = 0;",
+                 "if (g_imagePending) { g_imagePending = false; g_extras.imageBusy = false; }", "g_extras.imageCount = 0;",
+                 "g_extras.imageIndex = 0;", "g_extras.hasImage = false;"):
+        need(clear, step, "Unpair clears the gallery and any pending picture")
+        if clear.find("portENTER_CRITICAL(&g_mux);") > clear.find(step):
+            raise ValidationError("Unpair clears the gallery under g_mux")
+    need(block(feed, "void runImage() {"), "if (generation != g_generation) { ok = false; error[0] = 0; }",
+         "a picture downloaded under old settings is discarded")
+    need(block(feed, "bool configuredLocked()"), "lai::validKeyFor(g_backend, g_key)", "set up means a key for the saved backend")
+    fetchCaBlock = block(feed, "bool fetchCa(lai::Backend backend, const char* address, char* ca, size_t caLen, char* error, size_t errorLen)")
+    need(fetchCaBlock, "info.caPath", "the CA comes from the backend's own path")
+    forbid(fetchCaBlock, "/localai-ca.crt", "no hard-coded CA path")
+    fetchBlock = block(feed, "bool fetch(FeedResult& r, char* error, size_t errorLen)")
+    need(fetchBlock, "lai::keepCards(", "the cards kept follow the core rule")
+    need(feed, 'doc["ai"]["available"]', "the AI line follows the feed's ai.available")
+    run_feed = block(feed, "void runFeed(std::uint32_t generation)")
+    need(run_feed, "g_snap.aiAvailable = r.aiAvailable;", "ai.available reaches the snapshot")
+    ok_branch = block(run_feed, "if (ok) {")
+    after_ok = run_feed[run_feed.find(ok_branch) + len(ok_branch):]
+    if not after_ok.lstrip().startswith("else {"):
+        raise ValidationError("runFeed: the failure branch must follow if (ok) { ... }")
+    runFeedFailBranch = block(after_ok, "else {")
+    forbid(runFeedFailBranch, "workshopLocalAiFeedClear", "a failure (even 401) never forgets the key")
+    need(runFeedFailBranch, "++g_snap.failures", "a failure backs off")
+    # Fix 9 (31 Oct 2026): a message about an answer names the service the request went to, not the one saved now.
+    need(fetch, "g_requestBackend = backend;", "the request's backend is kept for its messages")
+    if feed.count("labelNow()") != 3:
+        raise ValidationError("labelNow() only where no request ran (no picture yet, the task could not start); "
+                              "answers use requestLabel()")
+    need(runFeedFailBranch, "g_snap.aiAvailable = -1;", "fix 8: a failed feed forgets ai.available (never stale)")
+    need(block(feed, "lai::Backend workshopLocalAiFeedBackend()"), "g_snap.configured ? g_backend : lai::Backend::LocalAi",
+         "the saved backend, Local AI when not set up")
     need(pair, "memset(key, 0, sizeof(key));", "12.7: the key copy is wiped")
     image = block(feed, "bool downloadImage(const char* path, char* error, size_t errorLen)")
     need(image, "contentLength > lai::kMaxImageBytes", "the picture is size-capped")
@@ -134,13 +197,17 @@ def validate(repo: Path) -> None:
     need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsFromPi = r.needsFromPi;", "needs reach the snapshot")
     need(fetch_fn, 'doc["needsCount"] | -1L', "the feed's needsCount (Pi Hub's whole list) is read")
     need(block(feed, "void runFeed(std::uint32_t generation)"), "g_snap.needsTotal = r.needsTotal;", "needsCount reaches the snapshot")
-    top = block(hub, "static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedSnapshot& ai, WtHomeRow out[2], uint8_t& others)")
-    need(top, "const bool needsPresent = fresh && ai.needsFromPi;", "Pi Hub's list wins whenever the feed carried it, even empty")
-    need(top, "workshop::localai::homeSummaryTop(ai.needs, nn, needsPresent, ai.cards, nc, idx, fromNeeds, others, wtJudgeHidden(), ai.needsTotal)",
-         "idle Home's two rows: needs first, else cards (less the judge card Later hid here); \"+N more\" counts Pi Hub's whole list")
-    forbid(top, "workshopLocalAiFeedSnapshot()", "wtHomeTop uses the caller's one snapshot")
+    top = block(hub, "static __attribute__((noinline)) uint8_t wtHomeTop(const WorkshopLocalAiFeedHome& h, WtHomeRow out[2], uint8_t& others)")
+    # Final review fix 7 (31 Oct 2026): the feed picks Home's rows under its lock; no UI code copies the whole snapshot.
+    home_fn = block(feed, "void workshopLocalAiFeedHome(const char* hiddenCardId, bool withWeather, WorkshopLocalAiFeedHome* out)")
+    need(home_fn, "lai::homeTop(g_snap.needs, nn, out->fresh && g_snap.needsFromPi, g_snap.cards, out->count, hiddenCardId, g_snap.needsTotal,",
+         "idle Home's two rows: Pi Hub's list whenever the feed carried it (even empty), else cards, less the judge card Later hid; "
+         "\"+N more\" counts Pi Hub's whole list")
+    need(home_fn, "portENTER_CRITICAL(&g_mux);", "Home's rows are picked under the feed's lock")
     need(block(hub, "static __attribute__((noinline)) uint8_t wtHomeRows(WtHomeRow rows[2], uint8_t& others, char* weather, size_t weatherLen)"),
-         "workshopLocalAiFeedSnapshot()", "one snapshot per Home frame or touch, in a leaf")
+         "workshopLocalAiFeedHome(wtJudgeHidden(), weather != nullptr, &h);", "one small read per Home frame or touch, in a leaf")
+    forbid(hub, "workshopLocalAiFeedSnapshot()", "no screen copies the whole feed snapshot (8 KB loop stack)")
+    forbid(web, "workshopLocalAiFeedSnapshot()", "no portal handler copies the whole feed snapshot")
     forbid(block(hub, "static void wtDrawHomeIdle(const WtPrint& w)"), "workshopLocalAiFeedSnapshot()", "no snapshot held while idle Home draws its rows")
     for fn in ("static uint8_t wtAiCount()", "static workshop::localai::Card wtAiCard(uint8_t i)", "static int8_t wtLabExtraIndex()",
                "static void wtDrawCalm(const WtPrint& w)"):
@@ -183,8 +250,90 @@ def validate(repo: Path) -> None:
     need(verdict, "DeserializationOption::Filter(filter)", "only id and status are read from the answer")
     need(block(feed, "bool somethingWaits() {"), "g_judgeLoadPending || g_verdictPending", "the long poll gives way to Judge it")
     need(fetch, "if (code < 200 || code > 299) {", "the verdict route's 202 is a success")
-    need(fetch, 'lai::copyUtf8(error, errorLen, why["error"] | "");', "Local AI's words are cut whole-character")
-    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card, Judge it)")
+    need(fetch, "lai::copyUtf8(error, errorLen, words);", "the service's words are cut whole-character")
+    need(fetch, 'filter["detail"] = true;', "Pi Hub's (FastAPI) detail is read from a 4xx body")
+    # Final review fix 1 (31 Oct 2026): any 4xx/5xx but 401 is read, so Pi Hub's 503 "AI unavailable — PC asleep" shows.
+    need(fetch, "if (code >= 400 && code != 401 && contentLength <= 2048) {", "the service's words on a 5xx too (Pi Hub's 503)")
+    forbid(fetch, "code < 500", "a 5xx body is not skipped")
+    need(fetch, 'const char* words = why["error"] | "";\n                if (!words[0]) words = why["detail"] | "";',
+         "error first, then a string detail (a 422 detail list is ignored)")
+    validate_pair_choice(hub, web, (repo / "include/web_pages.h").read_text(encoding="utf-8"),
+                         (repo / "web/app.js").read_text(encoding="utf-8"))
+    print("PASS: OS12 Local AI cards (smoke test, service, routes without secrets, pinned TLS with backoff, calm card, Judge it,"
+          " pairing with Pi Hub or Local AI)")
+
+
+def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
+    """31 Oct 2026 (display on Pi Hub, step 2): pairing chooses Pi Hub or Local AI on the screen, the portal and the script."""
+    lai = "workshop::localai::"
+    need(hub, f"static {lai}Backend g_wtPairBackend = {lai}Backend::PiHub;", "the overlay's choice lives in a static")
+    need(hub, f"static const {lai}Backend kWtPairChoices[wtl::kPairChoices] = {{{lai}Backend::PiHub, {lai}Backend::LocalAi}};",
+         "two choices: Pi Hub, then Local AI")
+    opener = block(hub, "static void wtOpenPair() {")
+    need(opener, f"if (!busy) wtPairChoose(st.configured ? st.backend : {lai}Backend::PiHub);",
+         "fix 13: every opening follows the saved service (Pi Hub when nothing is paired), unless a pairing runs")
+    forbid(hub, "g_wtPairBackendSet", "fix 13: no first-time-only choice")
+    choose = block(hub, f"static void wtPairChoose({lai}Backend b) {{")
+    need(choose, "g_wtPairSeenSeq = workshopLocalAiFeedPairSeq(nullptr);", "fix 11: a new choice hides the earlier result")
+    draw = block(hub, "static void wtDrawPair(const wsm::Screen& s) {")
+    need(draw, "wsDrawButton(wtl::pairChoiceRect(s, i), lai::backendInfo(kWtPairChoices[i]).label, !e.pairBusy, kWtPairChoices[i] == g_wtPairBackend, OS12V_BG);",
+         "both choices drawn with their labels, the chosen one in the accent; fix 10: not live while pairing runs")
+    need(draw, "const bool result = e.pairSeq && e.pairSeq != g_wtPairSeenSeq;", "fix 11: only a result since the choice changed")
+    need(draw, "else if (result && e.pairOk && st.configured && st.backend == g_wtPairBackend) {",
+         "fix 11: Paired with X only while X is saved and chosen")
+    for fn in ("wtl::pairStepsY(s)", "wtl::pairBoxesY(s)", "wtl::pairStatusRect(s)", "wtl::pairStatusLines(s)"):
+        need(draw, fn, "fix 12/14: the panel's offsets come from tabs_layout.hpp (checked by the layout smoke)")
+    need(draw, 'snprintf(title, sizeof(title), "Pair with %s", info.label);', "the header names the chosen service")
+    need(draw, '"In Pi Hub: System, Workshop display, Pair display. Then type its code here."', "Pi Hub's steps")
+    need(draw, '"In Local AI: Services, Workshop display, Pair display. Then type its code here."', "Local AI's steps, unchanged")
+    need(draw, 'snprintf(line, sizeof(line), "%s at %s", info.label, address);', "the address line names the chosen service")
+    forbid(draw, '"Pair with Local AI"', "no fixed Local AI header in the overlay (the tab's row keeps its words)")
+    address = block(hub, "static void wtPairAddress(char* out, size_t len) {")
+    need(address, "workshopLocalAiFeedBackend() == g_wtPairBackend", "the saved address only for the saved service")
+    need(address, "lai::backendInfo(g_wtPairBackend).defaultAddress", "else the chosen service's usual address")
+    forbid(address, '"10.0.0.21"', "no fixed Local AI address")
+    forbid(hub, "workshopLocalAiFeedPair(address, g_wtPairCode)", "every pairing names the chosen service")
+    if hub.count("workshopLocalAiFeedPair(address, g_wtPairCode, g_wtPairBackend)") != 2:
+        raise ValidationError("the keypad's Pair and the capture's -go both pair with the chosen service")
+    touch = block(hub, "static bool wtAiOverlayTouch(const wsm::Screen& s, int16_t x, int16_t y) {")
+    choice = block(touch, "if (wtl::pairChoiceRect(s, i).contains(x, y)) {")
+    need(choice, "g_wtPairCode[0] = 0;", "changing the choice clears the typed digits")
+    need(block(hub, "static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {"),
+         "if (wtl::pairChoiceRect(s, i).contains(x, y)) { out = wtl::pairChoiceRect(s, i); return true; }", "a press outlines the choice")
+    need(hub, 'const bool piHub = strncmp(name, "localai-pairhub", 15) == 0;', "capture localai-pairhub[-123456[-go]] chooses Pi Hub")
+    need(hub, f"wtPairChoose(piHub ? {lai}Backend::PiHub : {lai}Backend::LocalAi);", "capture localai-pair[-...] stays Local AI")
+    # The portal: an optional backend on pair and config, and the status names it.
+    status = block(web, "static void sendWorkshopLocalAiStatus(int httpCode = 200) {")
+    need(status, 'doc["backend"] = workshop::localai::backendId(st.backend);', "status names the service")
+    need(status, 'doc["aiAvailable"] = st.aiAvailable;', "status carries ai.available (-1, 0, 1)")
+    for fn in ("static void handleWorkshopLocalAiConfig() {", "static void handleWorkshopLocalAiPair() {"):
+        need(block(web, fn), 'workshop::localai::backendFrom(server.hasArg("backend") ? server.arg("backend").c_str() : "")',
+             "an optional backend field (missing: Local AI)")
+    need(block(web, "static void handleWorkshopLocalAiPair() {"), "workshopLocalAiFeedPair(server.arg(\"address\").c_str(), server.arg(\"code\").c_str(), backend)",
+         "the portal pairs with the chosen service")
+    need(pages, '<select id="localAiPairBackend"', "the portal's Pi Hub / Local AI choice")
+    need(pages, '<option value="pihub">Pi Hub</option><option value="localai">Local AI</option>', "Pi Hub first, then Local AI")
+    need(app_js, "var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.30',localai:'10.0.0.21'};", "the choice fills the address")
+    need(app_js, "'&backend='+encodeURIComponent(backend)", "the pairing request names the service")
+    need(app_js, "return (localAiLinkConfigured&&backend===localAiLinkBackend&&localAiLinkAddress)||LOCAL_AI_PAIR_ADDRESS[backend]||'';",
+         "fix 15: the saved service's own address when it is chosen again")
+    need(app_js, "addr.value=localAiPairAddressFor(sel.value);", "fix 15: the choice fills the address through the saved one")
+    forbid(app_js, "'Paired with Local AI.'", "the paired line is the service's own words or the chosen label")
+    script = (ROOT / "scripts/configure_localai_feed.py").read_text(encoding="utf-8")
+    need(script, 'parser.add_argument("--backend", choices=("localai", "pihub"), default="localai"', "the script's --backend")
+    need(script, '"pihub": ("10.0.0.30", "home.home.arpa")', "Pi Hub's address and name defaults")
+    need(script, '"backend": args.backend', "the script sends the backend")
+    # Fix round 1: the CA sent is the chosen service's: Local AI's default path is unchanged; Pi Hub has none and the
+    # script refuses without --ca, before contacting the display; the file must hold a PEM certificate.
+    need(script, 'CA_PATH = Path.home() / ".claude" / "localai-chat" / "localai-ca.crt"', "Local AI's default CA unchanged")
+    need(script, 'return CA_PATH if backend == "localai" else None', "no default CA for Pi Hub")
+    need(script, "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.30/home-ca.crt), or pair from the display or the portal.",
+         "Pi Hub without --ca says what to do")
+    need(script, '"-----BEGIN CERTIFICATE-----" not in text', "the CA file must be a PEM certificate")
+    test = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/test_configure_localai_feed.py")], check=False,
+                          capture_output=True, text=True)
+    if test.returncode != 0:
+        raise ValidationError("scripts/test_configure_localai_feed.py failed:\n" + test.stderr[-2000:])
 
 
 def main() -> int:
