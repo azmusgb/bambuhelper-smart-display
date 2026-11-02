@@ -92,6 +92,7 @@ bash tools/install_x2d_bridge_agent.sh --uninstall
 - The agent is `com.bambuhelper.x2d-camera-bridge`. It logs to `~/Library/Logs/x2d-camera-bridge.log`, which grows by roughly 2 MB a day from the tunnel's stats lines (successful frame requests are not logged).
 - It runs a copy of the bridge in `~/Library/Application Support/x2d-camera-bridge`, with a `VERSION` file naming the source commit (`--status` shows it). Checking out another branch changes nothing until you run the installer again.
 - Bambu Studio's live view still has to be open for frames. The bridge reconnects by itself when it reopens.
+- Each install is reported to Pi Hub's System › Versions as `release:x2d-bridge-mac` (the commit, and whether the bridge file had uncommitted changes). The installer queues the report and LocalAI's mac-watch agent sends it within 5 minutes; without mac-watch, the installer says the install isn't reported.
 
 ### Or: on the Raspberry Pi, from the printer's LAN stream
 

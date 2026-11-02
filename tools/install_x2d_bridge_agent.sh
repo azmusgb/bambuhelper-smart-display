@@ -86,3 +86,15 @@ launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
 for _ in $(seq 1 20); do launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break; sleep 0.5; done
 launchctl bootstrap "$DOMAIN" "$PLIST"
 echo "Installed $LABEL (logs: $LOG)"
+
+# release:x2d-bridge-mac (platform step 3, Pi Hub's System › Versions): queue this install's report; LocalAI's mac-watch
+# agent sends it to Pi Hub on its next run (within 5 minutes). Dirty means the bridge file had uncommitted changes.
+WATCH="$HOME/.claude/localai-chat/mac-watch.py"
+DIRTY=0
+[ -z "$(git -C "$ROOT" status --porcelain -- tools/x2d_camera_bridge.py 2>/dev/null)" ] || DIRTY=1
+if [ -f "$WATCH" ]; then
+  "$PYTHON" -I "$WATCH" --queue-release x2d-bridge-mac "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)" "$DIRTY" ||
+    echo "No release report for this install." >&2
+else
+  echo "mac-watch isn't installed, so Pi Hub won't hear of this install (LocalAI: bash host/mac-watch/install.sh)." >&2
+fi
