@@ -1,5 +1,7 @@
 name: Validate
 
+# The one check every change gets: repository, release and tooling contracts. Firmware builds
+# live in firmware.yml and the iOS app in companion-ios.yml, both path-filtered.
 # Branches are validated through their pull request; push runs only for main.
 on:
   push:
@@ -18,7 +20,7 @@ jobs:
   validate:
     name: Core repository validation
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -103,6 +105,52 @@ jobs:
           /tmp/workshop-os12-tests/press-gesture-smoke
           g++ -std=c++11 -Wall -Wextra -Werror -pedantic -pthread tests/workshop_os12_mic_meter_smoke.cpp -o /tmp/workshop-os12-tests/mic-meter-smoke
           /tmp/workshop-os12-tests/mic-meter-smoke
+
+      - name: Validate repository and release policy
+        run: python3 scripts/validate_release.py
+
+      - name: Validate static installer and device update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          python3 build.py
+          python3 scripts/validate_static_installer.py
+
+      - name: Validate device platform contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_os12_device_update.py --source-root .
+          python3 scripts/validate_os12_candidate_publisher.py
+          python3 scripts/validate_os12_media_service.py
+          python3 scripts/validate_os12_premium_ui_v2.py --repo .
+          python3 scripts/validate_platformio_toolchain.py
+
+      - name: Validate acceptance and recovery tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y zsh >/dev/null
+          fi
+          zsh -n scripts/capture-ws350-views.zsh
+          python3 scripts/validate_os12_physical_acceptance.py
+          python3 scripts/validate_os12_automation_collection.py
+          python3 scripts/validate_os12_recovery_roundtrip.py
+          python3 scripts/test_os12_evidence_bundle.py
+
+      - name: Exercise acceptance clients against a fake device
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/test_os12_portal_session_client.py
+          python3 scripts/test_os12_status_lite_runtime.py
+          python3 scripts/test_os12_code_token_runtime.py
+          python3 scripts/test_os12_video_page_start.py
+          python3 scripts/test_os12_retest_12_3_6.py
+          python3 scripts/test_os12_retest_12_3_9.py
 
       - name: Check repository hygiene
         shell: bash

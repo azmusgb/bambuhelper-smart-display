@@ -24,14 +24,13 @@ Use GitHub Actions artifacts for candidate binaries. Preserve historical textual
 
 ## Workflow policy
 
-Exactly four workflow files are expected:
+Exactly three workflow files are expected (`scripts/validate_release.py` enforces this):
 
-- `firmware-candidate.yml` — reusable WS350 + shared-target firmware gate;
-- `validate.yml` — repository validation;
-- `release-gate.yml` — accepted-source/release metadata validation;
-- `release-main.yml` — static download portal integrity validation.
+- `validate.yml` — every change: repository, release, static-installer and tooling contracts;
+- `firmware.yml` — firmware inputs: OS12 reconstruction, every board's build, and the WS350 candidate artifact;
+- `companion-ios.yml` — the iOS companion app.
 
-Do not add `bambuhelper-vX-...yml` release-specific workflows. Update `firmware-candidate.yml` in place when the accepted baseline or next candidate changes.
+Do not add version-specific workflows or self-hosted runners (the repository is public). Update `firmware.yml` in place when the reconstruction recipe changes.
 
 ## Firmware retention
 

@@ -1,0 +1,151 @@
+name: Firmware
+
+# Reconstructs the OS12 source (UI13 -> platform -> UX layers) at the exact head, which runs every
+# layer's validators, and compiles every supported board. The ws350 job's artifact is the only
+# flashable physical-acceptance candidate; the X2D jobs are compile regressions. Cheap contracts
+# run in validate.yml on every change. Keep the two path lists below identical.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apply_workshop_os*.py'
+      - 'apply_smart_home_*v11_23*.py'
+      - 'assets/**'
+      - 'contracts/**'
+      - 'firmware/platform/**'
+      - 'firmware/ui-*/**'
+      - 'tests/**'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/run_*.sh'
+      - 'scripts/validate_os12_*.py'
+      - 'scripts/validate_ui1*.py'
+      - 'scripts/smart_home_patch_utils.py'
+      - 'scripts/consolidate_portal_css.py'
+      - 'scripts/configure_localai_feed.py'
+      - 'scripts/generate_figtree_vlw_fonts.py'
+      - '.github/workflows/firmware.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apply_workshop_os*.py'
+      - 'apply_smart_home_*v11_23*.py'
+      - 'assets/**'
+      - 'contracts/**'
+      - 'firmware/platform/**'
+      - 'firmware/ui-*/**'
+      - 'tests/**'
+      - 'scripts/ensure-platformio.sh'
+      - 'scripts/run_*.sh'
+      - 'scripts/validate_os12_*.py'
+      - 'scripts/validate_ui1*.py'
+      - 'scripts/smart_home_patch_utils.py'
+      - 'scripts/consolidate_portal_css.py'
+      - 'scripts/configure_localai_feed.py'
+      - 'scripts/generate_figtree_vlw_fonts.py'
+      - '.github/workflows/firmware.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  OS12_RELEASE_VERSION: '12.8.0'
+  OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  ws350:
+    name: WS350 candidate and jc3248w535 regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
+
+      - name: Reconstruct and build WS350 and jc3248w535
+        run: BUILD=/tmp/ws350-os12-build bash scripts/run_os12_ux_local.sh --build
+
+      - name: Package physical-acceptance candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="/tmp/ws350-os12-build/.pio/build/ws_lcd_350/firmware.bin"
+          PART="/tmp/ws350-os12-build/.pio/build/ws_lcd_350/partitions.bin"
+          OUT=/tmp/os12-ux-ws350-candidate
+          test -s "$SRC"
+          test -s "$PART"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          cp "$SRC" "$OUT/firmware.bin"
+          cp "$PART" "$OUT/partitions.bin"
+          FW_SHA="$(sha256sum "$OUT/firmware.bin" | awk '{print $1}')"
+          FW_SIZE="$(stat -c '%s' "$OUT/firmware.bin")"
+          PART_SHA="$(sha256sum "$OUT/partitions.bin" | awk '{print $1}')"
+          PART_SIZE="$(stat -c '%s' "$OUT/partitions.bin")"
+          {
+            printf '%s  %s\n' "$FW_SHA" firmware.bin
+            printf '%s  %s\n' "$PART_SHA" partitions.bin
+          } > "$OUT/SHA256SUMS.txt"
+          # candidateAuthority keeps its historical value: the macOS installer scripts check it.
+          printf '{\n  "schemaVersion": 1,\n  "product": "Workshop OS",\n  "version": "%s",\n  "board": "ws_lcd_350",\n  "sourceSha": "%s",\n  "firmwareSha256": "%s",\n  "firmwareSize": %s,\n  "partitionSha256": "%s",\n  "partitionSize": %s,\n  "releaseState": "built-tested-ci-only",\n  "artifactRole": "physical-acceptance-candidate",\n  "candidateAuthority": "os12-ux-architecture",\n  "portalArchitecture": "control-plane-v4",\n  "inventoryContract": "device-feed/v1",\n  "physicalAcceptance": "required",\n  "accepted": false,\n  "stable": false\n}\n' \
+            "$OS12_RELEASE_VERSION" "$OS12_SOURCE_SHA" "$FW_SHA" "$FW_SIZE" "$PART_SHA" "$PART_SIZE" > "$OUT/candidate.json"
+          {
+            echo '### WS350 physical-acceptance candidate (CI only: not accepted, not stable)'
+            echo
+            printf -- '- Source SHA: `%s`\n' "$OS12_SOURCE_SHA"
+            printf -- '- Firmware: `%s` (%s bytes)\n' "$FW_SHA" "$FW_SIZE"
+            printf -- '- Partitions: `%s` (%s bytes)\n' "$PART_SHA" "$PART_SIZE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: os12-ux-ws350-${{ env.OS12_SOURCE_SHA }}
+          path: /tmp/os12-ux-ws350-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  x2d:
+    name: X2D compile regression (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: WS350
+            flag: --build-ws350
+          - board: jc3248w535
+            flag: --build-cross-board
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Cache pinned PlatformIO toolchain
+        uses: actions/cache@v5
+        with:
+          path: .workshop-tools
+          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
+
+      - name: Reconstruct exact-head source
+        run: BUILD=/tmp/ws350-os12-x2d-build bash scripts/run_os12_ux_local.sh
+
+      - name: Compile X2D ${{ matrix.board }}
+        run: |
+          BASE=/tmp/ws350-os12-x2d-build \
+            X2D_BRIDGE_URL=http://10.0.0.16:8091/x2d/frame.jpg \
+            bash scripts/run_x2d_local.sh --in-place ${{ matrix.flag }}

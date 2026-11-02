@@ -7,18 +7,13 @@ This is the canonical path from an exact-head CI candidate to physical evidence 
 Require all exact-head PR gates to be green, including:
 
 - Validate
-- Workshop OS Firmware Gate
-- Workshop OS UI13 Appliance Settings Gate
-- Validate accepted static installer
-- Workshop OS 12 Platform Bridge
-- Workshop OS 12 UX Architecture
-- Release Gate / merge-gate
+- Firmware
 
-Record the exact source SHA, the OS12 UX physical-candidate artifact ID, firmware byte count, and firmware SHA-256. Platform Bridge regression evidence is not flashable candidate authority.
+Record the exact source SHA, the Firmware workflow's `os12-ux-ws350-<sha>` artifact ID, firmware byte count, and firmware SHA-256.
 
 ## 2. Prepare the exact CI candidate
 
-Download the OS12 UX Architecture artifact for the exact PR head and extract it locally. The artifact must contain:
+Download the Firmware workflow's `os12-ux-ws350-<sha>` artifact for the exact PR head and extract it locally. The artifact must contain:
 
 - `candidate.json`
 - `SHA256SUMS.txt`

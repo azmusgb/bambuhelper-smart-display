@@ -21,7 +21,7 @@ For firmware work:
 
 1. branch from current `main`;
 2. open one candidate PR to `main`;
-3. update the reusable `.github/workflows/firmware-candidate.yml` only when the reconstruction recipe/baseline changes;
+3. update `.github/workflows/firmware.yml` only when the reconstruction recipe changes;
 4. update `releases/current.json` to describe the candidate when a formal candidate is established;
 5. do not create version-named workflow files.
 
@@ -29,19 +29,13 @@ Keep candidate binaries in Actions artifacts.
 
 ## 3. CI acceptance
 
-CI is intentionally **scope-owned**. A guarantee should have one authoritative workflow rather than being re-executed in every generic validation job.
+CI has three workflows:
 
-- **Validate** is the fast universal repository gate: JSON, Python/shell syntax, lightweight C++ contract smoke tests, and repository hygiene.
+- **Validate** runs on every change: JSON, Python/shell syntax, C++ contract smoke tests, repository hygiene, release policy, static-installer and device-update manifest integrity, device platform contracts, and the acceptance/recovery tooling tests against a fake device.
+- **Firmware** runs only when firmware inputs change. It reconstructs the final OS12 source (UI13, then platform, then UX layers, each with its validators), builds `ws_lcd_350` and `jc3248w535`, compiles the X2D overlay for both boards, and is the sole CI producer of the flashable physical-acceptance candidate.
 - **Workshop Companion iOS** runs only for `companion/**`, its protocol validator, or its own workflow.
-- **Workshop OS 12 Platform Bridge** runs only when platform/service/control inputs change.
-- **Workshop OS 12 UX Architecture** is the authoritative final OS12 reconstruction + WS350/cross-board compile and the sole CI producer of the flashable physical-acceptance candidate.
-- **Workshop OS 12 Tooling Checks** owns acceptance, capture, install, recovery, and candidate-publication tooling without rebuilding firmware.
-- **Workshop OS Firmware Gate — v11.22 Display Expert RC1** is a legacy reconstruction gate and runs only when its actual legacy reconstruction inputs change.
-- **Workshop OS UI13 Appliance Settings Gate** remains scoped to the UI13 lineage.
-- **Validate accepted static installer** owns the static download/install surface.
-- **Release Gate / merge-gate** validates release policy and waits for only the workflows required by the PR's changed paths; it does not duplicate those test suites.
 
-For a normal OS12 presentation/runtime-composition change, the expected expensive path is one final **OS12 UX Architecture** candidate build. Acceptance/recovery-helper changes use the lightweight **OS12 Tooling Checks** workflow instead. Platform, legacy firmware, UI13, Companion, and static-installer builds must not run merely because a generic OS12/Python file changed.
+Documentation and tooling changes run only Validate.
 
 Failures in an applicable owned gate are release blockers until explained and intentionally changed.
 
@@ -121,7 +115,7 @@ When intentionally promoting the download channel:
 `main` should use GitHub branch protection/rulesets so repository policy is enforced by the platform rather than documentation alone. Recommended minimums:
 
 - require a pull request before merging;
-- require the stable `merge-gate` status, which coordinates `Release Gate`, lightweight `Validate`, and only the applicable path-owned domain workflows;
+- require `Validate`, plus `Firmware` or `Workshop Companion iOS` when the PR changes their paths;
 - keep path ownership current when adding canonical source or new build inputs, so a change cannot evade its authoritative gate and unrelated gates do not run by default;
 - require branches to be up to date before merge;
 - block force pushes and branch deletion;

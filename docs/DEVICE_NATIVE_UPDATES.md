@@ -110,9 +110,9 @@ After the bootstrap installation and reboot, future ordinary candidates can be c
 
 ## Preparing a candidate
 
-There is exactly one flashable CI physical-candidate authority: **Workshop OS 12 UX Architecture** (`.github/workflows/os12-ux-architecture.yml`). Its `os12-ux-ws350-<sourceSha>` artifact contains `firmware.bin`, `candidate.json`, and `SHA256SUMS.txt`.
+There is exactly one flashable CI physical-candidate authority: the **WS350 candidate** job of **Firmware** (`.github/workflows/firmware.yml`). Its `os12-ux-ws350-<sourceSha>` artifact contains `firmware.bin`, `partitions.bin`, `candidate.json`, and `SHA256SUMS.txt`. `candidate.json` keeps `"candidateAuthority": "os12-ux-architecture"`, the value the macOS installer scripts check.
 
-The lower-level **Workshop OS 12 Platform Bridge** workflow is regression/build evidence only. Its output may have a different firmware hash because the UX/control-plane layers are applied later. It intentionally does **not** upload a `.bin` file and must never be used as a physical-acceptance or release candidate.
+The workflow's other jobs are compile regressions and upload nothing.
 
 The build pipeline creates the exact-head WS350 **UX physical-candidate CI artifact** with SHA-256 and build metadata, but intentionally does not publish it into `releases/device-update.json` automatically.
 

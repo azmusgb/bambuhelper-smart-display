@@ -220,7 +220,7 @@ saves the partition table, NVS and otadata, and stops if the partition layout
 differs. NVS is not erased. Keep USB attached for power, flashing, and serial
 diagnostics.
 
-CI (`os12-ux-architecture.yml`) compiles this overlay candidate on every
+CI (`firmware.yml`) compiles this overlay candidate on every
 relevant PR but does not package it.
 
 An already-published firmware image will not contain this experimental overlay or its private bridge endpoint.

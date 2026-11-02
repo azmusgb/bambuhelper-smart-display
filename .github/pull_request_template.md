@@ -26,11 +26,7 @@
 ## Validation
 
 - [ ] `Validate`
-- [ ] `Release Gate`
-- [ ] Static OTA portal integrity, if release/download assets changed
-- [ ] Reusable `Workshop OS Firmware Gate`, if firmware/tooling/device contracts changed
-- [ ] Native `ws_lcd_350` build
-- [ ] Shared `jc3248w535` regression build
+- [ ] `Firmware`, if firmware inputs changed (native `ws_lcd_350`, shared `jc3248w535` and X2D builds)
 - [ ] Browser JavaScript validation where applicable
 - [ ] Physical acceptance performed or explicitly marked as required
 - [ ] Authenticated framebuffer capture compared when physical visual output changed
