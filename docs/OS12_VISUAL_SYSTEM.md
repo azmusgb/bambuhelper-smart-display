@@ -159,7 +159,7 @@ Release state remains:
 
 ## One-command candidate install + unattended acceptance
 
-For exact CI candidates on macOS, use the repository-owned orchestrator after downloading the UX Architecture artifact and updating the local checkout to that exact source SHA:
+For exact CI candidates on macOS, use the repository-owned orchestrator after downloading the Firmware workflow's candidate artifact and updating the local checkout to that exact source SHA:
 
 ```bash
 bash scripts/install_accept_os12_candidate_macos.sh \

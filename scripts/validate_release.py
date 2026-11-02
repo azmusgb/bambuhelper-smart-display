@@ -33,24 +33,14 @@ ALLOWED_FIRMWARE = {
     ROLLBACK_FULL.as_posix(),
     ROLLBACK_OTA.as_posix(),
 }
-ALLOWED_WORKFLOWS = {
-    "companion-ios.yml",
-    "firmware-candidate.yml",
-    "os12-platform-bridge.yml",
-    "os12-tooling.yml",
-    "os12-ux-architecture.yml",
-    "release-gate.yml",
-    "release-main.yml",
-    "ui13-appliance-settings.yml",
-    "validate.yml",
-}
+ALLOWED_WORKFLOWS = {"companion-ios.yml", "firmware.yml", "validate.yml"}
 REQUIRED = [
     Path("README.md"), Path("LICENSE"), Path("NOTICE.md"), Path("SECURITY.md"),
     Path("CONTRIBUTING.md"), Path("release.json"), Path("releases/current.json"),
     Path("docs/REPOSITORY_HYGIENE.md"), Path("docs/UPSTREAM_SYNC.md"),
     Path("docs/RELEASE_PROCESS.md"), Path("docs/CONTROL_SAFETY.md"),
     Path("scripts/capture-ws350-views.zsh"), Path(".github/pull_request_template.md"),
-    Path(".github/workflows/firmware-candidate.yml"), Path(".github/workflows/validate.yml"),
+    Path(".github/workflows/firmware.yml"), Path(".github/workflows/validate.yml"),
     PRODUCTION_FULL, PRODUCTION_OTA, ROLLBACK12_FULL, ROLLBACK12_OTA, PREVIOUS_FULL, PREVIOUS_OTA, ROLLBACK_FULL, ROLLBACK_OTA,
 ]
 FORBIDDEN_PREFIXES = ("firmware/build/", ".v95/", "waveshare-workshop-os/")
@@ -200,38 +190,43 @@ def validate_capture_security() -> None:
 
 
 def validate_ci_ownership(workflows_dir: Path) -> None:
+    """Three workflows: Validate on every change, Firmware and Companion iOS when their paths change."""
     validate = (workflows_dir / "validate.yml").read_text(encoding="utf-8")
+    validate_header = validate.split("jobs:", 1)[0]
     if "name: Core repository validation" not in validate:
-        fail("Validate must remain the lightweight core repository gate")
-    for forbidden in (
-        "Workshop Companion iOS",
-        "xcodebuild",
-        "brew install xcodegen",
-        "run_os12_platform_local.sh",
-        "run_os12_ux_local.sh",
-        "accept_os12_recovery_roundtrip",
-    ):
-        if forbidden in validate:
-            fail(f"Validate contains domain-specific/heavy work: {forbidden}")
-
-    tooling = (workflows_dir / "os12-tooling.yml").read_text(encoding="utf-8")
+        fail("Validate must remain the core repository gate")
+    if "paths:" in validate_header:
+        fail("Validate must run on every change, not be path-filtered")
     for marker in (
-        "name: Workshop OS 12 Tooling Checks",
-        "- 'scripts/accept_os12_*.py'",
-        "- 'scripts/accept_os12_*.sh'",
-        "- 'scripts/validate_os12_physical_acceptance.py'",
-        "- 'scripts/validate_os12_recovery_roundtrip.py'",
-        "Validate recovery round-trip contract",
+        "python3 scripts/validate_release.py",
+        "python3 scripts/validate_static_installer.py",
+        "python3 scripts/validate_os12_recovery_roundtrip.py",
+        "python3 scripts/validate_platformio_toolchain.py",
     ):
-        if marker not in tooling:
-            fail(f"OS12 Tooling workflow missing owned contract: {marker}")
-    for forbidden in (
-        "run_os12_ux_local.sh --build",
-        "pio run",
-        "PlatformIO",
+        if marker not in validate:
+            fail(f"Validate missing owned contract: {marker}")
+    for forbidden in ("xcodebuild", "run_os12_ux_local.sh", "run_os12_platform_local.sh", "pio run", "self-hosted"):
+        if forbidden in validate:
+            fail(f"Validate contains firmware/iOS build work: {forbidden}")
+
+    firmware = (workflows_dir / "firmware.yml").read_text(encoding="utf-8")
+    firmware_header = firmware.split("permissions:", 1)[0]
+    push_paths, _, pr_paths = firmware_header.partition("  pull_request:")
+    for marker in (
+        "- 'apply_workshop_os*.py'",
+        "- 'firmware/platform/**'",
+        "- 'scripts/run_*.sh'",
+        "- 'scripts/validate_os12_*.py'",
+        "- '.github/workflows/firmware.yml'",
     ):
-        if forbidden in tooling:
-            fail(f"OS12 Tooling workflow contains firmware-build work: {forbidden}")
+        if marker not in push_paths or marker not in pr_paths:
+            fail(f"Firmware lost a reconstruction input on push or pull_request: {marker}")
+    if [l for l in push_paths.splitlines() if l.strip().startswith("- '")] != \
+            [l for l in pr_paths.splitlines() if l.strip().startswith("- '")]:
+        fail("Firmware push and pull_request path lists must be identical")
+    for forbidden in ("- 'firmware/**'", "- 'docs/**'", "- '*.md'", "self-hosted"):
+        if forbidden in firmware:
+            fail(f"Firmware trigger is too broad or uses a self-hosted runner: {forbidden}")
 
     companion = (workflows_dir / "companion-ios.yml").read_text(encoding="utf-8")
     for marker in (
@@ -243,76 +238,6 @@ def validate_ci_ownership(workflows_dir: Path) -> None:
     ):
         if marker not in companion:
             fail(f"Companion workflow missing path-owned contract: {marker}")
-
-    legacy = (workflows_dir / "firmware-candidate.yml").read_text(encoding="utf-8")
-    legacy_header = legacy.split("workflow_dispatch:", 1)[0]
-    if "\n    paths:\n" not in legacy_header:
-        fail("legacy firmware gate must be path-filtered")
-    for forbidden in (
-        "'scripts/validate_*.py'",
-        "'apply_smart_home_*.py'",
-        "'README.md'",
-        "'SECURITY.md'",
-    ):
-        if forbidden in legacy_header:
-            fail(f"legacy firmware gate trigger is too broad: {forbidden}")
-
-    ux = (workflows_dir / "os12-ux-architecture.yml").read_text(encoding="utf-8")
-    for forbidden in (
-        "- 'scripts/*os12*'",
-        "- 'scripts/accept_os12_*.py'",
-        "- 'scripts/accept_os12_*.sh'",
-        "- 'scripts/capture-ws350-views.zsh'",
-        "- 'scripts/bootstrap_ws350_os12_usb_macos.sh'",
-        "- 'docs/WORKSHOP_OS12_DEVICE_PLATFORM.md'",
-        "- 'docs/DEVICE_NATIVE_UPDATES.md'",
-        "- 'docs/MEDIA_PHYSICAL_ACCEPTANCE.md'",
-    ):
-        if forbidden in ux:
-            fail(f"OS12 UX candidate trigger is too broad: {forbidden}")
-    for marker in (
-        "- 'apply_workshop_os12_*.py'",
-        "- 'scripts/run_os12_ux_local.sh'",
-        "- 'scripts/validate_os12_ux_architecture.py'",
-        "- 'firmware/platform/**'",
-    ):
-        if marker not in ux:
-            fail(f"OS12 UX candidate lost a reconstruction input: {marker}")
-
-    platform = (workflows_dir / "os12-platform-bridge.yml").read_text(encoding="utf-8")
-    for forbidden in (
-        "- 'apply_workshop_os12_*.py'",
-        "- 'scripts/*os12*'",
-        "- '.github/workflows/validate.yml'",
-    ):
-        if forbidden in platform:
-            fail(f"OS12 Platform Bridge trigger is too broad: {forbidden}")
-    for marker in (
-        "- 'firmware/platform/**'",
-        "- 'apply_workshop_os12_platform_bridge.py'",
-        "- 'apply_workshop_os12_inventory_service.py'",
-        "- 'scripts/run_os12_platform_local.sh'",
-    ):
-        if marker not in platform:
-            fail(f"OS12 Platform Bridge lost an authoritative platform input: {marker}")
-
-    release_gate = (workflows_dir / "release-gate.yml").read_text(encoding="utf-8")
-    for marker in (
-        'required=("Validate")',
-        "legacy_firmware_required=0",
-        "platform_required=0",
-        "os12_required=0",
-        "companion_required=0",
-        "tooling_required=0",
-        'required+=("Workshop OS 12 UX Architecture")',
-        'required+=("Workshop OS 12 Platform Bridge")',
-        'required+=("Workshop Companion iOS")',
-        'required+=("Workshop OS 12 Tooling Checks")',
-    ):
-        if marker not in release_gate:
-            fail(f"Release Gate missing path-aware aggregation contract: {marker}")
-    if "Validate shell scripts" in release_gate:
-        fail("Release Gate must not duplicate Core Validate shell syntax work")
 
 
 IGNORED_LOCAL_PREFIXES = (".workshop-tools/", "dist/", "upstream/", ".git/")
@@ -424,7 +349,7 @@ def main() -> int:
     print("Static download channel: Workshop OS 12.7.1 Full + OTA")
     print("Static rollbacks: Workshop OS 12.4.4, then v11.19.1 and Smart Home v7.2 (Full + OTA)")
     print("Visual capture credential redaction: REQUIRED BEFORE RETENTION")
-    print("CI ownership: lightweight core validate + path-owned domain gates + release aggregation")
+    print("CI ownership: Validate on every change; Firmware and Companion iOS path-owned")
     return 0
 
 

@@ -114,12 +114,9 @@ Automation may establish objective machine-observable behavior, but it must not 
 - `apply_workshop_os_*.py` — Workshop OS source evolution and product-finish layers.
 - `apply_workshop_os12_*.py` — OS12 platform/control/security/update reconstruction layers.
 - `.bambuhelper-validation/` — verified patch payloads required by selected loaders.
-- `.github/workflows/firmware-candidate.yml` — reusable firmware/hardware gate.
-- `.github/workflows/ui13-appliance-settings.yml` — UI13 reconstruction, product-finish, native build, and exact artifact gate.
-- `.github/workflows/os12-platform-bridge.yml` — OS12 reconstruction/build and exact-head OTA candidate artifact.
-- `.github/workflows/validate.yml` — repository validation.
-- `.github/workflows/release-gate.yml` — release metadata validation and conditional merge-gate coordination.
-- `.github/workflows/release-main.yml` — accepted static-installer integrity gate.
+- `.github/workflows/validate.yml` — every change: repository, release, static-installer and tooling contracts.
+- `.github/workflows/firmware.yml` — firmware inputs only: exact-head OS12 reconstruction, every board's build, and the WS350 physical-acceptance candidate artifact.
+- `.github/workflows/companion-ios.yml` — `companion/**` only: protocol validation and iOS Simulator build.
 - `releases/current.json` — accepted-source / active-source-candidate / `main` / static-channel state.
 - `releases/device-update.json` — minimal versioned device-facing OTA discovery contract.
 - `release.json` — conservative static download/rollback catalog.

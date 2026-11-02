@@ -6,7 +6,7 @@ Workshop OS controls real hardware. Contributions are welcome, but the bar for a
 
 - Base normal work on `main`.
 - Keep **one active firmware candidate PR** to `main` at a time.
-- Do not create a new version-specific Actions workflow. Update `.github/workflows/firmware-candidate.yml` in place when the candidate/baseline changes.
+- Do not create a new version-specific Actions workflow. Update `.github/workflows/firmware.yml` in place when the reconstruction recipe changes.
 - Do not silently repin the upstream BambuHelper baseline. Follow `docs/UPSTREAM_SYNC.md`.
 
 ## Repository boundaries
@@ -43,20 +43,16 @@ Do not add speed/fan/temperature/AMS manipulation merely because a payload can b
 
 At minimum:
 
-- `Validate`
-- `Release Gate`
-- static portal integrity when release/download metadata is touched
+- `Validate` (it also covers release metadata and static portal integrity)
 
 ### Firmware, patch stack, device contract, visual or control changes
 
-Require the reusable `Workshop OS Firmware Gate`, including:
+Require `Firmware`, which runs when firmware inputs change and covers:
 
-- deterministic reconstruction;
-- device/safety contracts;
-- browser JavaScript validation;
-- native `ws_lcd_350` build;
+- deterministic reconstruction with every layer's device/safety contracts;
+- native `ws_lcd_350` build and the exact-head physical-acceptance candidate artifact;
 - shared `jc3248w535` regression build;
-- Full-image merge and OTA packaging.
+- X2D overlay compile regressions.
 
 ### Physical UI / touch / audio / recovery / control behavior
 

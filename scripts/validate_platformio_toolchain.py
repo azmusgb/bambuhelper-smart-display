@@ -31,9 +31,7 @@ def main() -> int:
     bootstrap = read(root / "scripts/bootstrap_ws350_os12_usb_macos.sh")
     exact_ci_installer = read(root / "scripts/flash_os12_ci_candidate_macos.sh")
     ui13_runner = read(root / "scripts/run_ui13_local.sh")
-    platform_workflow = read(root / ".github/workflows/os12-platform-bridge.yml")
-    ux_workflow = read(root / ".github/workflows/os12-ux-architecture.yml")
-    ui13_workflow = read(root / ".github/workflows/ui13-appliance-settings.yml")
+    firmware_workflow = read(root / ".github/workflows/firmware.yml")
 
     for needle in (
         "3.9|3.10|3.11|3.12) return 0",
@@ -94,37 +92,16 @@ def main() -> int:
     ):
         forbid(ui13_runner, needle, "parallel/global PlatformIO path")
 
-    for label, workflow in (
-        ("OS12 platform workflow", platform_workflow),
-        ("OS12 UX workflow", ux_workflow),
-        ("UI13 workflow", ui13_workflow),
-    ):
-        require(workflow, "actions/setup-python@v6", label)
-        forbid(workflow, "actions/setup-python@v5", f"{label} stale setup-python")
-        require(workflow, "python-version: '3.12'", label)
-        require(workflow, "scripts/ensure-platformio.sh", label)
-
-    for label, workflow in (
-        ("OS12 platform workflow", platform_workflow),
-        ("OS12 UX workflow", ux_workflow),
-        ("UI13 workflow", ui13_workflow),
-    ):
-        forbid(workflow, "python3 -m pip install --upgrade platformio", f"{label} global PlatformIO install")
-
-    for needle in (
-        "artifact_role=platform-regression-evidence",
-        "physical_candidate=false",
-        "flashable_artifact_published=false",
-        "physical_candidate_authority=.github/workflows/os12-ux-architecture.yml",
-        "name: workshop-os12-platform-regression-evidence-",
-    ):
-        require(platform_workflow, needle, "OS12 platform workflow artifact role")
-    for needle in (
-        "name: workshop-os12-ws350-ota-",
-        'cp "$SOURCE" "$OUT/$NAME"',
-        "artifact_type=OTA/application image",
-    ):
-        forbid(platform_workflow, needle, "parallel flashable platform artifact")
+    label = "Firmware workflow"
+    require(firmware_workflow, "actions/setup-python@v6", label)
+    forbid(firmware_workflow, "actions/setup-python@v5", f"{label} stale setup-python")
+    require(firmware_workflow, "python-version: '3.12'", label)
+    require(firmware_workflow, "scripts/ensure-platformio.sh", label)
+    require(firmware_workflow, "bash scripts/run_os12_ux_local.sh --build", label)
+    forbid(firmware_workflow, "python3 -m pip install --upgrade platformio", f"{label} global PlatformIO install")
+    forbid(firmware_workflow, "python -m pip install --upgrade platformio", f"{label} global PlatformIO install")
+    if firmware_workflow.count("actions/upload-artifact@") != 1:
+        raise ValidationError("Firmware workflow must publish exactly one artifact: the WS350 candidate")
 
     for needle in (
         '"artifactRole": "physical-acceptance-candidate"',
@@ -135,7 +112,7 @@ def main() -> int:
         '"partitionSha256": "%s"',
         '"partitionSize": %s',
     ):
-        require(ux_workflow, needle, "OS12 UX physical candidate authority")
+        require(firmware_workflow, needle, "WS350 physical candidate authority")
 
     for needle in (
         "This is the canonical macOS physical-candidate installer.",
@@ -163,7 +140,7 @@ def main() -> int:
 
     print(
         "PASS: Workshop OS build tooling has one pinned CI PlatformIO authority, "
-        "the OS12 UX workflow is the sole flashable physical-candidate authority, "
+        "the Firmware workflow is the sole flashable physical-candidate authority, "
         "and macOS physical acceptance verifies CI firmware+partition evidence before exact-artifact OTA "
         "without rebuilding firmware or invoking PlatformIO locally"
     )

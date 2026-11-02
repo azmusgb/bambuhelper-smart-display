@@ -8,7 +8,7 @@ This document is the persistent product/release roadmap. GitHub issues are reser
 - **Current code on `main`:** Workshop OS **v11.22 Display Expert RC1** plus the non-invasive **Workshop Companion v1 protocol/iPhone foundation** from PR **#82** — accepted firmware bytes remain unchanged.
 - **Static installer:** Workshop OS **v11.19.1 Physical Fit RC2** Full + OTA (intentionally conservative until a separate binary-channel promotion).
 - **Static rollback:** Smart Home **v7.2** Full + OTA.
-- **Repository governance:** protected `main` with stable path-aware `merge-gate`; force pushes and deletion blocked.
+- **Repository governance:** three workflows (Validate, Firmware, Companion iOS); `main` has no branch protection yet.
 - **Active direct firmware candidate:** Workshop OS **v11.23 Network / Locale / Layout Expert RC2**, PR **#76** — draft, physical acceptance required.
 - **Stacked follow-on candidate:** Workshop OS **v11.24 Audio Console RC1**, PR **#77** — draft, based on #76.
 - **Stacked Companion firmware candidate:** Workshop OS **v11.25 Workshop Companion BLE RC1**, PR **#83** — draft, based on #77; BLE/Wi-Fi coexistence and iPhone physical acceptance required.
