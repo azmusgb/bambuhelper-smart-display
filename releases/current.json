@@ -14,10 +14,10 @@
     "acceptanceEvidence": "Exact-head CI + healthy WS350 read-only interrogation + complete 29-view credential-safe framebuffer capture"
   },
   "download": {
-    "channel": "production-workshop-os-12.7.1",
-    "version": "12.7.1",
-    "rollbackVersion": "12.4.4",
-    "note": "The installer and the device's Stable channel offer Workshop OS 12.7.1: the exact CI image of main 06a49e1, installed on the WS350 by OTA and passed by accept_os12_unattended.py on 20 Oct 2026 (the owner waived the interactive re-test). Workshop OS 12.4.4 is the immediate rollback; v11.19.1 and Smart Home v7.2 stay as older ones."
+    "channel": "production-workshop-os-12.8.0",
+    "version": "12.8.0",
+    "rollbackVersion": "12.7.1",
+    "note": "The installer and the device's Stable channel offer Workshop OS 12.8.0: the exact CI image of main 446b22b, installed on the WS350 by OTA and passed by accept_os12_unattended.py on 2 Nov 2026; the owner checked it on the display. It has no display camera (the X2D bridge overlay is not in CI images). Workshop OS 12.7.1 is the immediate rollback; 12.4.4, v11.19.1 and Smart Home v7.2 stay as older ones."
   },
   "candidate": {
     "version": "12.3.9",

@@ -18,10 +18,11 @@ def sha256(path: Path) -> str:
 
 def main() -> int:
     r = json.loads((ROOT / 'release.json').read_text(encoding='utf-8'))
-    assert r['release'] == 'production-workshop-os-12.7.1'
+    assert r['release'] == 'production-workshop-os-12.8.0'
     assert r['board']['id'] == 'ws_lcd_350'
-    assert set(r['profiles']) == {'workshop-os-12.7.1', 'workshop-os-12.4.4', 'workshop-os-v11.19.1', 'smart-home-v7.2'}
-    assert r['profiles']['workshop-os-12.7.1']['recommended'] is True
+    assert set(r['profiles']) == {'workshop-os-12.8.0', 'workshop-os-12.7.1', 'workshop-os-12.4.4', 'workshop-os-v11.19.1', 'smart-home-v7.2'}
+    assert r['profiles']['workshop-os-12.8.0']['recommended'] is True
+    assert r['profiles']['workshop-os-12.7.1']['recommended'] is False
     assert r['profiles']['workshop-os-12.4.4']['recommended'] is False
     assert r['profiles']['workshop-os-v11.19.1']['recommended'] is False
     assert r['profiles']['smart-home-v7.2']['recommended'] is False
@@ -40,7 +41,7 @@ def main() -> int:
     stable = d['channels']['stable']
     assert stable['status'] == 'published'
     assert stable['release'] == r['release']
-    static = r['profiles']['workshop-os-12.7.1']
+    static = r['profiles']['workshop-os-12.8.0']
     assert stable['ota']['path'] == static['otaFile']
     assert stable['ota']['size'] == static['otaSize']
     assert stable['ota']['sha256'] == static['otaSha256']
@@ -68,15 +69,15 @@ def main() -> int:
     assert d['rules']['verifySha256BeforeInstall'] is True
     assert d['rules']['fullFlashRequiresRecoveryFlow'] is True
 
-    assert len(list((ROOT / 'firmware').glob('*.bin'))) == 8
-    assert len(list((ROOT / 'dist' / 'firmware').glob('*.bin'))) == 8
+    assert len(list((ROOT / 'firmware').glob('*.bin'))) == 10
+    assert len(list((ROOT / 'dist' / 'firmware').glob('*.bin'))) == 10
 
     app = (ROOT / 'app.js').read_text(encoding='utf-8')
     index = (ROOT / 'index.html').read_text(encoding='utf-8')
-    for needle in ("EXPECTED_RELEASE='production-workshop-os-12.7.1'", "selectedProfile='workshop-os-12.7.1'"):
+    for needle in ("EXPECTED_RELEASE='production-workshop-os-12.8.0'", "selectedProfile='workshop-os-12.8.0'"):
         assert needle in app, ('app.js', needle)
-    for needle in ('Workshop OS 12.7.1 — recommended', 'Workshop OS 12.4.4 — rollback',
-                   'Smart Home v7.2 — older rollback', 'Workshop OS 12.7.1 OTA'):
+    for needle in ('Workshop OS 12.8.0 — recommended', 'Workshop OS 12.7.1 — rollback',
+                   'Workshop OS 12.4.4 — older rollback', 'Smart Home v7.2 — older rollback', 'Workshop OS 12.8.0 OTA'):
         assert needle in index, ('index.html', needle)
     print('Accepted static installer, device update manifest and portal contract: PASS')
     return 0

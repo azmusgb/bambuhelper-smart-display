@@ -8,10 +8,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Static download channel (and the device's Stable channel): Workshop OS 12.7.1, rolling back to 12.4.4, then v11.19.1
-# and v7.2.
-PRODUCTION_FULL = Path("firmware/Workshop-OS-12.7.1-ws_lcd_350-Full.bin")
-PRODUCTION_OTA = Path("firmware/Workshop-OS-12.7.1-ws_lcd_350-OTA.bin")
+# Static download channel (and the device's Stable channel): Workshop OS 12.8.0, rolling back to 12.7.1, then 12.4.4,
+# v11.19.1 and v7.2.
+PRODUCTION_FULL = Path("firmware/Workshop-OS-12.8.0-ws_lcd_350-Full.bin")
+PRODUCTION_OTA = Path("firmware/Workshop-OS-12.8.0-ws_lcd_350-OTA.bin")
+ROLLBACK127_FULL = Path("firmware/Workshop-OS-12.7.1-ws_lcd_350-Full.bin")
+ROLLBACK127_OTA = Path("firmware/Workshop-OS-12.7.1-ws_lcd_350-OTA.bin")
 ROLLBACK12_FULL = Path("firmware/Workshop-OS-12.4.4-ws_lcd_350-Full.bin")
 ROLLBACK12_OTA = Path("firmware/Workshop-OS-12.4.4-ws_lcd_350-OTA.bin")
 PREVIOUS_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v11.19.1-Physical-Fit-RC2-Full.bin")
@@ -20,12 +22,14 @@ ROLLBACK_FULL = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Full-smart-home-v7.
 ROLLBACK_OTA = Path("firmware/BambuHelper-ws_lcd_350-v3.8.1-Smart-Home-v7.2-OTA.bin")
 UPSTREAM_BASELINE = "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4"
 ACCEPTED_SOURCE_VERSION = "11.22"
-STATIC_VERSION = "12.7.1"
-STATIC_ROLLBACK_VERSION = "12.4.4"
+STATIC_VERSION = "12.8.0"
+STATIC_ROLLBACK_VERSION = "12.7.1"
 
 ALLOWED_FIRMWARE = {
     PRODUCTION_FULL.as_posix(),
     PRODUCTION_OTA.as_posix(),
+    ROLLBACK127_FULL.as_posix(),
+    ROLLBACK127_OTA.as_posix(),
     ROLLBACK12_FULL.as_posix(),
     ROLLBACK12_OTA.as_posix(),
     PREVIOUS_FULL.as_posix(),
@@ -41,7 +45,8 @@ REQUIRED = [
     Path("docs/RELEASE_PROCESS.md"), Path("docs/CONTROL_SAFETY.md"),
     Path("scripts/capture-ws350-views.zsh"), Path(".github/pull_request_template.md"),
     Path(".github/workflows/firmware.yml"), Path(".github/workflows/validate.yml"),
-    PRODUCTION_FULL, PRODUCTION_OTA, ROLLBACK12_FULL, ROLLBACK12_OTA, PREVIOUS_FULL, PREVIOUS_OTA, ROLLBACK_FULL, ROLLBACK_OTA,
+    PRODUCTION_FULL, PRODUCTION_OTA, ROLLBACK127_FULL, ROLLBACK127_OTA, ROLLBACK12_FULL, ROLLBACK12_OTA,
+    PREVIOUS_FULL, PREVIOUS_OTA, ROLLBACK_FULL, ROLLBACK_OTA,
 ]
 FORBIDDEN_PREFIXES = ("firmware/build/", ".v95/", "waveshare-workshop-os/")
 FORBIDDEN_PATHS = {"web/os.config.json"}
@@ -294,13 +299,15 @@ def main() -> int:
     manifest = json.loads((ROOT / "releases/current.json").read_text(encoding="utf-8"))
 
     profiles = release.get("profiles", {})
-    if set(profiles) != {"workshop-os-12.7.1", "workshop-os-12.4.4", "workshop-os-v11.19.1", "smart-home-v7.2"}:
-        fail("static release.json must expose 12.7.1 + the 12.4.4, v11.19.1 and v7.2 rollbacks")
-    if [p for p, v in profiles.items() if v.get("recommended")] != ["workshop-os-12.7.1"]:
-        fail("only Workshop OS 12.7.1 is recommended")
+    if set(profiles) != {"workshop-os-12.8.0", "workshop-os-12.7.1", "workshop-os-12.4.4", "workshop-os-v11.19.1", "smart-home-v7.2"}:
+        fail("static release.json must expose 12.8.0 + the 12.7.1, 12.4.4, v11.19.1 and v7.2 rollbacks")
+    if [p for p, v in profiles.items() if v.get("recommended")] != ["workshop-os-12.8.0"]:
+        fail("only Workshop OS 12.8.0 is recommended")
     expected_paths = {
-        ("workshop-os-12.7.1", "file"): PRODUCTION_FULL.as_posix(),
-        ("workshop-os-12.7.1", "otaFile"): PRODUCTION_OTA.as_posix(),
+        ("workshop-os-12.8.0", "file"): PRODUCTION_FULL.as_posix(),
+        ("workshop-os-12.8.0", "otaFile"): PRODUCTION_OTA.as_posix(),
+        ("workshop-os-12.7.1", "file"): ROLLBACK127_FULL.as_posix(),
+        ("workshop-os-12.7.1", "otaFile"): ROLLBACK127_OTA.as_posix(),
         ("workshop-os-12.4.4", "file"): ROLLBACK12_FULL.as_posix(),
         ("workshop-os-12.4.4", "otaFile"): ROLLBACK12_OTA.as_posix(),
         ("workshop-os-v11.19.1", "file"): PREVIOUS_FULL.as_posix(),
@@ -332,10 +339,10 @@ def main() -> int:
     main_state_summary = validate_main_state(manifest.get("mainState"), readme_text)
 
     download = manifest.get("download") or {}
-    if download.get("channel") != "production-workshop-os-12.7.1" or download.get("version") != STATIC_VERSION:
-        fail("static download channel must be Workshop OS 12.7.1")
+    if download.get("channel") != "production-workshop-os-12.8.0" or download.get("version") != STATIC_VERSION:
+        fail("static download channel must be Workshop OS 12.8.0")
     if str(download.get("rollbackVersion")) != STATIC_ROLLBACK_VERSION:
-        fail("static rollbackVersion must be Workshop OS 12.4.4")
+        fail("static rollbackVersion must be Workshop OS 12.7.1")
 
     archive = ROOT / "releases" / "archive"
     if not (archive / "README.md").is_file():
@@ -346,8 +353,8 @@ def main() -> int:
     print(f"Accepted firmware commit: {accepted_commit}")
     print(f"Active candidate: {candidate_summary}")
     print(f"Main state: {main_state_summary}")
-    print("Static download channel: Workshop OS 12.7.1 Full + OTA")
-    print("Static rollbacks: Workshop OS 12.4.4, then v11.19.1 and Smart Home v7.2 (Full + OTA)")
+    print("Static download channel: Workshop OS 12.8.0 Full + OTA")
+    print("Static rollbacks: Workshop OS 12.7.1, then 12.4.4, v11.19.1 and Smart Home v7.2 (Full + OTA)")
     print("Visual capture credential redaction: REQUIRED BEFORE RETENTION")
     print("CI ownership: Validate on every change; Firmware and Companion iOS path-owned")
     return 0
