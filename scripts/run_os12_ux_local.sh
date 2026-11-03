@@ -5,6 +5,10 @@ ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
 OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.8.0}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
+# Printer -> Camera: the X2D bridge frame address compiled into the image. The default is the Pi's camera failover
+# (pi-hub deploy/x2d-camera-failover.py), which serves the Pi's own bridge and falls back to the MacBook's. This is
+# the one place it is set; scripts/run_x2d_local.sh passes another address for a development build.
+X2D_BRIDGE_URL="${X2D_BRIDGE_URL:-http://10.0.0.30:8091/x2d/frame.jpg}"
 
 cd "$ROOT"
 
@@ -13,6 +17,7 @@ echo "ROOT=$ROOT"
 echo "BUILD=$BUILD"
 echo "OS12_RELEASE_VERSION=$OS12_RELEASE_VERSION"
 echo "OS12_SOURCE_SHA=$OS12_SOURCE_SHA"
+echo "X2D_BRIDGE_URL=$X2D_BRIDGE_URL"
 
 BUILD="$BUILD" \
 OS12_RELEASE_VERSION="$OS12_RELEASE_VERSION" \
@@ -167,6 +172,14 @@ python3 "$ROOT/apply_workshop_os12_portal_icon_rail.py" --repo "$BUILD" --apply
 # Runs after the last layer that edits web/app.css.
 python3 "$ROOT/scripts/validate_os12_portal_boot.py" --repo "$BUILD"
 
+# Printer -> Camera from the X2D bridge, last so it starts from the finished canonical tree. The earlier media
+# validators prove the transport-agnostic backend layer; this overlay adds the bridge's fetch worker to the
+# reconstructed copy only (firmware/platform/media stays untouched) and refuses a tree it has already patched.
+python3 "$ROOT/apply_workshop_os12_x2d_bridge_camera.py" --repo "$BUILD" --bridge-url "$X2D_BRIDGE_URL" --apply
+python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
+X2D_COMPILED_URL="$(sed -n 's/^#define WORKSHOP_X2D_BRIDGE_URL "\(.*\)"$/\1/p' "$BUILD/src/ws350_media_backend.cpp")"
+[[ -n "$X2D_COMPILED_URL" ]] || { echo 'FAIL: X2D bridge URL missing from the reconstructed media backend' >&2; exit 1; }
+
 if [[ "${1:-}" == "--build" ]]; then
   PIO_BIN="$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")"
   [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable after isolated setup' >&2; exit 1; }
@@ -201,5 +214,6 @@ echo "Status token: GET /api/status/lite only, bearer token approved on the touc
 echo "Sign-in code key: GET /api/portal-code only, separate wsc_ key approved on the touchscreen, digest-only storage, its own lock-out (only a wrong wsc_ key counts), never the sign-in one."
 echo "Inventory authority: Filament Inventory device-feed v1 contract; printer AMS telemetry never creates canonical inventory facts."
 echo "Home/Workshop: consume the same profile-scoped Filament Inventory projection; Unknown/Undetermined is preserved when authoritative evidence is absent."
+echo "Printer camera: X2D bridge frames from $X2D_COMPILED_URL, fetched on a core-0 worker; the canonical media backend stays transport-agnostic."
 echo "Physical acceptance: REQUIRED before integration into the canonical bootstrap/update path."
 echo "Stable promotion: forbidden by this script."

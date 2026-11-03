@@ -53,7 +53,7 @@ jobs:
           fi
           echo 'Python syntax: PASS'
 
-      - name: Test experimental X2D overlays
+      - name: Test X2D camera overlays
         shell: bash
         run: |
           set -euo pipefail

@@ -21,6 +21,10 @@ Workshop OS deliberately keeps accepted source, merged-but-unaccepted source, st
 
 `releases/current.json` is authoritative for the accepted source baseline, any active source candidate, merged-but-unaccepted `main` state, and the conservative static download channel. `releases/device-update.json` is the versioned device-facing OTA discovery contract and is not automatically advanced by a source merge.
 
+## Printer camera in the canonical build
+
+The canonical OS12 reconstruction now ends by applying the X2D bridge camera overlays, so the CI WS350 candidate, and every later Stable, has **Printer → Camera**. Frames come from the Pi's camera failover, `http://10.0.0.30:8091/x2d/frame.jpg`, which serves the Pi's own bridge and falls back to the MacBook's. The address is set once, `X2D_BRIDGE_URL` in `scripts/run_os12_ux_local.sh`; `scripts/run_x2d_local.sh` builds a development image with another one. The repository media backend stays transport-agnostic. The 11 physical-acceptance checks in `docs/X2D_BRIDGE_CAMERA.md` gate the merge.
+
 ## Workshop OS v11.28 UI13 Appliance Settings
 
 PR **#109** is the frozen UI13 hardware-facing source candidate underneath the OS12 platform branch. Its goal is not another settings menu; it is a coherent appliance UI for a 480×320 touch device.

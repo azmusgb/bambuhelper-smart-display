@@ -1,6 +1,6 @@
 # X2D bridge camera for WS350
 
-Status: **experimental / physical validation required**
+Status: **part of the canonical WS350 build; physical acceptance required before merge** (see Physical acceptance)
 
 This path is a fallback for Bambu X2D camera viewing on the Waveshare ESP32-S3-Touch-LCD-3.5 (`ws_lcd_350`). It keeps the Bambu/TUTK camera session on a Mac and sends only a small JPEG frame to the WS350 over the trusted LAN.
 
@@ -10,7 +10,9 @@ USB remains the power, flashing, and serial-diagnostics connection. Runtime came
 
 The canonical Workshop OS 12 media backend under `firmware/platform/media/` remains unchanged and transport-agnostic. In particular, the canonical `Ws350MediaBackend` does **not** own `HTTPClient`/`WiFiClient` networking.
 
-X2D networking is installed only by `apply_workshop_os12_x2d_bridge_camera.py` into a **reconstructed firmware tree** for this hardware experiment. That keeps the accepted OS12 media contract intact while allowing the real WS350 to be tested before deciding whether the transport deserves a permanent service abstraction.
+X2D networking is installed only by `apply_workshop_os12_x2d_bridge_camera.py` into the **reconstructed firmware tree**, as the last step of the canonical reconstruction (`scripts/run_os12_ux_local.sh`). The repository backend and the earlier media validators keep the transport-agnostic OS12 media contract; the CI WS350 candidate, and so Stable, includes the camera.
+
+The compiled bridge address is set in one place, `X2D_BRIDGE_URL` in `scripts/run_os12_ux_local.sh`. Its default is the Pi's camera failover, `http://10.0.0.30:8091/x2d/frame.jpg` (pi-hub `deploy/x2d-camera-failover.py`), which serves the Pi's own bridge and falls back to the MacBook's.
 
 ```text
 Bambu X2D
@@ -29,7 +31,7 @@ tools/x2d_camera_bridge.py
    |
    | HTTP GET /x2d/frame.jpg on trusted LAN
    v
-reconstructed WS350 image + experimental X2D overlay
+reconstructed WS350 image + X2D overlay
    |
    | FreeRTOS fetch worker (core 0) -> PSRAM triple buffer
    v
@@ -149,22 +151,23 @@ Validate from another LAN device:
 http://<MAC_IP>:8091/x2d/frame.jpg
 ```
 
-## 3. Reconstruct canonical OS12 first
+## 3. The canonical reconstruction applies the overlays
 
-Run the repository's normal OS12 reconstruction sequence, including the canonical media runtime and authenticated media API. At this point the reconstructed `src/ws350_media_backend.cpp` should still match the accepted transport-agnostic design.
+`bash scripts/run_os12_ux_local.sh` (and CI's ws350 job) runs every OS12 layer and its validators, then applies the two X2D overlays with the bridge address above. The media validators run before the overlays, so they still prove the transport-agnostic layer.
 
 Do **not** edit `firmware/platform/media/ws350_media_backend.*` to add the bridge.
 
-## 4. Apply the experimental X2D overlays
+## 4. A development build with another bridge
 
-`scripts/run_x2d_local.sh` does steps 3-5 in one go. It copies the canonical
-tree to a separate build directory, so the canonical candidate is never touched:
+`scripts/run_x2d_local.sh` reconstructs the canonical tree with its own `X2D_BRIDGE_URL` compiled in, for example the Mac's bridge directly:
 
 ```bash
 X2D_BRIDGE_URL="http://${MAC_IP}:8091/x2d/frame.jpg" bash scripts/run_x2d_local.sh --build
 ```
 
-Or apply the two overlays by hand, in this order, after canonical reconstruction:
+The overlays refuse a tree they have already patched, so they are never applied twice. With `--in-place`, the script builds an existing tree and stops if it was reconstructed with a different address.
+
+The two overlays, in the order the reconstruction applies them:
 
 ```bash
 python3 apply_workshop_os12_x2d_bridge_camera.py \
@@ -221,14 +224,13 @@ saves the partition table, NVS and otadata, and stops if the partition layout
 differs. NVS is not erased. Keep USB attached for power, flashing, and serial
 diagnostics.
 
-CI (`firmware.yml`) compiles this overlay candidate on every
-relevant PR but does not package it.
+This is a local development build, never the CI candidate. CI (`firmware.yml`) builds and packages the canonical image, camera included, on every relevant PR.
 
-An already-published firmware image will not contain this experimental overlay or its private bridge endpoint.
+Firmware published before this change (12.8.0 and earlier) does not contain the overlay.
 
 ## 6. Start and control the viewer
 
-On the touchscreen (12.3.7+), tap **Printer → Camera**. The camera page plays the bridge with a Pause/Resume row. **‹ Printer** (Back) or any tab stops it. On builds without the X2D overlay, the same button plays the printer's own camera stream, which needs LAN mode and the printer's access code. The motion test is still at More → Sound & Alerts.
+On the touchscreen (12.3.7+), tap **Printer → Camera**. The camera page plays the bridge with a Pause/Resume row. **‹ Printer** (Back) or any tab stops it. On firmware from before the camera was canonical (12.8.0 and earlier), the same button plays the printer's own camera stream, which needs LAN mode and the printer's access code. The motion test is still at More → Sound & Alerts.
 
 From the portal or a script, use the existing authenticated OS12 session mechanism.
 
@@ -244,7 +246,7 @@ The X2D start route is fixed-source only and accepts no arbitrary URL/path argum
 
 ## Device-side limits
 
-The experimental overlay is deliberately conservative:
+The overlay is deliberately conservative:
 
 - maximum acquisition cadence: 5 fps, including HTTP latency,
 - JPEG maximum: 384 KiB,
@@ -259,7 +261,7 @@ Malformed, oversized, unavailable, or incomplete frames are rejected by the work
 
 ## Physical acceptance
 
-Do not promote this overlay into the canonical media architecture until the real WS350 passes all of the following:
+The change that made this overlay canonical must not merge until the real WS350, running that PR's exact CI candidate, passes all of the following:
 
 1. Camera view starts from a normal connected state.
 2. Frames visibly update and are not a repeated still image.
