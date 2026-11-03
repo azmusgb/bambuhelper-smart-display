@@ -48,7 +48,7 @@ done
 [[ -s "$ARTIFACT_ZIP" ]] || { echo "ERROR: artifact zip missing: $ARTIFACT_ZIP" >&2; exit 64; }
 
 cd "$ROOT"
-[[ -d .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
+[[ -e .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "ERROR: tracked checkout changes are present; refusing unaudited evidence collection." >&2
   exit 3
