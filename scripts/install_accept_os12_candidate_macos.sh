@@ -51,7 +51,7 @@ done
 [[ "$FULL_BACKUP" -eq 1 ]] || { echo "ERROR: --full-backup is required" >&2; exit 64; }
 
 cd "$ROOT"
-[[ -d .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
+[[ -e .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/os12-candidate.XXXXXX")"
 cleanup(){

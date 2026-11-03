@@ -49,7 +49,7 @@ if [[ "$EXERCISE_RECOVERY" -eq 1 && "$CONFIRM_IDLE" -ne 1 ]]; then
 fi
 
 cd "$ROOT"
-[[ -d .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
+[[ -e .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/os12-installed-candidate.XXXXXX")"
 cleanup(){
