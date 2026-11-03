@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Experimental X2D bridge development candidate for the WS350.
+# X2D bridge development build for the WS350.
 #
-# Copies the reconstructed canonical OS12 UX tree, applies the X2D overlays in
-# order, and optionally builds and USB-flashes it. The canonical tree is never
-# modified. This is a development candidate: it is never byte-identical to a CI
-# physical-acceptance candidate because the bridge URL is compiled in.
+# Reconstructs the canonical OS12 UX tree (which includes the X2D camera
+# overlays) with this X2D_BRIDGE_URL compiled in, and optionally builds and
+# USB-flashes it. It is a local development build, never the CI
+# physical-acceptance candidate, even with the canonical bridge URL.
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BASE="${BASE:-/tmp/ws350-os12-ux-build}"
@@ -30,11 +30,11 @@ Usage:
     bash scripts/run_x2d_local.sh [--reconstruct] [--build] [--flash --confirm-printer-idle]
 
 Options:
-  --reconstruct           Rebuild the canonical OS12 UX tree at $BASE first
-                          (automatic when $BASE does not exist).
-  --in-place              Apply the overlays directly to $BASE instead of a copy,
-                          so the build is incremental. Only for throwaway trees
-                          whose canonical artifacts were already packaged (CI).
+  --reconstruct           With --in-place: reconstruct $BASE again even when it
+                          exists (automatic when it doesn't).
+  --in-place              Build in $BASE, a tree already reconstructed with this
+                          X2D_BRIDGE_URL, instead of reconstructing into $BUILD.
+                          The build is incremental.
   --build                 Compile both ws_lcd_350 and jc3248w535 regressions.
   --build-ws350           Compile only the ws_lcd_350 X2D regression. Intended
                           for CI fan-out; existing local --build behavior is unchanged.
@@ -110,25 +110,30 @@ fi
 
 cd "$ROOT"
 
-if [[ "$RECONSTRUCT" -eq 1 || ! -d "$BASE/src" ]]; then
-  BUILD="$BASE" bash "$ROOT/scripts/run_os12_ux_local.sh"
-fi
-
-echo "=== X2D overlay candidate ==="
+# The canonical reconstruction applies the X2D camera overlays itself (scripts/run_os12_ux_local.sh), with the bridge
+# URL compiled in. A development build is that reconstruction with this script's X2D_BRIDGE_URL; the overlays refuse
+# a tree they have already patched, so they are never applied again here.
+echo "=== X2D bridge development build ==="
 if [[ "$IN_PLACE" -eq 1 ]]; then
   BUILD="$BASE"
-  echo "BUILD=$BUILD (in place; canonical tree is consumed)"
+  echo "BUILD=$BUILD (in place)"
+  if [[ "$RECONSTRUCT" -eq 1 || ! -d "$BUILD/src" ]]; then
+    X2D_BRIDGE_URL="$BRIDGE_URL" BUILD="$BUILD" bash "$ROOT/scripts/run_os12_ux_local.sh"
+  fi
 else
-  echo "BASE=$BASE"
   echo "BUILD=$BUILD"
-  rm -rf "$BUILD"
-  cp -a "$BASE" "$BUILD"
+  X2D_BRIDGE_URL="$BRIDGE_URL" BUILD="$BUILD" bash "$ROOT/scripts/run_os12_ux_local.sh"
 fi
 
-python3 "$ROOT/apply_workshop_os12_x2d_bridge_camera.py" --repo "$BUILD" --bridge-url "$BRIDGE_URL" --apply
-python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
+COMPILED_URL="$(sed -n 's/^#define WORKSHOP_X2D_BRIDGE_URL "\(.*\)"$/\1/p' "$BUILD/src/ws350_media_backend.cpp")"
+WANTED_URL="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import apply_workshop_os12_x2d_bridge_camera as p; print(p.validate_bridge_url(sys.argv[2]))' "$ROOT" "$BRIDGE_URL")"
+if [[ "$COMPILED_URL" != "$WANTED_URL" ]]; then
+  echo "ERROR: $BUILD compiles the bridge URL '${COMPILED_URL:-none}', not $WANTED_URL; rerun with --reconstruct." >&2
+  exit 65
+fi
+echo "Bridge URL: $COMPILED_URL"
 
-[[ "$DO_BUILD" -eq 1 ]] || { echo "X2D overlays applied (no build requested)."; exit 0; }
+[[ "$DO_BUILD" -eq 1 ]] || { echo "X2D development tree ready (no build requested)."; exit 0; }
 
 PIO_BIN="${PIO_BIN:-$(ROOT="$ROOT" bash "$ROOT/scripts/ensure-platformio.sh")}"
 [[ -x "$PIO_BIN" ]] || { echo 'FAIL: pio unavailable' >&2; exit 1; }

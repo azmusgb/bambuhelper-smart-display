@@ -23,6 +23,7 @@ import time
 import zlib
 
 from accept_os12_media_physical import update_identity
+from accept_os12_media_runtime import api, status, validate_status, wait_for_session
 from accept_os12_portal_runtime import AcceptanceError, Client, establish_portal_session, check
 from accept_os12_unattended import (
     REQUIRED_VIEWS,
@@ -71,6 +72,31 @@ def capture_settled_frame(client: Client, view_id: str) -> tuple[bytes, dict]:
         f"{view_id}: framebuffer did not settle within {SETTLE_MAX_ATTEMPTS} attempts "
         f"at threshold {SETTLE_DIFF_THRESHOLD}"
     )
+
+
+def freeze_video_view(client: Client) -> str:
+    """Pause the demo the Video test page starts by itself, so its frame can settle.
+
+    Opening media-video starts the built-in demo (#169). Once the demo really draws
+    into the framebuffer the view changes every frame and can never settle, so the
+    review capture is of the paused frame. Returns the session found on opening.
+    """
+    session = str(wait_for_session(client, {"PlayingVideo", "Idle"}, 3.0)["session"])
+    if session == "PlayingVideo":
+        pause = api(client, "/os12/media/video/pause", method="POST")
+        validate_status(pause)
+        check(pause["_http_status"] == 200 and pause["session"] == "Paused",
+              f"media-video: video pause refused before capture: {pause.get('error')}")
+    return session
+
+
+def stop_video(client: Client) -> None:
+    if str(status(client)["session"]) == "Idle":
+        return
+    stop = api(client, "/os12/media/stop", method="POST")
+    validate_status(stop)
+    check(stop["_http_status"] == 200 and stop["session"] == "Idle",
+          f"media-video: video stop refused after capture: {stop.get('error')}")
 
 
 def png_bytes(width: int, height: int, rgb: bytes) -> bytes:
@@ -165,7 +191,14 @@ def capture(args: argparse.Namespace) -> int:
     for index, view_id in enumerate(REQUIRED_VIEWS, 1):
         meta = by_id[view_id]
         show(client, view_id)
-        body, settle = capture_settled_frame(client, view_id)
+        opened = freeze_video_view(client) if view_id == "media-video" else None
+        try:
+            body, settle = capture_settled_frame(client, view_id)
+        finally:
+            if opened is not None:
+                stop_video(client)
+        if opened is not None:
+            settle["videoSessionOnOpen"] = opened
         captured_frames[view_id] = body
         width, height, rgb = parse_ppm(body)
         check((width, height) == (480, 320), f"{view_id}: expected 480x320, got {width}x{height}")
