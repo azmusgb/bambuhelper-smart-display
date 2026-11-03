@@ -69,7 +69,7 @@ done
 [[ "$EXERCISE" -eq 1 ]] || { echo "ERROR: --exercise is required before any full-image write." >&2; exit 64; }
 
 cd "$ROOT"
-[[ -d .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
+[[ -e .git ]] || { echo "ERROR: not inside Workshop OS repository" >&2; exit 2; }
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "ERROR: tracked checkout changes are present; refusing recovery exercise." >&2
   exit 3
