@@ -1,6 +1,6 @@
 {
-  "release": "production-workshop-os-12.8.0",
-  "sourceCommit": "446b22b9c589d95ba1718201af9a34288f1849fb",
+  "release": "production-workshop-os-12.9.0",
+  "sourceCommit": "076c4604b3d91864002626ca5a9e58af01ea018a",
   "board": {
     "id": "ws_lcd_350",
     "name": "Waveshare ESP32-S3-Touch-LCD-3.5",
@@ -11,9 +11,21 @@
     "psram": "8 MB"
   },
   "profiles": {
-    "workshop-os-12.8.0": {
-      "label": "Workshop OS 12.8.0 — recommended",
+    "workshop-os-12.9.0": {
+      "label": "Workshop OS 12.9.0 — recommended",
       "recommended": true,
+      "version": "Workshop OS 12.9.0",
+      "file": "firmware/Workshop-OS-12.9.0-ws_lcd_350-Full.bin",
+      "size": 2593008,
+      "sha256": "58f947fa5ae3fff504cd1178fb2380dfae7ed18683821fbd4e6a93812361ade6",
+      "otaFile": "firmware/Workshop-OS-12.9.0-ws_lcd_350-OTA.bin",
+      "otaSize": 2527472,
+      "otaSha256": "1a9a8fea48b9f3a64ccba870bf9bf1785b60ed9a091f25faf9bb94911a1e1846",
+      "description": "Current Workshop OS, now with the display camera: Printer › Camera shows the X2D live through the Pi's camera failover (the Pi's own bridge, else the MacBook's). Everything in 12.8.0 stays: Pi Hub on the display, updates from the Pi, idle Home with the house, printer and timer, and the Premium UI v2 look. The OTA image is the exact CI build that passed unattended acceptance on the WS350 (3 Nov 2026); the Full image wraps the same application for a fresh USB install."
+    },
+    "workshop-os-12.8.0": {
+      "label": "Workshop OS 12.8.0 (rollback)",
+      "recommended": false,
       "version": "Workshop OS 12.8.0",
       "file": "firmware/Workshop-OS-12.8.0-ws_lcd_350-Full.bin",
       "size": 2590384,
@@ -21,10 +33,10 @@
       "otaFile": "firmware/Workshop-OS-12.8.0-ws_lcd_350-OTA.bin",
       "otaSize": 2524848,
       "otaSha256": "4c91173fa28120605809d450eb4af64f6c1275e9cc84f5e34db71db1de949ca6",
-      "description": "Current Workshop OS: the display connects to Pi Hub and takes its updates from the Pi, idle Home shows the house, printer and timer on one screen, and the Premium UI v2 look (AMS spool gauges, thermal capsules, the Figtree boot splash, normal-case labels). The display camera is not in this image: X2D bridge viewing needs the separate camera build. The OTA image is the exact CI build that passed unattended acceptance on the WS350 (2 Nov 2026); the Full image wraps the same application for a fresh USB install."
+      "description": "Previous installer release, kept as the immediate rollback. It has no display camera."
     },
     "workshop-os-12.7.1": {
-      "label": "Workshop OS 12.7.1 (rollback)",
+      "label": "Workshop OS 12.7.1 (older rollback)",
       "recommended": false,
       "version": "Workshop OS 12.7.1",
       "file": "firmware/Workshop-OS-12.7.1-ws_lcd_350-Full.bin",
@@ -33,7 +45,7 @@
       "otaFile": "firmware/Workshop-OS-12.7.1-ws_lcd_350-OTA.bin",
       "otaSize": 2503536,
       "otaSha256": "cb0ea61e8ed66d3c69df4143e6c9d3b0aff0093f001235cf6735ceac40708741",
-      "description": "Previous installer release, kept as the immediate rollback."
+      "description": "Earlier installer release, kept as an older rollback."
     },
     "workshop-os-12.4.4": {
       "label": "Workshop OS 12.4.4 (older rollback)",
