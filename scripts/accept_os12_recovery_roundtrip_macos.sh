@@ -203,7 +203,10 @@ PY
 }
 
 PORT="$(resolve_port)"
-run_esptool() { "$ESP_PY" -m esptool --chip esp32s3 --port "$PORT" "$@"; }
+# 921600 baud: a 16 MB read takes about 3.5 min instead of about 24 at esptool's default 115200 (measured on the
+# WS350, 3 Nov 2026; the bytes read are identical). WORKSHOP_ESPTOOL_BAUD overrides it.
+ESPTOOL_BAUD="${WORKSHOP_ESPTOOL_BAUD:-921600}"
+run_esptool() { "$ESP_PY" -m esptool --chip esp32s3 --port "$PORT" --baud "$ESPTOOL_BAUD" "$@"; }
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 EVIDENCE_DIR="${WS350_RECOVERY_EVIDENCE_DIR:-$HOME/Downloads/workshop-os12-recovery-roundtrip-$STAMP}"

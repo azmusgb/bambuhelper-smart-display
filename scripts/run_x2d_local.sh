@@ -212,7 +212,10 @@ fi
 
 PORT="$(PIO_BIN="$PIO_BIN" bash "$ROOT/scripts/waveshare-usb.sh" port)"
 echo "WS350 USB port: $PORT"
-esptool() { "$PIO_BIN" pkg exec -p tool-esptoolpy -- esptool.py --chip esp32s3 --port "$PORT" "$@"; }
+# 921600 baud: a 16 MB read takes about 3.5 min instead of about 24 at esptool's default 115200 (measured on the
+# WS350, 3 Nov 2026; the bytes read are identical). WORKSHOP_ESPTOOL_BAUD overrides it.
+ESPTOOL_BAUD="${WORKSHOP_ESPTOOL_BAUD:-921600}"
+esptool() { "$PIO_BIN" pkg exec -p tool-esptoolpy -- esptool.py --chip esp32s3 --port "$PORT" --baud "$ESPTOOL_BAUD" "$@"; }
 
 BACKUP_DIR="${WS350_BACKUP_DIR:-$HOME/Downloads/workshop-os12-x2d-preflash-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$BACKUP_DIR"
