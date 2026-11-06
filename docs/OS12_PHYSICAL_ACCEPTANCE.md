@@ -127,7 +127,9 @@ With Home, the three Printer segments and Workshop, the catalog lists 20 views (
 Every More page must show:
 - the same header, with Back at top-left going to the parent page;
 - the tab bar, drawn and live (the More tab always opens the More root);
-- single-line rows at least 44 px tall;
+- single-line rows at least 48 px tall. This is the display kit's minimum (appliance-ui
+  `docs/superpowers/specs/2026-11-06-display-kit-design.md`, K5) and DESIGN.md's. Until the More pages move onto the
+  kit (its rollout step 5), the firmware's rows are 44 px, so this check is expected to fail on them;
 - stepper values centred between "−" and "+";
 - disabled controls that state the reason.
 

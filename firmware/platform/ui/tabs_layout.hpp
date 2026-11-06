@@ -27,7 +27,11 @@
 //   left and the done-at time beside it, the progress bar, one detail line.
 //   The done-at time is fixed when the printer's estimate changes (DoneAt),
 //   so every screen shows the same time and it does not tick.
+// - (12.9.1) honest readings: temperatures, the idle word and AMS amounts say
+//   what the printer's recent report backs, and nothing more (temperatureText,
+//   idlePrinterWord, readingsAgeText, trayAmountText).
 
+#include <math.h>
 #include <stdio.h>
 
 namespace workshop {
@@ -723,7 +727,8 @@ inline char* dateText(char* out, size_t len, int year, int month, int day, int w
 
 // What the calm status line says. A print comes first, then the workshop
 // timer, then the printer.
-enum class CalmState : uint8_t { NoPrinter, Offline, Attention, Idle, Finished, Printing, Paused, TimerRunning, TimerDone };
+enum class CalmState : uint8_t { NoPrinter, Offline, Attention, Idle, Finished, Printing, Paused, TimerRunning, TimerDone,
+                                 NoReadings, Unknown };
 
 struct CalmStatus {
   CalmState state;
@@ -731,6 +736,59 @@ struct CalmStatus {
   const char* doneAt;     // Printing: clock time ("6:42 PM"), or empty when unknown
   uint32_t timerSeconds;  // TimerRunning
 };
+
+// ---------------------------------------------------------------------------
+// Honest readings (12.9.1)
+// ---------------------------------------------------------------------------
+// A connected printer is not the same as a printer the display has heard from. These say only what the printer's
+// recent report backs: a missing temperature is "--", never 0°; "Ready" needs a recent report that says idle; and an
+// AMS tray's amount is the printer's own estimate or "amount unknown", never an assumed 1000 g spool.
+
+// "26°", "150° / 220°" while heating (withTarget), or "--" with no recent report.
+inline char* temperatureText(char* out, size_t len, bool fresh, float now, float want, bool withTarget) {
+  if (!out || !len) return out;
+  if (!fresh) snprintf(out, len, "--");
+  else if (withTarget && want > 1.0f && fabsf(want - now) >= 2.0f) snprintf(out, len, "%.0f° / %.0f°", now, want);
+  else snprintf(out, len, "%.0f°", now);
+  return out;
+}
+
+// What a connected printer that isn't printing is called.
+enum class PrinterWord : uint8_t { Ready, NoReadings, Unknown };
+
+inline PrinterWord idlePrinterWord(bool freshReadings, bool stateKnown) {
+  if (!freshReadings) return PrinterWord::NoReadings;
+  return stateKnown ? PrinterWord::Ready : PrinterWord::Unknown;
+}
+
+inline const char* printerWordText(PrinterWord word) {
+  switch (word) {
+    case PrinterWord::NoReadings: return "No readings";
+    case PrinterWord::Unknown: return "Unknown";
+    case PrinterWord::Ready:
+    default: return "Ready";
+  }
+}
+
+// Why there are no readings: never heard from, or how long since the last report (rounded down).
+inline char* readingsAgeText(char* out, size_t len, bool everRead, unsigned long ageSeconds) {
+  if (!out || !len) return out;
+  if (!everRead) { snprintf(out, len, "Waiting for the printer's first report"); return out; }
+  if (ageSeconds >= 2UL * 86400UL) snprintf(out, len, "No report from the printer for %lu days", ageSeconds / 86400UL);
+  else if (ageSeconds >= 3600UL) snprintf(out, len, "No report from the printer for %lu h", ageSeconds / 3600UL);
+  else snprintf(out, len, "No report from the printer for %lu min", ageSeconds / 60UL > 0 ? ageSeconds / 60UL : 1UL);
+  return out;
+}
+
+// An AMS tray's row value: "Empty", "PLA · 65% left" (the printer's estimate), or "PLA · amount unknown".
+inline char* trayAmountText(char* out, size_t len, const char* type, bool present, int remain) {
+  if (!out || !len) return out;
+  const char* name = type && type[0] ? type : "Filament";
+  if (!present) snprintf(out, len, "Empty");
+  else if (remain >= 0) snprintf(out, len, "%s · %d%% left", name, remain > 100 ? 100 : remain);
+  else snprintf(out, len, "%s · amount unknown", name);
+  return out;
+}
 
 inline char* calmStatusText(char* out, size_t len, const CalmStatus& c) {
   if (!out || !len) return out;
@@ -752,6 +810,8 @@ inline char* calmStatusText(char* out, size_t len, const CalmStatus& c) {
     case CalmState::Offline: snprintf(out, len, "Printer offline"); break;
     case CalmState::NoPrinter: snprintf(out, len, "No printer set up"); break;
     case CalmState::Finished: snprintf(out, len, "Print finished"); break;
+    case CalmState::NoReadings: snprintf(out, len, "No printer readings"); break;
+    case CalmState::Unknown: snprintf(out, len, "Printer state unknown"); break;
     case CalmState::Idle:
     default: snprintf(out, len, "Printer idle"); break;
   }

@@ -25,6 +25,10 @@
 //   the card, apart from each other and from Home's chevron; and one done-at
 //   time that holds still while the printer's estimate does, and is the same
 //   for every screen that asks.
+// - (12.9.1) honest readings: a missing or old printer report never shows as
+//   0° or "Ready"; temperatures are "--" until a recent report, the idle word
+//   is "No readings" or "Unknown" when the report can't back "Ready", and an
+//   AMS tray with no amount says so instead of an assumed 1000 g spool.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_tabs_layout_smoke.cpp -o /tmp/tabs-layout-smoke
 
@@ -382,6 +386,41 @@ void checkCalm(Screen s, const char* o) {
         }
 }
 
+void checkHonestReadings() {
+  char t[64];
+  // temperatures_need_a_recent_report: 0° is never drawn for a missing reading.
+  check(strcmp(temperatureText(t, sizeof(t), false, 0.0f, 0.0f, true), "--") == 0, "no report: temperature is --", t);
+  check(strcmp(temperatureText(t, sizeof(t), false, 26.0f, 0.0f, false), "--") == 0, "old report: temperature is --", t);
+  check(strcmp(temperatureText(t, sizeof(t), true, 26.0f, 0.0f, true), "26°") == 0, "fresh idle temperature", t);
+  check(strcmp(temperatureText(t, sizeof(t), true, 150.0f, 220.0f, true), "150° / 220°") == 0, "heating with target", t);
+  check(strcmp(temperatureText(t, sizeof(t), true, 150.0f, 220.0f, false), "150°") == 0, "heating, target hidden", t);
+  // ready_needs_a_recent_idle_report
+  check(idlePrinterWord(false, false) == PrinterWord::NoReadings, "no report is No readings", "idle word");
+  check(idlePrinterWord(false, true) == PrinterWord::NoReadings, "old report is No readings", "idle word");
+  check(idlePrinterWord(true, false) == PrinterWord::Unknown, "recent report without a state is Unknown", "idle word");
+  check(idlePrinterWord(true, true) == PrinterWord::Ready, "recent idle report is Ready", "idle word");
+  check(strcmp(printerWordText(PrinterWord::NoReadings), "No readings") == 0, "No readings text", "idle word");
+  check(strcmp(printerWordText(PrinterWord::Unknown), "Unknown") == 0, "Unknown text", "idle word");
+  check(strcmp(printerWordText(PrinterWord::Ready), "Ready") == 0, "Ready text", "idle word");
+  // readings_age_says_how_long
+  check(strcmp(readingsAgeText(t, sizeof(t), false, 0), "Waiting for the printer's first report") == 0, "never read", t);
+  check(strcmp(readingsAgeText(t, sizeof(t), true, 90), "No report from the printer for 1 min") == 0, "minutes", t);
+  check(strcmp(readingsAgeText(t, sizeof(t), true, 47823), "No report from the printer for 13 h") == 0, "hours", t);
+  check(strcmp(readingsAgeText(t, sizeof(t), true, 3 * 86400 + 5), "No report from the printer for 3 days") == 0, "days", t);
+  // ams_amount_is_never_assumed
+  check(strcmp(trayAmountText(t, sizeof(t), "PLA", true, -1), "PLA · amount unknown") == 0, "unknown amount", t);
+  check(strcmp(trayAmountText(t, sizeof(t), "PLA", true, 65), "PLA · 65% left") == 0, "printer's estimate", t);
+  check(strcmp(trayAmountText(t, sizeof(t), "", true, -1), "Filament · amount unknown") == 0, "no type", t);
+  check(strcmp(trayAmountText(t, sizeof(t), nullptr, true, 0), "Filament · 0% left") == 0, "empty spool estimate", t);
+  check(strcmp(trayAmountText(t, sizeof(t), "PLA", false, 50), "Empty") == 0, "no spool", t);
+  CalmStatus st;
+  st.percent = 0; st.doneAt = ""; st.timerSeconds = 0;
+  st.state = CalmState::NoReadings;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "No printer readings") == 0, "calm: no readings", t);
+  st.state = CalmState::Unknown;
+  check(strcmp(calmStatusText(t, sizeof(t), st), "Printer state unknown") == 0, "calm: unknown", t);
+}
+
 void checkCalmText() {
   char t[64];
   check(strcmp(dateText(t, sizeof(t), 2026, 10, 18, 0, 2), "Sunday · 10/18/2026") == 0, "date MM/DD/YYYY", t);
@@ -556,6 +595,7 @@ int main() {
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
   checkTree("tree");
   checkCalmText();
+  checkHonestReadings();
   checkInteractive();
   checkDoneAt();
   int controls[2] = {0, 0};
