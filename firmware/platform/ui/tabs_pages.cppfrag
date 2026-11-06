@@ -31,6 +31,10 @@ struct WtPrint {
   const BambuState* s;
   bool configured;
   bool online;
+  bool readings;      // 12.9.1: a recent report (the platform's telemetry freshness), not just a connection
+  bool stateKnown;    // the recent report says what the printer is doing
+  bool everRead;      // a report has arrived since the connection started
+  unsigned long readingsAgeS;
   bool printing;
   bool paused;
   bool active;        // printing or paused
@@ -136,6 +140,13 @@ static WtPrint wtPrint() {
   w.p = &displayedPrinter();
   w.s = &w.p->state;
   w.online = workshopPlatformPrinterOnline(slot);
+  {
+    const workshop::platform::PrinterState& ps = workshopPlatformPrinterState(slot);
+    w.readings = w.online && ps.telemetryFreshness == workshop::platform::Freshness::Fresh;
+    w.stateKnown = w.readings && ps.activity != workshop::platform::PrinterActivity::Unknown;
+    w.everRead = ps.observedAtMs != 0;
+    w.readingsAgeS = w.everRead ? (unsigned long)((millis() - ps.observedAtMs) / 1000UL) : 0UL;
+  }
   w.paused = workshopPlatformPrinterPaused(slot);
   w.printing = workshopPlatformPrinterPrinting(slot);
   w.active = w.printing || w.paused;
@@ -145,10 +156,14 @@ static WtPrint wtPrint() {
   w.alerts = w.online ? wtAlertCount(*w.s) : 0;
   if (!w.online) { w.chip = "Offline"; w.color = OS12V_AMBER; }
   else if (w.alerts || w.failedActive) { w.chip = "Attention"; w.color = OS12V_RED; }
+  else if (!w.readings) { w.chip = "No readings"; w.color = OS12V_MUTED; }
   else if (w.paused) { w.chip = "Paused"; w.color = OS12V_AMBER; }
   else if (w.printing) { w.chip = "Printing"; w.color = OS12V_ACCENT; }
   else if (w.finished) { w.chip = "Finished"; w.color = OS12V_GREEN; }
-  else { w.chip = "Ready"; w.color = OS12V_GREEN; }
+  else {
+    w.chip = wtl::printerWordText(wtl::idlePrinterWord(w.readings, w.stateKnown));
+    w.color = w.stateKnown ? OS12V_GREEN : OS12V_MUTED;
+  }
   return w;
 }
 
@@ -190,7 +205,7 @@ static wtl::DoneAt g_wtDoneAt = {0, 0};
 
 static bool wtDoneAtText(const WtPrint& w, char* out, size_t len) {
   out[0] = 0;
-  if (!w.s || !w.active || !w.online || w.paused || !w.s->remainingMinutes) return false;
+  if (!w.s || !w.active || !w.readings || w.paused || !w.s->remainingMinutes) return false;
   const time_t now = time(nullptr);
   if (now < 1700000000) return false;
   const long at = wtl::doneAtEpoch(g_wtDoneAt, w.s->remainingMinutes, (long)now);
@@ -405,18 +420,13 @@ static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPri
   char values[3][24];
   const char* labels[3] = {"Nozzle", "Bed", "Chamber"};
   float now[3] = {0, 0, 0}, want[3] = {0, 0, 0};
-  const bool live = w.s && w.online;
+  const bool live = w.s && w.readings;  // 12.9.1: a recent report, never a missing one drawn as 0°
   if (live) {
     labels[0] = wtNozzle(*w.s, now[0], want[0]);
     now[1] = w.s->bedTemp; want[1] = w.s->bedTarget;
     now[2] = w.s->chamberTemp;
   }
-  for (uint8_t i = 0; i < 3; ++i) {
-    if (!live) strlcpy(values[i], "--", sizeof(values[i]));
-    else if (targets && want[i] > 1.0f && fabsf(want[i] - now[i]) >= 2.0f)
-      snprintf(values[i], sizeof(values[i]), "%.0f° / %.0f°", now[i], want[i]);
-    else snprintf(values[i], sizeof(values[i]), "%.0f°", now[i]);
-  }
+  for (uint8_t i = 0; i < 3; ++i) wtl::temperatureText(values[i], sizeof(values[i]), live, now[i], want[i], targets);
   if (s.landscape()) {
     if (live && w.s->dualNozzle) labels[0] = w.s->activeNozzle == 1 ? "Nozzle L" : "Nozzle R";
     const wsm::Rect surface = wsm::rowSurface(area);
@@ -473,7 +483,7 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
   }
 
   const BambuState& st = *w.s;
-  if (w.active && w.online) {
+  if (w.active && w.readings) {
     // 12.3.9: percentage in 48 px, time left and the done-at time beside it.
     const wtl::PrintCardLayout L = wtl::printCardLayout(s, r, true);
     uiDrawFit(wtPrinterName(w), L.names.x, L.names.y, L.names.w, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
@@ -503,6 +513,14 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
     headline = w.failedActive && !w.alerts ? "Print failed" : "Needs attention";
     headColor = OS12V_RED;
     wtAlertText(w, detail, sizeof(detail));
+  } else if (!w.readings) {
+    headline = "No printer readings";
+    headColor = OS12V_MUTED;
+    wtl::readingsAgeText(detail, sizeof(detail), w.everRead, w.readingsAgeS);
+  } else if (!w.stateKnown) {
+    headline = "Printer state unknown";
+    headColor = OS12V_MUTED;
+    strlcpy(detail, "The printer's report doesn't say what it is doing.", sizeof(detail));
   } else if (w.finished) {
     headline = "Print finished";
     headColor = OS12V_GREEN;
@@ -756,7 +774,7 @@ static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneL
   c.timerSeconds = 0;
   doneAt[0] = 0;
   color = OS12V_GREEN;
-  if (w.active && w.online) {
+  if (w.active && w.readings) {
     c.state = w.paused ? wtl::CalmState::Paused : wtl::CalmState::Printing;
     c.percent = w.s->progress;
     color = w.paused ? OS12V_AMBER : OS12V_ACCENT;
@@ -777,6 +795,12 @@ static wtl::CalmStatus wtCalmStatus(const WtPrint& w, char* doneAt, size_t doneL
   } else if (w.alerts || w.failedActive) {
     c.state = wtl::CalmState::Attention;
     color = OS12V_RED;
+  } else if (!w.readings) {
+    c.state = wtl::CalmState::NoReadings;
+    color = OS12V_MUTED;
+  } else if (!w.stateKnown) {
+    c.state = wtl::CalmState::Unknown;
+    color = OS12V_MUTED;
   } else if (w.finished && wtFinishedRecently(w)) {
     c.state = wtl::CalmState::Finished;
   }
@@ -815,7 +839,8 @@ static void wtDrawCalm(const WtPrint& w) {
   uint16_t dot = OS12V_GREEN;
   const wtl::CalmStatus calm = wtCalmStatus(w, doneAt, sizeof(doneAt), dot);
   const bool printerBusy = calm.state != wtl::CalmState::Idle && calm.state != wtl::CalmState::NoPrinter &&
-                           calm.state != wtl::CalmState::Offline;
+                           calm.state != wtl::CalmState::Offline && calm.state != wtl::CalmState::NoReadings &&
+                           calm.state != wtl::CalmState::Unknown;
   const uint8_t rot = workshop::localai::rotationIndex(millis(), shown);
   // Without Local AI set up the screen is as before: the printer's line alone.
   const bool aiFirst = ai.configured;
@@ -1069,6 +1094,15 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
         sizeof(state));
     wtAlertText(w, detail, sizeof(detail));
     color = OS12V_RED;
+  } else if (!w.readings) {
+    // 12.9.1: connected but nothing recent from the printer. No temperatures, no "Ready".
+    strlcpy(state, wtl::printerWordText(wtl::PrinterWord::NoReadings), sizeof(state));
+    wtl::readingsAgeText(detail, sizeof(detail), w.everRead, w.readingsAgeS);
+    color = OS12V_MUTED;
+  } else if (!w.stateKnown) {
+    strlcpy(state, wtl::printerWordText(wtl::PrinterWord::Unknown), sizeof(state));
+    strlcpy(detail, "The printer's report doesn't say what it is doing", sizeof(detail));
+    color = OS12V_MUTED;
   } else {
     char at[24];
 
@@ -1084,10 +1118,9 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
 
     const char* job = w.s ? jobDisplayName(*w.s) : nullptr;
 
+    // 12.9.1: "Ready" says it; the old "Ready for the next print" line repeated it under the headline.
     if (w.finished && job && job[0])
       strlcpy(detail, job, sizeof(detail));
-    else
-      strlcpy(detail, "Ready for the next print", sizeof(detail));
   }
 
   wtDrawCardSurface(r, color);
@@ -1107,7 +1140,8 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
   const bool metrics =
       s.landscape() &&
       w.configured &&
-      w.online &&
+      w.readings &&
+      w.stateKnown &&
       !w.alerts &&
       !w.failedActive &&
       !w.finished &&
@@ -1172,6 +1206,8 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
       color,
       bg);
 
+  // 12.9.1: top-aligned under the headline. Centred on r.y + 62, the line's background box started about 10 px
+  // higher and covered the bottom of the 22 px headline drawn at r.y + 34.
   if (detail[0]) {
     uiDrawFit(
         detail,
@@ -1179,7 +1215,7 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
         (int16_t)(r.y + 62),
         textW,
         wsFitFont(detail, textW, FONT_BODY, FONT_SMALL),
-        ML_DATUM,
+        TL_DATUM,
         OS12V_TEXT,
         bg);
   }
@@ -1278,7 +1314,7 @@ struct WtTray {
 // The rows Printer > AMS lists, in printer order. Zero when there is nothing
 // to list (the page then shows one row that says why).
 static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
-  if (!w.s || !w.online) return 0;
+  if (!w.s || !w.readings) return 0;  // 12.9.1: an old report's trays are not shown as the current ones
   const AmsState& a = w.s->ams;
   uint8_t n = 0;
   if (a.present) {
@@ -1298,13 +1334,8 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
         r.remain = tr.remain;
         r.grams = tr.remain >= 0 ? (int16_t)((int32_t)tr.remain * 10) : (int16_t)-1;
         r.totalGrams = 1000;
-        if (!tr.present) {
-          strlcpy(r.value, "Empty", sizeof(r.value));
-        } else if (tr.remain >= 0) {
-          snprintf(r.value, sizeof(r.value), "%s · %dg (%d%%)", tr.type[0] ? tr.type : "Filament", (int)r.grams, (int)tr.remain);
-        } else {
-          snprintf(r.value, sizeof(r.value), "%s · ~1000g", tr.type[0] ? tr.type : "Filament");
-        }
+        // 12.9.1: the printer's own estimate, or "amount unknown". Never grams from an assumed 1000 g spool.
+        wtl::trayAmountText(r.value, sizeof(r.value), tr.type, tr.present, tr.remain);
       }
     }
   }
@@ -1521,7 +1552,7 @@ static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const Wt
     return;
   }
   const BambuState& st = *w.s;
-  if (w.active && w.online) {
+  if (w.active && w.readings) {
     // 12.3.9: the same layout as Home. "Printing" is not repeated (the header
     // chip says it); the job name is the detail line.
     const wtl::PrintCardLayout L = wtl::printCardLayout(s, r, false);
@@ -1542,6 +1573,14 @@ static void wtDrawPrinterCard(const wsm::Screen& s, const wsm::Rect& r, const Wt
     headline = w.failedActive && !w.alerts ? "Print failed" : "Needs attention";
     color = OS12V_RED;
     wtAlertText(w, detail, sizeof(detail));
+  } else if (!w.readings) {
+    headline = wtl::printerWordText(wtl::PrinterWord::NoReadings);
+    color = OS12V_MUTED;
+    wtl::readingsAgeText(detail, sizeof(detail), w.everRead, w.readingsAgeS);
+  } else if (!w.stateKnown) {
+    headline = wtl::printerWordText(wtl::PrinterWord::Unknown);
+    color = OS12V_MUTED;
+    strlcpy(detail, "The printer's report doesn't say what it is doing.", sizeof(detail));
   } else if (w.finished) {
     headline = "Finished";
     const char* job = jobDisplayName(st);
@@ -2012,7 +2051,7 @@ static void wtDrawPrinter(bool full) {
         else {
           WsRowView row;
           wsView(row);
-          strlcpy(row.value, !w.configured ? "No printer set up" : (!w.online ? "Printer offline" : "None reported by the printer"),
+          strlcpy(row.value, !w.configured ? "No printer set up" : (!w.online ? "Printer offline" : (!w.readings ? "No printer readings" : "None reported by the printer")),
                   sizeof(row.value));
           wsDrawRowBody(s, wsm::RowKind::Info, "AMS", row, r);
         }

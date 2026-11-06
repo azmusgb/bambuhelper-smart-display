@@ -51,6 +51,8 @@ python3 "$ROOT/apply_workshop_os12_media_runtime.py" --repo "$BUILD" --source-ro
 python3 "$ROOT/apply_workshop_os12_media_signal_hardening.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_mqtt_camera_telemetry.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_mqtt_camera_telemetry.py" --repo "$BUILD"
+python3 "$ROOT/apply_workshop_os12_mqtt_parse_diagnostics.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_mqtt_parse_diagnostics.py" --repo "$BUILD"
 python3 "$ROOT/apply_workshop_os12_camera_ownership.py" --repo "$BUILD" --apply
 python3 "$ROOT/apply_workshop_os12_camera_transport_diagnostics.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_media_signal.py" --repo "$BUILD"
