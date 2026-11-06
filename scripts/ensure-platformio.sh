@@ -99,6 +99,15 @@ if [[ -x "$VENV/bin/python" ]]; then
   fi
 fi
 
+# A cached environment whose interpreter link points at a Python that no longer
+# exists (CI restores .workshop-tools after the runner's 3.12 patch release
+# moves) is not executable, and `python -m venv` cannot recreate over it:
+#   Error: [Errno 2] No such file or directory: '.../platformio/bin/python3.12'
+if [[ -e "$VENV" && ! -x "$VENV/bin/python" ]]; then
+  echo "Repo-local PlatformIO environment has a missing interpreter; rebuilding it..." >&2
+  VENV_REBUILD=1
+fi
+
 if [[ "$VENV_REBUILD" -eq 1 ]]; then
   echo "Rebuilding repo-local PlatformIO environment for Python $EXPECTED_PY_VERSION..." >&2
   rm -rf "$VENV"
