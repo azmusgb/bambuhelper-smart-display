@@ -1276,12 +1276,8 @@ static ::ui::Clock wtKitClock() {
   return c;
 }
 
-// A Local AI card's tone as the kit's need tone (the web's needs ranking): bad, attention and warn; a card that is
-// only information or good news is the muted one.
-static ::ui::NeedTone wtKitNeedTone(workshop::localai::Tone t) {
-  using workshop::localai::Tone;
-  return t == Tone::Bad ? ::ui::NeedTone::Bad : t == Tone::Attention ? ::ui::NeedTone::Attention : ::ui::NeedTone::Warn;
-}
+// A Local AI card's tone as the kit's need tone: from the item's own severity (wkit::needToneOf), never its rank.
+static ::ui::NeedTone wtKitNeedTone(workshop::localai::Tone t) { return wkit::needToneOf(t); }
 
 // Idle Home on the appliance-ui display kit (display-kit rollout step 4; the drawing is home_idle_kit.hpp, shared with
 // its host test): Frame, two NeedsRow, a printer card, and a timer card with the kit's Button, in Archivo. The same
@@ -1318,7 +1314,7 @@ static __attribute__((noinline)) void wtDrawHomeIdleKit(const WtPrint& w) {
   WtHomePrinterFacts f;
   wtHomePrinterFacts(w, f);
   const char* name = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : "Printer";
-  char line[96];
+  char line[96], lineAlt[64];
   ::ui::Reading age;  // never read until a report is known to be old
   m.printerKind = f.kind == 0 ? ::ui::ChipKind::Ok : f.kind == 1 ? ::ui::ChipKind::Warn : f.kind == 2 ? ::ui::ChipKind::Bad : ::ui::ChipKind::Unknown;
   m.printerHeadline = f.state;
@@ -1332,11 +1328,14 @@ static __attribute__((noinline)) void wtDrawHomeIdleKit(const WtPrint& w) {
     snprintf(line, sizeof(line), "%s \xC2\xB7 %s", name, f.detail);  // never reported: "Waiting for the printer's first report"
     m.printerLine = line;
   } else if (f.metrics) {  // the old Nozzle and Bed tiles, as one line: healthy idle with fresh readings
-    snprintf(line, sizeof(line), "%s \xC2\xB7 Nozzle %.0f\xC2\xB0 \xC2\xB7 Bed %.0f\xC2\xB0", name, f.nozzleTemp, w.s ? w.s->bedTemp : 0.0f);
+    snprintf(lineAlt, sizeof(lineAlt), "Nozzle %.0f\xC2\xB0 \xC2\xB7 Bed %.0f\xC2\xB0", f.nozzleTemp, w.s ? w.s->bedTemp : 0.0f);
+    snprintf(line, sizeof(line), "%s \xC2\xB7 %s", name, lineAlt);
     m.printerLine = line;
+    m.printerLineAlt = lineAlt;  // the half-width card holds this, not the name in front of it
   } else {
     snprintf(line, sizeof(line), "%s%s%s", name, f.detail[0] ? " \xC2\xB7 " : "", f.detail);
     m.printerLine = line;
+    if (f.detail[0]) m.printerLineAlt = f.detail;  // the finished job's name, the failure's reason: what is worth the width
   }
 
   WsRowView timer;

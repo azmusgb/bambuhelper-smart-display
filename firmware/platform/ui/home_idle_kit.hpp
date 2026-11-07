@@ -30,6 +30,7 @@ struct HomeIdleModel {
   ::ui::ChipKind printerKind = ::ui::ChipKind::Unknown;
   const char* printerHeadline = "";
   const char* printerLine = "";
+  const char* printerLineAlt = nullptr;  // the same line in fewer words (no name), used when printerLine does not fit whole
   const char* printerAgeLead = nullptr;
   const ::ui::Reading* printerAge = nullptr;
   // The timer card: its state in words, that state's colour, and the one button (Start, Cancel, Clear).
@@ -41,6 +42,16 @@ struct HomeIdleModel {
   ::ui::Rect rect[4];
   ::ui::Clock now;
 };
+
+// A need's bar, from the item's own severity (Pi Hub's tone strings through workshop::localai::Tone): bad is red; attention
+// and warning (Pi Hub's "warn") are amber, because each is something that needs a look; only information, good news and
+// "busy" are the kit's quiet bar. Never from the item's place in the list, and never quieter than the item. The kit's own
+// NeedTone::Warn is its quiet tier (a grey bar, as the web's), not Pi Hub's "warn"; Pi Hub's "warn" is Attention here.
+// A template on the tone type so this header needs no Local AI header (the test passes the real enum).
+template <class Tone>
+inline ::ui::NeedTone needToneOf(Tone t) {
+  return t == Tone::Bad ? ::ui::NeedTone::Bad : (t == Tone::Attention || t == Tone::Warning) ? ::ui::NeedTone::Attention : ::ui::NeedTone::Warn;
+}
 
 constexpr int kHomeIdleTextMax = 128;  // bytes of one fitted line on the stack (the firmware's loop task has 8 KB)
 
@@ -86,7 +97,11 @@ WKIT_NOINLINE inline void drawHomeIdlePrinter(UiCanvas& c, const HomeIdleModel& 
     ::ui::drawText(c, x, b2, shown, UiFont::Fs3, UI_COLOR_MUTED, UI_COLOR_SURFACE);
     ::ui::AgeLine::draw(c, x + c.textWidth(shown, UiFont::Fs3), b2, *m.printerAge, m.now, UI_COLOR_SURFACE);
   } else {
-    fitWords(c, m.printerLine, UiFont::Fs3, right - x, text, sizeof text);
+    // The card is half the panel wide. "X2D \xC2\xB7 <job name>" cut at its first word is "X2D \xC2\xB7\xE2\x80\xA6", which says nothing: when the
+    // fuller line does not fit whole, the leaner one (without the name, which the Printer tab shows) takes its place.
+    const char* line = m.printerLine;
+    if (m.printerLineAlt && *m.printerLineAlt && c.textWidth(line, UiFont::Fs3) > right - x) line = m.printerLineAlt;
+    fitWords(c, line, UiFont::Fs3, right - x, text, sizeof text);
     ::ui::drawText(c, x, b2, text, UiFont::Fs3, UI_COLOR_MUTED, UI_COLOR_SURFACE);
   }
   chevronRight(c, r.right() - 20, r.y + r.h / 2, UI_COLOR_MUTED);
