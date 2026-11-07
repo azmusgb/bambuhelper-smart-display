@@ -606,7 +606,7 @@ static void wtDrawAiRow(const wsm::Rect& row, const workshop::localai::Card& car
   // Precision jewel indicator diode: outer halo + core + specular glint
   tft.drawCircle((int16_t)(x + 5), mid, 7, OS12V_LINE);
   tft.fillCircle((int16_t)(x + 5), mid, 5, dotCol);
-  tft.fillCircle((int16_t)(x + 4), (int16_t)(mid - 1), 1, 0xFFFF);
+  tft.fillCircle((int16_t)(x + 4), (int16_t)(mid - 1), 1, UI_COLOR_TEXT);
 
   setFont(tft, FONT_BODY);
   const int16_t maxTitleW = (int16_t)(row.w / 3);
