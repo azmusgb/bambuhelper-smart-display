@@ -81,6 +81,7 @@ extern "C" uint32_t workshop_x2d_frames_shown(void) __attribute__((weak));
 // A running session is not a picture: when the camera backend can say how many frames it has drawn and the answer is none,
 // the page says it is waiting (the Playing lamp and "Video playing" would claim what nobody has seen). A build without
 // that backend (the demo video) has no such count and keeps its words.
+static wkit::PictureRedraw g_wsPictureRedraw;
 static bool wsPictureWaiting() { return wsVideoSessionActive() && workshop_x2d_frames_shown && workshop_x2d_frames_shown() == 0; }
 
 static void wsVideoStart() {
@@ -2026,6 +2027,7 @@ static void wsDrawMoreRowState(
 static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row) {
   WsRowView v;
   wsRowView(spec.id, v);
+  if (spec.id == wsm::RowId::VideoPause) g_wsPictureRedraw.drew(wsPictureWaiting());  // what the row now shows
   wsDrawRowBody(s, spec.kind, spec.label, v, row);
   wsDrawMoreRowState(spec, v, row);
 }
@@ -2433,13 +2435,14 @@ static bool wsMoreShowPage(const char* name) {
 }
 
 // Called every loop (smartHubService): drives the live microphone meter.
-static bool g_wsPictureWasWaiting = false;
-
 static void wsMoreService() {
   if (getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::VideoTest) {
-    // The first frame turns "Waiting for picture" into Playing: redraw the control row when that changes.
-    const bool waiting = wsPictureWaiting();
-    if (waiting != g_wsPictureWasWaiting) { g_wsPictureWasWaiting = waiting; g_dirty = true; }
+    // The first frame turns "Waiting for picture" into Playing: redraw the control row when it no longer matches what the
+    // row last showed (not what this function last saw: a frame that lands between the first draw and the first look
+    // would then never be noticed).
+    if (g_wsPictureRedraw.stale(wsPictureWaiting())) g_dirty = true;
+  } else {
+    g_wsPictureRedraw.left();
   }
 #if WS_MIC_METER
   const uint32_t samples = buzzerBackendMicSampleCount();
