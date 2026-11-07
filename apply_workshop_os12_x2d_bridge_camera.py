@@ -162,6 +162,8 @@ static volatile bool gX2dFetchEnabled = false;
 static volatile uint32_t gX2dFetchGeneration = 0U;
 // 12.4.5: the bridge's last answer (HTTP status; -1 no answer, 0 none yet), so the viewer can say why it waits.
 static volatile int gX2dLastHttpStatus = 0;
+// Frames drawn since the session began: the only proof that a picture is on the screen (the viewer says Waiting until then).
+static volatile uint32_t gX2dFramesShown = 0U;
 
 static void x2dSetFetchEnabled(bool enabled, bool clearPublished) {
   if (!gX2dFrameMutex) return;
@@ -228,6 +230,9 @@ extern "C" const char* workshop_x2d_wait_hint(void) {
   return nullptr;
 }
 
+// Camera frames drawn in this session; 0 means no picture yet, whatever the session's state says (smart_hub.cpp declares it weak).
+extern "C" uint32_t workshop_x2d_frames_shown(void) { return gX2dFramesShown; }
+
 static void x2dFetchWorker(void*) {
   for (;;) {
     if (!gX2dFetchEnabled) {
@@ -282,6 +287,7 @@ static bool x2dEnsureFetchWorker() {
 
 static bool x2dBeginFetchSession() {
   if (!x2dEnsureFetchWorker()) return false;
+  gX2dFramesShown = 0U;
   x2dSetFetchEnabled(true, true);
   return true;
 }
@@ -418,6 +424,7 @@ void Ws350MediaBackend::renderX2dBridgeFrame(uint32_t nowMs) {
   // between clear and decode would show a black frame). The Video test page
   // clears the area once when the session starts.
   tft.drawJpg(gX2dDisplayFrame, static_cast<uint32_t>(frameBytes), x, y, 0, 0, 0, 0, scale, scale);
+  gX2dFramesShown = gX2dFramesShown + 1U;
 
   markFrameDirty();
   videoLastFrameId_ = frameSequence;

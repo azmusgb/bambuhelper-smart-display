@@ -74,6 +74,13 @@ static bool wsVideoSessionActive() {
   return s == workshop::media::SessionState::PlayingVideo || s == workshop::media::SessionState::Paused;
 }
 
+extern "C" uint32_t workshop_x2d_frames_shown(void) __attribute__((weak));
+
+// A running session is not a picture: when the camera backend can say how many frames it has drawn and the answer is none,
+// the page says it is waiting (the Playing lamp and "Video playing" would claim what nobody has seen). A build without
+// that backend (the demo video) has no such count and keeps its words.
+static bool wsPictureWaiting() { return wsVideoSessionActive() && workshop_x2d_frames_shown && workshop_x2d_frames_shown() == 0; }
+
 static void wsVideoStart() {
   workshop::media::MediaService& media = workshopMediaService();
   g_wsVideoChromeDrawn = false;
@@ -882,6 +889,9 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       if (paused) {
         strlcpy(v.value, "Paused", sizeof(v.value));
         v.valueColor = OS12V_AMBER;
+      } else if (wsPictureWaiting()) {
+        strlcpy(v.value, "Waiting for picture", sizeof(v.value));  // not "Playing" until a frame is on the screen
+        v.valueColor = OS12V_MUTED;
       } else if (wsVideoSessionActive()) {
         strlcpy(v.value, "Playing", sizeof(v.value));
         v.valueColor = OS12V_GREEN;
@@ -1759,17 +1769,18 @@ static void wsDrawVideoIdle(const wsm::Screen& s) {
   const wsm::Rect v = wsm::videoRect(s, wsm::PageId::VideoTest, g_wsCameraMode);
   tft.fillRect(v.x, v.y, v.w, v.h, TFT_BLACK);
   const bool running = wsVideoSessionActive();
-  const char* headline = running ? "Video playing" : (g_wsVideoStartFailed ? "Video could not start" : "Video is not running");
+  const bool waiting = wsPictureWaiting();
+  const char* headline = waiting ? "No picture yet" : running ? "Video playing" : (g_wsVideoStartFailed ? "Video could not start" : "Video is not running");
   const char* hint = running ? "Moving shapes check the screen refresh." : "Go back and open Video test again to retry.";
   if (g_wsCameraMode) {
-    headline = running ? "Camera on" : (g_wsVideoStartFailed ? "Camera not available" : "Camera is off");
+    headline = waiting ? "No picture yet" : running ? "Camera on" : (g_wsVideoStartFailed ? "Camera not available" : "Camera is off");
     hint = running ? "Waiting for the next frame." : "The printer needs LAN mode and its access code.";
-    if (running && workshop_x2d_wait_hint) {
+    if (waiting && workshop_x2d_wait_hint) {
       const char* why = workshop_x2d_wait_hint();
-      if (why) { headline = "No picture yet"; hint = why; }
+      if (why) hint = why;
     }
   }
-  uiDrawFit(headline, v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
+  uiDrawFit(headline, v.x + v.w / 2, v.y + v.h / 2 - 10, v.w - 32, FONT_BODY, MC_DATUM, running && !waiting ? OS12V_TEXT : OS12V_MUTED, TFT_BLACK);
   uiDrawFit(hint, v.x + v.w / 2, v.y + v.h / 2 + 14, v.w - 32, FONT_SMALL, MC_DATUM, OS12V_MUTED, TFT_BLACK);
 }
 
@@ -1977,7 +1988,14 @@ static bool wsMoreShowPage(const char* name) {
 }
 
 // Called every loop (smartHubService): drives the live microphone meter.
+static bool g_wsPictureWasWaiting = false;
+
 static void wsMoreService() {
+  if (getScreenState() == SCREEN_HUB_MORE && g_wsPage == wsm::PageId::VideoTest) {
+    // The first frame turns "Waiting for picture" into Playing: redraw the control row when that changes.
+    const bool waiting = wsPictureWaiting();
+    if (waiting != g_wsPictureWasWaiting) { g_wsPictureWasWaiting = waiting; g_dirty = true; }
+  }
 #if WS_MIC_METER
   const uint32_t samples = buzzerBackendMicSampleCount();
   if (samples != g_wsMicSeenSamples) {
