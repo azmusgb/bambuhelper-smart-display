@@ -1,0 +1,24 @@
+{
+  "note": "Files not yet on the kit's display parts (display-kit K7). May only shrink: scripts/validate_ui_raw_colours.py. Each value is the number of lines with a raw 0x.... colour or a new palette constant. Rollout steps 4 and 5 remove entries.",
+  "files": {
+    "apply_smart_home_control_polish_v11_4.py": 2,
+    "apply_smart_home_experience_v9_5.py": 11,
+    "apply_smart_home_print_ui_v9.py": 25,
+    "apply_smart_home_unified_display_v9_8.py": 1,
+    "apply_smart_home_visual_correctness_v11_19.py": 2,
+    "apply_smart_home_zero_blip_v9_6_1.py": 1,
+    "apply_workshop_os12_ui_finish.py": 1,
+    "apply_workshop_os12_visual_overhaul.py": 12,
+    "apply_workshop_os_sky_radar_v11_30.py": 8,
+    "apply_workshop_os_ui_overhaul_v11_25_rc3.py": 2,
+    "firmware/platform/ui/tabs_pages.cppfrag": 10,
+    "firmware/ui-v11.25-rc10/shared.cppfrag": 12,
+    "firmware/ui-v11.25-rc4/shared.cppfrag": 15,
+    "firmware/ui-v11.25-rc5/shared.cppfrag": 1,
+    "firmware/ui-v11.25-rc7/shared.cppfrag": 1,
+    "firmware/ui-v11.25-rc9/shared.cppfrag": 1,
+    "firmware/ui-v11.25/shared.cppfrag": 3,
+    "firmware/ui-v11.26-ui11/shared.cppfrag": 1,
+    "vendor/theme-v10/apply_smart_home_workshop_os_theme_v10_core.py": 33
+  }
+}

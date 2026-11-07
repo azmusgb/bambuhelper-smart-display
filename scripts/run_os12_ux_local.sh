@@ -111,8 +111,9 @@ python3 -m py_compile "$ROOT/scripts/accept_os12_code_token_runtime.py"
 # date format defaults to MM/DD/YYYY (validated by validate_os12_more_overhaul.py).
 python3 "$ROOT/apply_workshop_os12_more_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
-# Touchscreen palette: the three role-named RGB565 palettes take LocalAI's colours.
-python3 "$ROOT/apply_workshop_os12_device_localai_palette.py" --repo "$BUILD" --apply
+# Touchscreen palette (display kit, rollout step 3): the kit's header files and LovyanGFX adapter are installed, and
+# every role-named RGB565 constant (UI_*, OS12V_*, C10_*, W25_*) becomes a kit token (accent coolant teal, graphite greys).
+python3 "$ROOT/apply_workshop_os12_display_kit_palette.py" --repo "$BUILD" --source-root "$ROOT" --apply
 # Brand typography: install Figtree vector typography tables across all font sizes.
 python3 "$ROOT/apply_workshop_os12_figtree_typography.py" --repo "$BUILD" --apply
 python3 "$ROOT/scripts/validate_os12_figtree_typography.py" --repo "$BUILD"

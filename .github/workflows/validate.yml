@@ -61,7 +61,27 @@ jobs:
           python3 scripts/test_x2d_viewer_polish.py
           python3 scripts/test_consolidate_portal_css.py
           python3 scripts/test_portal_phone_fit.py
-          python3 scripts/test_device_localai_palette.py
+          python3 scripts/test_display_palette.py
+
+      - name: Validate the display kit sync, palette and raw-colour guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The synced kit is unedited (appliance-ui's own drift check), and the palette header is what the kit gives.
+          python3 assets/ui/verify.py assets/ui
+          python3 scripts/generate_display_palette.py --check
+          # No raw 0x.... colour or new palette constant in UI code; the allow list may only shrink, also against the base.
+          base_args=()
+          if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
+            git fetch --no-tags --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            base_args=(--base "origin/${GITHUB_BASE_REF}")
+          fi
+          python3 scripts/validate_ui_raw_colours.py "${base_args[@]}"
+          # The LovyanGFX adapter and the palette header, against the kit's C++17 headers.
+          mkdir -p /tmp/display-kit-tests/inc
+          ln -sfn "$PWD/assets/ui" /tmp/display-kit-tests/inc/kit
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/display-kit-tests/inc tests/workshop_os12_lgfx_canvas_smoke.cpp -o /tmp/display-kit-tests/lgfx-canvas-smoke
+          /tmp/display-kit-tests/lgfx-canvas-smoke
 
       - name: Validate tracked shell syntax
         shell: bash

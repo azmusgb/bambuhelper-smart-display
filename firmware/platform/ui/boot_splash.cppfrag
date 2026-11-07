@@ -18,18 +18,19 @@ void bootSplashTick();
 static lgfx::LGFX_Sprite* g_bootSprite = nullptr;
 static uint32_t g_bootSplashStart = 0;
 
-// LocalAI / Midnight Navy palette (app.css --ds-*), RGB565.
-static const uint16_t kBsBg = 0x0862;        // #070d14 deep midnight obsidian
-static const uint16_t kBsSurface = 0x1107;   // #111a26
-static const uint16_t kBsSurface2 = 0x11EB;  // #152538
-static const uint16_t kBsLine = 0x1A4F;      // #1e324a
-static const uint16_t kBsLineLight = 0x2AE3; // #2d4b70
-static const uint16_t kBsText = 0xFFFF;      // #ffffff pure crisp white
-static const uint16_t kBsMuted = 0x94F2;     // #94a3b8 slate muted
-static const uint16_t kBsAccent = 0x3D7F;    // #38bdf8 electric sky cyan
-static const uint16_t kBsViolet = 0x8A9E;    // #818cf8 vibrant indigo violet
-static const uint16_t kBsGood = 0x3E53;      // #34d399 emerald green
-static const uint16_t kBsWhite = 0xFFFF;
+// The kit's colours (display-kit K1): tokens.h, installed as include/kit/tokens.h by
+// apply_workshop_os12_display_kit_palette.py. The splash keeps its own names for the roles it draws.
+static const uint16_t kBsBg = UI_COLOR_BG;
+static const uint16_t kBsSurface = UI_COLOR_SURFACE;
+static const uint16_t kBsSurface2 = UI_COLOR_SURFACE_2;
+static const uint16_t kBsLine = UI_COLOR_LINE;
+static const uint16_t kBsLineLight = UI_COLOR_LINE_2;
+static const uint16_t kBsText = UI_COLOR_TEXT;
+static const uint16_t kBsMuted = UI_COLOR_MUTED;
+static const uint16_t kBsAccent = UI_COLOR_ACCENT;
+static const uint16_t kBsViolet = UI_COLOR_ACCENT_TEXT;  // the kit has one accent; its lighter step
+static const uint16_t kBsGood = UI_COLOR_OK;
+static const uint16_t kBsWhite = UI_COLOR_TEXT;
 
 static uint16_t bsLerp(uint16_t a, uint16_t b, float f) {
   if (f <= 0.0f) return a;
@@ -91,7 +92,7 @@ static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
   const float hudFade = bsPhase(t, 150, 750);
   if (hudFade > 0.0f) {
     const uint16_t bCol = bsLerp(kBsBg, kBsLine, hudFade);
-    const uint16_t tCol = bsLerp(kBsBg, 0x3A75, hudFade);
+    const uint16_t tCol = bsLerp(kBsBg, kBsLineLight, hudFade);
 
     // Corner brackets:
     g.drawFastHLine(12, 12, 14, bCol);
@@ -168,9 +169,9 @@ static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
     // Nozzle toolhead with metallic block, heater & glowing tip:
     g.fillCircle(nx, y, 4, kBsAccent);
     g.fillCircle(nx, y, 2, kBsWhite);
-    g.fillTriangle(nx - 4, y - 6, nx + 4, y - 6, nx, y - 1, 0xD6BA);
-    g.fillRoundRect(nx - 7, y - 14, 14, 8, 2, 0x2A4D);
-    g.drawRoundRect(nx - 7, y - 14, 14, 8, 2, 0x6DBF);
+    g.fillTriangle(nx - 4, y - 6, nx + 4, y - 6, nx, y - 1, kBsText);
+    g.fillRoundRect(nx - 7, y - 14, 14, 8, 2, kBsLineLight);
+    g.drawRoundRect(nx - 7, y - 14, 14, 8, 2, kBsAccent);
   }
 
   // 4. Luminous Central AI Star Power Core:
