@@ -435,7 +435,9 @@ class WaitingIsNotPlayingTests(unittest.TestCase):
         self.assertLess(row.index("wsPictureWaiting()"), row.index('"Playing"'))
         self.assertIn("Waiting for picture", row)
         # the control row is redrawn when the first frame turns waiting into playing
-        self.assertIn("waiting != g_wsPictureWasWaiting", pages)
+        self.assertIn("g_wsPictureRedraw.stale(wsPictureWaiting())", pages)  # against what the row last showed
+        self.assertIn("g_wsPictureRedraw.drew(wsPictureWaiting())", pages)
+        self.assertNotIn("g_wsPictureWasWaiting", pages)
 
 
 if __name__ == "__main__":
