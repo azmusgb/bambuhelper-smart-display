@@ -16,6 +16,7 @@
 //   mkdir -p /tmp/kit-inc && ln -sfn "$PWD/assets/ui" /tmp/kit-inc/kit
 //   g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/kit-inc tests/workshop_os12_home_idle_kit_smoke.cpp -o /tmp/home-idle-kit-smoke
 
+#include "../firmware/platform/localai/workshop_localai_feed_core.hpp"
 #include "../firmware/platform/ui/home_idle_kit.hpp"
 #include "../firmware/platform/ui/more_layout.hpp"
 #include "../firmware/platform/ui/tabs_layout.hpp"
@@ -190,6 +191,7 @@ wkit::HomeIdleModel baseModel() {
   m.printerKind = ::ui::ChipKind::Ok;
   m.printerHeadline = "Ready";
   m.printerLine = "X2D \xC2\xB7 Nozzle 24\xC2\xB0 \xC2\xB7 Bed 23\xC2\xB0";
+  m.printerLineAlt = "Nozzle 24\xC2\xB0 \xC2\xB7 Bed 23\xC2\xB0";
   m.timerValue = "Not running";
   return m;
 }
@@ -218,6 +220,19 @@ void runCase(const char* dir, const char* ppmDir, const Case& c) {
     const std::string label = std::string(c.name) + ": \"" + t.s + "\"";
     check(owner(c.model, t, canvas.face[fi].ascent, canvas.face[fi].descent) != -1, "text stays inside its part", label.c_str());
     check(::ui::fontPx(t.font) >= 14, "no text under 14 px", label.c_str());
+  }
+  // The printer card's muted line is never reduced to a prefix and an ellipsis ("X2D \xC2\xB7\xE2\x80\xA6"): it is whole, or it is
+  // cut at a word after something worth reading, and it never ends on the separator.
+  for (const TextOp& t : canvas.texts) {
+    if (t.font != UiFont::Fs3 || t.baseline < c.model.rect[2].y + c.model.rect[2].h / 2 || t.baseline > c.model.rect[2].bottom() ||
+        t.x < c.model.rect[2].x || t.x + t.w > c.model.rect[2].right())
+      continue;
+    const std::string label = std::string(c.name) + ": \"" + t.s + "\"";
+    if (!endsWithEllipsis(t.s)) continue;
+    const std::string head = t.s.substr(0, t.s.size() - 3);
+    check(head.size() >= 8, "a cut printer line keeps more than a prefix", label.c_str());
+    check(head.find_last_not_of(' ') != std::string::npos && head.substr(head.find_last_not_of(' ')).compare(0, 2, "\xC2\xB7") != 0,
+          "a cut printer line does not end on the separator", label.c_str());
   }
   // Nothing is drawn over the tab bar's guard band (the 54 px at the bottom).
   const int tabTop = ::ui::kScreenH - 54;
@@ -297,6 +312,64 @@ void layout() {
   for (uint8_t i = 0; i < 4; i++) check(!wtl::itemRect(portrait, v, 0, 0, i).empty(), "portrait panel keeps its own layout");
 }
 
+// The printer card holds a half-width line (about 190 px at 14 px): the readings of a healthy printer are shown whole
+// ("Nozzle 27\xC2\xB0 \xC2\xB7 Bed 26\xC2\xB0"), whichever of the fuller wording fits, and never as the name and an ellipsis.
+bool drawnLine(const MemCanvas& canvas, const wkit::HomeIdleModel& m, const char* needle) {
+  for (const TextOp& t : canvas.texts)
+    if (t.font == UiFont::Fs3 && t.baseline > m.rect[2].y + m.rect[2].h / 2 && t.baseline <= m.rect[2].bottom() && t.s.find(needle) != std::string::npos &&
+        !endsWithEllipsis(t.s))
+      return true;
+  return false;
+}
+
+// The bar down a need's left edge is the colour of the item's own severity, whatever its place in the list.
+void needTones(const char* dir) {
+  namespace lai = workshop::localai;
+  struct Row { const char* feed; lai::Tone tone; uint16_t bar; const char* what; };
+  const Row rows[] = {
+      {"bad", lai::toneFrom("bad"), UI_COLOR_BAD, "a failed item is the bad colour"},
+      {"warn", lai::toneFrom("warn"), UI_COLOR_WARN, "Pi Hub's warn is amber, not grey"},
+      {"warning", lai::toneFrom("warning"), UI_COLOR_WARN, "a warning is amber"},
+      {"attention", lai::toneFrom("attention"), UI_COLOR_WARN, "attention is amber"},
+      {"info", lai::toneFrom("info"), UI_COLOR_MUTED, "information is the quiet bar"},
+      {"ok", lai::toneFrom("ok"), UI_COLOR_MUTED, "good news is the quiet bar"},
+      {"busy", lai::toneFrom("busy"), UI_COLOR_MUTED, "busy is the quiet bar"},
+      {"unknown word", lai::toneFrom("surprise"), UI_COLOR_MUTED, "an unrecognised tone is information, not an alarm"},
+  };
+  for (const Row& r : rows) {
+    for (int place = 0; place < 2; place++) {  // the same severity in either row
+      wkit::HomeIdleModel m = baseModel();
+      m.need[place].tone = wkit::needToneOf(r.tone);
+      m.need[1 - place].tone = wkit::needToneOf(lai::Tone::Info);  // the other row is quiet
+      MemCanvas canvas(dir);
+      wkit::drawHomeIdle(canvas, m);
+      const ::ui::Rect& rc = m.rect[place];
+      const uint16_t drawn = canvas.px[static_cast<size_t>(rc.y + rc.h / 2) * ::ui::kScreenW + static_cast<size_t>(rc.x + 1)];
+      const std::string label = std::string(r.feed) + " in row " + std::to_string(place);
+      check(drawn == r.bar, r.what, label.c_str());
+    }
+  }
+}
+
+void printerLines(const char* dir) {
+  {  // healthy idle: the readings, whole, on the one line
+    wkit::HomeIdleModel m = baseModel();
+    MemCanvas canvas(dir);
+    wkit::drawHomeIdle(canvas, m);
+    check(drawnLine(canvas, m, "Nozzle 24\xC2\xB0") && drawnLine(canvas, m, "Bed 23\xC2\xB0"), "healthy idle shows nozzle and bed whole");
+  }
+  {  // a failure's reason keeps its words when the name does not fit with it
+    wkit::HomeIdleModel m = baseModel();
+    m.printerKind = ::ui::ChipKind::Bad;
+    m.printerHeadline = "Needs attention";
+    m.printerLine = "X2D \xC2\xB7 The nozzle is clogged";
+    m.printerLineAlt = "The nozzle is clogged";
+    MemCanvas canvas(dir);
+    wkit::drawHomeIdle(canvas, m);
+    check(drawnLine(canvas, m, "The nozzle is clogged"), "a failure reason is shown whole");
+  }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -332,6 +405,7 @@ int main(int argc, char** argv) {
     c.model.need[1].detail = "Unbroken_unbroken_unbroken_unbroken_unbroken_unbroken_unbroken_unbroken_unbroken_unbroken";
     c.model.printerHeadline = "Finished Wed 9:45 AM and cleared the plate";
     c.model.printerLine = "X2D \xC2\xB7 hex-tile_E-027_BLD-027-02_with_a_very_long_job_name_that_will_not_fit";
+    c.model.printerLineAlt = "hex-tile_E-027_BLD-027-02_with_a_very_long_job_name_that_will_not_fit";
     c.model.subtitle = "Alert cleared";
     c.model.subtitleColor = UI_COLOR_WARN;
     cases.push_back(c);
@@ -346,6 +420,13 @@ int main(int argc, char** argv) {
     cases.push_back(c);
   }
   static const ::ui::Reading quiet = ::ui::Reading::stale("1", 1794000000u - 240);
+  {  // the device's capture: Finished, with the job's name, in a half-width card
+    Case c{"finished-job", baseModel()};
+    c.model.printerHeadline = "Finished";
+    c.model.printerLine = "X2D \xC2\xB7 hex-tile_E-027_BLD-027-02";
+    c.model.printerLineAlt = "hex-tile_E-027_BLD-027-02";
+    cases.push_back(c);
+  }
   {
     Case c{"quiet-printer", baseModel()};
     c.model.printerKind = ::ui::ChipKind::Unknown;
@@ -385,6 +466,8 @@ int main(int argc, char** argv) {
     cases.push_back(c);
   }
   for (const Case& c : cases) runCase(dir, ppmDir, c);
+  printerLines(dir);
+  needTones(dir);
 
   printf("home idle kit smoke: %ld checks, %d failures\n", g_checks, g_failures);
   return g_failures ? 1 : 0;
