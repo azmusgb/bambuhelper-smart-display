@@ -381,11 +381,25 @@ static uint16_t* wsPickColourSlot(wsm::RowId id) {
   }
 }
 
+// The printer-error choices exist only on a board with the error screens.
+static bool wsPickIsHms(wsm::RowId id) {
+#if HAS_HMS_UI
+  return id == wsm::RowId::HmsSeverity || id == wsm::RowId::HmsPresent;
+#else
+  (void)id;
+  return false;
+#endif
+}
+
+// How long the finish screen stays (minutes; 0 is immediately): the presets the older step walked through.
+static const uint16_t kWsFinishMins[] = {0, 1, 3, 5, 10, 15, 30, 60};
+
 static bool wsPickKnown(wsm::RowId id) {
   using R = wsm::RowId;
   return wsPickIsColour(id) || id == R::TimeZone || id == R::DateFormat || id == R::AfterPrint || id == R::Theme || id == R::NightStart ||
          id == R::NightEnd || id == R::GaugeSelect || id == R::Smoothing || id == R::ClockTimeSize || id == R::ClockDateSize ||
-         id == R::TimeReadout;
+         id == R::TimeReadout || id == R::FinishTimeout || id == R::FanReadout || id == R::PlugReadout || id == R::GlowMode ||
+         id == R::GlowStyle || id == R::GlowDuration || id == R::LedFinishEffect || wsPickIsHms(id);
 }
 
 // The index of the choice in effect for the row's setting, -1 when it is not one of the options (a custom colour set from
@@ -414,6 +428,22 @@ static int wsPickCurrent(wsm::RowId id) {
     case R::ClockTimeSize: return dispSettings.clockTimeSize < 4U ? (int)dispSettings.clockTimeSize : -1;
     case R::ClockDateSize: return dispSettings.clockDateSize < 4U ? (int)dispSettings.clockDateSize : -1;
     case R::TimeReadout: return dispSettings.timeDisplayMode < 3U ? (int)dispSettings.timeDisplayMode : -1;
+    case R::FinishTimeout:
+      for (unsigned i = 0; i < sizeof(kWsFinishMins) / sizeof(kWsFinishMins[0]); ++i) if (kWsFinishMins[i] == dpSettings.finishDisplayMins) return (int)i;
+      return -1;
+    case R::FanReadout: return dispSettings.fanMatchPrinter ? 1 : 0;
+    case R::PlugReadout: {
+      const WsPlug plug = wsPlug();
+      return plug.on && tasmotaSettings[plug.index].displayMode < 3U ? (int)tasmotaSettings[plug.index].displayMode : -1;
+    }
+    case R::GlowMode: return dispSettings.glowMode < 3U ? (int)dispSettings.glowMode : -1;
+    case R::GlowStyle: return dispSettings.glowStyle < 3U ? (int)dispSettings.glowStyle : -1;
+    case R::GlowDuration: return dispSettings.glowDuration < 3U ? (int)dispSettings.glowDuration : -1;
+    case R::LedFinishEffect: return ledSettings.finishMode < 3U ? (int)ledSettings.finishMode : -1;
+#if HAS_HMS_UI
+    case R::HmsSeverity: return dispSettings.hmsSeverityAll ? 0 : 1;
+    case R::HmsPresent: return dispSettings.hmsAutoPresent < 3U ? (int)dispSettings.hmsAutoPresent : -1;
+#endif
     default: return -1;
   }
 }
@@ -473,6 +503,58 @@ static int wsPickBuild(wsm::RowId id) {
       wsPickStatic(kLabels, 3);
       return 3;
     }
+    case R::FinishTimeout: {
+      const int count = (int)(sizeof(kWsFinishMins) / sizeof(kWsFinishMins[0]));
+      for (n = 0; n < count; ++n) {
+        if (kWsFinishMins[n] == 0) strlcpy(g_wsPickText[n], "Immediately", sizeof(g_wsPickText[n]));
+        else snprintf(g_wsPickText[n], sizeof(g_wsPickText[n]), "%u min", (unsigned)kWsFinishMins[n]);
+        g_wsPickOpt[n] = ::ui::PickerOption();
+        g_wsPickOpt[n].label = g_wsPickText[n];
+      }
+      return n;
+    }
+    case R::FanReadout: {
+      static const char* const kLabels[] = {"Exact %", "Like printer"};
+      wsPickStatic(kLabels, 2);
+      return 2;
+    }
+    case R::PlugReadout: {
+      static const char* const kLabels[] = {"Alternate", "Power", "Layer"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+    case R::GlowMode: {
+      static const char* const kLabels[] = {"Off", "One colour", "Rainbow"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+    case R::GlowStyle: {
+      static const char* const kLabels[] = {"Sweep", "Pulse", "Storm"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+    case R::GlowDuration: {
+      static const char* const kLabels[] = {"Short burst", "Until dismissed", "Reminder"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+    case R::LedFinishEffect: {
+      static const char* const kLabels[] = {"Off", "Breathing", "Heartbeat"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+#if HAS_HMS_UI
+    case R::HmsSeverity: {
+      static const char* const kLabels[] = {"All", "Important only"};
+      wsPickStatic(kLabels, 2);
+      return 2;
+    }
+    case R::HmsPresent: {
+      static const char* const kLabels[] = {"Badge only", "Briefly", "Until dismissed"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+#endif
     case R::Theme:
       for (n = 0; n < HUB_THEME_COUNT && n < 24; ++n) {
         wsTitleCase(g_wsPickText[n], sizeof(g_wsPickText[n]), HUB_THEMES[n].label);
@@ -547,6 +629,49 @@ static const char* wsPickApply(int index) {
       (id == R::NightStart ? dpSettings.nightStartMin : dpSettings.nightEndMin) = (uint16_t)wnight::minutesOf(index);
       hubPersistDisplay(true);
       return nullptr;
+    case R::FinishTimeout:
+      if ((size_t)index >= sizeof(kWsFinishMins) / sizeof(kWsFinishMins[0])) return wkit::PickerSession::kNotKept;
+      dpSettings.finishDisplayMins = kWsFinishMins[index];
+      hubPersistDisplay(false);
+      return nullptr;
+    case R::FanReadout:
+      if (index > 1) return wkit::PickerSession::kNotKept;
+      dispSettings.fanMatchPrinter = index == 1;
+      hubPersistDisplay(false);
+      return nullptr;
+    case R::PlugReadout: {
+      const WsPlug plug = wsPlug();
+      if (index >= 3 || !plug.on) return wkit::PickerSession::kNotKept;
+      tasmotaSettings[plug.index].displayMode = (uint8_t)index;
+      hubPersistPower("Plug readout updated", C10_ACCENT);
+      wsClick();
+      return nullptr;
+    }
+    case R::GlowMode:
+    case R::GlowStyle:
+    case R::GlowDuration:
+      if (index >= 3) return wkit::PickerSession::kNotKept;
+      (id == R::GlowMode ? dispSettings.glowMode : id == R::GlowStyle ? dispSettings.glowStyle : dispSettings.glowDuration) = (uint8_t)index;
+      hubPersistDisplayExpert();
+      return nullptr;
+    case R::LedFinishEffect:
+      if (index >= 3) return wkit::PickerSession::kNotKept;
+      ledSettings.finishMode = (uint8_t)index;
+      hubPersistLed("Finish effect updated", C10_ACCENT);
+      wsClick();
+      return nullptr;
+#if HAS_HMS_UI
+    case R::HmsSeverity:
+      if (index > 1) return wkit::PickerSession::kNotKept;
+      dispSettings.hmsSeverityAll = index == 0;
+      hubPersistDisplay(false);
+      return nullptr;
+    case R::HmsPresent:
+      if (index >= 3) return wkit::PickerSession::kNotKept;
+      dispSettings.hmsAutoPresent = (uint8_t)index;
+      hubPersistDisplay(false);
+      return nullptr;
+#endif
     case R::GaugeSelect:
       if (index >= 12) return wkit::PickerSession::kNotKept;
       g_displayGaugeColorIndex = (uint8_t)index;

@@ -194,6 +194,24 @@ def validate(repo: Path) -> str:
         if kind in ("Toggle", "Stepper", "Choice", "Action", "Action2") and f"case R::{row}:" not in tap:
             raise ValidationError(f"{page}/{row}: {kind} row has no action in wsRowTap")
 
+    # Display-kit K9: every Choice row opens the Picker, so each has its current value, its options and its setter (a colour
+    # row is covered by wsPickIsColour). A Choice row with none would open nothing on the kit's panel.
+    pick_known = block(hub, "static bool wsPickKnown(wsm::RowId id)")
+    pick_parts = {
+        "wsPickCurrent": block(hub, "static int wsPickCurrent(wsm::RowId id)"),
+        "wsPickBuild": block(hub, "static int wsPickBuild(wsm::RowId id)"),
+        "wsPickApply": block(hub, "static const char* wsPickApply(int index)"),
+    }
+    colour_rows = set(re.findall(r"wsm::RowId::(\w+)", block(hub, "static bool wsPickIsColour(wsm::RowId id)")))
+    for page, row, kind in live_page_rows(layout, fragment):
+        if kind != "Choice" or row in colour_rows:
+            continue
+        if f"R::{row}" not in pick_known and f"wsPickIsHms(id)" not in pick_known:
+            raise ValidationError(f"{page}/{row}: Choice row is not a known Picker setting")
+        for name, body in pick_parts.items():
+            if f"case R::{row}:" not in body:
+                raise ValidationError(f"{page}/{row}: Choice row has no case in {name}")
+
     # Disabled controls say why: a disabled row always carries a reason.
     for line in view.splitlines():
         if "v.enabled = false;" in line and "v.reason" not in line:
