@@ -33,7 +33,7 @@ def main() -> int:
     # No code reads or writes the old whole-hour fields; only the migration and the older-export / older-page paths name hours.
     for rel in ("src/settings.h", "src/settings.cpp", "src/display_ui.cpp", "src/smart_hub.cpp", "src/web_template.cpp", "src/web_server.cpp"):
         text = read(rel)
-        if re.search(r"\bnight(?:Start|End)Hour\b", text.replace('dp["nightStartHour"]', "").replace('dp["nightEndHour"]', "")):
+        if re.search(r"\bnight(?:Start|End)Hour\b", re.sub(r'dp\["night(?:Start|End)Hour"\]', "", text)):
             fail(f"{rel} still uses nightStartHour / nightEndHour")
     settings = read("src/settings.cpp")
     for needle in ('"dp_nstartm"', '"dp_nendm"', "wnight::resolveStored", 'prefs.putUShort("dp_nstartm"', 'prefs.putUShort("dp_nendm"'):
