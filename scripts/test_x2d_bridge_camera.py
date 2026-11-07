@@ -411,5 +411,32 @@ class PatchIntegrationTests(unittest.TestCase):
             self.assertEqual(snapshot(repo), before)
 
 
+class WaitingIsNotPlayingTests(unittest.TestCase):
+    """K6: a session that has drawn no frame is not "Video playing" and not a green Playing lamp."""
+
+    PAGES = (Path(__file__).resolve().parents[1] / "firmware/platform/ui/more_pages.cppfrag").read_text(encoding="utf-8")
+
+    def test_backend_counts_frames_drawn_in_the_session(self) -> None:
+        block = patch.RENDER_X2D
+        self.assertIn("gX2dFramesShown = gX2dFramesShown + 1U;", block)
+        self.assertLess(block.index("tft.drawJpg("), block.index("gX2dFramesShown = gX2dFramesShown + 1U;"))
+        begin = patch.ASYNC_BLOCK[patch.ASYNC_BLOCK.index("static bool x2dBeginFetchSession()"):]
+        self.assertLess(begin.index("gX2dFramesShown = 0U;"), begin.index("x2dSetFetchEnabled(true, true);"))
+        self.assertIn('extern "C" uint32_t workshop_x2d_frames_shown(void)', patch.ASYNC_BLOCK)
+
+    def test_page_says_waiting_until_a_frame_is_drawn(self) -> None:
+        pages = self.PAGES
+        self.assertIn("workshop_x2d_frames_shown() == 0", pages)
+        idle = pages[pages.index("static void wsDrawVideoIdle"):pages.index("static void wsDrawVideoControls")]
+        self.assertIn('waiting ? "No picture yet"', idle)  # both the camera and the video-test wording
+        self.assertEqual(idle.count('"No picture yet"'), 2)
+        row = pages[pages.index("case R::VideoPause"):]
+        row = row[:row.index("default:")]
+        self.assertLess(row.index("wsPictureWaiting()"), row.index('"Playing"'))
+        self.assertIn("Waiting for picture", row)
+        # the control row is redrawn when the first frame turns waiting into playing
+        self.assertIn("waiting != g_wsPictureWasWaiting", pages)
+
+
 if __name__ == "__main__":
     unittest.main()
