@@ -317,9 +317,38 @@ void checkMediaRows(Screen s, const char* o) {
   check(rowIndex(PageId::SoundAlerts, RowId::None) == -1, "unknown row has no index", o);
 }
 
+// Display-kit K9: a named choice, a colour or a clock time is a Choice row (the value and a chevron, a tap opens the
+// Picker), not a Stepper. Numbers keep the Stepper; these settings are on the Choice rows.
+void checkChoiceRows() {
+  const RowId choices[] = {RowId::TimeZone, RowId::DateFormat, RowId::AfterPrint, RowId::Theme, RowId::NightStart, RowId::NightEnd,
+                           RowId::GaugeSelect, RowId::GaugeArc, RowId::GaugeLabel, RowId::GaugeValue, RowId::WarnColor, RowId::Smoothing,
+                           RowId::ClockTimeColor, RowId::ClockDateColor, RowId::ClockTimeSize, RowId::ClockDateSize, RowId::TimeReadout,
+                           RowId::GlowColor};
+  const Screen s = makeScreen(480, 320);
+  check(pickerKit(s) && !pickerKit(makeScreen(320, 480)), "the Picker is for the 480 x 320 panel", "choice rows");
+  for (unsigned i = 0; i < sizeof(choices) / sizeof(choices[0]); ++i) {
+    bool found = false;
+    for (int pg = 0; pg < static_cast<int>(kPageCount) && !found; ++pg) {
+      const PageSpec& p = page(static_cast<PageId>(pg));
+      for (uint8_t r = 0; r < p.rowCount; ++r) {
+        if (p.rows[r].id != choices[i]) continue;
+        found = true;
+        check(p.rows[r].kind == RowKind::Choice, "a named choice, colour or time is a Choice row", p.rows[r].label);
+        const Rect row = rowRect(s, p.id, 0, r);
+        if (row.empty()) continue;  // below the first page: its hit is checked with the page's other rows
+        const Hit h = hitTest(s, p.id, 0, false, row.x + row.w / 2, row.y + row.h / 2);
+        check(h.kind == HitKind::Row && h.index == r && h.part == Part::Whole, "a tap anywhere on a Choice row opens it", p.rows[r].label);
+        check(row.h >= 44 && !valueRect(s, row, RowKind::Choice).empty() && valueRect(s, row, RowKind::Choice).right() <= row.right() - 28,
+              "the value leaves room for the chevron", p.rows[r].label);
+      }
+    }
+    check(found, "the Choice row is on a page", "choice rows", static_cast<int>(i));
+  }
+}
+
 void checkRowStyle() {
   const RowKind kinds[] = {RowKind::Info, RowKind::Nav, RowKind::Toggle, RowKind::Stepper,
-                           RowKind::Action, RowKind::Action2, RowKind::Code};
+                           RowKind::Action, RowKind::Action2, RowKind::Code, RowKind::Choice};
   for (unsigned i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i) {
     const RowKind k = kinds[i];
     const bool readOnly = k == RowKind::Info || k == RowKind::Code;
@@ -411,6 +440,7 @@ void checkValueText() {
 int main() {
   checkValueText();
   checkRowStyle();
+  checkChoiceRows();
   const Screen screens[2] = {makeScreen(480, 320), makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
   checkTree("tree");

@@ -39,7 +39,7 @@ FONT_FILES = (  # in UiFont order: Fs3, Fs4, Fs5, Fs6, Readout
     ("archivo_readout_34", "display/fonts/archivo-readout-34.vlw"),
 )
 UI_DIR = Path("firmware") / "platform" / "ui"
-KIT_SCREEN_FILES = ("kit_screen.hpp", "home_idle_kit.hpp")
+KIT_SCREEN_FILES = ("kit_screen.hpp", "home_idle_kit.hpp", "more_picker.hpp")
 FONTS_HEADER = Path("include") / "workshop_archivo_fonts.h"
 FONTS_SOURCE = Path("src") / "workshop_archivo_fonts.cpp"
 
@@ -49,6 +49,7 @@ HUB_INCLUDES = (
     + '#include "kit/display/ui.h"\n'
     + '#include "workshop_archivo_fonts.h"\n'
     + '#include "workshop_kit/home_idle_kit.hpp"\n'
+    + '#include "workshop_kit/more_picker.hpp"\n'
 )
 OLD_SHOW_HOME = '  if (strcmp(pageName, "home") == 0) { setPage(SCREEN_HUB_HOME); return true; }\n'
 NEW_SHOW_HOME = (

@@ -123,6 +123,7 @@ enum class RowKind : uint8_t {
   Action,   // whole row runs one action; a button is drawn on the right
   Action2,  // two buttons on the right, each its own target
   Code,     // read-only, large text (the Local Portal access code)
+  Choice,   // a named choice, a colour or a clock time (display-kit K9): the value and a chevron; a tap opens the Picker
 };
 
 enum class Part : uint8_t { Whole = 0, Minus, Plus, ActionA, ActionB };
@@ -214,9 +215,9 @@ static const RowSpec kNetworkRows[] = {
 };
 
 static const RowSpec kTimeLocaleRows[] = {
-  {RowId::TimeZone, RowKind::Stepper, "Time zone", PageId::Root},
+  {RowId::TimeZone, RowKind::Choice, "Time zone", PageId::Root},
   {RowId::Clock24h, RowKind::Toggle, "24-hour clock", PageId::Root},
-  {RowId::DateFormat, RowKind::Stepper, "Date format", PageId::Root},
+  {RowId::DateFormat, RowKind::Choice, "Date format", PageId::Root},
 };
 
 static const RowSpec kDisplayRows[] = {
@@ -224,17 +225,17 @@ static const RowSpec kDisplayRows[] = {
   {RowId::StandbyBrightness, RowKind::Stepper, "Standby", PageId::Root},
   {RowId::ClockScheduleNav, RowKind::Nav, "Clock & schedule", PageId::ClockSchedule},
   {RowId::GaugesNav, RowKind::Nav, "Gauges", PageId::Gauges},
-  {RowId::AfterPrint, RowKind::Stepper, "After a print", PageId::Root},
+  {RowId::AfterPrint, RowKind::Choice, "After a print", PageId::Root},
   {RowId::FinishTimeout, RowKind::Stepper, "Finish screen", PageId::Root},
   {RowId::DoorAck, RowKind::Toggle, "Wait for door", PageId::Root},
   {RowId::KeepPrintScreen, RowKind::Toggle, "Stay on printer", PageId::Root},
   {RowId::FinishTime, RowKind::Toggle, "Show finish time", PageId::Root},
-  {RowId::TimeReadout, RowKind::Stepper, "Time shown", PageId::Root},
+  {RowId::TimeReadout, RowKind::Choice, "Time shown", PageId::Root},
   {RowId::AnimatedBar, RowKind::Toggle, "Animated progress", PageId::Root},
   {RowId::SmallLabels, RowKind::Toggle, "Small labels", PageId::Root},
   {RowId::FanReadout, RowKind::Stepper, "Fan readout", PageId::Root},
   {RowId::StatusReadout, RowKind::Toggle, "Status readout", PageId::Root},
-  {RowId::Theme, RowKind::Stepper, "Colour theme", PageId::Root},
+  {RowId::Theme, RowKind::Choice, "Colour theme", PageId::Root},
   {RowId::AmbientHome, RowKind::Toggle, "Calm idle screen", PageId::Root},
   {RowId::Rotation, RowKind::Action, "Rotation", PageId::Root},
 };
@@ -242,29 +243,29 @@ static const RowSpec kDisplayRows[] = {
 static const RowSpec kClockScheduleRows[] = {
   {RowId::NightMode, RowKind::Toggle, "Night mode", PageId::Root},
   {RowId::NightBrightness, RowKind::Stepper, "Night brightness", PageId::Root},
-  {RowId::NightStart, RowKind::Stepper, "Night starts", PageId::Root},
-  {RowId::NightEnd, RowKind::Stepper, "Night ends", PageId::Root},
+  {RowId::NightStart, RowKind::Choice, "Night starts", PageId::Root},
+  {RowId::NightEnd, RowKind::Choice, "Night ends", PageId::Root},
   {RowId::PongClock, RowKind::Toggle, "Animated clock", PageId::Root},
-  {RowId::ClockTimeSize, RowKind::Stepper, "Time size", PageId::Root},
-  {RowId::ClockDateSize, RowKind::Stepper, "Date size", PageId::Root},
+  {RowId::ClockTimeSize, RowKind::Choice, "Time size", PageId::Root},
+  {RowId::ClockDateSize, RowKind::Choice, "Date size", PageId::Root},
   {RowId::ClockShowDate, RowKind::Toggle, "Show date", PageId::Root},
   {RowId::ClockInfo, RowKind::Toggle, "Name and address", PageId::Root},
-  {RowId::ClockTimeColor, RowKind::Stepper, "Time colour", PageId::Root},
-  {RowId::ClockDateColor, RowKind::Stepper, "Date colour", PageId::Root},
+  {RowId::ClockTimeColor, RowKind::Choice, "Time colour", PageId::Root},
+  {RowId::ClockDateColor, RowKind::Choice, "Date colour", PageId::Root},
 };
 
 static const RowSpec kGaugesRows[] = {
-  {RowId::GaugeSelect, RowKind::Stepper, "Gauge", PageId::Root},
-  {RowId::GaugeArc, RowKind::Stepper, "Arc colour", PageId::Root},
-  {RowId::GaugeLabel, RowKind::Stepper, "Label colour", PageId::Root},
-  {RowId::GaugeValue, RowKind::Stepper, "Value colour", PageId::Root},
+  {RowId::GaugeSelect, RowKind::Choice, "Gauge", PageId::Root},
+  {RowId::GaugeArc, RowKind::Choice, "Arc colour", PageId::Root},
+  {RowId::GaugeLabel, RowKind::Choice, "Label colour", PageId::Root},
+  {RowId::GaugeValue, RowKind::Choice, "Value colour", PageId::Root},
   {RowId::NozzleScale, RowKind::Stepper, "Nozzle scale", PageId::Root},
   {RowId::BedScale, RowKind::Stepper, "Bed scale", PageId::Root},
   {RowId::ChamberScale, RowKind::Stepper, "Chamber scale", PageId::Root},
   {RowId::PowerScale, RowKind::Stepper, "Power scale", PageId::Root},
-  {RowId::Smoothing, RowKind::Stepper, "Smoothing", PageId::Root},
+  {RowId::Smoothing, RowKind::Choice, "Smoothing", PageId::Root},
   {RowId::WarnAt, RowKind::Stepper, "Warn at", PageId::Root},
-  {RowId::WarnColor, RowKind::Stepper, "Warning colour", PageId::Root},
+  {RowId::WarnColor, RowKind::Choice, "Warning colour", PageId::Root},
   {RowId::GaugeDefaults, RowKind::Action, "Gauge defaults", PageId::Root},
   {RowId::Ams8Slot, RowKind::Toggle, "8-slot AMS (wide)", PageId::Root},
   {RowId::Ams9Slot, RowKind::Toggle, "9-slot AMS (tall)", PageId::Root},
@@ -299,7 +300,7 @@ static const RowSpec kAlertsRows[] = {
   {RowId::GlowMode, RowKind::Stepper, "Edge glow", PageId::Root},
   {RowId::GlowStyle, RowKind::Stepper, "Glow style", PageId::Root},
   {RowId::GlowDuration, RowKind::Stepper, "Glow length", PageId::Root},
-  {RowId::GlowColor, RowKind::Stepper, "Glow colour", PageId::Root},
+  {RowId::GlowColor, RowKind::Choice, "Glow colour", PageId::Root},
 };
 
 static const RowSpec kStatusLightRows[] = {
@@ -505,6 +506,9 @@ inline bool rowInteractive(RowKind kind) { return kind != RowKind::Info && kind 
 // nothing looks like a button unless it is one (12.3.6).
 inline bool rowRaised(RowKind kind, bool enabled) { return rowInteractive(kind) && enabled; }
 
+// The Picker (display-kit K9) is the kit's 480 x 320 screen. Other panels keep the older control: a tap on a Choice row steps to the next choice.
+inline bool pickerKit(Screen s) { return s.w == 480 && s.h == 320; }
+
 inline int stepperValueWidth(Screen s) { return s.landscape() ? 150 : 76; }
 inline int actionButtonWidth(Screen s) { return s.landscape() ? 112 : 84; }
 inline int action2ButtonWidth(Screen s) { return s.landscape() ? 96 : 70; }
@@ -579,7 +583,7 @@ inline bool drawsValueText(const char* value) { return value != nullptr && value
 inline Rect valueRect(Screen s, const Rect& row, RowKind kind) {
   const int labelShare = s.landscape() ? 200 : 116;
   int right = row.right() - 12;
-  if (kind == RowKind::Nav) right = row.right() - 28;           // room for the chevron
+  if (kind == RowKind::Nav || kind == RowKind::Choice) right = row.right() - 28;  // room for the chevron
   if (kind == RowKind::Toggle) right = partDrawRect(s, row, kind, Part::Whole).x - 8;
   if (kind == RowKind::Action) right = partDrawRect(s, row, kind, Part::Whole).x - 8;
   if (kind == RowKind::Action2) right = partDrawRect(s, row, kind, Part::ActionA).x - 8;
