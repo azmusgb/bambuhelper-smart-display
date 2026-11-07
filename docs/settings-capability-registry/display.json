@@ -29,8 +29,8 @@
       "classification": "PHYSICAL",
       "implementedOnDevice": true,
       "surface": "Display → Schedule",
-      "browserBindings": [{"route": "/apply", "keys": ["nstart", "nend", "nbright"]}],
-      "physicalEvidence": ["\"NIGHT BRIGHTNESS\"", "nightStartHour=hubStepHour", "nightEndHour=hubStepHour"]
+      "browserBindings": [{"route": "/apply", "keys": ["nstartm", "nendm", "nstart", "nend", "nbright"]}],
+      "physicalEvidence": ["\"NIGHT BRIGHTNESS\"", "nightStartMin = wnight::step", "nightEndMin = wnight::step"]
     },
     {
       "id": "display.finish-timeout",
