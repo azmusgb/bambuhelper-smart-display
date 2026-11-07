@@ -249,6 +249,9 @@ def validate_workshop(hub: str, fragment: str) -> None:
     # Useful without inventory: the timer and the note live on Workshop, and
     # set-up is one row that says where to go.
     rows = block(hub, "static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v)")
+    # The timer's row is wtTimerRow, shared with idle Home's timer card (display-kit step 4).
+    need(rows, "wtTimerRow(v);", "Workshop's timer row is the shared one")
+    rows += block(hub, "static void wtTimerRow(WsRowView& v)")
     for needle in ('"Not set up"', '"Local Portal > More > Filament Inventory"', '"Start"', '"Cancel"',
                    "g_workshopNote", "wtTimerLength()"):
         need(rows, needle, "Workshop rows")

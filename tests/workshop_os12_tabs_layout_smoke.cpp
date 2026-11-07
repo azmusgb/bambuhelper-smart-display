@@ -191,7 +191,10 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
   const ItemSpec& it = item(v, i, n);
   char where[112];
   snprintf(where, sizeof(where), "%s / %s / %s / n=%u scroll=%u", o, v.title, it.label, (unsigned)n, (unsigned)scroll);
-  check(r.h >= kMinTouch && r.h % more::kRowH == 0, "item is whole 44 px slots", where, r.h);
+  // Idle Home on the 480 x 320 panel is the display kit's own geometry (72 px needs, a 58 px band), not the 44 px slot
+  // grid: tests/workshop_os12_home_idle_kit_smoke.cpp checks it against the kit's headers.
+  const bool kitGeometry = v.id == View::HomeIdle && homeIdleKit(s);
+  check(r.h >= kMinTouch && (kitGeometry || r.h % more::kRowH == 0), "item is whole 44 px slots", where, r.h);
   check(inside(r, more::contentBand(s)), "item inside the content area", where, r.y, r.bottom());
   check(!intersects(r, more::tabBand(s)) && !intersects(r, more::headerBand(s)), "item clear of header and tab bar", where);
   if (v.segments) check(!intersects(r, segmentBand(s)), "item clear of the segments", where);

@@ -122,6 +122,9 @@ python3 "$ROOT/scripts/validate_os12_figtree_typography.py" --repo "$BUILD"
 # it builds on.
 python3 "$ROOT/apply_workshop_os12_tabs_overhaul.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_tabs_overhaul.py" --repo "$BUILD"
+# Display kit, rollout step 4: idle Home drawn through the kit's parts with Archivo (the screen's code is in the tabs
+# layer above; this installs the fonts, the kit includes and idle Home's drawing header).
+python3 "$ROOT/apply_workshop_os12_display_kit_home.py" --repo "$BUILD" --source-root "$ROOT" --apply
 # 12.3.10 Local AI cards on the calm idle screen (GET /api/display/feed over pinned TLS).
 python3 "$ROOT/apply_workshop_os12_localai_feed.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_localai_feed.py" --repo "$BUILD"

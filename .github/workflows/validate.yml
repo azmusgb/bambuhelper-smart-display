@@ -82,6 +82,9 @@ jobs:
           ln -sfn "$PWD/assets/ui" /tmp/display-kit-tests/inc/kit
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/display-kit-tests/inc tests/workshop_os12_lgfx_canvas_smoke.cpp -o /tmp/display-kit-tests/lgfx-canvas-smoke
           /tmp/display-kit-tests/lgfx-canvas-smoke
+          # Idle Home on the kit's parts (rollout step 4): geometry, hit areas, text fits, drawn on a host with the real Archivo faces.
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/display-kit-tests/inc tests/workshop_os12_home_idle_kit_smoke.cpp -o /tmp/display-kit-tests/home-idle-kit-smoke
+          /tmp/display-kit-tests/home-idle-kit-smoke
 
       - name: Validate tracked shell syntax
         shell: bash

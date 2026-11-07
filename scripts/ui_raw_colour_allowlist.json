@@ -11,7 +11,7 @@
     "apply_workshop_os12_visual_overhaul.py": 12,
     "apply_workshop_os_sky_radar_v11_30.py": 8,
     "apply_workshop_os_ui_overhaul_v11_25_rc3.py": 2,
-    "firmware/platform/ui/tabs_pages.cppfrag": 10,
+    "firmware/platform/ui/tabs_pages.cppfrag": 9,
     "firmware/ui-v11.25-rc10/shared.cppfrag": 12,
     "firmware/ui-v11.25-rc4/shared.cppfrag": 15,
     "firmware/ui-v11.25-rc5/shared.cppfrag": 1,

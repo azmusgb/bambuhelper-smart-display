@@ -432,9 +432,14 @@ def main() -> int:
         "Pi Hub unavailable warning tone",
     )
 
+    # The state words and the metrics rule live in wtHomePrinterFacts, shared by the slot layout's card (wtDrawHomePrinter)
+    # and the display kit's card (wtDrawHomeIdleKit, display-kit step 4).
     home_printer = block(
         pages,
         "static void wtDrawHomePrinter(",
+    ) + block(
+        pages,
+        "static void wtHomePrinterFacts(",
     )
     need(
         home_printer,
