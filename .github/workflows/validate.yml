@@ -85,6 +85,9 @@ jobs:
           # Idle Home on the kit's parts (rollout step 4): geometry, hit areas, text fits, drawn on a host with the real Archivo faces.
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/display-kit-tests/inc tests/workshop_os12_home_idle_kit_smoke.cpp -o /tmp/display-kit-tests/home-idle-kit-smoke
           /tmp/display-kit-tests/home-idle-kit-smoke
+          # The More pages' Picker session (rollout step 5): fits, scrolls, swatches, long labels, failed save, unknown.
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/display-kit-tests/inc tests/workshop_os12_more_picker_smoke.cpp -o /tmp/display-kit-tests/more-picker-smoke
+          /tmp/display-kit-tests/more-picker-smoke
 
       - name: Validate tracked shell syntax
         shell: bash

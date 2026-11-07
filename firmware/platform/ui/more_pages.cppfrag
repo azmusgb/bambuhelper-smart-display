@@ -14,6 +14,8 @@ enum class WsDialog : uint8_t { None = 0, AutoOffEnable, Install, Channel };
 static wsm::PageId g_wsPage = wsm::PageId::Root;
 static uint8_t g_wsScroll = 0;
 static WsDialog g_wsDialog = WsDialog::None;
+static wkit::PickerSession g_wsPick;  // the Picker that is open, if any (below), and the row whose setting it edits
+static wsm::RowId g_wsPickRow = wsm::RowId::None;
 static char g_wsToast[72] = {0};
 static unsigned long g_wsToastUntilMs = 0;
 // Set when a level-1 page was opened from the Home or Workshop tab (12.3):
@@ -154,6 +156,7 @@ static void wsLeavePage(wsm::PageId next) {
 }
 
 static void wsOpen(wsm::PageId id) {
+  if (g_wsPick.isOpen()) { g_wsPick.close(); g_wsPickRow = wsm::RowId::None; }
   if (!wsPageLive(id)) id = wsm::PageId::Root;
   wsLeavePage(id);
   wsClearLegacy();
@@ -343,6 +346,280 @@ static const uint16_t kWsLevels[] = {0, 64, 128, 192, 255};
 static const uint16_t kWsMainLevels[] = {64, 128, 192, 255};
 
 static void wsColorText(char* out, size_t len, uint16_t color) { wsTitleCase(out, len, hubExpertColorName(color)); }
+
+// ---------------------------------------------------------------------------
+// Picker (display-kit K9, rollout step 5): a named choice, a colour or a clock time is chosen from a full screen of rows,
+// not stepped with - and +. wkit::PickerSession (more_picker.hpp) is the session; this is the settings' side of it: the
+// options and the current choice of each setting, and the setter. On a panel other than the kit's 480 x 320 a tap on the
+// row steps to the next choice, as the "+" did.
+// ---------------------------------------------------------------------------
+
+static void wsTab(uint8_t i);
+static void wsClick();
+static ::ui::PickerOption g_wsPickOpt[::ui::Picker::kMaxOptions];
+static char g_wsPickText[24][16];  // generated labels (hours, colours, themes, gauges); the zone and format names are static
+
+static void wsKitFontsReleased() { setFont(tft, FONT_NONE); }
+
+static bool wsPickIsColour(wsm::RowId id) {
+  return id == wsm::RowId::GaugeArc || id == wsm::RowId::GaugeLabel || id == wsm::RowId::GaugeValue || id == wsm::RowId::WarnColor ||
+         id == wsm::RowId::ClockTimeColor || id == wsm::RowId::ClockDateColor || id == wsm::RowId::GlowColor;
+}
+
+static uint16_t* wsPickColourSlot(wsm::RowId id) {
+  using R = wsm::RowId;
+  switch (id) {
+    case R::GaugeArc: return &hubSelectedGaugeColors()->arc;
+    case R::GaugeLabel: return &hubSelectedGaugeColors()->label;
+    case R::GaugeValue: return &hubSelectedGaugeColors()->value;
+    case R::WarnColor: return &dispSettings.warnColor;
+    case R::ClockTimeColor: return &dispSettings.clockTimeColor;
+    case R::ClockDateColor: return &dispSettings.clockDateColor;
+    case R::GlowColor: return &dispSettings.glowColor;
+    default: return nullptr;
+  }
+}
+
+static bool wsPickKnown(wsm::RowId id) {
+  using R = wsm::RowId;
+  return wsPickIsColour(id) || id == R::TimeZone || id == R::DateFormat || id == R::AfterPrint || id == R::Theme || id == R::NightStart ||
+         id == R::NightEnd || id == R::GaugeSelect || id == R::Smoothing || id == R::ClockTimeSize || id == R::ClockDateSize ||
+         id == R::TimeReadout;
+}
+
+// The index of the choice in effect for the row's setting, -1 when it is not one of the options (a custom colour set from
+// the portal, a time zone string from a newer firmware): nothing is then checked and the Picker says so.
+static int wsPickCurrent(wsm::RowId id) {
+  using R = wsm::RowId;
+  if (wsPickIsColour(id)) {
+    const uint16_t* slot = wsPickColourSlot(id);
+    for (uint8_t i = 0; slot && i < HUB_EXPERT_COLOR_COUNT; ++i) if (HUB_EXPERT_COLORS[i].value == *slot) return i;
+    return -1;
+  }
+  switch (id) {
+    case R::TimeZone: {
+      size_t count = 0;
+      const TimezoneRegion* regions = getSupportedTimezones(&count);
+      for (size_t i = 0; regions && i < count; ++i) if (!strcmp(regions[i].posixString, netSettings.timezoneStr)) return (int)i;
+      return -1;
+    }
+    case R::DateFormat: return netSettings.dateFormat < 6U ? (int)netSettings.dateFormat : -1;
+    case R::AfterPrint: return hubAfterPrintMode();
+    case R::Theme: return hubThemePresetIndex();
+    case R::NightStart: return dpSettings.nightStartHour < 24U ? (int)dpSettings.nightStartHour : -1;
+    case R::NightEnd: return dpSettings.nightEndHour < 24U ? (int)dpSettings.nightEndHour : -1;
+    case R::GaugeSelect: return g_displayGaugeColorIndex < 12U ? (int)g_displayGaugeColorIndex : -1;
+    case R::Smoothing: return dispSettings.gaugeSmoothing < 4U ? (int)dispSettings.gaugeSmoothing : -1;
+    case R::ClockTimeSize: return dispSettings.clockTimeSize < 4U ? (int)dispSettings.clockTimeSize : -1;
+    case R::ClockDateSize: return dispSettings.clockDateSize < 4U ? (int)dispSettings.clockDateSize : -1;
+    case R::TimeReadout: return dispSettings.timeDisplayMode < 3U ? (int)dispSettings.timeDisplayMode : -1;
+    default: return -1;
+  }
+}
+
+static int wsPickReadBack() { return wsPickCurrent(g_wsPickRow); }
+
+static void wsPickStatic(const char* const* labels, int n) {
+  for (int i = 0; i < n; ++i) { g_wsPickOpt[i] = ::ui::PickerOption(); g_wsPickOpt[i].label = labels[i]; }
+}
+
+// Fills g_wsPickOpt for the row's setting; returns how many options (0: not a Picker setting).
+static int wsPickBuild(wsm::RowId id) {
+  using R = wsm::RowId;
+  int n = 0;
+  if (wsPickIsColour(id)) {
+    n = HUB_EXPERT_COLOR_COUNT;
+    for (int i = 0; i < n; ++i) {
+      wsTitleCase(g_wsPickText[i], sizeof(g_wsPickText[i]), HUB_EXPERT_COLORS[i].label);
+      g_wsPickOpt[i] = ::ui::PickerOption();
+      g_wsPickOpt[i].label = g_wsPickText[i];
+      g_wsPickOpt[i].hasSwatch = true;
+      g_wsPickOpt[i].swatch = HUB_EXPERT_COLORS[i].value;
+    }
+    return n;
+  }
+  switch (id) {
+    case R::TimeZone: {
+      size_t count = 0;
+      const TimezoneRegion* regions = getSupportedTimezones(&count);
+      n = (int)(count < (size_t)::ui::Picker::kMaxOptions ? count : (size_t)::ui::Picker::kMaxOptions);
+      for (int i = 0; regions && i < n; ++i) { g_wsPickOpt[i] = ::ui::PickerOption(); g_wsPickOpt[i].label = regions[i].name; }
+      return regions ? n : 0;
+    }
+    case R::DateFormat: {
+      static const char* const kLabels[] = {"DD.MM.YYYY", "DD-MM-YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD Mon YYYY", "Mon DD, YYYY"};
+      wsPickStatic(kLabels, 6);
+      return 6;
+    }
+    case R::AfterPrint: {
+      static const char* const kLabels[] = {"Stay on", "Show clock", "Screen off"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+    case R::Smoothing: {
+      static const char* const kLabels[] = {"Off", "Slow", "Normal", "Fast"};
+      wsPickStatic(kLabels, 4);
+      return 4;
+    }
+    case R::ClockTimeSize:
+    case R::ClockDateSize: {
+      static const char* const kLabels[] = {"Auto", "Normal", "Medium", "Large"};
+      wsPickStatic(kLabels, 4);
+      return 4;
+    }
+    case R::TimeReadout: {
+      static const char* const kLabels[] = {"Finish time", "Time left", "Both"};
+      wsPickStatic(kLabels, 3);
+      return 3;
+    }
+    case R::Theme:
+      for (n = 0; n < HUB_THEME_COUNT && n < 24; ++n) {
+        wsTitleCase(g_wsPickText[n], sizeof(g_wsPickText[n]), HUB_THEMES[n].label);
+        g_wsPickOpt[n] = ::ui::PickerOption();
+        g_wsPickOpt[n].label = g_wsPickText[n];
+      }
+      return n;
+    case R::GaugeSelect:
+      for (n = 0; n < 12; ++n) {
+        wsTitleCase(g_wsPickText[n], sizeof(g_wsPickText[n]), hubGaugeName((uint8_t)n));
+        g_wsPickOpt[n] = ::ui::PickerOption();
+        g_wsPickOpt[n].label = g_wsPickText[n];
+      }
+      return n;
+    case R::NightStart:
+    case R::NightEnd:  // whole hours: that is what the schedule stores
+      for (n = 0; n < 24; ++n) {
+        wsHourText(g_wsPickText[n], sizeof(g_wsPickText[n]), (uint8_t)n);
+        g_wsPickOpt[n] = ::ui::PickerOption();
+        g_wsPickOpt[n].label = g_wsPickText[n];
+      }
+      return n;
+    default: return 0;
+  }
+}
+
+// Sets the chosen option. Null when done; the Picker reads the setting back (wsPickReadBack) and says "Not saved" if it
+// is not what was chosen. (The settings store has no write result of its own to report.)
+static const char* wsPickApply(int index) {
+  using R = wsm::RowId;
+  const wsm::RowId id = g_wsPickRow;
+  if (index < 0) return wkit::PickerSession::kNotKept;
+  if (wsPickIsColour(id)) {
+    uint16_t* slot = wsPickColourSlot(id);
+    if (!slot || index >= (int)HUB_EXPERT_COLOR_COUNT) return wkit::PickerSession::kNotKept;
+    *slot = HUB_EXPERT_COLORS[index].value;
+    hubPersistDisplayExpert();
+    return nullptr;
+  }
+  switch (id) {
+    case R::TimeZone: {
+      size_t count = 0;
+      const TimezoneRegion* regions = getSupportedTimezones(&count);
+      if (!regions || (size_t)index >= count) return wkit::PickerSession::kNotKept;
+      netSettings.timezoneIndex = (uint8_t)index;
+      strlcpy(netSettings.timezoneStr, regions[index].posixString, sizeof(netSettings.timezoneStr));
+      saveSettings();
+      configTzTime(netSettings.timezoneStr, "pool.ntp.org", "time.nist.gov");
+      wsClick();
+      return nullptr;
+    }
+    case R::DateFormat:
+      if (index >= 6) return wkit::PickerSession::kNotKept;
+      netSettings.dateFormat = (uint8_t)index;
+      saveSettings();
+      wsClick();
+      return nullptr;
+    case R::AfterPrint:
+      if (index >= 3) return wkit::PickerSession::kNotKept;
+      dpSettings.keepDisplayOn = index == 0;
+      if (index != 0) dpSettings.showClockAfterFinish = index == 1;
+      hubPersistDisplay(false);
+      return nullptr;
+    case R::Theme:
+      if (index >= (int)HUB_THEME_COUNT) return wkit::PickerSession::kNotKept;
+      hubApplyThemePreset((uint8_t)index);
+      hubPersistDisplayExpert();
+      return nullptr;
+    case R::NightStart:
+    case R::NightEnd:
+      if (index >= 24) return wkit::PickerSession::kNotKept;
+      (id == R::NightStart ? dpSettings.nightStartHour : dpSettings.nightEndHour) = (uint8_t)index;
+      hubPersistDisplay(true);
+      return nullptr;
+    case R::GaugeSelect:
+      if (index >= 12) return wkit::PickerSession::kNotKept;
+      g_displayGaugeColorIndex = (uint8_t)index;
+      wsClick();
+      return nullptr;
+    case R::Smoothing:
+      if (index >= 4) return wkit::PickerSession::kNotKept;
+      dispSettings.gaugeSmoothing = (uint8_t)index;
+      hubPersistDisplayExpert();
+      return nullptr;
+    case R::ClockTimeSize:
+    case R::ClockDateSize:
+      if (index >= 4) return wkit::PickerSession::kNotKept;
+      (id == R::ClockTimeSize ? dispSettings.clockTimeSize : dispSettings.clockDateSize) = (uint8_t)index;
+      hubPersistDisplay(false);
+      return nullptr;
+    case R::TimeReadout:
+      if (index >= 3) return wkit::PickerSession::kNotKept;
+      dispSettings.timeDisplayMode = (uint8_t)index;
+      hubPersistDisplay(false);
+      return nullptr;
+    default: return wkit::PickerSession::kNotKept;
+  }
+}
+
+// The row's label on the page that is open: the Picker's title (the setting's name).
+static const char* wsPickTitle(wsm::RowId id) {
+  const wsm::PageSpec& p = wsm::page(g_wsPage);
+  for (uint8_t r = 0; r < p.rowCount; ++r) if (p.rows[r].id == id) return p.rows[r].label;
+  return "Choose";
+}
+
+// Opens the Picker for the row; false when the row is not a Picker setting or the panel is not the kit's.
+static bool wsPickOpen(wsm::RowId id) {
+  if (!wsPickKnown(id) || !wsm::pickerKit(wsScreen())) return false;
+  const int n = wsPickBuild(id);
+  if (n < 1) return false;
+  g_wsPickRow = id;
+  if (!g_wsPick.open(wsPickTitle(id), g_wsPickOpt, n, wsPickCurrent(id), wsm::kTabH)) return false;
+  g_dirty = true;
+  return true;
+}
+
+static void wsPickClose() {
+  g_wsPick.close();
+  g_wsPickRow = wsm::RowId::None;
+  g_dirty = true;
+}
+
+// One full screen in the kit's parts; the tab bar below it is the device's.
+static __attribute__((noinline)) void wsDrawPicker() {
+  tft.fillScreen(OS12V_BG);
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wsKitFontsReleased);
+  g_wsPick.draw(canvas);
+  canvas.release();  // the older draws select their own fonts
+  uiBottomNav(wsNavTab(), nullptr);
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
+// A touch while the Picker is open. A touch on the tab bar closes it (nothing changes) and is the tab bar's.
+static __attribute__((noinline)) bool wsPickTouch(int16_t x, int16_t y) {
+  if (y >= wsm::tabBand(wsScreen()).y) { wsPickClose(); return false; }
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wsKitFontsReleased);
+  const wkit::PickerSession::Outcome o = g_wsPick.tap(canvas, x, y, wsPickApply, wsPickReadBack);
+  canvas.release();
+  switch (o) {
+    case wkit::PickerSession::Outcome::Redraw: g_dirty = true; break;
+    case wkit::PickerSession::Outcome::Closed: wsPickClose(); break;
+    case wkit::PickerSession::Outcome::Home: wsPickClose(); wsTab(0); break;
+    case wkit::PickerSession::Outcome::None: default: break;
+  }
+  return true;
+}
 
 static void wsRowView(wsm::RowId id, WsRowView& v) {
   wsView(v);
@@ -914,6 +1191,7 @@ static void wsRowTap(wsm::RowId id, wsm::Part part) {
   using R = wsm::RowId;
   const WsPlug plug = wsPlug();
   const int dir = part == wsm::Part::Minus ? -1 : 1;
+  if (part == wsm::Part::Whole && wsPickOpen(id)) { wsClick(); return; }  // else the older step below (other panels)
   switch (id) {
     case R::PlugEnabled: {
       TasmotaSettings& ps = tasmotaSettings[plug.index];
@@ -1482,8 +1760,9 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
   switch (kind) {
     case wsm::RowKind::Info:
     case wsm::RowKind::Nav:
+    case wsm::RowKind::Choice:
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
-      if (kind == wsm::RowKind::Nav) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
+      if (kind == wsm::RowKind::Nav || kind == wsm::RowKind::Choice) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
       break;
     case wsm::RowKind::Code:
       wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w,
@@ -1796,6 +2075,7 @@ static void wsMoreDraw(bool full) {
   if (g_rotationPreviewMode) { hubRc2DrawRotationPreview(); return; }
   const wsm::Screen s = wsScreen();
   if (!wsPageLive(g_wsPage)) g_wsPage = wsm::PageId::Root;
+  if (g_wsPick.isOpen()) { wsDrawPicker(); return; }
   const wsm::PageSpec& p = wsm::page(g_wsPage);
   if (wsVideoDirect()) {
     // The backend owns the video area; draw only the chrome around it, and
@@ -1850,6 +2130,8 @@ static void wsVideoGuard(ScreenState screen) {
 }
 
 static void wsTab(uint8_t i) {
+  g_wsPick.close();
+  g_wsPickRow = wsm::RowId::None;
   g_wsDialog = WsDialog::None;
   g_wsReturnTab = -1;
   if (i < 3) { wsLeavePage(wsm::PageId::Root); g_wsPage = wsm::PageId::Root; g_wsScroll = 0; }
@@ -1888,6 +2170,7 @@ static bool wsRotationPreviewTouch(int16_t x, int16_t y, bool longPress) {
 
 static bool wsMoreTouch(int16_t x, int16_t y, bool longPress) {
   if (g_rotationPreviewMode) return wsRotationPreviewTouch(x, y, longPress);
+  if (g_wsPick.isOpen() && wsPickTouch(x, y)) return true;
   const wsm::Screen s = wsScreen();
   const wsm::PageSpec& p = wsm::page(g_wsPage);
   const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y, wsCameraView(p.id));
@@ -2026,7 +2309,7 @@ static void wsMoreService() {
 // page acts on. False when the point would do nothing (empty space, the tab
 // guard band, read-only or disabled rows, a scroll button at its end).
 static bool wsMorePressRect(int16_t x, int16_t y, wsm::Rect& out) {
-  if (g_rotationPreviewMode) return false;
+  if (g_rotationPreviewMode || g_wsPick.isOpen()) return false;  // the Picker has its own rows; no outline from the page behind
   const wsm::Screen s = wsScreen();
   const wsm::PageSpec& p = wsm::page(g_wsPage);
   const wsm::Hit h = wsm::hitTest(s, p.id, g_wsScroll, g_wsDialog != WsDialog::None, x, y, wsCameraView(p.id));

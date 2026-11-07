@@ -191,7 +191,7 @@ def validate(repo: Path) -> str:
     for page, row, kind in live_page_rows(layout, fragment):
         if f"case R::{row}:" not in view:
             raise ValidationError(f"{page}/{row}: no value case in wsRowView")
-        if kind in ("Toggle", "Stepper", "Action", "Action2") and f"case R::{row}:" not in tap:
+        if kind in ("Toggle", "Stepper", "Choice", "Action", "Action2") and f"case R::{row}:" not in tap:
             raise ValidationError(f"{page}/{row}: {kind} row has no action in wsRowTap")
 
     # Disabled controls say why: a disabled row always carries a reason.
