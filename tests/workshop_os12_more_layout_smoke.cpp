@@ -323,7 +323,8 @@ void checkChoiceRows() {
   const RowId choices[] = {RowId::TimeZone, RowId::DateFormat, RowId::AfterPrint, RowId::Theme, RowId::NightStart, RowId::NightEnd,
                            RowId::GaugeSelect, RowId::GaugeArc, RowId::GaugeLabel, RowId::GaugeValue, RowId::WarnColor, RowId::Smoothing,
                            RowId::ClockTimeColor, RowId::ClockDateColor, RowId::ClockTimeSize, RowId::ClockDateSize, RowId::TimeReadout,
-                           RowId::GlowColor};
+                           RowId::GlowColor, RowId::PlugReadout, RowId::FinishTimeout, RowId::FanReadout, RowId::HmsSeverity,
+                           RowId::HmsPresent, RowId::GlowMode, RowId::GlowStyle, RowId::GlowDuration, RowId::LedFinishEffect};
   const Screen s = makeScreen(480, 320);
   check(pickerKit(s) && !pickerKit(makeScreen(320, 480)), "the Picker is for the 480 x 320 panel", "choice rows");
   for (unsigned i = 0; i < sizeof(choices) / sizeof(choices[0]); ++i) {
