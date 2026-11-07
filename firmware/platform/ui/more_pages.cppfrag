@@ -771,7 +771,6 @@ static __attribute__((noinline)) bool wsPickTouch(int16_t x, int16_t y) {
   switch (o) {
     case wkit::PickerSession::Outcome::Redraw: g_dirty = true; break;
     case wkit::PickerSession::Outcome::Closed: wsPickClose(); break;
-    case wkit::PickerSession::Outcome::Home: wsPickClose(); wsTab(0); break;
     case wkit::PickerSession::Outcome::None: default: break;
   }
   return true;

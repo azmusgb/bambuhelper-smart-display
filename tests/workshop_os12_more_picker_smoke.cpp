@@ -7,7 +7,7 @@
 //    current choice, which is below page one;
 //  - colours show their swatch beside the name;
 //  - a long label (a time zone's full name) wraps, in the 16 px face, and is never cut or shrunk;
-//  - a tap applies the choice and closes; Back and Home change nothing (apply is never called);
+//  - a tap applies the choice and closes; Back changes nothing (apply is never called; Home is the tab bar's);
 //  - a failed save (apply gives a reason) or a setting that reads back as something else keeps the Picker open, says
 //    "Not saved: why" on that row, and keeps the previous choice checked;
 //  - an unreadable current value checks nothing and the title line says "Current setting unknown".
@@ -243,15 +243,15 @@ void applyAndBack() {
     const O o = s.tap(c, 20, 24, applyValue, readValue);  // the header's Back
     check(o == O::Closed && !s.isOpen() && g_applied == 0 && g_value == 1, "Back closes and changes nothing");
   }
-  {  // Home
+  {  // Home is the tab bar's (kit 2.13): the header's right end is the title's, and a tap there does nothing
     reset(1);
     MemCanvas c(g_dir);
     List l = namedList(3);
     PickerSession s;
     s.open("After a print", l.opt.data(), 3, 1);
     s.draw(c);
-    const O o = s.tap(c, ::ui::kScreenW - 40, 24, applyValue, readValue);  // the header's Home
-    check(o == O::Home && !s.isOpen() && g_applied == 0, "Home closes and changes nothing");
+    const O o = s.tap(c, ::ui::kScreenW - 40, 24, applyValue, readValue);  // where the header's Home used to be
+    check(o == O::None && s.isOpen() && g_applied == 0, "the header has no Home: a tap there changes nothing");
   }
   {  // a tap outside every row does nothing
     reset(1);
