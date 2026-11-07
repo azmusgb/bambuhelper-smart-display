@@ -181,6 +181,10 @@ python3 "$ROOT/scripts/validate_os12_portal_boot.py" --repo "$BUILD"
 # reconstructed copy only (firmware/platform/media stays untouched) and refuses a tree it has already patched.
 python3 "$ROOT/apply_workshop_os12_x2d_bridge_camera.py" --repo "$BUILD" --bridge-url "$X2D_BRIDGE_URL" --apply
 python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
+# Night-mode times in 15-minute steps (display-kit K9): the schedule is kept in minutes, an existing whole hour h becomes h * 60,
+# and the portal lists the 96 times. The touchscreen Picker's side is in firmware/platform/ui/more_pages.cppfrag.
+python3 "$ROOT/apply_workshop_os12_night_minutes.py" --repo "$BUILD" --source-root "$ROOT" --apply
+python3 "$ROOT/scripts/validate_os12_night_minutes.py" --repo "$BUILD" --source-root "$ROOT"
 X2D_COMPILED_URL="$(sed -n 's/^#define WORKSHOP_X2D_BRIDGE_URL "\(.*\)"$/\1/p' "$BUILD/src/ws350_media_backend.cpp")"
 [[ -n "$X2D_COMPILED_URL" ]] || { echo 'FAIL: X2D bridge URL missing from the reconstructed media backend' >&2; exit 1; }
 

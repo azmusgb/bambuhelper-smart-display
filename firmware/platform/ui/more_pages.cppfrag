@@ -357,7 +357,8 @@ static void wsColorText(char* out, size_t len, uint16_t color) { wsTitleCase(out
 static void wsTab(uint8_t i);
 static void wsClick();
 static ::ui::PickerOption g_wsPickOpt[::ui::Picker::kMaxOptions];
-static char g_wsPickText[24][16];  // generated labels (hours, colours, themes, gauges); the zone and format names are static
+static char g_wsPickText[24][16];  // generated labels (colours, themes, gauges); the zone and format names are static
+static char g_wsNightText[wnight::kOptionCount][9];  // the 96 night-mode times, "10:15 PM" at most
 
 static void wsKitFontsReleased() { setFont(tft, FONT_NONE); }
 
@@ -406,8 +407,8 @@ static int wsPickCurrent(wsm::RowId id) {
     case R::DateFormat: return netSettings.dateFormat < 6U ? (int)netSettings.dateFormat : -1;
     case R::AfterPrint: return hubAfterPrintMode();
     case R::Theme: return hubThemePresetIndex();
-    case R::NightStart: return dpSettings.nightStartHour < 24U ? (int)dpSettings.nightStartHour : -1;
-    case R::NightEnd: return dpSettings.nightEndHour < 24U ? (int)dpSettings.nightEndHour : -1;
+    case R::NightStart: return wnight::indexOf(dpSettings.nightStartMin);
+    case R::NightEnd: return wnight::indexOf(dpSettings.nightEndMin);
     case R::GaugeSelect: return g_displayGaugeColorIndex < 12U ? (int)g_displayGaugeColorIndex : -1;
     case R::Smoothing: return dispSettings.gaugeSmoothing < 4U ? (int)dispSettings.gaugeSmoothing : -1;
     case R::ClockTimeSize: return dispSettings.clockTimeSize < 4U ? (int)dispSettings.clockTimeSize : -1;
@@ -487,11 +488,11 @@ static int wsPickBuild(wsm::RowId id) {
       }
       return n;
     case R::NightStart:
-    case R::NightEnd:  // whole hours: that is what the schedule stores
-      for (n = 0; n < 24; ++n) {
-        wsHourText(g_wsPickText[n], sizeof(g_wsPickText[n]), (uint8_t)n);
+    case R::NightEnd:  // every 15 minutes: that is what the schedule stores
+      for (n = 0; n < wnight::kOptionCount; ++n) {
+        wnight::format(g_wsNightText[n], sizeof(g_wsNightText[n]), (uint16_t)wnight::minutesOf(n), netSettings.use24h);
         g_wsPickOpt[n] = ::ui::PickerOption();
-        g_wsPickOpt[n].label = g_wsPickText[n];
+        g_wsPickOpt[n].label = g_wsNightText[n];
       }
       return n;
     default: return 0;
@@ -542,8 +543,8 @@ static const char* wsPickApply(int index) {
       return nullptr;
     case R::NightStart:
     case R::NightEnd:
-      if (index >= 24) return wkit::PickerSession::kNotKept;
-      (id == R::NightStart ? dpSettings.nightStartHour : dpSettings.nightEndHour) = (uint8_t)index;
+      if (wnight::minutesOf(index) < 0) return wkit::PickerSession::kNotKept;
+      (id == R::NightStart ? dpSettings.nightStartMin : dpSettings.nightEndMin) = (uint16_t)wnight::minutesOf(index);
       hubPersistDisplay(true);
       return nullptr;
     case R::GaugeSelect:
@@ -908,11 +909,11 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       v.valueColor = OS12V_TEXT;
       break;
     case R::NightStart:
-      wsHourText(v.value, sizeof(v.value), dpSettings.nightStartHour);
+      wnight::format(v.value, sizeof(v.value), dpSettings.nightStartMin, netSettings.use24h);
       v.valueColor = OS12V_TEXT;
       break;
     case R::NightEnd:
-      wsHourText(v.value, sizeof(v.value), dpSettings.nightEndHour);
+      wnight::format(v.value, sizeof(v.value), dpSettings.nightEndMin, netSettings.use24h);
       v.valueColor = OS12V_TEXT;
       break;
     case R::PongClock: v.on = dispSettings.pongClock; break;
@@ -1319,8 +1320,8 @@ static void wsRowTap(wsm::RowId id, wsm::Part part) {
       dpSettings.nightBrightness = (uint8_t)wsStepList(dpSettings.nightBrightness, kWsLevels, 5, dir);
       hubPersistDisplay(true);
       break;
-    case R::NightStart: dpSettings.nightStartHour = hubStepHour(dpSettings.nightStartHour, dir < 0); hubPersistDisplay(true); break;
-    case R::NightEnd: dpSettings.nightEndHour = hubStepHour(dpSettings.nightEndHour, dir < 0); hubPersistDisplay(true); break;
+    case R::NightStart: dpSettings.nightStartMin = wnight::step(dpSettings.nightStartMin, dir < 0); hubPersistDisplay(true); break;
+    case R::NightEnd: dpSettings.nightEndMin = wnight::step(dpSettings.nightEndMin, dir < 0); hubPersistDisplay(true); break;
     case R::PongClock: dispSettings.pongClock = !dispSettings.pongClock; hubPersistDisplay(false); break;
     case R::ClockTimeSize:
       dispSettings.clockTimeSize = (uint8_t)((dispSettings.clockTimeSize + (dir < 0 ? 3U : 1U)) % 4U);
