@@ -393,13 +393,15 @@ static bool wsPickIsHms(wsm::RowId id) {
 
 // How long the finish screen stays (minutes; 0 is immediately): the presets the older step walked through.
 static const uint16_t kWsFinishMins[] = {0, 1, 3, 5, 10, 15, 30, 60};
+static wnight::Quiet wsQuiet() { return wnight::Quiet{buzzerSettings.quietEnabled, buzzerSettings.quietStartMin, buzzerSettings.quietEndMin}; }
 
 static bool wsPickKnown(wsm::RowId id) {
   using R = wsm::RowId;
   return wsPickIsColour(id) || id == R::TimeZone || id == R::DateFormat || id == R::AfterPrint || id == R::Theme || id == R::NightStart ||
          id == R::NightEnd || id == R::GaugeSelect || id == R::Smoothing || id == R::ClockTimeSize || id == R::ClockDateSize ||
          id == R::TimeReadout || id == R::FinishTimeout || id == R::FanReadout || id == R::PlugReadout || id == R::GlowMode ||
-         id == R::GlowStyle || id == R::GlowDuration || id == R::LedFinishEffect || wsPickIsHms(id);
+         id == R::GlowStyle || id == R::GlowDuration || id == R::LedFinishEffect || id == R::QuietStart || id == R::QuietEnd ||
+         wsPickIsHms(id);
 }
 
 // The index of the choice in effect for the row's setting, -1 when it is not one of the options (a custom colour set from
@@ -444,6 +446,8 @@ static int wsPickCurrent(wsm::RowId id) {
     case R::HmsSeverity: return dispSettings.hmsSeverityAll ? 0 : 1;
     case R::HmsPresent: return dispSettings.hmsAutoPresent < 3U ? (int)dispSettings.hmsAutoPresent : -1;
 #endif
+    case R::QuietStart: return wnight::quietIndex(wsQuiet());
+    case R::QuietEnd: return wnight::indexOf(buzzerSettings.quietEndMin);
     default: return -1;
   }
 }
@@ -569,6 +573,16 @@ static int wsPickBuild(wsm::RowId id) {
         g_wsPickOpt[n].label = g_wsPickText[n];
       }
       return n;
+    case R::QuietStart:  // Off, then every 15 minutes: no time doubles as off
+      g_wsPickOpt[0] = ::ui::PickerOption();
+      g_wsPickOpt[0].label = "Off";
+      for (n = 0; n < wnight::kOptionCount; ++n) {
+        wnight::format(g_wsNightText[n], sizeof(g_wsNightText[n]), (uint16_t)wnight::minutesOf(n), netSettings.use24h);
+        g_wsPickOpt[n + 1] = ::ui::PickerOption();
+        g_wsPickOpt[n + 1].label = g_wsNightText[n];
+      }
+      return n + 1;
+    case R::QuietEnd:
     case R::NightStart:
     case R::NightEnd:  // every 15 minutes: that is what the schedule stores
       for (n = 0; n < wnight::kOptionCount; ++n) {
@@ -622,6 +636,21 @@ static const char* wsPickApply(int index) {
       if (index >= (int)HUB_THEME_COUNT) return wkit::PickerSession::kNotKept;
       hubApplyThemePreset((uint8_t)index);
       hubPersistDisplayExpert();
+      return nullptr;
+    case R::QuietStart: {
+      wnight::Quiet q = wsQuiet();
+      if (!wnight::chooseQuietStart(q, index)) return wkit::PickerSession::kNotKept;
+      buzzerSettings.quietEnabled = q.enabled;
+      buzzerSettings.quietStartMin = q.start;
+      saveBuzzerSettings();
+      wsClick();
+      return nullptr;
+    }
+    case R::QuietEnd:
+      if (wnight::minutesOf(index) < 0) return wkit::PickerSession::kNotKept;
+      buzzerSettings.quietEndMin = (uint16_t)wnight::minutesOf(index);
+      saveBuzzerSettings();
+      wsClick();
       return nullptr;
     case R::NightStart:
     case R::NightEnd:
@@ -1129,13 +1158,13 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
       strlcpy(v.value, ledSettings.enabled ? "On" : "Off", sizeof(v.value));
       break;
     case R::QuietStart:
-      if (buzzerSettings.quietStartHour == 0) strlcpy(v.value, "Off", sizeof(v.value));
-      else wsHourText(v.value, sizeof(v.value), buzzerSettings.quietStartHour);
+      if (!buzzerSettings.quietEnabled) strlcpy(v.value, "Off", sizeof(v.value));
+      else wnight::format(v.value, sizeof(v.value), buzzerSettings.quietStartMin, netSettings.use24h);
       v.valueColor = OS12V_TEXT;
       break;
     case R::QuietEnd:
-      if (buzzerSettings.quietStartHour == 0) { v.enabled = false; v.reason = "Quiet hours are off"; break; }
-      wsHourText(v.value, sizeof(v.value), buzzerSettings.quietEndHour);
+      if (!buzzerSettings.quietEnabled) { v.enabled = false; v.reason = "Quiet hours are off"; break; }
+      wnight::format(v.value, sizeof(v.value), buzzerSettings.quietEndMin, netSettings.use24h);
       v.valueColor = OS12V_TEXT;
       break;
     case R::SpeakerTest: {
@@ -1534,13 +1563,20 @@ static void wsRowTap(wsm::RowId id, wsm::Part part) {
       wsClick();
       break;
     }
-    case R::QuietStart:
-      buzzerSettings.quietStartHour = (uint8_t)wsStepClamp(buzzerSettings.quietStartHour, dir, 0, 23);
+    case R::QuietStart: {
+      // The older control: Off, then each time in turn, around the ring.
+      wnight::Quiet q = wsQuiet();
+      const int count = wnight::kOptionCount + 1;
+      const int now = wnight::quietIndex(q);
+      wnight::chooseQuietStart(q, now < 0 ? 0 : (now + (dir < 0 ? count - 1 : 1)) % count);
+      buzzerSettings.quietEnabled = q.enabled;
+      buzzerSettings.quietStartMin = q.start;
       saveBuzzerSettings();
       wsClick();
       break;
+    }
     case R::QuietEnd:
-      buzzerSettings.quietEndHour = hubStepHour(buzzerSettings.quietEndHour, dir < 0);
+      buzzerSettings.quietEndMin = wnight::step(buzzerSettings.quietEndMin, dir < 0);
       saveBuzzerSettings();
       wsClick();
       break;
