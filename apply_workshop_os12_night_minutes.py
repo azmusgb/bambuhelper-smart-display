@@ -101,7 +101,7 @@ EXPORT_NEW = """  dp["nightStartMin"] = dpSettings.nightStartMin;
 RESTORE_OLD = """    if (dp["nightStartHour"].is<uint8_t>())     dpSettings.nightStartHour = dp["nightStartHour"].as<uint8_t>();
     if (dp["nightEndHour"].is<uint8_t>())       dpSettings.nightEndHour = dp["nightEndHour"].as<uint8_t>();
 """
-RESTORE_NEW = """    // Minutes; an export from before the schedule had minutes carries nightStartHour / nightEndHour (h * 60).
+RESTORE_NEW = """    // Minutes; an export from before the schedule had minutes carries whole hours instead (read as h * 60).
     wnight::importTime(dp["nightStartMin"].is<int>(), dp["nightStartMin"].as<long>(), dp["nightStartHour"].is<int>(),
                        dp["nightStartHour"].as<long>(), dpSettings.nightStartMin);
     wnight::importTime(dp["nightEndMin"].is<int>(), dp["nightEndMin"].as<long>(), dp["nightEndHour"].is<int>(),
