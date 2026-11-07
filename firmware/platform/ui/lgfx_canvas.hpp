@@ -9,8 +9,9 @@
 //
 // Fonts: the kit's five faces are Archivo VLW files (appliance-ui display/fonts/*.vlw, 225,129 bytes in all). The
 // caller links them in as byte arrays, the way fonts.cpp links the Figtree ones, and passes them in UiLgfxFonts. A face
-// with no data draws nothing and measures 0: the adapter never substitutes another size. Until a screen is ported
-// (rollout steps 4 and 5) nothing instantiates this class and no font is linked.
+// with no data draws nothing and measures 0: the adapter never substitutes another size. Idle Home (rollout step 4)
+// is the first screen on it: apply_workshop_os12_display_kit_home.py links the five faces (src/workshop_archivo_fonts.cpp,
+// generated from the kit's .vlw files) and wtDrawHomeIdleKit draws through this class.
 //
 // State it changes on the target: the current VLW font, the text datum (baseline_left), the text colours and the text
 // size (1). The older screen code selects fonts through setFont(), which caches its choice: call release() when a

@@ -273,11 +273,43 @@ inline uint8_t clampScroll(Screen s, const ViewSpec& v, uint8_t runtimeCount, in
   return static_cast<uint8_t>(scroll > m ? m : scroll);
 }
 
+// Idle Home on the display kit's parts (display-kit rollout step 4). The kit draws a 480 x 320 panel, so this is the
+// kit's own geometry for that panel only: its 48 px header, two Needs-you rows of the kit's 72 px, then one band of
+// 58 px with the printer card and the timer card side by side (the Button inside is the kit's 48 px). 4 px between
+// the rows and the band, 8 px at the sides and between the two cards; the 54 px tab bar is below. Other panels keep
+// the slot grid. The numbers are the kit's (ui::NeedsRow::kHeight, ui::Button 48 px, kHeaderH): the display-kit smoke
+// test checks them against the kit's headers.
+static const int16_t kHomeIdleKitW = 480;
+static const int16_t kHomeIdleKitH = 320;
+static const int16_t kHomeIdleHeaderH = 48;
+static const int16_t kHomeIdleNeedH = 72;
+static const int16_t kHomeIdleBandH = 58;
+static const int16_t kHomeIdleGap = 4;
+static const int16_t kHomeIdleMargin = 8;
+static const int16_t kHomeIdleTimerW = 188;
+
+inline bool homeIdleKit(Screen s) { return s.w == kHomeIdleKitW && s.h == kHomeIdleKitH; }
+
+// Item i of kHomeIdleItems on the kit's panel: need, need, printer card, timer card.
+inline Rect homeIdleRect(uint8_t i) {
+  const int16_t x = kHomeIdleMargin, w = static_cast<int16_t>(kHomeIdleKitW - 2 * kHomeIdleMargin);
+  const int16_t y0 = static_cast<int16_t>(kHomeIdleHeaderH + kHomeIdleGap);
+  const int16_t y2 = static_cast<int16_t>(y0 + 2 * kHomeIdleNeedH + 2 * kHomeIdleGap);
+  switch (i) {
+    case 0: return makeRect(x, y0, w, kHomeIdleNeedH);
+    case 1: return makeRect(x, static_cast<int16_t>(y0 + kHomeIdleNeedH + kHomeIdleGap), w, kHomeIdleNeedH);
+    case 2: return makeRect(x, y2, static_cast<int16_t>(w - kHomeIdleTimerW - kHomeIdleMargin), kHomeIdleBandH);
+    case 3: return makeRect(static_cast<int16_t>(x + w - kHomeIdleTimerW), y2, kHomeIdleTimerW, kHomeIdleBandH);
+    default: return makeRect(0, 0, 0, 0);
+  }
+}
+
 // Rectangle of item `i`, or empty when it is scrolled out of view or does
 // not fit.
 inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t scroll, uint8_t i) {
   const uint8_t n = itemCount(v, runtimeCount);
   if (i >= n) return makeRect(0, 0, 0, 0);
+  if (v.id == View::HomeIdle && homeIdleKit(s)) return homeIdleRect(i);
   if (!v.list) scroll = 0;
   if (i < scroll) return makeRect(0, 0, 0, 0);
   int slot = firstSlot(v);

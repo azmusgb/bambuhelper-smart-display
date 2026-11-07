@@ -914,11 +914,26 @@ static void wtDrawCalm(const WtPrint& w) {
 
 // 12.4.1: Home keeps the big print card for a print that is running, finished or failed (or an error); otherwise
 // it is Local AI's cards, a printer row and the timer.
+// /hub/show home-idle: idle Home whatever the printer is doing, so it can be captured and accepted without waiting
+// 30 minutes after a print. It holds until another page is shown or the display moves to another tab, or 5 minutes at
+// most; a tap on idle Home itself (the timer, the printer card) does not end it.
+static bool g_wtHomeIdleShown = false;
+static uint32_t g_wtHomeIdleShownAt = 0;
+static void wtHomeIdleForce(bool on) {
+  g_wtHomeIdleShown = on;
+  g_wtHomeIdleShownAt = millis();
+}
+static bool wtHomeIdleForced() {
+  if (g_wtHomeIdleShown && millis() - g_wtHomeIdleShownAt > 300000UL) g_wtHomeIdleShown = false;
+  return g_wtHomeIdleShown;
+}
+
 static bool wtHomeIdle(const WtPrint& w) {
-  return !(w.configured && w.online && (w.active || wtFinishedRecently(w) || w.failedActive || w.alerts));
+  return wtHomeIdleForced() || !(w.configured && w.online && (w.active || wtFinishedRecently(w) || w.failedActive || w.alerts));
 }
 
 static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v);  // Local AI tab rows (below)
+static void wtTimerRow(WsRowView& v);  // the workshop timer's row (below)
 
 // Home at a glance (26 Oct 2026): idle Home's two "Needs you" rows. Pi Hub's one list from the top (the same list,
 // in the same order, as on Pi Hub and the Print lab page), else Local AI's cards; one snapshot for both rows.
@@ -1069,59 +1084,89 @@ static void wtDrawHomeMetric(const wsm::Rect& r, const char* label, float value,
       OS12V_SURFACE);
 }
 
-static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
-  const uint16_t bg = OS12V_SURFACE2;
+// What the printer row on idle Home says, one place for both drawings (the slot layout and the display kit's card):
+// the state word, the line under it, its lamp, and whether the readings back showing temperatures.
+struct WtHomePrinterFacts {
+  char state[48];
+  char detail[96];
+  uint16_t color;
+  uint8_t kind;           // the kit's lamp: 0 ok, 1 warn, 2 bad, 3 unknown (ui::ChipKind)
+  bool metrics;           // healthy idle with fresh readings: the nozzle and bed temperatures are worth showing
+  bool noReadings;        // connected but quiet: `detail` is the old "No report ..." line; the kit card shows an age
+  float nozzleTemp, nozzleTarget;
+};
 
-  char state[48], detail[96];
-  uint16_t color = OS12V_GREEN;
-  detail[0] = 0;
-
-  float nozzleTemp = 0.0f;
-  float nozzleTarget = 0.0f;
+static void wtHomePrinterFacts(const WtPrint& w, WtHomePrinterFacts& f) {
+  f.state[0] = 0;
+  f.detail[0] = 0;
+  f.color = OS12V_GREEN;
+  f.kind = 0;
+  f.noReadings = false;
+  f.nozzleTemp = 0.0f;
+  f.nozzleTarget = 0.0f;
+  f.metrics = w.configured && w.readings && w.stateKnown && !w.alerts && !w.failedActive && !w.finished && w.s;
 
   if (!w.configured) {
-    strlcpy(state, "Not set up", sizeof(state));
-    strlcpy(detail, "Add your printer in Local Portal", sizeof(detail));
-    color = OS12V_MUTED;
+    strlcpy(f.state, "Not set up", sizeof(f.state));
+    strlcpy(f.detail, "Add your printer in Local Portal", sizeof(f.detail));
+    f.color = OS12V_MUTED;
+    f.kind = 3;
   } else if (!w.online) {
-    strlcpy(state, "Offline", sizeof(state));
-    strlcpy(detail, "Check that it is on and on Wi-Fi", sizeof(detail));
-    color = OS12V_AMBER;
+    strlcpy(f.state, "Offline", sizeof(f.state));
+    strlcpy(f.detail, "Check that it is on and on Wi-Fi", sizeof(f.detail));
+    f.color = OS12V_AMBER;
+    f.kind = 1;
   } else if (w.alerts || w.failedActive) {
     strlcpy(
-        state,
+        f.state,
         w.failedActive && !w.alerts ? "Print failed" : "Needs attention",
-        sizeof(state));
-    wtAlertText(w, detail, sizeof(detail));
-    color = OS12V_RED;
+        sizeof(f.state));
+    wtAlertText(w, f.detail, sizeof(f.detail));
+    f.color = OS12V_RED;
+    f.kind = 2;
   } else if (!w.readings) {
     // 12.9.1: connected but nothing recent from the printer. No temperatures, no "Ready".
-    strlcpy(state, wtl::printerWordText(wtl::PrinterWord::NoReadings), sizeof(state));
-    wtl::readingsAgeText(detail, sizeof(detail), w.everRead, w.readingsAgeS);
-    color = OS12V_MUTED;
+    strlcpy(f.state, wtl::printerWordText(wtl::PrinterWord::NoReadings), sizeof(f.state));
+    wtl::readingsAgeText(f.detail, sizeof(f.detail), w.everRead, w.readingsAgeS);
+    f.color = OS12V_MUTED;
+    f.kind = 3;
+    f.noReadings = true;
   } else if (!w.stateKnown) {
-    strlcpy(state, wtl::printerWordText(wtl::PrinterWord::Unknown), sizeof(state));
-    strlcpy(detail, "The printer's report doesn't say what it is doing", sizeof(detail));
-    color = OS12V_MUTED;
+    strlcpy(f.state, wtl::printerWordText(wtl::PrinterWord::Unknown), sizeof(f.state));
+    strlcpy(f.detail, "The printer's report doesn't say what it is doing", sizeof(f.detail));
+    f.color = OS12V_MUTED;
+    f.kind = 3;
   } else {
     char at[24];
 
     if (w.s)
-      wtNozzle(*w.s, nozzleTemp, nozzleTarget);
+      wtNozzle(*w.s, f.nozzleTemp, f.nozzleTarget);
 
     if (w.finished && w.s &&
         wtClockOf(at, sizeof(at), (time_t)w.s->finishEpoch)) {
-      snprintf(state, sizeof(state), "Finished %s", at);
+      snprintf(f.state, sizeof(f.state), "Finished %s", at);
     } else {
-      strlcpy(state, w.finished ? "Finished" : "Ready", sizeof(state));
+      strlcpy(f.state, w.finished ? "Finished" : "Ready", sizeof(f.state));
     }
 
     const char* job = w.s ? jobDisplayName(*w.s) : nullptr;
 
     // 12.9.1: "Ready" says it; the old "Ready for the next print" line repeated it under the headline.
     if (w.finished && job && job[0])
-      strlcpy(detail, job, sizeof(detail));
+      strlcpy(f.detail, job, sizeof(f.detail));
   }
+}
+
+static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const WtPrint& w) {
+  const uint16_t bg = OS12V_SURFACE2;
+
+  WtHomePrinterFacts f;
+  wtHomePrinterFacts(w, f);
+  const char* state = f.state;
+  const char* detail = f.detail;
+  const uint16_t color = f.color;
+  const float nozzleTemp = f.nozzleTemp;
+  const float nozzleTarget = f.nozzleTarget;
 
   wtDrawCardSurface(r, color);
 
@@ -1137,15 +1182,7 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
   // Premium v2 Home printer bento. In landscape, healthy idle state gains
   // two read-only temperature tiles. The outer card and its hit rectangle
   // remain exactly the canonical HomePrinterRow geometry.
-  const bool metrics =
-      s.landscape() &&
-      w.configured &&
-      w.readings &&
-      w.stateKnown &&
-      !w.alerts &&
-      !w.failedActive &&
-      !w.finished &&
-      w.s;
+  const bool metrics = s.landscape() && f.metrics;
 
   int16_t textRight = contentRight;
 
@@ -1221,9 +1258,114 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
   }
 }
 
+// The adapter loads the kit's Archivo faces into the panel's one current font. setFont() remembers which of its own
+// Figtree faces that is, so when the adapter lets go it says nothing is loaded and the next setFont() loads its own.
+static void wtKitFontsReleased() { setFont(tft, FONT_NONE); }
+
+// The kit's clock for its ages ("since 10:32"): the epoch and this display's offset from UTC (0 epoch until the
+// clock is set over Wi-Fi, when the ages say Unknown). The offset is the local time of `now` less its UTC time.
+static ::ui::Clock wtKitClock() {
+  ::ui::Clock c{0, 0};
+  const time_t now = time(nullptr);
+  if (now < 1700000000) return c;
+  struct tm gm;
+  gmtime_r(&now, &gm);
+  gm.tm_isdst = -1;
+  c.epoch = (uint32_t)now;
+  c.utcOffsetSeconds = (int32_t)((long)now - (long)mktime(&gm));
+  return c;
+}
+
+// A Local AI card's tone as the kit's need tone (the web's needs ranking): bad, attention and warn; a card that is
+// only information or good news is the muted one.
+static ::ui::NeedTone wtKitNeedTone(workshop::localai::Tone t) {
+  using workshop::localai::Tone;
+  return t == Tone::Bad ? ::ui::NeedTone::Bad : t == Tone::Attention ? ::ui::NeedTone::Attention : ::ui::NeedTone::Warn;
+}
+
+// Idle Home on the appliance-ui display kit (display-kit rollout step 4; the drawing is home_idle_kit.hpp, shared with
+// its host test): Frame, two NeedsRow, a printer card, and a timer card with the kit's Button, in Archivo. The same
+// screen as before (the clock and weather, the top two needs, the printer, the timer): this fills the model from the
+// live state and draws it. It is the pattern for the screens that follow: build a model, draw it through the canvas,
+// release the canvas before any older draw that selects a font, and hit-test with the layout's rects.
+// noinline: the model, the rows and the fitted lines stay out of wtDrawHome's frame (8 KB loop task).
+static __attribute__((noinline)) void wtDrawHomeIdleKit(const WtPrint& w) {
+  const wsm::Screen s = wsScreen();
+  tft.fillScreen(OS12V_BG);
+  char clock[16], weather[24], more[16];
+  wtHomeClock(clock, sizeof(clock));
+  WtHomeRow rows[2];  // one snapshot for the frame: the weather and both need rows (wtHomeRows)
+  uint8_t others = 0;
+  wtHomeRows(rows, others, weather, sizeof(weather));
+
+  wkit::HomeIdleModel m;
+  m.title = clock;
+  if (wsToastActive()) { m.subtitle = g_wsToast; m.subtitleColor = UI_COLOR_WARN; }
+  else m.subtitle = weather[0] ? weather : nullptr;
+  m.now = wtKitClock();
+  for (uint8_t k = 0; k < 2; ++k) {
+    ::ui::NeedItem& n = m.need[k];
+    n.tone = wtKitNeedTone(rows[k].c.tone);
+    n.title = rows[k].c.title;
+    n.detail = rows[k].c.text;
+    n.asOf = rows[k].c.at;
+  }
+  if (others) {  // the second row says how many more there are, on its meta line, as the kit's area
+    snprintf(more, sizeof(more), "+%u more", (unsigned)others);
+    m.need[1].area = more;
+  }
+
+  WtHomePrinterFacts f;
+  wtHomePrinterFacts(w, f);
+  const char* name = (w.configured && w.p && w.p->config.name[0]) ? w.p->config.name : "Printer";
+  char line[96];
+  ::ui::Reading age;  // never read until a report is known to be old
+  m.printerKind = f.kind == 0 ? ::ui::ChipKind::Ok : f.kind == 1 ? ::ui::ChipKind::Warn : f.kind == 2 ? ::ui::ChipKind::Bad : ::ui::ChipKind::Unknown;
+  m.printerHeadline = f.state;
+  if (f.noReadings && w.everRead && m.now.set()) {
+    // Quiet printer: how long ago it last reported, in the kit's words (AgeLine), not a sum of our own.
+    age = ::ui::Reading::stale("1", m.now.epoch > w.readingsAgeS ? m.now.epoch - (uint32_t)w.readingsAgeS : 1);
+    m.printerLine = name;
+    m.printerAgeLead = "Last report";
+    m.printerAge = &age;
+  } else if (f.noReadings) {
+    snprintf(line, sizeof(line), "%s \xC2\xB7 %s", name, f.detail);  // never reported: "Waiting for the printer's first report"
+    m.printerLine = line;
+  } else if (f.metrics) {  // the old Nozzle and Bed tiles, as one line: healthy idle with fresh readings
+    snprintf(line, sizeof(line), "%s \xC2\xB7 Nozzle %.0f\xC2\xB0 \xC2\xB7 Bed %.0f\xC2\xB0", name, f.nozzleTemp, w.s ? w.s->bedTemp : 0.0f);
+    m.printerLine = line;
+  } else {
+    snprintf(line, sizeof(line), "%s%s%s", name, f.detail[0] ? " \xC2\xB7 " : "", f.detail);
+    m.printerLine = line;
+  }
+
+  WsRowView timer;
+  wsView(timer);
+  wtTimerRow(timer);
+  m.timerValue = timer.value;
+  m.timerValueColor = g_workshopTimerDone ? UI_COLOR_WARN : workshopTimerActive() ? UI_COLOR_ACCENT_TEXT : UI_COLOR_MUTED;
+  m.timerButton = timer.button ? timer.button : "Start";
+  m.timerPrimary = !g_workshopTimerDone && !workshopTimerActive();  // Start is the screen's one primary
+
+  const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);
+  for (uint8_t i = 0; i < 4; ++i) {
+    const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
+    m.rect[i] = ::ui::Rect{r.x, r.y, r.w, r.h};
+  }
+
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wtKitFontsReleased);
+  wkit::drawHomeIdle(canvas, m);
+  canvas.release();  // the older draws below select their own fonts
+  uiBottomNav(0, nullptr);
+  wtDrawBanner(s);  // 12.6
+  hubMarkFrameDirty();
+  g_dirty = false;
+}
+
 static void wtDrawHomeIdle(const WtPrint& w) {
   const wsm::Screen s = wsScreen();
-  const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);
+  if (wtl::homeIdleKit(s)) { wtDrawHomeIdleKit(w); return; }  // the 480 x 320 panel: the display kit's parts
+  const wtl::ViewSpec& v = wtl::view(wtl::View::HomeIdle);  // other panels: the slot layout, as before
   tft.fillScreen(OS12V_BG);
   // Home at a glance: the header says the time (Home is already marked in the tab bar) and the weather.
   char clock[16], weather[24];
@@ -2137,6 +2279,20 @@ static void wtStepTimer(int dir) {
   g_wtTimerMinutes = wsStepList(wtTimerLength(), sorted, 4, dir);
 }
 
+// The workshop timer's row: its state in words and its one button. Idle Home's timer card reads it too.
+static void wtTimerRow(WsRowView& v) {
+  if (g_workshopTimerDone) { strlcpy(v.value, "Done", sizeof(v.value)); v.valueColor = OS12V_AMBER; v.button = "Clear"; }
+  else if (workshopTimerActive()) {
+    const uint32_t sec = workshopTimerRemainingSeconds();
+    snprintf(v.value, sizeof(v.value), "%lu:%02lu left", (unsigned long)(sec / 60UL), (unsigned long)(sec % 60UL));
+    v.valueColor = OS12V_ACCENT;
+    v.button = "Cancel";
+  } else {
+    strlcpy(v.value, "Not running", sizeof(v.value));
+    v.button = "Start";
+  }
+}
+
 static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot& inv, WsRowView& v) {
   wsView(v);
   using workshop::platform::Freshness;
@@ -2199,16 +2355,7 @@ static void wtWorkshopRow(wtl::ItemId id, const WorkshopInventoryRuntimeSnapshot
       strlcpy(v.value, "Address and sign-in code", sizeof(v.value));
       break;
     case wtl::ItemId::WsTimer:
-      if (g_workshopTimerDone) { strlcpy(v.value, "Done", sizeof(v.value)); v.valueColor = OS12V_AMBER; v.button = "Clear"; }
-      else if (workshopTimerActive()) {
-        const uint32_t sec = workshopTimerRemainingSeconds();
-        snprintf(v.value, sizeof(v.value), "%lu:%02lu left", (unsigned long)(sec / 60UL), (unsigned long)(sec % 60UL));
-        v.valueColor = OS12V_ACCENT;
-        v.button = "Cancel";
-      } else {
-        strlcpy(v.value, "Not running", sizeof(v.value));
-        v.button = "Start";
-      }
+      wtTimerRow(v);
       break;
     case wtl::ItemId::WsTimerLength:
       snprintf(v.value, sizeof(v.value), "%u min", (unsigned)wtTimerLength());
@@ -2619,6 +2766,16 @@ static void wtDrawWorkshop(bool full) {
 // segment selected (the capture scripts open each one by id).
 static bool wtShowPrinterView(const char* name) {
   g_wtBootPreview = 0;
+  wtHomeIdleForce(false);
+  // "home-idle" shows idle Home whatever the printer is doing (it is a page, not a /hub/views id, like "calm"), so the
+  // display kit's Home can be captured and accepted without waiting for the printer to be idle for 30 minutes.
+  if (name && strcmp(name, "home-idle") == 0) {
+    wtHomeIdleForce(true);
+    setPage(SCREEN_HUB_HOME);
+    g_ambientActive = false;
+    g_dirty = true;
+    return true;
+  }
   if (name && strncmp(name, "boot-splash", 11) == 0) {
     int pct = 100;
     if (name[11] == '-') pct = atoi(name + 12);
@@ -2695,6 +2852,7 @@ static bool wtShowPrinterView(const char* name) {
 
 static void wtTab(uint8_t i) {
   g_wtAiOverlay = 0;  // 12.4.2: a tab closes the Ask overlay
+  wtHomeIdleForce(false);
   if (i == 0) setPage(SCREEN_HUB_HOME);
   else if (i == 1) setPage(SCREEN_HUB_PRINTER);
   else if (i == 2) setPage(SCREEN_HUB_WORKSHOP);
@@ -2737,11 +2895,13 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
       const int8_t card = wtHomeNeedCard(wtl::homeNeedRow(v, hi.index));
       if (wtJudgeOpenIndex(card, true)) { wsClick(); g_dirty = true; return true; }  // 26 Oct 2026: Judge it
       g_wtAiOverlay = 0;
+      wtHomeIdleForce(false);
       g_wtWorkshopScroll = card > 0 ? (uint8_t)card : 0;  // clamped when the tab draws
       setPage(SCREEN_HUB_WORKSHOP);
       wsClick();
     }
     else if (id == wtl::ItemId::HomePrinterRow) {
+      wtHomeIdleForce(false);
       if (workshopPlatformState().configuredPrinterCount > 0) setPage(SCREEN_HUB_PRINTER);
       else wsOpenFrom(wsm::PageId::LocalPortal, 0);
       wsClick();
