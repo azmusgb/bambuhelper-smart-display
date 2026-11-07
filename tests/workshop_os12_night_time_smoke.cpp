@@ -1,4 +1,4 @@
-// Host test for firmware/platform/ui/night_time.hpp: night-mode times in 15-minute steps.
+// Host test for firmware/platform/ui/night_time.hpp: night-mode and quiet-hours times in 15-minute steps.
 //
 //   g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_night_time_smoke.cpp -o night-time-smoke
 
@@ -142,10 +142,80 @@ int main() {
     }
   }
 
+  // ---- Quiet hours ----
+  {
+    // Migration keeps what the old keys did: on exactly when the two hours differ.
+    Quiet q = resolveQuiet(false, false, 0, 0, 22, 7);
+    check(q.enabled && q.start == 1320 && q.end == 420, "quiet: 22 to 7 migrates on, 22:00 to 07:00");
+    q = resolveQuiet(false, false, 0, 0, 0, 0);
+    check(!q.enabled && q.start == 0 && q.end == 0, "quiet: never saved is off");
+    q = resolveQuiet(false, false, 0, 0, 5, 5);
+    check(!q.enabled && q.start == 300 && q.end == 300, "quiet: equal hours were off, and stay off");
+    q = resolveQuiet(false, false, 0, 0, 0, 7);
+    check(q.enabled && q.start == 0 && q.end == 420, "quiet: 0 to 7 was a working window (midnight to 07:00); it stays one");
+    q = resolveQuiet(false, false, 0, 0, 40, 7);
+    check(q.enabled && q.start == 0 && q.end == 420, "quiet: an hour outside the day reads as 0");
+    q = resolveQuiet(true, true, 1335, 360, 22, 6);
+    check(q.enabled && q.start == 1335 && q.end == 360, "quiet: stored minutes win");
+    q = resolveQuiet(true, false, 1335, 360, 22, 6);
+    check(!q.enabled && q.start == 1335 && q.end == 360, "quiet: off keeps its times");
+    q = resolveQuiet(true, true, 1337, 360, 22, 6);
+    check(q.enabled && q.start == 1320 && q.end == 360, "quiet: stored minutes off the step fall back to the hours");
+
+    // Holding sounds.
+    q.enabled = true; q.start = 1335; q.end = 420;
+    check(quietNow(q, at(23, 0)) && quietNow(q, at(3, 0)) && !quietNow(q, at(7, 0)) && !quietNow(q, at(22, 14)) && quietNow(q, at(22, 15)), "quiet: window across midnight");
+    q.enabled = false;
+    for (unsigned m = 0; m < 1440; m += 15) check(!quietNow(q, m), "quiet: off holds nothing");
+    q.enabled = true; q.start = q.end = 600;
+    for (unsigned m = 0; m < 1440; m += 15) check(!quietNow(q, m), "quiet: equal times hold nothing");
+
+    // The quiet-from Picker: 97 options, "Off" first.
+    q.enabled = false; q.start = 1320; q.end = 420;
+    check(quietIndex(q) == 0, "quiet: off is option 0");
+    check(chooseQuietStart(q, 1) && q.enabled && q.start == 0 && q.end == 420 && quietIndex(q) == 1, "quiet: option 1 is 00:00 and turns it on, end kept");
+    check(chooseQuietStart(q, 89) && q.start == 1320 && quietIndex(q) == 89, "quiet: option 89 is 22:00");
+    check(chooseQuietStart(q, 96) && q.start == 1425 && quietIndex(q) == 96, "quiet: option 96 is 23:45");
+    check(chooseQuietStart(q, 0) && !q.enabled && q.start == 1425 && quietIndex(q) == 0, "quiet: Off turns it off and keeps the time");
+    check(!chooseQuietStart(q, 97) && !chooseQuietStart(q, -1) && !q.enabled, "quiet: no option 97 or -1");
+    q.enabled = true; q.start = 1337;
+    check(quietIndex(q) == -1, "quiet: a start that is not an option is unknown");
+    for (int i = 0; i <= kOptionCount; ++i) {
+      Quiet r = {false, 1320, 420};
+      check(chooseQuietStart(r, i) && quietIndex(r) == i, "quiet: every option reads back as itself");
+    }
+
+    // Portal and export. New page: on/off and minutes.
+    q = Quiet{false, 1320, 420};
+    check(importQuietText("1", "1335", "360", nullptr, nullptr, q) && q.enabled && q.start == 1335 && q.end == 360, "quiet form: on with both times");
+    check(importQuietText("0", nullptr, "420", nullptr, nullptr, q) && !q.enabled && q.start == 1335 && q.end == 420, "quiet form: off keeps the start, takes the end");
+    check(!importQuietText("2", "1337", "-5", nullptr, nullptr, q) && !q.enabled && q.start == 1335 && q.end == 420, "quiet form: bad on, bad times: nothing changes");
+    check(!importQuietText("x", nullptr, nullptr, nullptr, nullptr, q) && !q.enabled, "quiet form: on that is not a number");
+    check(!importQuietText(nullptr, nullptr, nullptr, nullptr, nullptr, q), "quiet form: no field, no change");
+    // An old page: hours only, on when they differ.
+    check(importQuietText(nullptr, nullptr, nullptr, "22", "7", q) && q.enabled && q.start == 1320 && q.end == 420, "quiet form: an old page's 22 and 7 is on, 22:00 to 07:00");
+    check(importQuietText(nullptr, nullptr, nullptr, "0", "0", q) && !q.enabled && q.start == 0 && q.end == 0, "quiet form: an old page's 0 and 0 is off");
+    check(importQuietText(nullptr, nullptr, nullptr, "0", "7", q) && q.enabled && q.start == 0 && q.end == 420, "quiet form: an old page's 0 and 7 is midnight to 07:00");
+    check(!importQuietText(nullptr, nullptr, nullptr, "24", "x", q) && q.enabled && q.start == 0 && q.end == 420, "quiet form: old hours outside the day change nothing");
+    check(importQuietText("1", "1320", "420", "5", "5", q) && q.enabled && q.start == 1320 && q.end == 420, "quiet form: new fields win over old ones");
+    // Export then restore.
+    for (int i = 0; i <= kOptionCount; ++i) {
+      Quiet from = {false, 1320, 420};
+      chooseQuietStart(from, i);
+      Quiet to = {true, 0, 0};
+      check(importQuiet(true, from.enabled ? 1 : 0, true, from.start, true, from.end, false, 0, false, 0, to) && to.enabled == from.enabled &&
+                to.start == from.start && to.end == from.end,
+            "quiet export then restore");
+    }
+    // An older export: hours only.
+    Quiet old = {true, 0, 0};
+    check(importQuiet(false, 0, false, 0, false, 0, true, 22, true, 7, old) && old.enabled && old.start == 1320 && old.end == 420, "quiet restore: an older export's hours");
+  }
+
   if (g_failures) {
     printf("%d check(s) failed\n", g_failures);
     return 1;
   }
-  printf("PASS: night-mode times - 96 options, hour migration, midnight crossing, labels, portal round trip\n");
+  printf("PASS: night-mode and quiet-hours times - 96 options, Off, hour migration, midnight crossing, labels, portal round trip\n");
   return 0;
 }

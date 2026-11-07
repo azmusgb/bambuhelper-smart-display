@@ -185,6 +185,9 @@ python3 "$ROOT/apply_workshop_os12_x2d_viewer_polish.py" --repo "$BUILD" --apply
 # and the portal lists the 96 times. The touchscreen Picker's side is in firmware/platform/ui/more_pages.cppfrag.
 python3 "$ROOT/apply_workshop_os12_night_minutes.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_night_minutes.py" --repo "$BUILD" --source-root "$ROOT"
+# Quiet hours: an explicit Off and the same 15-minute times (the Picker's side is in more_pages.cppfrag). Needs the night overlay's header.
+python3 "$ROOT/apply_workshop_os12_quiet_minutes.py" --repo "$BUILD" --apply
+python3 "$ROOT/scripts/validate_os12_quiet_minutes.py" --repo "$BUILD"
 X2D_COMPILED_URL="$(sed -n 's/^#define WORKSHOP_X2D_BRIDGE_URL "\(.*\)"$/\1/p' "$BUILD/src/ws350_media_backend.cpp")"
 [[ -n "$X2D_COMPILED_URL" ]] || { echo 'FAIL: X2D bridge URL missing from the reconstructed media backend' >&2; exit 1; }
 

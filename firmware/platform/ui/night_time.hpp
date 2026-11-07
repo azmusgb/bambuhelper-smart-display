@@ -1,9 +1,10 @@
-// Night-mode times (display-kit K9: a Picker of times in 15-minute steps). The schedule used to keep whole hours
+// Night-mode and quiet-hours times (display-kit K9: a Picker of times in 15-minute steps). The schedule used to keep whole hours
 // (nightStartHour, nightEndHour, NVS dp_nstart / dp_nend); it keeps minutes after midnight, multiples of 15, in
 // nightStartMin / nightEndMin (NVS dp_nstartm / dp_nendm). This header is everything about those numbers that does not
 // need the device: the migration from the stored hour, the night test (crossing midnight), the 96 options, the label,
 // and reading the portal's form and settings export. tests/workshop_os12_night_time_smoke.cpp drives it on a host.
-// Header-only, C++11, no Arduino. Installed as include/workshop_night_time.hpp.
+// Quiet hours (sound off between two times) use the same times plus an explicit on/off, so the Picker's first option is
+// "Off" and no time doubles as "off". Header-only, C++11, no Arduino. Installed as include/workshop_night_time.hpp.
 #pragma once
 
 #include <stddef.h>
@@ -102,6 +103,77 @@ inline bool importTimeText(const char* minutesArg, const char* hourArg, uint16_t
   if (hasM && !parseLong(minutesArg, m)) m = -1;  // present but not a number: not valid, and the hour must not stand in
   if (hasH && !parseLong(hourArg, h)) h = -1;
   return importTime(hasM, m, hasH, h, inOut);
+}
+
+// ---- Quiet hours ----------------------------------------------------------------------------------------------------
+// Before this change quiet hours were two whole hours (NVS buz_qstart / buz_qend) where start == end meant off (the
+// portal said "0-0 = off"; the touchscreen showed "Off" for start 0 even though 00:00 to 07:00 was a window that worked).
+// Now: quietEnabled, quietStartMin, quietEndMin (NVS buz_qon, buz_qsm, buz_qem). The times are kept while it is off.
+
+struct Quiet {
+  bool enabled;
+  uint16_t start;
+  uint16_t end;
+};
+
+// The stored value to use at boot. `hasNew`: buz_qon exists. `legacyStart` / `legacyEnd`: the old hour keys (0 when never
+// saved, which is what they defaulted to). Old behaviour is kept as it was: on exactly when the two hours differ.
+inline Quiet resolveQuiet(bool hasNew, bool enabled, uint16_t start, uint16_t end, uint8_t legacyStart, uint8_t legacyEnd) {
+  Quiet q;
+  if (hasNew && valid(start) && valid(end)) {
+    q.enabled = enabled;
+    q.start = start;
+    q.end = end;
+    return q;
+  }
+  const unsigned s = validHour(legacyStart) ? legacyStart : 0U;
+  const unsigned e = validHour(legacyEnd) ? legacyEnd : 0U;
+  q.enabled = s != e;
+  q.start = (uint16_t)(s * 60U);
+  q.end = (uint16_t)(e * 60U);
+  return q;
+}
+
+// Whether sounds are held at `minuteOfDay`.
+inline bool quietNow(const Quiet& q, unsigned minuteOfDay) { return q.enabled && isNight(minuteOfDay, q.start, q.end); }
+
+// The quiet-from Picker: option 0 is "Off", option i + 1 is the i-th time. -1 when the time is not an option.
+inline int quietIndex(const Quiet& q) { return !q.enabled ? 0 : (valid(q.start) ? indexOf(q.start) + 1 : -1); }
+
+// The choice of quiet-from option `index` (0 = Off, else a time that turns quiet hours on, the end time kept). False for
+// an index outside the 97 options.
+inline bool chooseQuietStart(Quiet& q, int index) {
+  if (index < 0 || index > kOptionCount) return false;
+  if (index == 0) { q.enabled = false; return true; }
+  q.enabled = true;
+  q.start = (uint16_t)minutesOf(index - 1);
+  return true;
+}
+
+// From the portal or a settings export, any of: the on/off (0 or 1), the two times in minutes, the two older whole hours.
+// A page or export from before this change has hours only, and then, as it always did, quiet hours are on when the two
+// hours differ. A field that is absent or not a valid value leaves its setting. Returns true when anything was set.
+inline bool importQuiet(bool hasOn, long on, bool hasStartMin, long startMin, bool hasEndMin, long endMin, bool hasStartHour, long startHour,
+                        bool hasEndHour, long endHour, Quiet& q) {
+  bool changed = false;
+  if (hasOn && (on == 0 || on == 1)) { q.enabled = on == 1; changed = true; }
+  if (hasStartMin || hasEndMin) {
+    changed = importTime(hasStartMin, startMin, false, 0, q.start) || changed;
+    changed = importTime(hasEndMin, endMin, false, 0, q.end) || changed;
+  } else if (!hasOn && (hasStartHour || hasEndHour)) {
+    const bool a = importTime(false, 0, hasStartHour, startHour, q.start);
+    const bool b = importTime(false, 0, hasEndHour, endHour, q.end);
+    if (a || b) { q.enabled = q.start != q.end; changed = true; }
+  }
+  return changed;
+}
+
+// The same for form arguments as text (null: absent). A present field that is not a number is a bad value.
+inline bool importQuietText(const char* on, const char* startMin, const char* endMin, const char* startHour, const char* endHour, Quiet& q) {
+  long v[5] = {0, 0, 0, 0, 0};
+  const char* arg[5] = {on, startMin, endMin, startHour, endHour};
+  for (int i = 0; i < 5; ++i) if (arg[i] && !parseLong(arg[i], v[i])) v[i] = -1;
+  return importQuiet(on != nullptr, v[0], startMin != nullptr, v[1], endMin != nullptr, v[2], startHour != nullptr, v[3], endHour != nullptr, v[4], q);
 }
 
 }  // namespace wnight
