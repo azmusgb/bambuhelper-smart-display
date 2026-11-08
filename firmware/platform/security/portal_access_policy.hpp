@@ -13,8 +13,10 @@
 //     (Origin, or Referer when Origin is absent). No client-supplied marker
 //     header is accepted as proof of origin;
 //   * ordinary setup/fallback AP exposes only the captive onboarding surface;
-//   * deliberate Recovery Safe Mode exposes only recovery, application OTA and
-//     factory reset;
+//   * deliberate Recovery Safe Mode on the AP shows the read-only recovery page and
+//     status without a code; recovery actions, the application OTA upload and
+//     factory reset need the portal-code session like everything else (the code
+//     is on the device's screen; /login stays open on the AP);
 //   * the optional owner setting "Require access code = off" opens a short,
 //     explicit list of read-only status routes on station Wi-Fi. It never opens
 //     controls, settings, credentials, capture, diagnostics or Recovery, and it
@@ -120,16 +122,17 @@ inline bool captiveOnboardingRoute(const char* uri) {
            detail::same(uri, "/app.css") || detail::same(uri, "/app.js");
 }
 
-// Deliberate Recovery Safe Mode: dedicated recovery, application OTA, reset.
-inline bool recoverySafeModeRoute(const char* uri) {
-    return detail::same(uri, "/recovery") || detail::startsWith(uri, "/recovery/") ||
-           detail::same(uri, "/ota/upload") || detail::same(uri, "/reset");
+// Deliberate Recovery Safe Mode: the recovery page and its status are read-only and open. Everything that changes
+// the device (recovery actions, application OTA, factory reset) is not on this list.
+inline bool recoverySafeModeReadRoute(const char* uri) {
+    return detail::same(uri, "/recovery") || detail::same(uri, "/recovery/status");
 }
 
-inline bool apPublicRoute(const char* uri, bool apMode, bool recoverySafeMode) {
+// Routes an unauthenticated AP client may use. Read-only recovery routes only for a GET.
+inline bool apPublicRoute(const char* uri, bool mutating, bool apMode, bool recoverySafeMode) {
     if (!apMode) return false;
     if (captiveOnboardingRoute(uri)) return true;
-    return recoverySafeMode && recoverySafeModeRoute(uri);
+    return recoverySafeMode && !mutating && recoverySafeModeReadRoute(uri);
 }
 
 // Read-only routes that the owner may open on station Wi-Fi by turning
@@ -159,7 +162,7 @@ inline bool signInNavigationRoute(const char* uri) {
 inline PortalAccess decidePortalAccess(const PortalRequestFacts& r) {
     const char* uri = r.uri != nullptr ? r.uri : "";
 
-    if (apPublicRoute(uri, r.apMode, r.recoverySafeMode)) {
+    if (apPublicRoute(uri, r.mutating, r.apMode, r.recoverySafeMode)) {
         if (r.mutating && !r.sameOrigin) return PortalAccess::RejectCrossOrigin;
         return PortalAccess::Allow;
     }

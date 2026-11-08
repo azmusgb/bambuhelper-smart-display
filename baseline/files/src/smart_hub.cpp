@@ -1,5 +1,6 @@
 #include "security_manager.h"
 #include "smart_home_build.h"
+#include "workshop_http_body_limit.hpp"
 #include "recovery_manager.h"
 #include "button.h"
 #include "buzzer.h"
@@ -394,6 +395,63 @@ static void parseCustomPayload(const String& body, int httpCode) {
   g_dirty = true;
 }
 
+// The reply body, read from the socket into a fixed buffer. A reply with a Transfer-Encoding header (chunked, or with a
+// Content-Length as well), with no Content-Length, or declaring more than HUB_HTTP_LIMIT is refused before any byte is
+// read; the copy then stops at HUB_HTTP_LIMIT + 1 bytes, at the declared length, or after 4.5 s, whichever comes first
+// (workshop_http_body_limit.hpp, tested on the host). HTTPClient's whole-body String reader is never used: it buffers whatever arrives.
+// False after reporting why.
+static char g_hubBody[HUB_HTTP_LIMIT + 1];
+
+struct HubStreamSource {
+  WiFiClient* c;
+  int available() { return c->available(); }
+  int read(uint8_t* dst, size_t n) { return c->read(dst, n); }
+  bool connected() { return c->connected(); }
+  uint32_t nowMs() { return millis(); }
+  void idle() { delay(2); }
+};
+
+static bool readBoundedBody(HTTPClient& http, int code, String& out) {
+  const int declared = http.getSize();
+  switch (workshop::http::checkReplyHeaders(declared, http.hasHeader("Transfer-Encoding"), HUB_HTTP_LIMIT)) {
+    case workshop::http::BodyLength::Ok:
+      break;
+    case workshop::http::BodyLength::TooLarge:
+      customFail("JSON response is larger than 4 KB", code);
+      return false;
+    case workshop::http::BodyLength::Chunked:
+      customFail("Endpoint sent a chunked reply", code);
+      return false;
+    case workshop::http::BodyLength::Missing:
+    default:
+      customFail("Endpoint did not send a Content-Length", code);
+      return false;
+  }
+  WiFiClient* stream = http.getStreamPtr();
+  if (!stream) {
+    customFail("Endpoint closed the connection", code);
+    return false;
+  }
+  HubStreamSource src{stream};
+  const workshop::http::ReadResult r = workshop::http::readBounded(src, declared, HUB_HTTP_LIMIT, 4500, g_hubBody);
+  switch (r.status) {
+    case workshop::http::ReadStatus::Ok:
+      out = String(g_hubBody);
+      return true;
+    case workshop::http::ReadStatus::TooLarge:
+    case workshop::http::ReadStatus::OverDeclared:
+      customFail("JSON response is larger than 4 KB", code);
+      return false;
+    case workshop::http::ReadStatus::Timeout:
+      customFail("Custom endpoint timed out", code);
+      return false;
+    case workshop::http::ReadStatus::Truncated:
+    default:
+      customFail("Custom endpoint reply was cut short", code);
+      return false;
+  }
+}
+
 static void fetchCustom() {
   if (!g_cfg.customUrl[0]) {
     customFail("No custom endpoint configured");
@@ -408,6 +466,8 @@ static void fetchCustom() {
   HTTPClient http;
   http.setConnectTimeout(3500);
   http.setTimeout(4500);
+  static const char* kReplyHeaders[] = {"Transfer-Encoding"};
+  http.collectHeaders(kReplyHeaders, 1);  // readBoundedBody() refuses a reply that has this header
   int code = 0;
 
   if (url.startsWith("https://")) {
@@ -418,9 +478,10 @@ static void fetchCustom() {
       return;
     }
     code = http.GET();
-    if (code > 0 && code < 400)
-      parseCustomPayload(http.getString(), code);
-    else
+    if (code > 0 && code < 400) {
+      String body;
+      if (readBoundedBody(http, code, body)) parseCustomPayload(body, code);
+    } else
       customFail("Custom HTTPS request failed", code);
     http.end();
     return;
@@ -432,10 +493,12 @@ static void fetchCustom() {
     return;
   }
   code = http.GET();
-  if (code > 0 && code < 400)
-    parseCustomPayload(http.getString(), code);
-  else
+  if (code > 0 && code < 400) {
+    String body;
+    if (readBoundedBody(http, code, body)) parseCustomPayload(body, code);
+  } else {
     customFail("Custom HTTP request failed", code);
+  }
   http.end();
 }
 

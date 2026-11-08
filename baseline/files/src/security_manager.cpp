@@ -193,15 +193,13 @@ static bool apPublicRouteAllowed(WebServer& server) {
     return true;
   }
 
-  // Recovery actions are unauthenticated only in deliberate Recovery Safe
-  // Mode, which requires a physical recovery transition. Ordinary AP fallback
-  // does not expose these routes. Settings export remains authenticated because
-  // it can contain printer access codes and other secrets.
-  if (recoverySafeModeActive()) {
-    if (uri == "/recovery" || uri.startsWith("/recovery/") ||
-        uri == "/ota/upload" || uri == "/reset") {
-      return true;
-    }
+  // Deliberate Recovery Safe Mode (a physical recovery transition) leaves only the read-only recovery page and status
+  // open. Recovery actions, the application OTA upload and factory reset need the portal-code session like everything
+  // else; the code is on the device screen and /login stays open on the AP. Settings export stays authenticated
+  // because it can contain printer access codes and other secrets. (The shipped build replaces this function with
+  // firmware/platform/security/portal_access_policy.hpp.)
+  if (recoverySafeModeActive() && server.method() == HTTP_GET && (uri == "/recovery" || uri == "/recovery/status")) {
+    return true;
   }
 
   return false;
