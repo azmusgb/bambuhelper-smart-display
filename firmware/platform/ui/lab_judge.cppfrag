@@ -290,12 +290,25 @@ static void wtJudgedLine(char* out, size_t len) {
   else strlcpy(out, "Judged", len);
 }
 
-// One choice: a kit Button, plain, or the accent (primary) fill when it is the chosen one. "–" is a dash drawn on the
-// button (the panel's font has no dash).
+// One choice: a kit Button face, and the chosen one drawn as Tabs draws its selected tab (the accent wash, the accent
+// bar under the label, the accent text), so Send stays the sheet's one primary. "-" is a dash drawn on the button (the
+// panel's font has no dash).
 static void wtJudgeDrawChip(UiCanvas& c, const wlab::Box& b, const char* text, bool dash, bool on, bool live) {
   const ::ui::Rect r{b.x, b.y, b.w, b.h};
-  ::ui::Button::draw(c, r, dash ? "" : text, on ? ::ui::ButtonStyle::Primary : ::ui::ButtonStyle::Plain, on || live);
-  if (dash) c.fillRoundRect(b.x + b.w / 2 - 8, b.y + b.h / 2 - 1, 16, 3, 1, on ? UI_COLOR_ON_ACCENT : live ? UI_COLOR_TEXT : UI_COLOR_MUTED);
+  const ::ui::Rect bb = ::ui::Button::bounds(r);
+  const bool enabled = on || live;
+  uint16_t under = ::ui::Button::drawFace(c, r, ::ui::ButtonStyle::Plain, enabled);  // what the label sits on
+  ::ui::Rect lab = bb;
+  if (on) {
+    under = ::ui::blend565(UI_COLOR_ACCENT, UI_COLOR_SURFACE_2, 14);
+    const ::ui::Rect in = bb.inset(2);
+    c.fillRoundRect(in.x, in.y, in.w, in.h, UI_R_3 - 2, under);
+    c.fillRect(bb.x + 16, bb.bottom() - 2 - 3, bb.w - 32, 3, UI_COLOR_ACCENT);
+    lab.h -= 4;  // the label sits above the bar
+  }
+  const uint16_t fg = on ? UI_COLOR_ACCENT_TEXT : enabled ? UI_COLOR_TEXT : UI_COLOR_MUTED;
+  if (dash) c.fillRoundRect(lab.x + lab.w / 2 - 8, lab.y + lab.h / 2 - 1, 16, 3, 1, fg);
+  else ::ui::drawTextCentered(c, lab, text, UiFont::Fs4, fg, under);
 }
 
 static void wtJudgeDrawCheck(int16_t x, int16_t cy, uint16_t c) {  // the "✓" of "Done ✓"
