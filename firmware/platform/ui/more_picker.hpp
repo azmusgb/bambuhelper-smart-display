@@ -17,7 +17,6 @@ class PickerSession {
     None,     // nothing changed on screen
     Redraw,   // draw it again (a page turn, a failure shown or cleared)
     Closed,   // the Picker closed (a choice kept, or Back): show the page it came from
-    Home,     // the Picker closed and Home was asked for
   };
   // Apply the choice: null when it was kept, else why it was not ("The device did not keep it").
   using Apply = const char* (*)(int index);
@@ -50,7 +49,6 @@ class PickerSession {
     const ::ui::PickerResult r = picker_.tap(c, x, y);
     switch (r.event) {
       case ::ui::PickerEvent::Back: open_ = false; return Outcome::Closed;
-      case ::ui::PickerEvent::Home: open_ = false; return Outcome::Home;
       case ::ui::PickerEvent::Scrolled: return Outcome::Redraw;
       case ::ui::PickerEvent::Chose: {
         const char* why = apply ? apply(r.index) : kNotKept;

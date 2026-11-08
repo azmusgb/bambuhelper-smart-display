@@ -322,6 +322,19 @@ bool drawnLine(const MemCanvas& canvas, const wkit::HomeIdleModel& m, const char
   return false;
 }
 
+// Kit 2.13: a level-one header has no Back and no Home (Home is the tab bar's). Idle Home draws only its title and the
+// subtitle line: the header's 88 px at each end hold no button glyph, so no pixel there but the bar colour.
+void headerHasNoButtons(const char* dir) {
+  wkit::HomeIdleModel m = baseModel();
+  MemCanvas canvas(dir);
+  wkit::drawHomeIdle(canvas, m);
+  int odd = 0;
+  for (int y = 4; y < ::ui::kHeaderH - 4; y++)
+    for (int x = ::ui::kScreenW - 80; x < ::ui::kScreenW - 4; x++)
+      if (canvas.px[static_cast<size_t>(y) * ::ui::kScreenW + static_cast<size_t>(x)] != UI_COLOR_BAR) odd++;
+  check(odd == 0, "the header's right end holds no Home button", std::to_string(odd).c_str());
+}
+
 // The bar down a need's left edge is the colour of the item's own severity, whatever its place in the list.
 void needTones(const char* dir) {
   namespace lai = workshop::localai;
@@ -468,6 +481,7 @@ int main(int argc, char** argv) {
   for (const Case& c : cases) runCase(dir, ppmDir, c);
   printerLines(dir);
   needTones(dir);
+  headerHasNoButtons(dir);
 
   printf("home idle kit smoke: %ld checks, %d failures\n", g_checks, g_failures);
   return g_failures ? 1 : 0;
