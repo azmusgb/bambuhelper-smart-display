@@ -304,6 +304,22 @@ inline Rect homeIdleRect(uint8_t i) {
   }
 }
 
+// Printer's tab strip is the display kit's Tabs part: 48 px high (ui::Tabs::kHeight), drawn in the first slot's place.
+// The slots under it share what is left above the tab bar, so the Control view's four rows still fit on the
+// 480 x 320 panel (173 px: 43 px each). Taller panels keep the 44 px slot.
+static const int16_t kSegmentH = 48;
+
+inline int16_t segmentBottom() { return static_cast<int16_t>(more::kRowTop + kSegmentH); }
+
+// Height of one slot of a view; only a view with the strip is ever squeezed below 44 px.
+inline int itemPitch(Screen s, const ViewSpec& v) {
+  if (!v.segments) return more::kRowH;
+  const int rows = more::visibleRows(s) - 1;  // the slots under the strip
+  if (rows <= 0) return more::kRowH;
+  const int fit = (s.h - more::kTabH - segmentBottom()) / rows;
+  return fit < more::kRowH ? fit : more::kRowH;
+}
+
 // Rectangle of item `i`, or empty when it is scrolled out of view or does
 // not fit.
 inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t scroll, uint8_t i) {
@@ -317,6 +333,10 @@ inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t 
   const int span = itemSlots(s, v, item(v, i, runtimeCount));
   if (slot + span > more::visibleRows(s)) return makeRect(0, 0, 0, 0);
   const Rect top = more::slotRect(s, static_cast<uint8_t>(slot));
+  if (v.segments) {
+    const int pitch = itemPitch(s, v);
+    return makeRect(top.x, segmentBottom() + (slot - 1) * pitch, top.w, span * pitch);
+  }
   return makeRect(top.x, top.y, top.w, span * more::kRowH);
 }
 
@@ -330,13 +350,16 @@ static const uint8_t kSegmentCount = 4;
 static const uint8_t kViewSegments = 3;
 static const uint8_t kCameraSegment = 3;
 
-inline Rect segmentBand(Screen s) { return more::slotRect(s, 0); }
+// The strip is ui::Tabs::tabRect's own arithmetic (equal shares of the width, no gaps), so what is drawn is what is hit.
+inline Rect segmentBand(Screen s) {
+  const Rect slot = more::slotRect(s, 0);
+  return makeRect(slot.x, slot.y, slot.w, kSegmentH);
+}
 
 inline Rect segmentRect(Screen s, uint8_t i) {
   const Rect band = segmentBand(s);
-  const int cell = band.w / kSegmentCount;
-  const int x = band.x + i * cell;
-  return makeRect(x, band.y, i == kSegmentCount - 1 ? band.right() - x : cell, band.h);
+  const int x0 = band.x + band.w * i / kSegmentCount, x1 = band.x + band.w * (i + 1) / kSegmentCount;
+  return makeRect(x0, band.y, x1 - x0, band.h);
 }
 
 inline View segmentView(uint8_t i) {

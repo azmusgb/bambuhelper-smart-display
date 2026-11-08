@@ -146,8 +146,8 @@ def main() -> int:
     # Slice 3: Printer Status / AMS presentation remains contract-safe.
     need(
         pages,
-        "Premium v2 Printer segment treatment.",
-        "Printer segment presentation",
+        "::ui::Tabs::draw(canvas,",
+        "Printer strip drawn by the kit's Tabs part",
     )
     need(
         pages,

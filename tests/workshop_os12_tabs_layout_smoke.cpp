@@ -54,6 +54,8 @@ void check(bool ok, const char* what, const char* where, int a = 0, int b = 0) {
 }
 
 bool bigEnough(const Rect& r) { return r.w >= kMinTouch && r.h >= kMinTouch; }
+// A Printer control under the kit strip may be 43 px high on the 480 x 320 panel (see itemPitch).
+bool bigEnoughPrinter(const Rect& r) { return r.w >= kMinTouch && r.h >= kMinTouch - 1; }
 bool sameHit(const Hit& a, const Hit& b) { return a.kind == b.kind && a.index == b.index && a.part == b.part; }
 
 void probePoints(const Rect& r, int xs[5], int ys[5]) {
@@ -194,7 +196,11 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
   // Idle Home on the 480 x 320 panel is the display kit's own geometry (72 px needs, a 58 px band), not the 44 px slot
   // grid: tests/workshop_os12_home_idle_kit_smoke.cpp checks it against the kit's headers.
   const bool kitGeometry = v.id == View::HomeIdle && homeIdleKit(s);
-  check(r.h >= kMinTouch && (kitGeometry || r.h % more::kRowH == 0), "item is whole 44 px slots", where, r.h);
+  // Under the Printer's 48 px kit strip the slots share what is left (itemPitch: 43 px on the 480 x 320 panel).
+  const int pitch = v.segments ? itemPitch(s, v) : more::kRowH;
+  check(v.segments ? pitch >= kMinTouch - 1 && pitch <= more::kRowH : true, "Printer slot is 43 to 44 px", where, pitch);
+  check(r.h >= pitch && (kitGeometry || r.h % pitch == 0), "item is whole slots", where, r.h);
+  check(v.segments || r.h >= kMinTouch, "item at least 44 px (Printer 43)", where, r.h);
   check(inside(r, more::contentBand(s)), "item inside the content area", where, r.y, r.bottom());
   check(!intersects(r, more::tabBand(s)) && !intersects(r, more::headerBand(s)), "item clear of header and tab bar", where);
   if (v.segments) check(!intersects(r, segmentBand(s)), "item clear of the segments", where);
@@ -214,17 +220,17 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
         const Rect cell = tempCellRect(s, r, c);
         check(inside(cell, r) && cell.w >= 96, "temperature cell fits", where, cell.w);
       }
-      check(s.landscape() ? r.h == more::kRowH : r.h == 3 * more::kRowH, "strip in landscape, rows in portrait", where, r.h);
+      check(s.landscape() ? r.h == pitch : r.h == 3 * pitch, "strip in landscape, rows in portrait", where, r.h);
       break;
     case ItemKind::Primary:
-      check(bigEnough(r), "primary at least 44x44", where);
+      check(bigEnoughPrinter(r), "primary at least 44 wide, 43 high", where);
       check(inside(primaryDrawRect(r), r), "primary drawn inside its row", where);
       expectRoutes(s, v.id, n, scroll, r, makeHit(HitKind::Item, i, Part::Whole), where);
       ++controls;
       break;
     case ItemKind::Hold: {
       const Rect touch = holdTouchRect(s, r), drawn = holdDrawRect(s, r);
-      check(bigEnough(touch), "hold button at least 44x44", where, touch.w, touch.h);
+      check(bigEnoughPrinter(touch), "hold button at least 44 wide, 43 high", where, touch.w, touch.h);
       check(inside(drawn, touch) && inside(touch, r), "hold button inside its row", where);
       check(touch.w <= r.w / 2, "hold button is not the whole row", where, touch.w);
       expectRoutes(s, v.id, n, scroll, touch, makeHit(HitKind::Item, i, Part::Whole), where);
@@ -325,7 +331,7 @@ void checkStop(Screen s, const char* o) {
   const Rect stopRow = itemRect(s, c, 0, 0, static_cast<uint8_t>(c.itemCount - 1));
   const Rect stop = holdItemTouch(s, View::PrinterControl, 0, 0, ItemId::ControlStop);
   check(!stop.empty() && stop.x == holdTouchRect(s, stopRow).x, "Stop target found by id", o);
-  check(stop.y - primary.bottom() >= 2 * more::kRowH, "two rows between Pause and Stop", o, stop.y - primary.bottom());
+  check(stop.y - primary.bottom() >= 2 * itemPitch(s, view(View::PrinterControl)), "two rows between Pause and Stop", o, stop.y - primary.bottom());
   check(!intersects(stop, more::tabBand(s)), "Stop clear of the tab bar", o);
   check(stop.w * stop.h < primary.w * primary.h / 2, "Stop is a smaller target than Pause", o);
   // No other view has a Stop target.
