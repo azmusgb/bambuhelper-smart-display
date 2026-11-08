@@ -2,7 +2,7 @@
 // display. The same sheet as the phone's (Local AI app/public/print-lab.js), one strip per screen: paging, chip
 // selection, "–" sent as null, the inconclusive reasons, the Send payload Local AI's POST /api/display/lab/verdict
 // takes, the states (Waiting for the Mac, Done, the Mac's refusal, already judged with Change it), bounded parsing of
-// GET /api/display/lab/judge, and the layout at 480x320 and 320x480 with 44 px targets.
+// GET /api/display/lab/judge, and the layout at 480x320 and 320x480 with the kit's 48 px targets.
 #include "../firmware/platform/ui/lab_judge.hpp"
 
 #include <cstdio>
@@ -326,13 +326,13 @@ static void boundedParsing() {
         "run ids: letters, digits and '-' only, short");
 }
 
-// Layout: 44 px targets, nothing overlapping, inside the screen; chips wrap to at most two lines; a page with more
+// Layout: the kit's 48 px targets, nothing overlapping, inside the screen; chips wrap to at most two lines; a page with more
 // than fits scrolls inside the sheet.
 static int measure(const char* text, void*) {
   int n = 0;
   for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p; ++p)
     if ((*p & 0xC0) != 0x80) ++n;
-  return n * 9;  // about FONT_BODY's width
+  return n * 8;  // about the kit's Fs4 width
 }
 
 static bool inside(const Box& b, int w, int h) { return b.x >= 0 && b.y >= 0 && b.x + b.w <= w && b.y + b.h <= h; }
@@ -356,8 +356,8 @@ static void checkTargets(const SheetLayout& L, int w, int h, const char* what) {
   }
   for (int i = 0; i < n; ++i) {
     char m[96];
-    std::snprintf(m, sizeof(m), "%s: target %d is 44 px", what, i);
-    CHECK(t[i].w >= 44 && t[i].h >= 44, m);
+    std::snprintf(m, sizeof(m), "%s: target %d is the kit's 48 px", what, i);
+    CHECK(t[i].w >= 48 && t[i].h >= 48, m);
     std::snprintf(m, sizeof(m), "%s: target %d on screen", what, i);
     CHECK(inside(t[i], w, h), m);
     for (int k = i + 1; k < n; ++k) {
@@ -382,7 +382,7 @@ static void judgePageFits() {
   }
   json += "],\"judged\":null,\"pending\":null}";
   LabJudge j;
-  CHECK(load(j, json.c_str()) && j.s.criterionCount == 6, "judge_page_fits_480x320_44px: 6 criteria x 4 choices");
+  CHECK(load(j, json.c_str()) && j.s.criterionCount == 6, "judge_page_fits_480x320_48px: 6 criteria x 4 choices");
   const int sizes[2][2] = {{480, 320}, {320, 480}};
   for (int o = 0; o < 2; ++o) {
     const int w = sizes[o][0], h = sizes[o][1];
@@ -404,19 +404,19 @@ static void judgePageFits() {
       if (!j.sendPage(page)) {
         bool all = true;
         for (uint8_t r = 0; r < 6; ++r) all = all && seen[r];
-        CHECK(all, "judge_page_fits_480x320_44px: every criterion can be scrolled to");
-        CHECK(L.rowCount == 6 && L.rows[0].chipCount == 5, "judge_page_fits_480x320_44px: four choices and \"–\"");
+        CHECK(all, "judge_page_fits_480x320_48px: every criterion can be scrolled to");
+        CHECK(L.rowCount == 6 && L.rows[0].chipCount == 5, "judge_page_fits_480x320_48px: four choices and \"–\"");
       } else {
-        CHECK(L.reasons && L.rows[0].chipCount == kReasonCount && !L.scrolls, "judge_page_fits_480x320_44px: Send page: three reasons, no scrolling");
-        CHECK(L.status.y >= L.rows[0].label.y + L.rows[0].h && L.status.h >= 54 && inside(L.status, w, h), "judge_page_fits_480x320_44px: room for the state and the photos line");
+        CHECK(L.reasons && L.rows[0].chipCount == kReasonCount && !L.scrolls, "judge_page_fits_480x320_48px: Send page: three reasons, no scrolling");
+        CHECK(L.status.y >= L.rows[0].label.y + L.rows[0].h && L.status.h >= 54 && inside(L.status, w, h), "judge_page_fits_480x320_48px: room for the state and the photos line");
       }
     }
     sheetLayout(w, h, j, 0, 0, measure, nullptr, L);
-    CHECK(L.scrolls && L.maxFirst > 0, "judge_page_fits_480x320_44px: more than fits scrolls inside the sheet");
-    CHECK(wrapped, "judge_page_fits_480x320_44px: long chips wrap to a second line");
-    CHECK(L.hasBack && hitTest(L, L.back.x + 4, L.back.y + 4).kind == HitKind::Back, "judge_page_fits_480x320_44px: page 1 Back closes");
+    CHECK(L.scrolls && L.maxFirst > 0, "judge_page_fits_480x320_48px: more than fits scrolls inside the sheet");
+    CHECK(wrapped, "judge_page_fits_480x320_48px: long chips wrap to a second line");
+    CHECK(L.hasBack && hitTest(L, L.back.x + 4, L.back.y + 4).kind == HitKind::Back, "judge_page_fits_480x320_48px: page 1 Back closes");
     sheetLayout(w, h, j, 0, 200, measure, nullptr, L);
-    CHECK(L.first == L.maxFirst, "judge_page_fits_480x320_44px: scroll clamped");
+    CHECK(L.first == L.maxFirst, "judge_page_fits_480x320_48px: scroll clamped");
     // Single-page states (phone only, nothing to judge): Later and Close only.
     LabJudge p;
     load(p, "{\"experiment\":\"E-022\",\"run\":\"PR-022-01\",\"phoneOnly\":true,\"reason\":\"Judge it on your phone\"}");

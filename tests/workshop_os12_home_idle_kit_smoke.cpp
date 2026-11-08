@@ -18,6 +18,7 @@
 
 #include "../firmware/platform/localai/workshop_localai_feed_core.hpp"
 #include "../firmware/platform/ui/home_idle_kit.hpp"
+#include "../firmware/platform/ui/lab_judge.hpp"
 #include "../firmware/platform/ui/more_layout.hpp"
 #include "../firmware/platform/ui/tabs_layout.hpp"
 
@@ -387,6 +388,18 @@ void printerStrip(const char* dir) {
   }
 }
 
+// The Judge it sheet's header, targets and title start are the kit's, and a chip is as wide as ui::Button::width says.
+void labJudgeKit(const char* dir) {
+  namespace lab = workshop::lab;
+  check(lab::kHeaderH == ::ui::kHeaderH && lab::kTarget == ::ui::kTarget && lab::kTitlePad == ::ui::Frame::kPad, "the sheet's header and targets are the kit's");
+  MemCanvas canvas(dir);
+  if (!canvas.ok) { check(false, "the Archivo VLW files load"); return; }
+  const char* words[] = {"clean", "flawed", "barely visible", "Later", ""};
+  for (const char* w : words)
+    check(canvas.textWidth(w, UiFont::Fs4) + lab::kChipPad == ::ui::Button::width(canvas, w) || ::ui::Button::width(canvas, w) == ::ui::kTarget,
+          "a chip's padding is the Button's", w);
+}
+
 void printerLines(const char* dir) {
   {  // healthy idle: the readings, whole, on the one line
     wkit::HomeIdleModel m = baseModel();
@@ -504,6 +517,7 @@ int main(int argc, char** argv) {
   for (const Case& c : cases) runCase(dir, ppmDir, c);
   printerLines(dir);
   printerStrip(dir);
+  labJudgeKit(dir);
   needTones(dir);
   headerHasNoButtons(dir);
 

@@ -726,15 +726,18 @@ inline Box box(int x, int y, int w, int h) { Box b = {(int16_t)x, (int16_t)y, (i
 
 typedef int (*MeasureFn)(const char* text, void* ctx);
 
-static const int16_t kHeaderH = 44;
-static const int16_t kTarget = 44;
-static const int16_t kChipGap = 6;
+// The display kit's sizes: its 48 px header and 48 px buttons (ui::Button, ui::Frame). Choices sit 4 px apart, not the
+// kit's 8 px, so the three reasons and the state still fit in the 480 x 320 body.
+static const int16_t kHeaderH = 48;
+static const int16_t kTarget = 48;
+static const int16_t kTitlePad = 16;      // ui::Frame::kPad: where a level-one title starts
+static const int16_t kChipGap = 4;
 static const int16_t kLinePitch = kTarget + kChipGap;
 static const int16_t kMargin = 8;
 static const int16_t kLabelColumn = 132;  // landscape: the criterion's label left of its chips
 static const int16_t kLabelLine = 22;     // portrait: above them
 static const int16_t kChipMinW = 52;
-static const int16_t kChipPad = 28;
+static const int16_t kChipPad = 32;  // ui::Button::width: 16 px each side of the label
 static const int16_t kStatusMinH = 54;
 
 struct ChipRow {
@@ -782,7 +785,7 @@ inline void sheetLayout(int w, int h, const LabJudge& j, uint8_t page, uint8_t f
   const bool wide = w >= 400;
   const int laterW = 100, backW = wide ? 120 : 92, nextW = wide ? 140 : 92, footY = h - kTarget - 6;
   L.later = box(w - kMargin - laterW, 0, laterW, kHeaderH);
-  L.title = box(kMargin, 0, L.later.x - 2 * kMargin, kHeaderH);
+  L.title = box(kTitlePad, 0, L.later.x - kMargin - kTitlePad, kHeaderH);
   L.body = box(0, kHeaderH + 4, w, footY - 4 - (kHeaderH + 4));
   L.next = box(w - kMargin - nextW, footY, nextW, kTarget);
   const uint8_t pages = j.pages();

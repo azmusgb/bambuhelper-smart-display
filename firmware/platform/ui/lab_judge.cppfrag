@@ -72,15 +72,21 @@ static bool wtJudgeCardNow(workshop::localai::Card* out) {
   return false;
 }
 
-static int wtJudgeMeasure(const char* text, void*) {
-  setFont(tft, FONT_BODY);
-  return tft.textWidth(text);
+// A chip is a kit Button (ui::Button::width: the label in Fs4 and 16 px each side), so its width is measured in the kit's
+// font; ctx is the canvas.
+static_assert(wlab::kHeaderH == ::ui::kHeaderH && wlab::kTarget == ::ui::kTarget && wlab::kTitlePad == ::ui::Frame::kPad,
+              "the Judge it sheet's header and targets are the kit's");
+
+static int wtJudgeMeasure(const char* text, void* ctx) {
+  return static_cast<UiCanvas*>(ctx)->textWidth(text, UiFont::Fs4);
 }
 
 static void wtJudgeLayout(const wsm::Screen& s, wlab::SheetLayout& L) {
   WtJudgeUi& u = g_wtJudgeUi;
   if (u.page >= g_wtJudge.pages()) u.page = (uint8_t)(g_wtJudge.pages() - 1);
-  wlab::sheetLayout(s.w, s.h, g_wtJudge, u.page, u.first, wtJudgeMeasure, nullptr, L);
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wtKitFontsReleased);
+  wlab::sheetLayout(s.w, s.h, g_wtJudge, u.page, u.first, wtJudgeMeasure, &canvas, L);
+  canvas.release();  // the older draws select their own fonts
   u.first = L.first;
 }
 
@@ -284,13 +290,12 @@ static void wtJudgedLine(char* out, size_t len) {
   else strlcpy(out, "Judged", len);
 }
 
-static void wtJudgeDrawChip(const wlab::Box& b, const char* text, bool dash, bool on, bool live) {
-  const uint16_t bg = on ? OS12V_ACCENT : OS12V_SURFACE2;
-  const uint16_t fg = on ? OS12V_BG : (live ? OS12V_TEXT : OS12V_MUTED);
-  tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, live || on ? bg : OS12V_BG);
-  tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, on ? OS12V_ACCENT : OS12V_LINE);
-  if (dash) tft.fillRoundRect(b.x + b.w / 2 - 8, b.y + b.h / 2 - 1, 16, 3, 1, fg);  // "–" (not in the panel's font)
-  else uiDrawFit(text, b.x + b.w / 2, b.y + b.h / 2, b.w - 12, wsValueFont(text, b.w - 12), MC_DATUM, fg, live || on ? bg : OS12V_BG);
+// One choice: a kit Button, plain, or the accent (primary) fill when it is the chosen one. "–" is a dash drawn on the
+// button (the panel's font has no dash).
+static void wtJudgeDrawChip(UiCanvas& c, const wlab::Box& b, const char* text, bool dash, bool on, bool live) {
+  const ::ui::Rect r{b.x, b.y, b.w, b.h};
+  ::ui::Button::draw(c, r, dash ? "" : text, on ? ::ui::ButtonStyle::Primary : ::ui::ButtonStyle::Plain, on || live);
+  if (dash) c.fillRoundRect(b.x + b.w / 2 - 8, b.y + b.h / 2 - 1, 16, 3, 1, on ? UI_COLOR_ON_ACCENT : live ? UI_COLOR_TEXT : UI_COLOR_MUTED);
 }
 
 static void wtJudgeDrawCheck(int16_t x, int16_t cy, uint16_t c) {  // the "✓" of "Done ✓"
@@ -362,56 +367,69 @@ static __attribute__((noinline)) void wtDrawJudge(const wsm::Screen& s) {
   wtJudgeLayout(s, L);
   const bool editable = g_wtJudge.editable();
   tft.fillScreen(OS12V_BG);
-  // Header: the title (or a toast), Later.
-  tft.fillRoundRect(OS12V_INSET, 12, 4, 20, 2, OS12V_ACCENT);
-  const int16_t titleX = (int16_t)(L.title.x + 10), titleW = (int16_t)(L.title.w - 10);
-  if (wsToastActive()) {
-    uiDrawFit(g_wsToast, titleX, wsm::kHeaderH / 2, titleW, wsFitFont(g_wsToast, titleW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_AMBER, OS12V_BG);
-  } else {
-    char title[72];
-    g_wtJudge.title(title, sizeof(title), u.page);
-    uiDrawFit(title, titleX, wsm::kHeaderH / 2, titleW, wsFitFont(title, titleW, FONT_BODY, FONT_SMALL), ML_DATUM, OS12V_TEXT, OS12V_BG);
-  }
-  wsDrawButton(wsm::makeRect(L.later.x, L.later.y + 6, L.later.w, L.later.h - 12), "Later", true, false, OS12V_BG);
-  tft.drawFastHLine(OS12V_INSET, wsm::kHeaderH - 1, s.w - OS12V_INSET * 2, OS12V_LINE);
-  // Body: a strip's criteria, or the last page.
   const bool sendPage = g_wtJudge.sendPage(u.page);
+  bool nextOn = true;
+  const char* next = sendPage ? g_wtJudge.action(nextOn) : "Next";
+  {
+    // The kit's parts: Frame's header (the title, or a toast under it), Later, every choice, Back, the scroll arrows
+    // and Next are Buttons. Labels and the state's words follow, once the kit has let go of the fonts.
+    UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wtKitFontsReleased);
+    char title[72], shown[72], note[96];
+    g_wtJudge.title(title, sizeof(title), u.page);
+    const bool toast = wsToastActive();
+    ::ui::ellipsize(canvas, title, toast ? UiFont::Fs4 : UiFont::Fs5, L.title.w, shown, sizeof(shown));
+    if (toast) ::ui::ellipsize(canvas, g_wsToast, UiFont::Fs3, L.title.w, note, sizeof(note));
+    ::ui::Frame::draw(canvas, shown, ::ui::Level::One, toast ? note : nullptr, UI_COLOR_WARN);
+    ::ui::Button::draw(canvas, ::ui::Rect{L.later.x, L.later.y, L.later.w, L.later.h}, "Later", ::ui::ButtonStyle::Plain, true);
+    for (uint8_t r = 0; r < L.rowCount; ++r) {
+      const wlab::ChipRow& row = L.rows[r];
+      if (!row.shown) continue;
+      if (L.reasons) {
+        for (uint8_t k = 0; k < row.chipCount; ++k) wtJudgeDrawChip(canvas, row.chips[k], wlab::kReasons[k], false, g_wtJudge.reason == (int8_t)k, editable);
+        continue;
+      }
+      const wlab::Criterion& c = g_wtJudge.s.criteria[r];
+      const int8_t chosen = g_wtJudge.selected(u.page, r);
+      for (uint8_t k = 0; k < row.chipCount; ++k) {
+        const bool dash = k == c.choiceCount;
+        wtJudgeDrawChip(canvas, row.chips[k], dash ? "" : c.choices[k], dash, dash ? chosen == wlab::kNotJudged : chosen == (int8_t)k, editable);
+      }
+    }
+    if (L.hasBack) ::ui::Button::draw(canvas, ::ui::Rect{L.back.x, L.back.y, L.back.w, L.back.h}, u.page == 0 ? "Close" : "Back", ::ui::ButtonStyle::Plain, true);
+    if (L.scrolls) {
+      for (uint8_t i = 0; i < 2; ++i) {
+        const wlab::Box& r = i == 0 ? L.up : L.down;
+        ::ui::Button::drawFace(canvas, ::ui::Rect{r.x, r.y, r.w, r.h}, ::ui::ButtonStyle::Plain, i == 0 ? L.first > 0 : L.first < L.maxFirst);
+      }
+    }
+    ::ui::Button::draw(canvas, ::ui::Rect{L.next.x, L.next.y, L.next.w, L.next.h}, next,
+                       sendPage && nextOn ? ::ui::ButtonStyle::Primary : ::ui::ButtonStyle::Plain, nextOn);
+    canvas.release();  // the older draws below select their own fonts
+  }
+  // Body: each criterion's words, the arrows' triangles, and the last page's state.
   for (uint8_t r = 0; r < L.rowCount; ++r) {
     const wlab::ChipRow& row = L.rows[r];
     if (!row.shown) continue;
     if (L.reasons) {
       uiDrawFit("Inconclusive", row.label.x, (int16_t)(row.label.y + (s.w >= 400 ? 14 : 10)), row.label.w, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
       if (s.w >= 400) uiDrawFit("optional", row.label.x, (int16_t)(row.label.y + 32), row.label.w, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_BG);
-      for (uint8_t k = 0; k < row.chipCount; ++k) wtJudgeDrawChip(row.chips[k], wlab::kReasons[k], false, g_wtJudge.reason == (int8_t)k, editable);
       continue;
     }
     const wlab::Criterion& c = g_wtJudge.s.criteria[r];
     if (s.w >= 400) wsDrawWrapped(c.label, row.label.x, (int16_t)(row.label.y + 4), row.label.w, 18, row.lines > 1 ? 4 : 2, FONT_SMALL, OS12V_TEXT, OS12V_BG);
     else uiDrawFit(c.label, row.label.x, (int16_t)(row.label.y + 10), row.label.w, FONT_SMALL, ML_DATUM, OS12V_TEXT, OS12V_BG);
-    const int8_t chosen = g_wtJudge.selected(u.page, r);
-    for (uint8_t k = 0; k < row.chipCount; ++k) {
-      const bool dash = k == c.choiceCount;
-      wtJudgeDrawChip(row.chips[k], dash ? "" : c.choices[k], dash, dash ? chosen == wlab::kNotJudged : chosen == (int8_t)k, editable);
-    }
   }
   if (sendPage || !L.rowCount) wtJudgeDrawStatus(L.status);
-  // Footer: Back (Close on the first page), the scroll arrows when the page scrolls, Next or the last page's button.
-  if (L.hasBack) wsDrawButton(wsm::makeRect(L.back.x, L.back.y, L.back.w, L.back.h), u.page == 0 ? "Close" : "Back", true, false, OS12V_BG);
   if (L.scrolls) {
     for (uint8_t i = 0; i < 2; ++i) {
       const wlab::Box& r = i == 0 ? L.up : L.down;
       const bool live = i == 0 ? L.first > 0 : L.first < L.maxFirst;
-      tft.fillRoundRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6, 9, live ? OS12V_SURFACE2 : OS12V_SURFACE);
-      tft.drawRoundRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6, 9, live ? OS12V_LINE : OS12V_SURFACE);
       const int16_t cx = (int16_t)(r.x + r.w / 2), cy = (int16_t)(r.y + r.h / 2);
-      const uint16_t col = live ? OS12V_ACCENT : OS12V_LINE;
+      const uint16_t col = live ? UI_COLOR_TEXT : UI_COLOR_MUTED;
       if (i == 0) tft.fillTriangle(cx - 7, cy + 4, cx + 7, cy + 4, cx, cy - 5, col);
       else tft.fillTriangle(cx - 7, cy - 4, cx + 7, cy - 4, cx, cy + 5, col);
     }
   }
-  bool on = true;
-  const char* next = sendPage ? g_wtJudge.action(on) : "Next";
-  wsDrawButton(wsm::makeRect(L.next.x, L.next.y, L.next.w, L.next.h), next, on, sendPage && on, OS12V_BG);
   hubMarkFrameDirty();
   g_dirty = false;
 }
