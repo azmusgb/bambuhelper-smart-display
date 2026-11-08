@@ -224,13 +224,21 @@ def validate(repo: Path) -> str:
     # (12.3: the row body is shared with the Home, Printer and Workshop tabs.)
     need(block(hub, "static void wsDrawRow(const wsm::Screen& s, const wsm::RowSpec& spec, const wsm::Rect& row)"),
          "wsDrawRowBody(s, spec.kind, spec.label, v, row);", "More rows drawn by the shared row body")
-    row = block(hub, "static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")
-    forbid(row, "uiDrawFit(value", "value text drawn without the empty-value guard")
-    if row.count("uiDrawFit(") != 1:
-        raise ValidationError("wsDrawRowBody may draw text directly only for the label")
-    toggle = row[row.find("case wsm::RowKind::Toggle:"):row.find("case wsm::RowKind::Stepper:")]
-    for needle in ("drawFastVLine", "drawLine", "fillRect(", "drawRect(", "drawString(", "drawChar("):
-        forbid(toggle, needle, "extra drawing between a toggle's label and switch")
+    # The shared row body is two drawings: the kit's 48 px row (More) and the older 44 px slot (the tabs, until they move over).
+    need(block(hub, "static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,"),
+         "if (wsm::kitRow(row)) wsDrawRowBodyKit(", "the row body picks the kit's row by its height")
+    for sig in ("static void wsDrawRowBodyLegacy(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,",
+                "static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,"):
+        row = block(hub, sig)
+        forbid(row, "uiDrawFit(value", "value text drawn without the empty-value guard")
+        if row.count("uiDrawFit(") != 1:
+            raise ValidationError("a row body may draw text directly only for the label")
+        toggle = row[row.find("case wsm::RowKind::Toggle:"):row.find("case wsm::RowKind::Stepper:")]
+        for needle in ("drawFastVLine", "drawLine", "fillRect(", "drawRect(", "drawString(", "drawChar("):
+            forbid(toggle, needle, "extra drawing between a toggle's label and switch")
+    kit_row = block(hub, "static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")
+    for part in ("::ui::Switch::draw(", "::ui::Stepper::draw(", "::ui::Button::draw("):
+        need(kit_row, part, "More's controls are the kit's parts")
     value_draw = block(hub, "static void wsDrawRowValue(")
     need(value_draw, "if (!wsm::drawsValueText(text)) return;", "empty values draw nothing")
     need(layout, "inline bool drawsValueText(const char* value) { return value != nullptr && value[0] != '\\0'; }",
