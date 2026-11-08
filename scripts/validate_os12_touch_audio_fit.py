@@ -127,8 +127,9 @@ def validate(repo: Path, source_root: Path) -> None:
         need(hit, "tabTouchRect(s, i).contains(x, y)", f"{name} tab touch keeps the guard band")
         forbid(hit, "tabRect(s, i).contains(x, y)", f"{name} tab touch on the drawn tab")
     need(layout, "static const int16_t kTabGuard = 4;", "guard band")
-    row = block(hub, "static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")
+    row = block(hub, "static void wsDrawRowBodyLegacy(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")
     need(row, "const bool raised = wsm::rowRaised(kind, v.enabled);", "flat read-only and disabled rows")
+    need(block(hub, "static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,"), "wsm::rowRaised(kind, v.enabled) && !buttons;", "flat read-only and disabled rows (kit row)")
     need(layout, "inline bool rowRaised(RowKind kind, bool enabled) { return rowInteractive(kind) && enabled; }", "raised rule")
     tray = block(hub, "static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray& t)")
     if re.search(r"(?:fill|draw)RoundRect\s*\(\s*surface\.x", tray):

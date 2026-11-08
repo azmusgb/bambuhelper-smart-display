@@ -122,7 +122,7 @@ The More tab holds 15 pages, at most two levels deep. The page table and every t
 | `system-update` | Updates & About | More |
 | `system-diagnostics` | Device health | Updates & About |
 
-With Home, the three Printer segments and Workshop, the catalog lists 20 views (catalog version 3). Since 12.3.3, `printer` opens Printer on Status, `printer-ams` on AMS and `printer-control` on Control, so each segment can be captured on its own. Removed ids are still accepted by `/hub/show` and open the page that replaced them: `system`, `tools`, `custom`, `media`, `media-lab`, the merged `display-*` ids, the other `hardware-*` ids, and the Network Expert ids. `scripts/capture-ws350-views.zsh` redacts the access-code row, (8, 89)–(472, 133), on catalog v3.
+With Home, the three Printer segments and Workshop, the catalog lists 20 views (catalog version 3). Since 12.3.3, `printer` opens Printer on Status, `printer-ams` on AMS and `printer-control` on Control, so each segment can be captured on its own. Removed ids are still accepted by `/hub/show` and open the page that replaced them: `system`, `tools`, `custom`, `media`, `media-lab`, the merged `display-*` ids, the other `hardware-*` ids, and the Network Expert ids. `scripts/capture-ws350-views.zsh` redacts the access-code row, (8, 45)–(472, 93), on catalog v3.
 
 Every More page must show:
 - the same header, with Back at top-left going to the parent page;
