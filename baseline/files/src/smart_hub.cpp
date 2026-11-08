@@ -466,7 +466,7 @@ static void fetchCustom() {
   HTTPClient http;
   http.setConnectTimeout(3500);
   http.setTimeout(4500);
-  static const char* const kReplyHeaders[] = {"Transfer-Encoding"};
+  static const char* kReplyHeaders[] = {"Transfer-Encoding"};
   http.collectHeaders(kReplyHeaders, 1);  // readBoundedBody() refuses a reply that has this header
   int code = 0;
 
