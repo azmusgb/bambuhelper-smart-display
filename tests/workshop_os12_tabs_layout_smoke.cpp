@@ -54,8 +54,8 @@ void check(bool ok, const char* what, const char* where, int a = 0, int b = 0) {
 }
 
 bool bigEnough(const Rect& r) { return r.w >= kMinTouch && r.h >= kMinTouch; }
-// A Printer control under the kit strip may be 43 px high on the 480 x 320 panel (see itemPitch).
-bool bigEnoughPrinter(const Rect& r) { return r.w >= kMinTouch && r.h >= kMinTouch - 1; }
+// The kit's target: a row is 48 px and the whole row is what a tap hits.
+bool kitTarget(const Rect& r) { return r.w >= more::kRowH && r.h >= more::kRowH; }
 bool sameHit(const Hit& a, const Hit& b) { return a.kind == b.kind && a.index == b.index && a.part == b.part; }
 
 void probePoints(const Rect& r, int xs[5], int ys[5]) {
@@ -69,7 +69,10 @@ void probePoints(const Rect& r, int xs[5], int ys[5]) {
 void expectRoutes(Screen s, View id, uint8_t n, uint8_t scroll, const Rect& r, const Hit& want, const char* where) {
   int xs[5], ys[5];
   probePoints(r, xs, ys);
+  const bool scrolling = scrolls(s, view(id), n);
   for (int i = 0; i < 5; ++i) {
+    // The two scroll buttons' 48 px touch targets reach 3 px into the first row below the header: that is theirs.
+    if (scrolling && (tabScrollUpRect(s).contains(xs[i], ys[i]) || tabScrollDownRect(s).contains(xs[i], ys[i]))) continue;
     const Hit got = hitTest(s, id, n, scroll, xs[i], ys[i]);
     check(sameHit(got, want), "tap routes to its control", where, xs[i], ys[i]);
   }
@@ -79,8 +82,8 @@ void expectRoutes(Screen s, View id, uint8_t n, uint8_t scroll, const Rect& r, c
 Rect drawnTarget(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, const Hit& h) {
   if (h.kind == HitKind::Segment) return segmentRect(s, h.index);
   if (h.kind == HitKind::Tab) return more::tabRect(s, h.index);
-  if (h.kind == HitKind::ScrollUp) return more::scrollUpRect(s);
-  if (h.kind == HitKind::ScrollDown) return more::scrollDownRect(s);
+  if (h.kind == HitKind::ScrollUp) return tabScrollUpRect(s);
+  if (h.kind == HitKind::ScrollDown) return tabScrollDownRect(s);
   if (h.kind != HitKind::Item) return makeRect(0, 0, 0, 0);
   const Rect r = itemRect(s, v, n, scroll, h.index);
   const ItemSpec& it = item(v, h.index, n);
@@ -126,7 +129,7 @@ void checkTree(const char* o) {
     for (uint8_t j = 0; j < v.itemCount; ++j) {
       const ItemSpec& it = v.items[j];
       check(it.label && it.label[0], "item has a label", v.title, j);
-      if (v.list) check(it.kind == ItemKind::Row, "lists hold rows only", it.label);
+      if (v.repeat || v.headRepeat) check(it.kind == ItemKind::Row, "a repeated item is a row", it.label);
       if (it.kind == ItemKind::Card && it.tappable)
         check(v.id == View::Home || v.id == View::HomeIdle, "only Home's cards are buttons", it.label);  // idle Home too
     }
@@ -196,10 +199,11 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
   // Idle Home on the 480 x 320 panel is the display kit's own geometry (72 px needs, a 58 px band), not the 44 px slot
   // grid: tests/workshop_os12_home_idle_kit_smoke.cpp checks it against the kit's headers.
   const bool kitGeometry = v.id == View::HomeIdle && homeIdleKit(s);
-  // Under the Printer's 48 px kit strip the slots share what is left (itemPitch: 43 px on the 480 x 320 panel).
-  const int pitch = v.segments ? itemPitch(s, v) : more::kTabRowH;
-  check(v.segments ? pitch >= kMinTouch - 1 && pitch <= more::kTabRowH : true, "Printer slot is 43 to 44 px", where, pitch);
-  check(r.h >= pitch && (kitGeometry || r.h % pitch == 0), "item is whole slots", where, r.h);
+  // Items are the kit's 48 px rows, 4 px apart: an item of n slots is n * 52 - 4 px.
+  const int slots = (r.h + more::kRowGap) / more::kRowPitch;
+  const bool homeCard = it.id == ItemId::HomeCard && s.landscape();  // sized to its content, see kHomeCardH
+  check(kitGeometry || homeCard || (r.h == slots * more::kRowPitch - more::kRowGap && slots >= 1), "item is whole 48 px rows", where, r.h);
+  check(kitGeometry || r.h >= more::kRowH, "item at least the kit's 48 px", where, r.h);
   check(v.segments || r.h >= kMinTouch, "item at least 44 px (Printer 43)", where, r.h);
   check(inside(r, more::contentBand(s)), "item inside the content area", where, r.y, r.bottom());
   check(!intersects(r, more::tabBand(s)) && !intersects(r, more::headerBand(s)), "item clear of header and tab bar", where);
@@ -220,17 +224,17 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
         const Rect cell = tempCellRect(s, r, c);
         check(inside(cell, r) && cell.w >= 96, "temperature cell fits", where, cell.w);
       }
-      check(s.landscape() ? r.h == pitch : r.h == 3 * pitch, "strip in landscape, rows in portrait", where, r.h);
+      check(s.landscape() ? r.h == more::kRowH : r.h == 3 * more::kRowPitch - more::kRowGap, "strip in landscape, rows in portrait", where, r.h);
       break;
     case ItemKind::Primary:
-      check(bigEnoughPrinter(r), "primary at least 44 wide, 43 high", where);
+      check(kitTarget(r), "primary is the kit's 48 px", where);
       check(inside(primaryDrawRect(r), r), "primary drawn inside its row", where);
       expectRoutes(s, v.id, n, scroll, r, makeHit(HitKind::Item, i, Part::Whole), where);
       ++controls;
       break;
     case ItemKind::Hold: {
       const Rect touch = holdTouchRect(s, r), drawn = holdDrawRect(s, r);
-      check(bigEnoughPrinter(touch), "hold button at least 44 wide, 43 high", where, touch.w, touch.h);
+      check(kitTarget(touch), "hold button is the kit's 48 px", where, touch.w, touch.h);
       check(inside(drawn, touch) && inside(touch, r), "hold button inside its row", where);
       check(touch.w <= r.w / 2, "hold button is not the whole row", where, touch.w);
       expectRoutes(s, v.id, n, scroll, touch, makeHit(HitKind::Item, i, Part::Whole), where);
@@ -298,12 +302,12 @@ void checkView(Screen s, const ViewSpec& v, uint8_t n, const char* o, int& contr
       ++controls;
     }
   if (maxS > 0) {
-    expectRoutes(s, v.id, n, 0, more::scrollUpRect(s), makeHit(HitKind::ScrollUp, 0, Part::Whole), where);
-    expectRoutes(s, v.id, n, 0, more::scrollDownRect(s), makeHit(HitKind::ScrollDown, 0, Part::Whole), where);
+    expectRoutes(s, v.id, n, 0, tabScrollUpRect(s), makeHit(HitKind::ScrollUp, 0, Part::Whole), where);
+    expectRoutes(s, v.id, n, 0, tabScrollDownRect(s), makeHit(HitKind::ScrollDown, 0, Part::Whole), where);
     controls += 2;
   } else {
     // No scroll buttons: the header's right side is the status chip, not a target.
-    const Hit h = hitTest(s, v.id, n, 0, more::scrollDownRect(s).x + 10, 20);
+    const Hit h = hitTest(s, v.id, n, 0, tabScrollDownRect(s).x + 10, 20);
     check(h.kind == HitKind::None, "header is not a target without scroll buttons", where);
   }
 
@@ -327,11 +331,19 @@ void checkView(Screen s, const ViewSpec& v, uint8_t n, const char* o, int& contr
 
 void checkStop(Screen s, const char* o) {
   const ViewSpec& c = view(View::PrinterControl);
+  // Where Control scrolls (the 480 x 320 panel: three rows under the strip), Stop is only on screen once the list is
+  // scrolled to it, and Pause is off screen then; where it fits (portrait) two rows separate them.
+  const uint8_t last = maxScroll(s, c, 0);
   const Rect primary = itemRect(s, c, 0, 0, 0);
-  const Rect stopRow = itemRect(s, c, 0, 0, static_cast<uint8_t>(c.itemCount - 1));
-  const Rect stop = holdItemTouch(s, View::PrinterControl, 0, 0, ItemId::ControlStop);
+  const Rect stopRow = itemRect(s, c, 0, last, static_cast<uint8_t>(c.itemCount - 1));
+  const Rect stop = holdItemTouch(s, View::PrinterControl, 0, last, ItemId::ControlStop);
   check(!stop.empty() && stop.x == holdTouchRect(s, stopRow).x, "Stop target found by id", o);
-  check(stop.y - primary.bottom() >= 2 * itemPitch(s, view(View::PrinterControl)), "two rows between Pause and Stop", o, stop.y - primary.bottom());
+  if (last > 0) {
+    check(itemRect(s, c, 0, last, 0).empty(), "Pause is off screen where Stop is", o);
+    check(holdItemTouch(s, View::PrinterControl, 0, 0, ItemId::ControlStop).empty(), "Stop is off screen where Pause is", o);
+  } else {
+    check(stop.y - primary.bottom() >= 2 * more::kRowPitch - more::kRowGap, "two rows between Pause and Stop", o, stop.y - primary.bottom());
+  }
   check(!intersects(stop, more::tabBand(s)), "Stop clear of the tab bar", o);
   check(stop.w * stop.h < primary.w * primary.h / 2, "Stop is a smaller target than Pause", o);
   // No other view has a Stop target.
@@ -353,7 +365,7 @@ void checkCalm(Screen s, const char* o) {
     if (i < 3) check(parts[i].bottom() <= parts[i + 1].y, "calm parts top to bottom", o, i);
   }
   check(c.clock.h >= 90 && c.clock.w >= 280, "calm clock is large", o, c.clock.w, c.clock.h);
-  check(c.status.h == more::kTabRowH, "calm status is one line", o, c.status.h);
+  check(c.status.h == kCalmRowH, "calm status is one line", o, c.status.h);
   check(c.hint.y == more::tabBand(s).y && c.hint.h == more::tabBand(s).h, "wake hint where the tab bar would be", o);
   check(c.clock.y >= 16, "calm clock clear of the top edge", o, c.clock.y);
   check(c.ai.empty(), "no Local AI card slot unless asked for", o);
@@ -366,7 +378,7 @@ void checkCalm(Screen s, const char* o) {
     for (int j = i + 1; j < 5; ++j) check(!intersects(ap[i], ap[j]), "calm parts do not overlap (with Local AI)", o, i, j);
     if (i < 4) check(ap[i].bottom() <= ap[i + 1].y, "calm parts top to bottom (with Local AI)", o, i);
   }
-  check(a.ai.h == more::kTabRowH && a.ai.w == a.status.w && a.ai.x == a.status.x, "Local AI card lines up with the status", o);
+  check(a.ai.h == kCalmRowH && a.ai.w == a.status.w && a.ai.x == a.status.x, "Local AI card lines up with the status", o);
   check(a.clock.y >= 16 && a.clock.h == c.clock.h, "the clock keeps its size and stays clear of the top", o, a.clock.y);
 
   // Full-screen scan: every pixel is the wake target, including every pixel
@@ -599,6 +611,34 @@ void checkAiOverlays(Screen s, const char* o) {
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 
+// The owner's two rules for Home and Printer after the kit rows (PR 272 on the device): Home's first screen shows the
+// Local AI row, the print card and the temperatures with no scrolling (it did before the 48 px rows), and the header
+// keeps the printer's status chip when a view scrolls: the scroll buttons sit beside it, never over it.
+void checkFirstScreenAndHeader(Screen s, const char* o) {
+  const Rect band = more::tabBand(s);
+  if (s.landscape()) {
+    const ViewSpec& home = view(View::Home);
+    check(!scrolls(s, home, 0), "Home does not scroll on the 480 x 320 panel (temperatures on the first screen)", o);
+    for (uint8_t i = 0; i < home.itemCount; ++i) {
+      const Rect r = itemRect(s, home, 0, 0, i);
+      check(r.w > 0 && r.h > 0 && r.bottom() <= band.y, "Home item on the first screen, above the tab bar", o, i, r.bottom());
+    }
+    const Rect temps = itemRect(s, home, 0, 0, 2);
+    check(home.items[2].id == ItemId::HomeTemps && temps.w > 0 && temps.bottom() <= band.y, "Home's temperatures are on the first screen", o, temps.y);
+  }
+  const Rect chip = more::chipRect(s);
+  for (uint8_t i = 0; i < kViewCount; ++i) {
+    const ViewSpec& v = kViews[i];
+    if (!v.list) continue;
+    const Rect up = tabScrollUpRect(s), down = tabScrollDownRect(s);
+    check(!intersects(up, chip) && !intersects(down, chip), "scroll buttons do not cover the status chip", o, i);
+    check(!intersects(up, down), "scroll buttons apart", o);
+    check(up.w >= 48 && up.h >= 48 && down.w >= 48 && down.h >= 48, "scroll buttons at least 48 x 48", o, up.w, up.h);
+    check(titleRect(s, true).w >= 64, "title keeps room beside the scroll buttons and chip", o, titleRect(s, true).w);
+    check(titleRect(s, true).right() <= up.x && titleRect(s, false).right() <= chip.x, "title clear of the controls", o);
+  }
+}
+
 int main() {
   const Screen screens[2] = {more::makeScreen(480, 320), more::makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
@@ -611,6 +651,7 @@ int main() {
   for (int k = 0; k < 2; ++k) {
     checkChrome(screens[k], names[k]);
     checkStop(screens[k], names[k]);
+    checkFirstScreenAndHeader(screens[k], names[k]);
     checkCalm(screens[k], names[k]);
     checkPrintCard(screens[k], names[k]);
     checkAiOverlays(screens[k], names[k]);
