@@ -1,5 +1,34 @@
 # Upstream BambuHelper sync policy
 
+## The baseline and the pinned upstream (from 7 Nov 2026)
+
+The WS350 image is built from two things: the pinned upstream `Keralots/BambuHelper` commit
+`8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` and `baseline/`, the checked-in changes Workshop OS made to it
+(32 files: 25 changed upstream files and 7 added ones, in `baseline/files/`; `baseline/UPSTREAM` names the repository
+and commit; `baseline/MANIFEST.sha256` checks the files; `baseline/deleted.txt` lists upstream files removed, none today).
+`scripts/baseline.py apply` clones the pin and lays the baseline over it; `scripts/run_os12_platform_local.sh` does that
+where it used to run the v8 to v11.28 layers. The newer layers (Workshop OS 12 platform, More, tabs, display kit) still
+apply on top of the baseline as before.
+
+Until the layers are deleted, `LEGACY_CHAIN=1 bash scripts/run_os12_ux_local.sh` rebuilds the old way, and the
+"Baseline equals the legacy chain" CI job builds both and fails unless the built trees (`baseline.py verify`) and the
+`firmware.bin` of both boards are byte for byte the same for the same source SHA and build directory. The build is
+deterministic for a fixed source SHA and build path; a different checkout path changes some bytes of the image.
+
+**The baseline is Workshop OS's source.** It is edited directly, in normal PRs, like any other file in the repository. It
+is not regenerated from the layers any more (after the layers are deleted there is nothing to regenerate it from). Upstream
+BambuHelper is the pin's history, not a live dependency.
+
+**Taking an upstream update** is still a dedicated candidate (the sync rule below). With the baseline it is a three-way
+merge instead of a layer replay:
+
+1. `git fetch` upstream and take the diff `PIN..NEW` (`git diff 8cb1cbb..NEW`).
+2. For each changed file that is also in `baseline/files/`, merge the upstream change into the baseline copy by hand (the
+   baseline copy is the "ours", the old pin is the base). Files not in the baseline come from the new pin untouched.
+3. Set `baseline/UPSTREAM` to the new commit, run `python3 scripts/baseline.py manifest`, and update `deleted.txt` if upstream
+   file removals matter.
+4. Run the whole sync gate below (build both boards, validators, captures, physical checks).
+
 Workshop OS **v11.22 Display Expert RC1** is the physically accepted source baseline and is reproducibly reconstructed from BambuHelper commit `8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4` plus the accepted Workshop OS evolution stack. The active v11.23 hardware candidate and stacked v11.24 Audio Console candidate continue from that same deliberate pin.
 
 As of **2026-09-04**, upstream `Keralots/BambuHelper` `main` is `95597e4d633950bc00bb1cd50ce59da5c375a1fa`, **11 commits ahead** of the Workshop OS pin. The upstream comparison overlaps areas Workshop OS actively modifies, including display/rendering, touch behavior, MQTT/HMS state, settings, browser UI, smart-plug behavior, and printer-power interaction.
