@@ -345,16 +345,16 @@ void needTones(const char* dir) {
       {"warn", lai::toneFrom("warn"), UI_COLOR_WARN, "Pi Hub's warn is amber, not grey"},
       {"warning", lai::toneFrom("warning"), UI_COLOR_WARN, "a warning is amber"},
       {"attention", lai::toneFrom("attention"), UI_COLOR_WARN, "attention is amber"},
-      {"info", lai::toneFrom("info"), UI_COLOR_WARN, "information is amber too: the kit (2.11.1) draws nothing in Needs grey"},
-      {"ok", lai::toneFrom("ok"), UI_COLOR_WARN, "good news is amber too (kit 2.11.1)"},
-      {"busy", lai::toneFrom("busy"), UI_COLOR_WARN, "busy is amber too (kit 2.11.1)"},
-      {"unknown word", lai::toneFrom("surprise"), UI_COLOR_WARN, "an unrecognised tone is the kit's non-bad bar (amber, kit 2.11.1)"},
+      {"info", lai::toneFrom("info"), UI_COLOR_MUTED, "information is the quiet bar"},
+      {"ok", lai::toneFrom("ok"), UI_COLOR_MUTED, "good news is the quiet bar"},
+      {"busy", lai::toneFrom("busy"), UI_COLOR_MUTED, "busy is the quiet bar"},
+      {"unknown word", lai::toneFrom("surprise"), UI_COLOR_MUTED, "an unrecognised tone is information, not an alarm"},
   };
   for (const Row& r : rows) {
     for (int place = 0; place < 2; place++) {  // the same severity in either row
       wkit::HomeIdleModel m = baseModel();
       m.need[place].tone = wkit::needToneOf(r.tone);
-      m.need[1 - place].tone = wkit::needToneOf(lai::Tone::Info);  // the other row is the kit's non-bad tier
+      m.need[1 - place].tone = wkit::needToneOf(lai::Tone::Info);  // the other row is the quiet tier
       MemCanvas canvas(dir);
       wkit::drawHomeIdle(canvas, m);
       const ::ui::Rect& rc = m.rect[place];

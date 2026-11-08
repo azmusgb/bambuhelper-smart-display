@@ -43,14 +43,13 @@ struct HomeIdleModel {
   ::ui::Clock now;
 };
 
-// A need's bar, from the item's own severity (Pi Hub's tone strings through workshop::localai::Tone): bad is red, and every
-// other tone is amber. Since kit 2.11.1 nothing in a Needs list is grey (each item needs a look): the kit has two bars, Bad
-// and amber, so Pi Hub's information, good news and "busy" take the amber one with warn and attention, as the web's ui-need
-// does. Never from the item's place in the list.
+// A need's bar, from the item's own severity (Pi Hub's tone strings through workshop::localai::Tone): bad is red, warn and
+// attention are amber, and information, good news and "busy" are the kit's quiet Info bar (kit 2.14.0). Never from the
+// item's place in the list.
 // A template on the tone type so this header needs no Local AI header (the test passes the real enum).
 template <class Tone>
 inline ::ui::NeedTone needToneOf(Tone t) {
-  return t == Tone::Bad ? ::ui::NeedTone::Bad : (t == Tone::Attention || t == Tone::Warning) ? ::ui::NeedTone::Attention : ::ui::NeedTone::Warn;
+  return t == Tone::Bad ? ::ui::NeedTone::Bad : (t == Tone::Attention || t == Tone::Warning) ? ::ui::NeedTone::Attention : ::ui::NeedTone::Info;
 }
 
 constexpr int kHomeIdleTextMax = 128;  // bytes of one fitted line on the stack (the firmware's loop task has 8 KB)
