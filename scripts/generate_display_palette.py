@@ -100,9 +100,9 @@ ROLES: dict[str, dict[str, object]] = {
 
 FAMILY_NOTE = {
     "OS12V": "OS12V_*: the OS12 visual overhaul's palette (apply_workshop_os12_visual_overhaul.py)",
-    "UI": "UI_*: the v10 theme's palette (vendor/theme-v10/apply_smart_home_workshop_os_theme_v10_core.py)",
+    "UI": "UI_*: the v10 theme's palette (baseline/files/src/smart_hub.cpp)",
     "C10": "C10_*: the shared row and card helpers",
-    "W25": "W25_*: the v11.25 shell (firmware/ui-v11.25-rc4/shared.cppfrag)",
+    "W25": "W25_*: the v11.25 shell (baseline/files/src/smart_hub.cpp)",
 }
 
 

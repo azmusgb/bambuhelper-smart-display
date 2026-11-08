@@ -28,7 +28,7 @@ static constexpr uint16_t OS12V_GREEN    = UI_COLOR_OK;
 static constexpr uint16_t OS12V_AMBER    = UI_COLOR_WARN;
 static constexpr uint16_t OS12V_RED      = UI_COLOR_BAD;
 
-// UI_*: the v10 theme's palette (vendor/theme-v10/apply_smart_home_workshop_os_theme_v10_core.py)
+// UI_*: the v10 theme's palette (baseline/files/src/smart_hub.cpp)
 static constexpr uint16_t UI_BG          = UI_COLOR_BG;
 static constexpr uint16_t UI_PANEL       = UI_COLOR_SURFACE;
 static constexpr uint16_t UI_PANEL_2     = UI_COLOR_SURFACE_2;
@@ -65,7 +65,7 @@ static constexpr uint16_t C10_GREEN      = UI_COLOR_OK;
 static constexpr uint16_t C10_ORANGE     = UI_COLOR_WARN;
 static constexpr uint16_t C10_RED        = UI_COLOR_BAD;
 
-// W25_*: the v11.25 shell (firmware/ui-v11.25-rc4/shared.cppfrag)
+// W25_*: the v11.25 shell (baseline/files/src/smart_hub.cpp)
 static constexpr uint16_t W25_BG         = UI_COLOR_BG;
 static constexpr uint16_t W25_NAV        = UI_COLOR_BAR;
 static constexpr uint16_t W25_SURFACE    = UI_COLOR_SURFACE;

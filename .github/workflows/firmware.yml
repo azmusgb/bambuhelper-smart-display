@@ -9,18 +9,15 @@ on:
     branches: [main]
     paths:
       - 'apply_workshop_os*.py'
-      - 'apply_smart_home_*v11_23*.py'
       - 'assets/**'
       - 'baseline/**'
       - 'contracts/**'
       - 'firmware/platform/**'
-      - 'firmware/ui-*/**'
       - 'tests/**'
       - 'scripts/baseline.py'
       - 'scripts/ensure-platformio.sh'
       - 'scripts/run_*.sh'
       - 'scripts/validate_os12_*.py'
-      - 'scripts/validate_ui1*.py'
       - 'scripts/smart_home_patch_utils.py'
       - 'scripts/consolidate_portal_css.py'
       - 'scripts/configure_localai_feed.py'
@@ -31,18 +28,15 @@ on:
     branches: [main]
     paths:
       - 'apply_workshop_os*.py'
-      - 'apply_smart_home_*v11_23*.py'
       - 'assets/**'
       - 'baseline/**'
       - 'contracts/**'
       - 'firmware/platform/**'
-      - 'firmware/ui-*/**'
       - 'tests/**'
       - 'scripts/baseline.py'
       - 'scripts/ensure-platformio.sh'
       - 'scripts/run_*.sh'
       - 'scripts/validate_os12_*.py'
-      - 'scripts/validate_ui1*.py'
       - 'scripts/smart_home_patch_utils.py'
       - 'scripts/consolidate_portal_css.py'
       - 'scripts/configure_localai_feed.py'
@@ -63,47 +57,6 @@ env:
   OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
-  baseline:
-    name: Baseline equals the legacy chain
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Cache pinned PlatformIO toolchain
-        uses: actions/cache@v5
-        with:
-          path: .workshop-tools
-          key: platformio-${{ runner.os }}-${{ hashFiles('scripts/ensure-platformio.sh', 'upstream/platformio.ini') }}
-
-      # The same source SHA and the same build directory, so the two firmware images can be byte for byte the same.
-      - name: Build from the baseline
-        run: |
-          set -euo pipefail
-          BUILD=/tmp/ws350-os12-build bash scripts/run_os12_ux_local.sh --build
-          mkdir -p /tmp/from-baseline
-          mv /tmp/ws350-os12-build /tmp/from-baseline/tree
-
-      - name: Build from the legacy layers
-        run: |
-          set -euo pipefail
-          LEGACY_CHAIN=1 BUILD=/tmp/ws350-os12-build bash scripts/run_os12_ux_local.sh --build
-
-      - name: Same built tree and same firmware
-        run: |
-          set -euo pipefail
-          python3 scripts/baseline.py verify --chain /tmp/ws350-os12-build --build /tmp/from-baseline/tree
-          for env in ws_lcd_350 jc3248w535; do
-            a=$(sha256sum "/tmp/from-baseline/tree/.pio/build/$env/firmware.bin" | cut -d' ' -f1)
-            b=$(sha256sum "/tmp/ws350-os12-build/.pio/build/$env/firmware.bin" | cut -d' ' -f1)
-            echo "$env baseline=$a legacy=$b"
-            test "$a" = "$b"
-          done
-
   ws350:
     name: WS350 candidate and jc3248w535 regression
     runs-on: ubuntu-latest

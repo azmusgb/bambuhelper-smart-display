@@ -10,13 +10,13 @@ and commit; `baseline/MANIFEST.sha256` checks the files; `baseline/deleted.txt` 
 where it used to run the v8 to v11.28 layers. The newer layers (Workshop OS 12 platform, More, tabs, display kit) still
 apply on top of the baseline as before.
 
-Until the layers are deleted, `LEGACY_CHAIN=1 bash scripts/run_os12_ux_local.sh` rebuilds the old way, and the
-"Baseline equals the legacy chain" CI job builds both and fails unless the built trees (`baseline.py verify`) and the
-`firmware.bin` of both boards are byte for byte the same for the same source SHA and build directory. The build is
-deterministic for a fixed source SHA and build path; a different checkout path changes some bytes of the image.
+The v8 to v11.28 layers that used to rebuild the baseline (about 90 `apply_smart_home_*` and `apply_workshop_os_*`
+scripts, their runners, `vendor/` and `firmware/ui-v11.*`) are deleted. They were proven equal to the baseline when it was
+checked in: same built tree and same `firmware.bin` for the same source SHA and checkout path (PR 274). The history has
+them if you need to read how a change got in.
 
 **The baseline is Workshop OS's source.** It is edited directly, in normal PRs, like any other file in the repository. It
-is not regenerated from the layers any more (after the layers are deleted there is nothing to regenerate it from). Upstream
+is not regenerated from anything. Upstream
 BambuHelper is the pin's history, not a live dependency.
 
 **Taking an upstream update** is still a dedicated candidate (the sync rule below). With the baseline it is a three-way

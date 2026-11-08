@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 """The checked-in baseline: pinned upstream BambuHelper plus Workshop OS's own changes to it, as plain files.
 
-Until now the WS350 image was rebuilt by running some 100 apply_*.py layers (v8 to v11.28, scripts/run_ui13_local.sh)
-over the pinned upstream. baseline/ holds what that chain produces, so the build copies it over the pinned upstream
-instead. The layers stay in the repo for now (LEGACY_CHAIN=1 runs them) so CI can prove the two are identical.
+The WS350 image is built from the pinned upstream with baseline/ laid over it, then the apply_workshop_os12_*.py layers.
+(Until 7 Nov 2026 baseline/ was rebuilt on every build by some 100 apply_*.py layers, v8 to v11.28; they are deleted and
+the baseline is now the source: edit baseline/files directly.)
 
   baseline/UPSTREAM        the upstream repository and the pinned commit
-  baseline/files/          every file the chain adds or changes, at its path in the tree
-  baseline/deleted.txt     files of the pinned upstream the chain removes (one path per line; may be empty)
+  baseline/files/          every file Workshop OS adds or changes, at its path in the tree
+  baseline/deleted.txt     files of the pinned upstream that Workshop OS removes (one path per line; may be empty)
   baseline/MANIFEST.sha256 sha256 of every file under baseline/files (checked on apply)
 
-  baseline.py apply   --build DIR          clone the pinned upstream into DIR and lay the baseline over it
-  baseline.py capture --chain TREE         rewrite baseline/ from a tree built by the legacy chain (a maintainer's step)
-  baseline.py manifest                     rewrite MANIFEST.sha256 after editing baseline/files by hand
-  baseline.py verify  --chain TREE --build DIR   the two trees are the same files with the same bytes and modes
-
-Not part of the product, left out of the baseline and of the comparison (nothing later in the build reads them): the
-backup directories the old layers leave at the top of the tree (.*-backup), and the copies of the repo's
-firmware/ui-v11.* fragments that rc9 and rc10 make inside the tree.
+  baseline.py apply    --build DIR         clone the pinned upstream into DIR and lay the baseline over it
+  baseline.py manifest                     rewrite MANIFEST.sha256 after editing baseline/files
 """
 from __future__ import annotations
 
@@ -38,12 +32,7 @@ SKIP_TOP = (".git", ".pio")
 
 def skipped(rel: str) -> bool:
     parts = rel.split("/")
-    top = parts[0]
-    if top in SKIP_TOP or (top.startswith(".") and top.endswith("-backup")) or "__pycache__" in parts:
-        return True
-    # rc9 and rc10 copy the repo's firmware/ui-v11.25* fragments into the tree (upstream's .gitignore hides firmware/);
-    # nothing later reads those copies.
-    return len(parts) > 1 and top == "firmware" and parts[1].startswith("ui-v11.")
+    return parts[0] in SKIP_TOP or "__pycache__" in parts
 
 
 def upstream() -> tuple[str, str]:
@@ -106,34 +95,6 @@ def cmd_apply(build: Path) -> int:
     return 0
 
 
-def cmd_capture(chain: Path) -> int:
-    repo, sha = upstream()
-    head = run("git", "rev-parse", "HEAD", cwd=chain).strip()
-    if head != sha:
-        print(f"FAIL: {chain} is at {head}, not the pinned {sha}", file=sys.stderr)
-        return 1
-    status = run("git", "status", "--porcelain", "--untracked-files=all", "-z", cwd=chain).split("\0")
-    changed, deleted = [], []
-    for entry in status:
-        if not entry:
-            continue
-        code, rel = entry[:2], entry[3:]
-        if skipped(rel):
-            continue
-        (deleted if "D" in code else changed).append(rel)
-    if FILES.exists():
-        shutil.rmtree(FILES)
-    for rel in sorted(changed):
-        target = FILES / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(chain / rel, target)
-        shutil.copymode(chain / rel, target)
-    (BASE / "deleted.txt").write_text("".join(f"{r}\n" for r in sorted(deleted)))
-    (BASE / "MANIFEST.sha256").write_text("".join(f"{sha256(FILES / r)}  {r}\n" for r in sorted(changed)))
-    print(f"captured {len(changed)} files, {len(deleted)} deleted")
-    return 0
-
-
 def cmd_manifest() -> int:
     files = tree_files(FILES)
     (BASE / "MANIFEST.sha256").write_text("".join(f"{sha256(p)}  {r}\n" for r, p in sorted(files.items())))
@@ -141,41 +102,17 @@ def cmd_manifest() -> int:
     return 0
 
 
-def cmd_verify(chain: Path, build: Path) -> int:
-    a, b = tree_files(chain), tree_files(build)
-    problems = []
-    for rel in sorted(set(a) | set(b)):
-        if rel not in a:
-            problems.append(f"only in the baseline build: {rel}")
-        elif rel not in b:
-            problems.append(f"only in the chain build: {rel}")
-        elif a[rel].read_bytes() != b[rel].read_bytes():
-            problems.append(f"bytes differ: {rel}")
-        elif stat.S_IMODE(a[rel].stat().st_mode) != stat.S_IMODE(b[rel].stat().st_mode):
-            problems.append(f"mode differs: {rel}")
-    if problems:
-        print("\n".join(problems[:50]), file=sys.stderr)
-        print(f"FAIL: {len(problems)} differences", file=sys.stderr)
-        return 1
-    print(f"PASS: the baseline build and the legacy chain build are the same {len(a)} files, byte for byte")
-    return 0
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("apply"); p.add_argument("--build", type=Path, required=True)
-    p = sub.add_parser("capture"); p.add_argument("--chain", type=Path, required=True)
     sub.add_parser("manifest")
-    p = sub.add_parser("verify"); p.add_argument("--chain", type=Path, required=True); p.add_argument("--build", type=Path, required=True)
     args = ap.parse_args()
     if args.cmd == "apply":
         return cmd_apply(args.build.resolve())
-    if args.cmd == "capture":
-        return cmd_capture(args.chain.resolve())
     if args.cmd == "manifest":
         return cmd_manifest()
-    return cmd_verify(args.chain.resolve(), args.build.resolve())
+    return 2
 
 
 if __name__ == "__main__":
