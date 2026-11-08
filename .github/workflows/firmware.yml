@@ -21,7 +21,6 @@ on:
       - 'scripts/smart_home_patch_utils.py'
       - 'scripts/consolidate_portal_css.py'
       - 'scripts/configure_localai_feed.py'
-      - 'scripts/generate_figtree_vlw_fonts.py'
       - 'scripts/generate_display_palette.py'
       - '.github/workflows/firmware.yml'
   pull_request:
@@ -40,7 +39,6 @@ on:
       - 'scripts/smart_home_patch_utils.py'
       - 'scripts/consolidate_portal_css.py'
       - 'scripts/configure_localai_feed.py'
-      - 'scripts/generate_figtree_vlw_fonts.py'
       - 'scripts/generate_display_palette.py'
       - '.github/workflows/firmware.yml'
   workflow_dispatch:

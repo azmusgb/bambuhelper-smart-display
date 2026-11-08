@@ -636,6 +636,14 @@ static void uiFitText(char* out, size_t len, const char* src,
   const char* dots = "...";
   const int16_t dotsW = tft.textWidth(dots);
   while (out[0] && tft.textWidth(out) + dotsW > maxPx) uiTrimUtf8End(out);
+  // Cut at a word, never mid-word, when the text has one to cut at (display-kit K3); one long word is cut where it fits.
+  {
+    const size_t n = strlen(out);
+    if (n > 0 && n < strlen(src ? src : "") && src[n] != ' ') {
+      char* sp = strrchr(out, ' ');
+      if (sp && sp != out) { while (sp > out && sp[-1] == ' ') --sp; *sp = '\0'; }
+    }
+  }
   if (out[0] && strlen(out) + 3 < len) strlcat(out, dots, len);
   else if (dotsW <= maxPx) strlcpy(out, dots, len);
   else out[0] = '\0';

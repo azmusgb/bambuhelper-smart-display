@@ -5,7 +5,7 @@
 // - Luminous hexagon printed layer-by-layer with glowing toolhead and spark
 // - Precision aerospace HUD grid, crosshairs and corner brackets
 // - Radiant central AI Star power core with diamond aperture
-// - Crystal-clear Figtree typography without nearest-neighbor scaling artifacts
+// - Crystal-clear typography without nearest-neighbor scaling artifacts
 // - Gradient power progress bar with white leading-edge spark
 // - Live hardware telemetry and Wi-Fi connection indicator
 //
@@ -223,7 +223,7 @@ static void bootSplashRender(lgfx::LovyanGFX& g, uint32_t t, bool panelCache) {
     g.drawCircle(cx, cy, rr + 1, rc);
   }
 
-  // 7. Typography: Native 1.0x Figtree Bold (crystal-sharp, zero pixelation):
+  // 7. Typography: Native 1.0x bold (crystal-sharp, zero pixelation):
   static const char kPrefix[] = "Workshop";
   static const char kSuffix[] = " OS";
   const int nameY = landscape ? 172 : 250;
