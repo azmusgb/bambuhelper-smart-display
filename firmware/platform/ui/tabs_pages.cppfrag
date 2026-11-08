@@ -1617,59 +1617,17 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
   }
 }
 
+// Printer's Status / AMS / Control / Camera: the display kit's Tabs part, in the rectangle the layout hands the touch
+// code (wtl::segmentBand), so what is drawn is what is hit. Camera opens a page, so it is never the selected tab.
+static_assert(wtl::kSegmentH == ::ui::Tabs::kHeight, "the Printer strip is as tall as the kit's Tabs");
+
 static void wtDrawSegments(const wsm::Screen& s, uint8_t selected) {
-  static const char* kLabels[wtl::kSegmentCount] = {"Status", "AMS", "Control", "Camera"};
+  static const ::ui::TabItem kTabs[wtl::kSegmentCount] = {
+      {"Status", true}, {"AMS", true}, {"Control", true}, {"Camera", true}};
   const wsm::Rect band = wtl::segmentBand(s);
-  const wsm::Rect surface = wsm::rowSurface(band);
-  tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_SURFACE);
-  tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 12, OS12V_LINE);
-  for (uint8_t i = 0; i < wtl::kSegmentCount; ++i) {
-    const wsm::Rect r = wtl::segmentRect(s, i);
-    const bool on = i == selected;
-    // Premium v2 Printer segment treatment. The canonical segmentRect()
-    // remains the sole draw/touch geometry; only selected-state styling changes.
-    if (on) {
-      tft.fillRoundRect(
-          (int16_t)(r.x + 4),
-          (int16_t)(r.y + 5),
-          (int16_t)(r.w - 8),
-          (int16_t)(r.h - 10),
-          9,
-          OS12V_SURFACE2);
-
-      tft.drawRoundRect(
-          (int16_t)(r.x + 4),
-          (int16_t)(r.y + 5),
-          (int16_t)(r.w - 8),
-          (int16_t)(r.h - 10),
-          9,
-          OS12V_ACCENT);
-
-      tft.fillRoundRect(
-          (int16_t)(r.x + 14),
-          (int16_t)(r.bottom() - 9),
-          (int16_t)(r.w - 28),
-          3,
-          1,
-          OS12V_ACCENT);
-    } else if (i) {
-      tft.drawFastVLine(
-          r.x,
-          (int16_t)(r.y + 12),
-          (int16_t)(r.h - 24),
-          OS12V_LINE);
-    }
-
-    uiDrawFit(
-        kLabels[i],
-        (int16_t)(r.x + r.w / 2),
-        (int16_t)(r.y + r.h / 2),
-        (int16_t)(r.w - 16),
-        FONT_BODY,
-        MC_DATUM,
-        on ? OS12V_ACCENT : OS12V_MUTED,
-        on ? OS12V_SURFACE2 : OS12V_SURFACE);
-  }
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wtKitFontsReleased);
+  ::ui::Tabs::draw(canvas, ::ui::Rect{band.x, band.y, band.w, band.h}, kTabs, wtl::kSegmentCount, selected, UI_COLOR_BG);
+  canvas.release();  // the older draws below select their own fonts
 }
 
 static const char* wtSpeedText(uint8_t speed) {
@@ -2213,7 +2171,7 @@ static void wtDrawPrinter(bool full) {
     // Scroll position, as on the long More pages.
     const uint8_t maxS = wtl::maxScroll(s, v, count);
     const wsm::Rect first = wtl::itemRect(s, v, count, scroll, scroll);
-    const int16_t top = first.y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);
+    const int16_t top = first.y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wtl::itemPitch(s, v) - 8);
     const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / count);
     tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * scroll / maxS), 2, thumb, OS12V_MUTED);

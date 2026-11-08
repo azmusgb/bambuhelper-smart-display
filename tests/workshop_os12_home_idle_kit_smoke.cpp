@@ -364,6 +364,29 @@ void needTones(const char* dir) {
   }
 }
 
+// Printer's Status / AMS / Control / Camera is the kit's Tabs part: the layout's rectangles are the kit's, every label
+// fits whole, a tap lands on the tab drawn there, and the strip paints inside its band.
+void printerStrip(const char* dir) {
+  namespace more = workshop::ui::more;
+  static const ::ui::TabItem kTabs[wtl::kSegmentCount] = {{"Status", true}, {"AMS", true}, {"Control", true}, {"Camera", true}};
+  check(wtl::kSegmentH == ::ui::Tabs::kHeight, "the Printer strip is the kit's 48 px");
+  const wtl::Screen sizes[2] = {more::makeScreen(480, 320), more::makeScreen(320, 480)};
+  for (const wtl::Screen& s : sizes) {
+    const workshop::ui::more::Rect band = wtl::segmentBand(s);
+    const ::ui::Rect kb{band.x, band.y, band.w, band.h};
+    for (uint8_t i = 0; i < wtl::kSegmentCount; ++i) {
+      const workshop::ui::more::Rect r = wtl::segmentRect(s, i);
+      const ::ui::Rect k = ::ui::Tabs::tabRect(kb, wtl::kSegmentCount, i);
+      check(r.x == k.x && r.y == k.y && r.w == k.w && r.h == k.h, "segmentRect is the kit's tabRect");
+      check(::ui::Tabs::hit(kb, kTabs, wtl::kSegmentCount, r.x + r.w / 2, r.y + r.h / 2) == i, "the kit hits the tab the layout hits");
+    }
+    if (!s.landscape()) continue;  // the only panel is 480 x 320; 320 wide holds the layout tests, not the words
+    MemCanvas canvas(dir);
+    if (!canvas.ok) { check(false, "the Archivo VLW files load"); return; }
+    check(::ui::Tabs::fits(canvas, kb, kTabs, wtl::kSegmentCount), "every Printer tab label fits whole");
+  }
+}
+
 void printerLines(const char* dir) {
   {  // healthy idle: the readings, whole, on the one line
     wkit::HomeIdleModel m = baseModel();
@@ -480,6 +503,7 @@ int main(int argc, char** argv) {
   }
   for (const Case& c : cases) runCase(dir, ppmDir, c);
   printerLines(dir);
+  printerStrip(dir);
   needTones(dir);
   headerHasNoButtons(dir);
 
