@@ -280,11 +280,11 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
     uiDrawFit(g_wsToast, titleX, t.y + t.h / 2, t.right() - titleX, wsFitFont(g_wsToast, t.right() - titleX, FONT_BODY, FONT_SMALL),
               ML_DATUM, OS12V_AMBER, OS12V_BG);
   } else {
-    const int16_t right = (chip && !scrollButtons) ? wsm::chipRect(s).x - 8 : t.right();
+    const int16_t right = t.right();
     uiDrawFit(title, titleX, t.y + t.h / 2, right - titleX, FONT_BODY, ML_DATUM, OS12V_TEXT, OS12V_BG);
   }
   if (scrollButtons) {
-    const wsm::Rect up = wsm::scrollUpRect(s), down = wsm::scrollDownRect(s);
+    const wsm::Rect up = wtl::tabScrollUpRect(s), down = wtl::tabScrollDownRect(s);
     const uint8_t totalDots = (maxScroll < 6) ? (uint8_t)(maxScroll + 1) : 6;
     if (totalDots > 1) {
       const int16_t dotGap = 9;
@@ -301,7 +301,8 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
       }
     }
     for (uint8_t i = 0; i < 2; ++i) {
-      const wsm::Rect r = i == 0 ? up : down;
+      const wsm::Rect hit = i == 0 ? up : down;
+      const wsm::Rect r = wsm::makeRect(hit.x, 0, hit.w, wsm::kHeaderH);  // drawn in the header; the touch target is 48 px high
       const bool live = i == 0 ? scroll > 0 : scroll < maxScroll;
       tft.fillRoundRect(r.x + 3, r.y + 5, r.w - 6, r.h - 10, 9, live ? OS12V_SURFACE2 : OS12V_SURFACE);
       tft.drawRoundRect(r.x + 3, r.y + 5, r.w - 6, r.h - 10, 9, live ? OS12V_LINE : OS12V_SURFACE);
@@ -310,7 +311,8 @@ static void wtDrawHeader(const wsm::Screen& s, const char* title, const char* ch
       if (i == 0) tft.fillTriangle(cx - 7, cy + 4, cx + 7, cy + 4, cx, cy - 5, c);
       else tft.fillTriangle(cx - 7, cy - 4, cx + 7, cy - 4, cx, cy + 5, c);
     }
-  } else if (chip && !wsToastActive()) {
+  }
+  if (chip && !wsToastActive()) {
     const wsm::Rect c = wsm::chipRect(s);
     tft.fillRoundRect(c.x, c.y, c.w, c.h, 13, OS12V_SURFACE);
     tft.drawRoundRect(c.x, c.y, c.w, c.h, 13, OS12V_LINE);
@@ -476,9 +478,9 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
   wsDrawChevronRight(wtl::cardChevronX(r), r.y + r.h / 2, OS12V_MUTED);
 
   if (!w.configured) {
-    uiDrawFit("No printer set up", x, r.y + 18, textW, FONT_LARGE, TL_DATUM, OS12V_TEXT, bg);
+    uiDrawFit("No printer set up", x, r.y + 14, textW, FONT_LARGE, TL_DATUM, OS12V_TEXT, bg);
     wsDrawWrapped("Add your printer in Local Portal. Tap here to see its address and sign-in code.",
-                  x, r.y + 58, textW, 22, 3, FONT_BODY, OS12V_MUTED, bg);
+                  x, r.y + 48, textW, 22, 2, FONT_BODY, OS12V_MUTED, bg);
     return;
   }
 
@@ -499,7 +501,8 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
     return;
   }
 
-  uiDrawFit(wtPrinterName(w), x, r.y + 10, textW, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
+  // Home's card is 112 px (tabs_layout.hpp kHomeCardH): name, headline and up to two detail lines fit with margin.
+  uiDrawFit(wtPrinterName(w), x, r.y + 8, textW, FONT_SMALL, TL_DATUM, OS12V_MUTED, bg);
 
   const char* headline = "Ready for the next print";
   uint16_t headColor = OS12V_TEXT;
@@ -531,8 +534,8 @@ static void wtDrawHomeCard(const wsm::Screen& s, const wsm::Rect& r, const WtPri
   } else {
     strlcpy(detail, "Start a print from Bambu Studio or the printer.", sizeof(detail));
   }
-  uiDrawFit(headline, x, r.y + 34, textW, FONT_LARGE, TL_DATUM, headColor, bg);
-  if (detail[0]) wsDrawWrapped(detail, x, r.y + 70, textW, 22, 2, FONT_BODY, OS12V_MUTED, bg);
+  uiDrawFit(headline, x, r.y + 26, textW, FONT_LARGE, TL_DATUM, headColor, bg);
+  if (detail[0]) wsDrawWrapped(detail, x, r.y + 60, textW, 22, 2, FONT_BODY, OS12V_MUTED, bg);
 }
 
 // 12.6: a finished print keeps the big card (and the calm screen's line) for 30 minutes after it finished; then Home
@@ -1396,8 +1399,8 @@ static void wtDrawHomeIdle(const WtPrint& w) {
 static uint8_t g_wtBootPreview = 0;  // 0 off, else percent + 1
 static uint32_t g_wtBootPreviewAt = 0;
 
-// Where Home's and Printer's lists are scrolled to (by items; on the 480 x 320 panel Home's card leaves room for the Local AI
-// row or the temperatures, and Printer's Status and Control have more rows than fit under the tab strip).
+// Where Home's and Printer's lists are scrolled to (by items; Home's three items fit the 480 x 320 panel without scrolling, so it only
+// scrolls on a smaller one; Printer's Status and Control have more rows than fit under the tab strip).
 static uint8_t g_wtHomeScroll = 0;
 static uint8_t g_wtPrinterScroll = 0;
 

@@ -69,7 +69,10 @@ void probePoints(const Rect& r, int xs[5], int ys[5]) {
 void expectRoutes(Screen s, View id, uint8_t n, uint8_t scroll, const Rect& r, const Hit& want, const char* where) {
   int xs[5], ys[5];
   probePoints(r, xs, ys);
+  const bool scrolling = scrolls(s, view(id), n);
   for (int i = 0; i < 5; ++i) {
+    // The two scroll buttons' 48 px touch targets reach 3 px into the first row below the header: that is theirs.
+    if (scrolling && (tabScrollUpRect(s).contains(xs[i], ys[i]) || tabScrollDownRect(s).contains(xs[i], ys[i]))) continue;
     const Hit got = hitTest(s, id, n, scroll, xs[i], ys[i]);
     check(sameHit(got, want), "tap routes to its control", where, xs[i], ys[i]);
   }
@@ -79,8 +82,8 @@ void expectRoutes(Screen s, View id, uint8_t n, uint8_t scroll, const Rect& r, c
 Rect drawnTarget(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, const Hit& h) {
   if (h.kind == HitKind::Segment) return segmentRect(s, h.index);
   if (h.kind == HitKind::Tab) return more::tabRect(s, h.index);
-  if (h.kind == HitKind::ScrollUp) return more::scrollUpRect(s);
-  if (h.kind == HitKind::ScrollDown) return more::scrollDownRect(s);
+  if (h.kind == HitKind::ScrollUp) return tabScrollUpRect(s);
+  if (h.kind == HitKind::ScrollDown) return tabScrollDownRect(s);
   if (h.kind != HitKind::Item) return makeRect(0, 0, 0, 0);
   const Rect r = itemRect(s, v, n, scroll, h.index);
   const ItemSpec& it = item(v, h.index, n);
@@ -198,7 +201,8 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
   const bool kitGeometry = v.id == View::HomeIdle && homeIdleKit(s);
   // Items are the kit's 48 px rows, 4 px apart: an item of n slots is n * 52 - 4 px.
   const int slots = (r.h + more::kRowGap) / more::kRowPitch;
-  check(kitGeometry || (r.h == slots * more::kRowPitch - more::kRowGap && slots >= 1), "item is whole 48 px rows", where, r.h);
+  const bool homeCard = it.id == ItemId::HomeCard && s.landscape();  // sized to its content, see kHomeCardH
+  check(kitGeometry || homeCard || (r.h == slots * more::kRowPitch - more::kRowGap && slots >= 1), "item is whole 48 px rows", where, r.h);
   check(kitGeometry || r.h >= more::kRowH, "item at least the kit's 48 px", where, r.h);
   check(v.segments || r.h >= kMinTouch, "item at least 44 px (Printer 43)", where, r.h);
   check(inside(r, more::contentBand(s)), "item inside the content area", where, r.y, r.bottom());
@@ -298,12 +302,12 @@ void checkView(Screen s, const ViewSpec& v, uint8_t n, const char* o, int& contr
       ++controls;
     }
   if (maxS > 0) {
-    expectRoutes(s, v.id, n, 0, more::scrollUpRect(s), makeHit(HitKind::ScrollUp, 0, Part::Whole), where);
-    expectRoutes(s, v.id, n, 0, more::scrollDownRect(s), makeHit(HitKind::ScrollDown, 0, Part::Whole), where);
+    expectRoutes(s, v.id, n, 0, tabScrollUpRect(s), makeHit(HitKind::ScrollUp, 0, Part::Whole), where);
+    expectRoutes(s, v.id, n, 0, tabScrollDownRect(s), makeHit(HitKind::ScrollDown, 0, Part::Whole), where);
     controls += 2;
   } else {
     // No scroll buttons: the header's right side is the status chip, not a target.
-    const Hit h = hitTest(s, v.id, n, 0, more::scrollDownRect(s).x + 10, 20);
+    const Hit h = hitTest(s, v.id, n, 0, tabScrollDownRect(s).x + 10, 20);
     check(h.kind == HitKind::None, "header is not a target without scroll buttons", where);
   }
 
@@ -607,6 +611,34 @@ void checkAiOverlays(Screen s, const char* o) {
   check(imageArea(s).bottom() == imageCaption(s).y && imageCaption(s).bottom() == s.h, "picture, then its caption", o);
 }
 
+// The owner's two rules for Home and Printer after the kit rows (PR 272 on the device): Home's first screen shows the
+// Local AI row, the print card and the temperatures with no scrolling (it did before the 48 px rows), and the header
+// keeps the printer's status chip when a view scrolls: the scroll buttons sit beside it, never over it.
+void checkFirstScreenAndHeader(Screen s, const char* o) {
+  const Rect band = more::tabBand(s);
+  if (s.landscape()) {
+    const ViewSpec& home = view(View::Home);
+    check(!scrolls(s, home, 0), "Home does not scroll on the 480 x 320 panel (temperatures on the first screen)", o);
+    for (uint8_t i = 0; i < home.itemCount; ++i) {
+      const Rect r = itemRect(s, home, 0, 0, i);
+      check(r.w > 0 && r.h > 0 && r.bottom() <= band.y, "Home item on the first screen, above the tab bar", o, i, r.bottom());
+    }
+    const Rect temps = itemRect(s, home, 0, 0, 2);
+    check(home.items[2].id == ItemId::HomeTemps && temps.w > 0 && temps.bottom() <= band.y, "Home's temperatures are on the first screen", o, temps.y);
+  }
+  const Rect chip = more::chipRect(s);
+  for (uint8_t i = 0; i < kViewCount; ++i) {
+    const ViewSpec& v = kViews[i];
+    if (!v.list) continue;
+    const Rect up = tabScrollUpRect(s), down = tabScrollDownRect(s);
+    check(!intersects(up, chip) && !intersects(down, chip), "scroll buttons do not cover the status chip", o, i);
+    check(!intersects(up, down), "scroll buttons apart", o);
+    check(up.w >= 48 && up.h >= 48 && down.w >= 48 && down.h >= 48, "scroll buttons at least 48 x 48", o, up.w, up.h);
+    check(titleRect(s, true).w >= 64, "title keeps room beside the scroll buttons and chip", o, titleRect(s, true).w);
+    check(titleRect(s, true).right() <= up.x && titleRect(s, false).right() <= chip.x, "title clear of the controls", o);
+  }
+}
+
 int main() {
   const Screen screens[2] = {more::makeScreen(480, 320), more::makeScreen(320, 480)};
   const char* names[2] = {"landscape 480x320", "portrait 320x480"};
@@ -619,6 +651,7 @@ int main() {
   for (int k = 0; k < 2; ++k) {
     checkChrome(screens[k], names[k]);
     checkStop(screens[k], names[k]);
+    checkFirstScreenAndHeader(screens[k], names[k]);
     checkCalm(screens[k], names[k]);
     checkPrintCard(screens[k], names[k]);
     checkAiOverlays(screens[k], names[k]);

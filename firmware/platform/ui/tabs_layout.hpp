@@ -241,33 +241,47 @@ inline uint8_t headIndex(const ViewSpec& v, uint8_t i, uint8_t runtimeCount) {
 
 inline uint8_t firstSlot(const ViewSpec& v) { return v.segments ? 1 : 0; }
 
-// How many of the kit's 48 px rows (4 px apart) an item takes: a card or the temperatures take two or three.
-inline uint8_t itemSlots(Screen s, const ViewSpec& v, const ItemSpec& it) {
+// Item heights, in px. Rows, the primary button and the hold button are the kit's 48 px. A status card takes two row
+// pitches (100 px) in landscape, three (152 px) in portrait; Home's running-print card is kHomeCardH, sized to its
+// content so that the first page still shows Local AI, the card and the temperatures (it was a 152 px card with
+// empty space, which pushed the temperatures off the first screen). The landscape temperature strip is one 48 px row.
+static const int16_t kHomeCardH = 112;
+// The list ends this far above the tab bar.
+static const int16_t kListBottomGap = 2;
+
+inline int16_t itemHeight(Screen s, const ViewSpec& v, const ItemSpec& it) {
   (void)v;
   switch (it.kind) {
     case ItemKind::Card:
-      if (it.id == ItemId::HomeCard) return 3;  // the running print's card: 152 px, in the 132 px layout
-      return s.landscape() ? 2 : 3;
+      if (s.landscape()) return it.id == ItemId::HomeCard ? kHomeCardH : static_cast<int16_t>(2 * more::kRowPitch - more::kRowGap);
+      return static_cast<int16_t>(3 * more::kRowPitch - more::kRowGap);
     case ItemKind::Temps:
-      return s.landscape() ? 1 : 3;
+      return s.landscape() ? more::kRowH : static_cast<int16_t>(3 * more::kRowPitch - more::kRowGap);
     default:
-      return 1;
+      return more::kRowH;
   }
 }
+
+// Top of the list (below the Printer strip, when the view has one) and the lowest y an item may reach.
+inline int16_t listTop(const ViewSpec& v) {
+  return static_cast<int16_t>(more::kRowTop + (v.segments ? more::kRowH + more::kRowGap : 0));
+}
+inline int16_t listBottom(Screen s) { return static_cast<int16_t>(s.h - more::kTabH - kListBottomGap); }
 
 inline uint8_t listCapacity(Screen s, const ViewSpec& v) {
   const int n = more::visibleRows(s) - firstSlot(v);
   return static_cast<uint8_t>(n > 0 ? n : 0);
 }
 
-// The first item from which every later one fits (a list scrolls by items, which may take more than one slot).
+// The first item from which every later one fits (a list scrolls by items, which differ in height).
 inline uint8_t maxScroll(Screen s, const ViewSpec& v, uint8_t runtimeCount) {
   if (!v.list) return 0;
-  const uint8_t n = itemCount(v, runtimeCount), cap = listCapacity(s, v);
+  const uint8_t n = itemCount(v, runtimeCount);
+  const int cap = listBottom(s) - listTop(v);
   int tail = 0;
   uint8_t first = n;
   for (int j = n - 1; j >= 0; --j) {
-    tail += itemSlots(s, v, item(v, static_cast<uint8_t>(j), runtimeCount));
+    tail += itemHeight(s, v, item(v, static_cast<uint8_t>(j), runtimeCount)) + (tail ? more::kRowGap : 0);
     if (tail > cap) break;
     first = static_cast<uint8_t>(j);
   }
@@ -324,12 +338,12 @@ inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t 
   if (v.id == View::HomeIdle && homeIdleKit(s)) return homeIdleRect(i);
   if (!v.list) scroll = 0;
   if (i < scroll) return makeRect(0, 0, 0, 0);
-  int slot = firstSlot(v);
-  for (uint8_t j = scroll; j < i; ++j) slot += itemSlots(s, v, item(v, j, runtimeCount));
-  const int span = itemSlots(s, v, item(v, i, runtimeCount));
-  if (slot + span > more::visibleRows(s)) return makeRect(0, 0, 0, 0);
-  const Rect top = more::slotRect(s, static_cast<uint8_t>(slot));
-  return makeRect(top.x, top.y, top.w, span * more::kRowPitch - more::kRowGap);
+  int y = listTop(v);
+  for (uint8_t j = scroll; j < i; ++j) y += itemHeight(s, v, item(v, j, runtimeCount)) + more::kRowGap;
+  const int h = itemHeight(s, v, item(v, i, runtimeCount));
+  if (y + h > listBottom(s)) return makeRect(0, 0, 0, 0);
+  const Rect top = more::slotRect(s, 0);
+  return makeRect(top.x, y, top.w, h);
 }
 
 // ---------------------------------------------------------------------------
@@ -414,10 +428,10 @@ inline Rect holdTouchRect(Screen s, const Rect& row) {
 // Card chevron (drawn on tappable cards so the target is visible).
 inline int cardChevronX(const Rect& card) { return card.right() - 16; }
 
-// Print status card while a print runs (12.3.9). Home's card (three slots,
+// Print status card while a print runs (12.3.9). Home's card (112 px,
 // tappable, with a chevron) also has the printer and job names on top;
 // Printer > Status (two slots in landscape) has the job name as its detail
-// line. The parts are laid out in an 88 px block (Printer) or a 132 px block
+// line. The parts are laid out in an 88 px block (Printer) or a 101 px block
 // (Home), centred in taller cards.
 struct PrintCardLayout {
   Rect names;    // Home only: printer name (10 px) over the job name (14 px)
@@ -437,18 +451,18 @@ inline PrintCardLayout printCardLayout(Screen s, const Rect& card, bool home) {
   PrintCardLayout c;
   const int x = card.x + 18;
   const int w = card.w - 18 - (home ? 34 : 18);  // Home leaves room for the chevron
-  const int block = home ? 132 : 88;
+  const int block = home ? 101 : 88;  // Home: names, digits, bar, detail in the 112 px card
   const int y = card.y + (card.h > block ? (card.h - block) / 2 : 0);
   // Printer's card is only 88 px: tighter gaps there keep the 14 px detail line's glyphs (which reach a few px
   // below its 16 px box) off the card's bottom border.
-  const int top = home ? 42 : 2;
+  const int top = home ? 28 : 2;
   const int colX = x + kPercentW + 8, colW = x + w - colX;
-  c.names = home ? makeRect(x, y + 5, w, 34) : makeRect(0, 0, 0, 0);
+  c.names = home ? makeRect(x, y + 2, w, 26) : makeRect(0, 0, 0, 0);
   c.percent = makeRect(x, y + top, kPercentW, kPercentH + 6);
   c.left = makeRect(colX, y + top + 2, colW, 22);
   c.doneAt = makeRect(colX, y + top + 26, colW, 18);
-  c.bar = makeRect(x, y + top + kPercentH + (home ? 12 : 10), w, kProgressH);
-  c.detail = makeRect(x, c.bar.bottom() + (home ? 4 : 2), w, 16);
+  c.bar = makeRect(x, y + top + kPercentH + (home ? 6 : 10), w, kProgressH);
+  c.detail = makeRect(x, c.bar.bottom() + (home ? 1 : 2), w, 16);
   return c;
 }
 
@@ -472,8 +486,19 @@ inline long doneAtEpoch(DoneAt& d, uint16_t minutesLeft, long now) {
   return d.epoch;
 }
 
-// Header: title on the left, chip or scroll buttons on the right (as More).
-inline Rect titleRect(Screen s, bool scrollButtons) { return more::titleRect(s, true, scrollButtons); }
+// Header: title on the left, then the scroll buttons (when the view scrolls), then the status chip, which is always
+// there: the printer's state must not disappear from the header when a view scrolls. The buttons sit just left of the
+// chip, two 52 px wide, 48 px high touch targets (the header is 44 px, so they reach 4 px into the content; the
+// buttons are tested before the items, and the first item's top 3 px under them are not a target there).
+static const int16_t kScrollBtnW = 52;
+static const int16_t kScrollBtnH = 48;
+inline Rect tabScrollUpRect(Screen s) { return makeRect(more::chipRect(s).x - 8 - 2 * kScrollBtnW, 0, kScrollBtnW, kScrollBtnH); }
+inline Rect tabScrollDownRect(Screen s) { return makeRect(more::chipRect(s).x - 8 - kScrollBtnW, 0, kScrollBtnW, kScrollBtnH); }
+inline Rect titleRect(Screen s, bool scrollButtons) {
+  const int left = 12;
+  const int right = scrollButtons ? tabScrollUpRect(s).x - 4 : more::chipRect(s).x - 8;
+  return makeRect(left, 0, right - left, more::kHeaderH);
+}
 
 // ---------------------------------------------------------------------------
 // Hit testing
@@ -502,8 +527,8 @@ inline Hit hitTest(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, int 
   if (more::tabBand(s).contains(x, y)) return makeHit(HitKind::None, 0, Part::Whole);  // the guard band
   const ViewSpec& v = view(id);
   if (scrolls(s, v, runtimeCount)) {
-    if (more::scrollUpRect(s).contains(x, y)) return makeHit(HitKind::ScrollUp, 0, Part::Whole);
-    if (more::scrollDownRect(s).contains(x, y)) return makeHit(HitKind::ScrollDown, 0, Part::Whole);
+    if (tabScrollUpRect(s).contains(x, y)) return makeHit(HitKind::ScrollUp, 0, Part::Whole);
+    if (tabScrollDownRect(s).contains(x, y)) return makeHit(HitKind::ScrollDown, 0, Part::Whole);
   }
   if (v.segments) {
     for (uint8_t i = 0; i < kSegmentCount; ++i)
@@ -558,8 +583,8 @@ inline Rect hitRect(Screen s, View id, uint8_t runtimeCount, uint8_t scroll, con
   const ViewSpec& v = view(id);
   switch (h.kind) {
     case HitKind::Tab: return more::tabTouchRect(s, h.index);
-    case HitKind::ScrollUp: return more::scrollUpRect(s);
-    case HitKind::ScrollDown: return more::scrollDownRect(s);
+    case HitKind::ScrollUp: return tabScrollUpRect(s);
+    case HitKind::ScrollDown: return tabScrollDownRect(s);
     case HitKind::Segment: return segmentRect(s, h.index);
     case HitKind::Item: {
       const Rect r = itemRect(s, v, runtimeCount, scroll, h.index);
