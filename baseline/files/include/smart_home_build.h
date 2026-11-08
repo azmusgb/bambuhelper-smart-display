@@ -1,0 +1,40 @@
+#pragma once
+
+#define SMART_HOME_VERSION "v11.28"
+#define SMART_HOME_PROFILE "appliance-settings-ui13"
+#define SMART_HOME_UPSTREAM_SHA "8cb1cbbb6d3c175af91989e8ebe1bbdcbe848ac4"
+#define SMART_HOME_UPSTREAM_SHA_SHORT "8cb1cbbb"
+#define SMART_HOME_BUILD_LABEL "Workshop OS v11.28 UI13 Appliance Settings"
+#define WORKSHOP_OS_RC2_TOUCH_UX 1
+
+// Workshop OS v11.23 RC2 secure touch UX
+
+// Workshop OS v11.23 RC2 authenticated LAN restore
+
+#define WORKSHOP_OS_V11_25_UI_OVERHAUL 1
+
+#define WORKSHOP_OS_V11_25_UI_OVERHAUL_RC2 1
+
+#define WORKSHOP_OS_V11_25_UI_OVERHAUL_RC3 1
+
+#define WORKSHOP_OS_V11_25_UI_OVERHAUL_RC4 1
+
+#define WORKSHOP_OS_V11_25_UI_RC5 1
+#define WORKSHOP_OS_UI_SCHEMA "UI13"
+
+#define WORKSHOP_OS_V11_25_SECURE_ACCEPTANCE_RC6 1
+#define WORKSHOP_OS_AUTH_MODE "portal-code"
+
+#define WORKSHOP_OS_V11_25_UI_RC7 1
+
+#define WORKSHOP_OS_V11_25_UI_RC8 1
+
+#define WORKSHOP_OS_V11_25_UI_RC9 1
+
+#define WORKSHOP_OS_V11_25_UI_RC10 1
+
+#define WORKSHOP_OS_V11_26_UI11 1
+
+#define WORKSHOP_OS_V11_27_UI12 1
+
+#define WORKSHOP_OS_V11_28_UI13 1
