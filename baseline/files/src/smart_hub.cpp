@@ -607,24 +607,6 @@ static void hubCommitFrame() {
   g_hubFramePrimed = true;
 }
 
-static uint16_t uiStateColor(const BambuState& s) {
-  if (!s.connected) return UI_DIM;
-  if (s.gcodeStateId == GCODE_FAILED) return UI_RED;
-  if (s.gcodeStateId == GCODE_PAUSE) return UI_AMBER;
-  if (s.printing) return UI_ORANGE;
-  return UI_GREEN;
-}
-
-static const char* uiSpeedText(uint8_t speed) {
-  switch (speed) {
-    case 1: return "SILENT";
-    case 2: return "STANDARD";
-    case 3: return "SPORT";
-    case 4: return "LUDICROUS";
-    default: return "AUTO";
-  }
-}
-
 static uint8_t uiHmsCount(const BambuState& s) {
 #if HAS_HMS_UI
   uint8_t n = s.hmsCount;
@@ -680,7 +662,6 @@ static HubRect hr(int16_t x, int16_t y, int16_t w, int16_t h) { return {x,y,w,h}
 static bool hubLandscape() { return tft.width() > tft.height(); }
 static int16_t hubNavH() { return 54; }
 static int16_t hubHeaderH() { return 36; }
-static int16_t hubContentBottom() { return tft.height() - hubNavH() - 8; }
 static HubRect hubNavRect(uint8_t i) {
   const int16_t W=tft.width(), cell=W/4, x=i*cell;
   return hr(x,tft.height()-hubNavH(),i==3?W-x:cell,hubNavH());
@@ -749,55 +730,6 @@ static HubRect hubSystemActionRect(uint8_t i) {
   return hr(0,0,0,0);
 }
 
-static void uiCard(int16_t x, int16_t y, int16_t w, int16_t h,
-                   uint16_t accent = UI_BORDER, bool strong = false) {
-  tft.fillRoundRect(x + 2, y + 3, w, h, 11, 0x0000);
-  tft.fillRoundRect(x, y, w, h, 11, strong ? UI_GLOW : UI_BORDER_2);
-  tft.fillRoundRect(x + 1, y + 1, w - 2, h - 2, 10, UI_PANEL);
-  // v11: a restrained inner highlight gives the graphite surfaces depth on the
-  // physical IPS panel without adding another outline or decorative dot.
-  if (w > 34) tft.drawFastHLine(x + 17, y + 2, w - 34, strong ? accent : UI_BORDER_2);
-  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 10, strong ? accent : UI_BORDER);
-  if (accent != UI_BORDER) {
-    if (strong) {
-      tft.fillRoundRect(x + 1, y + 9, 3, h - 18, 2, accent);
-      tft.fillCircle(x + w - 12, y + 12, 3, accent);
-    } else {
-      // v10.5: category accent without the old stripe+dot on every card.
-      tft.fillRoundRect(x + 11, y + 1, 24, 2, 1, accent);
-    }
-  }
-}
-
-static void uiPanelFill(int16_t x, int16_t y, int16_t w, int16_t h) {
-  tft.fillRoundRect(x, y, w, h, 9, UI_PANEL_2);
-  tft.drawRoundRect(x, y, w, h, 9, UI_BORDER_2);
-}
-
-static void uiPill(int16_t x, int16_t y, int16_t w,
-                   const char* text, uint16_t color) {
-  tft.fillRoundRect(x, y, w, 20, 10, UI_PANEL_3);
-  tft.drawRoundRect(x, y, w, 20, 10, color);
-  tft.fillCircle(x + 10, y + 10, 3, color);
-  uiDrawFit(text,x+18,y+10,w-24,FONT_SMALL,ML_DATUM,color,UI_PANEL_3);
-}
-
-static void uiSectionLabel(int16_t x, int16_t y, const char* label,
-                           uint16_t accent, int16_t maxPx=180) {
-  tft.fillRoundRect(x, y + 3, 3, 12, 2, accent);
-  uiDrawFit(label,x+9,y+9,maxPx,FONT_SMALL,ML_DATUM,UI_TEXT,UI_PANEL);
-}
-
-static void uiMetric(int16_t x, int16_t y, int16_t w, int16_t h,
-                     const char* label, const char* value, uint16_t accent,
-                     const char* sub = nullptr) {
-  uiCard(x, y, w, h, UI_BORDER, false);
-  uiDrawFit(label && *label ? label : "—",x+9,y+7,w-18,FONT_SMALL,TL_DATUM,UI_MUTED,UI_PANEL);
-  uiDrawFit(value && *value ? value : "—",x+9,y+27,w-18,h>=58?FONT_BODY:FONT_SMALL,TL_DATUM,accent,UI_PANEL);
-  if (sub && *sub && h >= 54)
-    uiDrawFit(sub,x+9,y+h-15,w-18,FONT_SMALL,TL_DATUM,UI_DIM,UI_PANEL);
-}
-
 static void uiProgressBar(int16_t x, int16_t y, int16_t w, uint8_t pct,
                           uint16_t accent = UI_ORANGE) {
   if (pct > 100) pct = 100;
@@ -807,114 +739,13 @@ static void uiProgressBar(int16_t x, int16_t y, int16_t w, uint8_t pct,
   if (fw > 5) tft.fillCircle(x + fw - 3, y + 3, 2, UI_TEXT);
 }
 
-static void uiProgressRing(int16_t cx, int16_t cy, int16_t radius,
-                           uint8_t pct, uint16_t accent) {
-  if (pct > 100) pct = 100;
-  const uint8_t segments = 32;
-  const uint8_t active = (uint16_t)segments * pct / 100;
-  for (uint8_t i = 0; i < segments; i++) {
-    float a = (-90.0f + (360.0f * i / segments)) * 0.01745329252f;
-    int16_t x = cx + (int16_t)(cosf(a) * radius);
-    int16_t y = cy + (int16_t)(sinf(a) * radius);
-    tft.fillCircle(x, y, i < active ? 3 : 2, i < active ? accent : UI_BORDER);
-  }
-}
-
-static void uiPrinterArt(int16_t x, int16_t y, int16_t w, int16_t h,
-                         uint16_t accent) {
-  int16_t bodyX = x + w / 5, bodyY = y + h / 4;
-  int16_t bodyW = w * 3 / 5, bodyH = h * 3 / 5;
-  tft.fillRoundRect(bodyX + 3, bodyY + 4, bodyW, bodyH, 7, UI_BG);
-  tft.fillRoundRect(bodyX, bodyY, bodyW, bodyH, 7, UI_BORDER);
-  tft.fillRoundRect(bodyX + 2, bodyY + 2, bodyW - 4, bodyH - 4, 5, 0x0862);
-  tft.drawRect(bodyX + 9, bodyY + 11, bodyW - 18, bodyH - 22, UI_MUTED);
-  tft.drawRect(bodyX + 13, bodyY + 15, bodyW - 26, bodyH - 30, 0x0000);
-  tft.fillRoundRect(bodyX + bodyW - 17, bodyY + 8, 9, 18, 2, UI_PANEL_2);
-  tft.fillCircle(bodyX + bodyW - 13, bodyY + 13, 2, UI_GREEN);
-  tft.fillRoundRect(bodyX + 6, bodyY - 14, bodyW - 12, 14, 5, UI_PANEL_2);
-  for (uint8_t i = 0; i < 4; i++) {
-    int16_t sx = bodyX + 13 + i * ((bodyW - 26) / 4);
-    tft.fillCircle(sx, bodyY - 7, 5, i == 0 ? accent : UI_MUTED);
-    tft.fillCircle(sx, bodyY - 7, 2, UI_BG);
-  }
-  tft.drawFastHLine(bodyX + 13, bodyY + bodyH - 13, bodyW - 26, accent);
-  int16_t px = bodyX + bodyW / 2, py = bodyY + bodyH - 23;
-  tft.fillTriangle(px - 10, py, px, py - 18, px + 10, py, accent);
-  tft.fillTriangle(px - 6, py - 2, px, py - 12, px + 6, py - 2, UI_PANEL);
-}
-
-static bool uiNameHas(const char* name, const char* token) {
-  if (!name || !token || !*token) return false;
-  for (const char* p = name; *p; ++p) {
-    const char* a = p; const char* b = token;
-    while (*a && *b && toupper((unsigned char)*a) == toupper((unsigned char)*b)) { ++a; ++b; }
-    if (!*b) return true;
-  }
-  return false;
-}
-
 enum UiPrinterFamily : uint8_t { UI_PF_GENERIC=0, UI_PF_A1, UI_PF_A1_MINI, UI_PF_P1, UI_PF_X1, UI_PF_H2, UI_PF_X2 };
-static UiPrinterFamily uiPrinterFamily(const PrinterSlot& p) {
-  const char* n=p.config.name;
-  if (uiNameHas(n,"X2")) return UI_PF_X2;
-  if (uiNameHas(n,"H2") || p.state.dualNozzle) return UI_PF_H2;
-  if (uiNameHas(n,"A1 MINI")) return UI_PF_A1_MINI;
-  if (uiNameHas(n,"A1")) return UI_PF_A1;
-  if (uiNameHas(n,"P1")) return UI_PF_P1;
-  if (uiNameHas(n,"X1")) return UI_PF_X1;
-  return UI_PF_GENERIC;
-}
-
-static void uiPrinterArtFamily(int16_t x, int16_t y, int16_t w, int16_t h,
-                               uint16_t accent, const PrinterSlot& p) {
-  const UiPrinterFamily family=uiPrinterFamily(p);
-  if (family==UI_PF_A1 || family==UI_PF_A1_MINI) {
-    const int16_t cx=x+w/2, bedY=y+h*4/5;
-    tft.fillRoundRect(x+w/5,bedY-4,w*3/5,7,3,UI_BORDER);
-    tft.drawFastVLine(x+w/4,y+h/5,h*3/5,UI_MUTED);
-    tft.drawFastHLine(x+w/4,y+h/4,w/2,UI_MUTED);
-    tft.fillRoundRect(cx-11,y+h/3,22,15,4,UI_PANEL_2);
-    tft.fillCircle(cx,y+h/3+7,3,accent);
-    tft.fillTriangle(cx-9,bedY-5,cx,bedY-25,cx+9,bedY-5,accent);
-    if (family==UI_PF_A1_MINI) uiDrawFit("mini",cx,y+h-4,w-12,FONT_SMALL,TC_DATUM,UI_MUTED,UI_BG);
-    return;
-  }
-  uiPrinterArt(x,y,w,h,accent);
-  const int16_t cx=x+w/2;
-  if (family==UI_PF_P1) tft.drawFastHLine(x+w/4,y+h*4/5,w/2,UI_CYAN);
-  if (family==UI_PF_X1) { tft.fillCircle(x+w*3/4,y+h/3,3,UI_BLUE); tft.drawFastHLine(x+w/4,y+h*4/5,w/2,UI_BLUE); }
-  if (family==UI_PF_H2 || family==UI_PF_X2) {
-    tft.fillCircle(cx-6,y+h/2,3,UI_ORANGE); tft.fillCircle(cx+6,y+h/2,3,UI_CYAN);
-    tft.drawFastHLine(x+w/4,y+h*4/5,w/2,family==UI_PF_X2?UI_PURPLE:UI_ORANGE);
-  }
-}
 
 static void uiSpoolScaled(int16_t cx,int16_t cy,uint16_t color,bool active,int8_t remain,uint8_t r) {
   (void)remain; if(!color)color=UI_MUTED;
   if(active)tft.fillCircle(cx,cy,r+3,UI_ORANGE);
   tft.fillCircle(cx,cy,r+1,UI_BORDER); tft.fillCircle(cx,cy,r-3,color);
   tft.fillCircle(cx,cy,r/3,UI_BG); tft.drawCircle(cx,cy,r/2,UI_PANEL_2);
-}
-
-static void uiSpoolCaption(int16_t cx,int16_t y,const char* type,int8_t remain,int16_t maxPx) {
-  char line[24];
-  if(remain>=0)snprintf(line,sizeof(line),"%s · %d%%",type&&*type?type:"—",(int)remain);
-  else snprintf(line,sizeof(line),"%s",type&&*type?type:"—");
-  uiDrawFit(line,cx,y,maxPx,FONT_SMALL,TC_DATUM,UI_DIM,UI_PANEL);
-}
-
-static void uiWifiGlyph(int16_t x, int16_t y, int rssi) {
-  uint16_t c = rssi > -72 ? UI_GREEN : (rssi > -82 ? UI_AMBER : UI_RED);
-  uint8_t bars = rssi > -60 ? 4 : rssi > -70 ? 3 : rssi > -80 ? 2 : 1;
-  for (uint8_t i = 0; i < 4; i++) {
-    int16_t bh = 5 + i * 4;
-    tft.fillRoundRect(x + i * 7, y + 18 - bh, 5, bh, 2, i < bars ? c : UI_BORDER);
-  }
-}
-
-static uint16_t uiPageAccent(uint8_t page) {
-  (void)page;
-  return UI_ORANGE;
 }
 
 static void uiClockText(char* out, size_t len) {
@@ -930,16 +761,6 @@ static void uiClockText(char* out, size_t len) {
   strlcpy(out, p, len);
 }
 
-static uint16_t uiExperienceAccent() {
-  switch (g_experienceAccent) {
-    case 1: return UI_CYAN;
-    case 2: return UI_BLUE;
-    case 3: return UI_PURPLE;
-    case 4: return UI_GREEN;
-    default:return UI_ORANGE;
-  }
-}
-
 static bool workshopTimerActive() {
   return g_workshopTimerEndMs != 0 && (long)(g_workshopTimerEndMs - millis()) > 0;
 }
@@ -947,18 +768,6 @@ static bool workshopTimerActive() {
 static uint32_t workshopTimerRemainingSeconds() {
   if (!workshopTimerActive()) return 0;
   return (uint32_t)((g_workshopTimerEndMs - millis() + 999UL) / 1000UL);
-}
-
-static void workshopTimerText(char* out, size_t len, bool compact=false) {
-  if (!out || !len) return;
-  if (g_workshopTimerDone) { strlcpy(out, compact ? "DONE" : "Timer complete", len); return; }
-  if (!workshopTimerActive()) {
-    strlcpy(out, compact ? "TOOLS" : "Timer ready", len);
-    return;
-  }
-  uint32_t sec=workshopTimerRemainingSeconds();
-  snprintf(out,len,compact?"%02u:%02u":"%u:%02u remaining",
-           (unsigned)(sec/60U),(unsigned)(sec%60U));
 }
 
 static void startWorkshopTimer(uint16_t minutes) {
@@ -984,16 +793,6 @@ static void uiClockDateText(char* out,size_t len) {
   time_t now=time(nullptr); if(now<1700000000)return;
   struct tm tmNow; localtime_r(&now,&tmNow);
   strftime(out,len,"%a • %b %d",&tmNow);
-}
-
-static void uiBackdrop() {
-  const int16_t W=tft.width(), H=hubContentBottom();
-  for (int16_t y=52; y<H; y+=48) tft.drawFastHLine(0,y,W,0x0841);
-  for (int16_t x=24; x<W; x+=64) tft.drawFastVLine(x,40,H-40,0x0841);
-  tft.drawFastHLine(10,44,58,UI_GLOW);
-  tft.drawFastHLine(W-68,44,58,UI_GLOW);
-  tft.fillCircle(68,44,2,UI_ORANGE);
-  tft.fillCircle(W-68,44,2,UI_ORANGE);
 }
 
 static const uint16_t W25_BG=0x08A3;
@@ -1061,20 +860,6 @@ static void drawHeader(const char* title,const char* right,uint8_t page) {
   (void)hubV1125UiFingerprint(page);
 }
 
-
-static void uiNavIcon(int16_t cx, int16_t cy, uint8_t item, uint16_t c) {
-  if (item == 0) {
-    tft.drawLine(cx - 6, cy, cx, cy - 6, c); tft.drawLine(cx, cy - 6, cx + 6, cy, c);
-    tft.drawRect(cx - 5, cy, 10, 7, c);
-  } else if (item == 1) {
-    tft.drawRoundRect(cx - 6, cy - 5, 12, 10, 2, c); tft.drawFastHLine(cx - 3, cy - 8, 6, c); tft.fillCircle(cx, cy, 2, c);
-  } else if (item == 2) {
-    tft.drawRect(cx - 6, cy - 6, 12, 12, c); tft.drawLine(cx - 6, cy - 6, cx + 6, cy + 6, c); tft.drawLine(cx + 6, cy - 6, cx - 6, cy + 6, c);
-  } else {
-    tft.drawCircle(cx, cy, 6, c); tft.fillCircle(cx - 3, cy, 1, c); tft.fillCircle(cx, cy, 1, c); tft.fillCircle(cx + 3, cy, 1, c);
-  }
-}
-
 static void hubV1125TabIcon(uint8_t i,int16_t cx,int16_t cy,uint16_t c) {
   if(i==0) {
     tft.drawLine(cx-8,cy,cx,cy-7,c);
@@ -1126,12 +911,6 @@ static void formatDuration(uint16_t mins, char* out, size_t len) {
   else snprintf(out, len, "%um", (unsigned)m);
 }
 
-static uint32_t uiAmsSignature(const BambuState& s) {
-  uint32_t sig=2166136261u;sig=(sig^(uint8_t)(s.ams.present?1:0))*16777619u;sig=(sig^(uint8_t)s.ams.unitCount)*16777619u;sig=(sig^(uint8_t)(s.ams.activeTray+1))*16777619u;
-  for(uint8_t i=0;i<4;i++){const AmsTray&tr=s.ams.trays[i];sig=(sig^(uint8_t)(tr.present?1:0))*16777619u;sig=(sig^(uint16_t)tr.colorRgb565)*16777619u;sig=(sig^(uint8_t)(tr.remain+1))*16777619u;for(uint8_t j=0;tr.type[j]&&j<8;j++)sig=(sig^(uint8_t)tr.type[j])*16777619u;}
-  return sig;
-}
-
 static const char* hubWidgetLabel(uint8_t kind) {
   static const char* labels[]={"PROGRESS","NOZZLE","BED","CHAMBER","WI-FI","AMS","LAYER","ETA","FAN","UPTIME"};
   return kind<HUB_W_COUNT?labels[kind]:"WIDGET";
@@ -1161,214 +940,9 @@ static void drawWidgetCard(uint8_t slot,const HubRect&r,bool selected=false) {
   if(selected){tft.drawRoundRect(r.x+2,r.y+2,r.w-4,r.h-4,9,UI_ORANGE);tft.fillRoundRect(r.x+r.w-22,r.y+8,14,4,2,UI_ORANGE);}
 }
 
-static void drawTelemetryRail(const HubRect&r,const BambuState&s) {
-  uiCard(r.x,r.y,r.w,r.h,s.connected?UI_BORDER:UI_RED,false);
-  const char* labels[4]={"NOZZLE","BED","CHAMBER","FAN"};char vals[4][12];
-  if(s.connected){snprintf(vals[0],sizeof(vals[0]),"%.0f°",s.nozzleTemp);snprintf(vals[1],sizeof(vals[1]),"%.0f°",s.bedTemp);snprintf(vals[2],sizeof(vals[2]),"%.0f°",s.chamberTemp);snprintf(vals[3],sizeof(vals[3]),"%u%%",(unsigned)s.coolingFanPct);}else{for(uint8_t i=0;i<4;i++)strlcpy(vals[i],"—",sizeof(vals[i]));}
-  if(r.w>=260){const int16_t cell=r.w/4;for(uint8_t i=0;i<4;i++){if(i)tft.drawFastVLine(r.x+i*cell,r.y+9,r.h-18,UI_BORDER);int16_t cx=r.x+i*cell+cell/2;uiDrawFit(labels[i],cx,r.y+9,cell-8,FONT_SMALL,TC_DATUM,UI_DIM,UI_PANEL);uiDrawFit(vals[i],cx,r.y+31,cell-8,FONT_BODY,TC_DATUM,i==0?UI_ORANGE:i==1?UI_AMBER:i==2?UI_BLUE:UI_CYAN,UI_PANEL);}}
-  else{const int16_t rowH=r.h/4;for(uint8_t i=0;i<4;i++){if(i)tft.drawFastHLine(r.x+8,r.y+i*rowH,r.w-16,UI_BORDER);uiDrawFit(labels[i],r.x+10,r.y+i*rowH+rowH/2,r.w/2-14,FONT_SMALL,ML_DATUM,UI_DIM,UI_PANEL);uiDrawFit(vals[i],r.x+r.w-10,r.y+i*rowH+rowH/2,r.w/2-14,FONT_BODY,MR_DATUM,i==0?UI_ORANGE:i==1?UI_AMBER:i==2?UI_BLUE:UI_CYAN,UI_PANEL);}}
-}
-
 
 
 static bool hubTouchHealthy();
-
-// ---------------------------------------------------------------------------
-// Smart Home v10.5 physical information architecture helpers
-// ---------------------------------------------------------------------------
-static const char* uiPrinterStateLabel(const BambuState& s) {
-  if (!s.connected) return "OFFLINE";
-  if (s.gcodeStateId == GCODE_PAUSE) return "PAUSED";
-  if (s.gcodeStateId == GCODE_FAILED) return "ERROR";
-  if (s.printing) return "PRINTING";
-  return "READY";
-}
-
-static const char* uiFilamentColorName(uint16_t c) {
-  // RGB565 -> coarse workshop-friendly color identity. This intentionally
-  // favors stable names over a large palette that would truncate on-device.
-  const int r=((c>>11)&0x1f)*255/31;
-  const int g=((c>>5)&0x3f)*255/63;
-  const int b=(c&0x1f)*255/31;
-  const int hi=max(r,max(g,b)), lo=min(r,min(g,b));
-  if (hi < 42) return "BLACK";
-  if (lo > 220) return "WHITE";
-  if (hi-lo < 24) return hi < 105 ? "DARK GRAY" : (hi > 190 ? "LIGHT GRAY" : "GRAY");
-  if (r > 180 && g > 125 && b < 80) return g > 185 ? "YELLOW" : "ORANGE";
-  if (r > 165 && b > 125 && g < 135) return "PURPLE";
-  if (r >= g && r >= b) return "RED";
-  if (g >= r && g >= b) return g > b + 35 ? "GREEN" : "TEAL";
-  return b > r + 25 ? "BLUE" : "PURPLE";
-}
-
-static int8_t uiLoadedTray(const BambuState& s) {
-  return (s.ams.present && s.ams.activeTray < 4) ? (int8_t)s.ams.activeTray : -1;
-}
-
-static uint8_t uiMaterialCount(const BambuState& s) {
-  uint8_t count=0;
-  if (!s.ams.present) return 0;
-  uint8_t n=s.ams.unitCount*4; if(n>4)n=4;
-  for(uint8_t i=0;i<n;i++) if(s.ams.trays[i].present) count++;
-  return count;
-}
-
-static bool uiLoadedFilamentLow(const BambuState& s) {
-  const int8_t i=uiLoadedTray(s);
-  return i>=0 && s.ams.trays[i].present && s.ams.trays[i].remain>=0 && s.ams.trays[i].remain<=15;
-}
-
-static void uiAttentionStrip(const HubRect& r,const BambuState* s) {
-  const bool wifi=WiFi.status()==WL_CONNECTED;
-  const int rssi=wifi?WiFi.RSSI():-100;
-  const char* msg="No attention items";
-  uint16_t c=UI_GREEN;
-  if(!wifi){msg="Wi-Fi is offline";c=UI_RED;}
-  else if(rssi<-75){msg="Wi-Fi signal is weak";c=UI_AMBER;}
-  else if(s && !s->connected){msg="Printer connection needs attention";c=UI_AMBER;}
-  else if(s && uiHmsCount(*s)){msg="Printer has an active alert";c=UI_AMBER;}
-  else if(s && uiLoadedFilamentLow(*s)){msg="Loaded filament is low";c=UI_AMBER;}
-  uiPanelFill(r.x,r.y,r.w,r.h);
-  tft.fillCircle(r.x+13,r.y+r.h/2,4,c);
-  uiDrawFit(msg,r.x+25,r.y+r.h/2,r.w-37,FONT_BODY,ML_DATUM,c,UI_PANEL_2);
-}
-
-static void uiMiniLabelValue(const HubRect& r,const char* label,const char* value,
-                             uint16_t accent,const char* detail=nullptr) {
-  uiCard(r.x,r.y,r.w,r.h,accent,false);
-  uiSectionLabel(r.x+10,r.y+8,label,accent,r.w-22);
-  uiDrawFit(value,r.x+10,r.y+31,r.w-20,FONT_BODY,TL_DATUM,UI_TEXT,UI_PANEL);
-  if(detail && *detail) uiDrawFit(detail,r.x+10,r.y+r.h-10,r.w-20,FONT_SMALL,BL_DATUM,UI_DIM,UI_PANEL);
-}
-
-static void uiMaterialSlot(const HubRect& r,const AmsTray* tr,bool active,uint8_t index,bool compact) {
-  const bool present=tr&&tr->present;
-  uint16_t filament=present?tr->colorRgb565:UI_BORDER;
-  if(present && filament==0) filament=0x1082; // keep black filament visible on dark UI.
-  const uint16_t bg=active?UI_PANEL_3:UI_PANEL_2;
-  tft.fillRoundRect(r.x,r.y,r.w,r.h,8,bg);
-  tft.drawRoundRect(r.x,r.y,r.w,r.h,8,active?UI_ORANGE:UI_BORDER_2);
-  if(active)tft.fillRoundRect(r.x+3,r.y+7,3,r.h-14,2,UI_ORANGE);
-  char slot[6];snprintf(slot,sizeof(slot),"A%u",(unsigned)(index+1));
-  char remain[12];if(present&&tr->remain>=0)snprintf(remain,sizeof(remain),"%d%%",(int)tr->remain);else strlcpy(remain,"—",sizeof(remain));
-  const char* type=present&&tr->type[0]?tr->type:"EMPTY";
-  const char* color=present?uiFilamentColorName(tr->colorRgb565):"";
-  if(compact){
-    uiSpoolScaled(r.x+17,r.y+r.h/2,filament,active,present?tr->remain:-1,10);
-    uiDrawFit(slot,r.x+32,r.y+7,r.w-39,FONT_SMALL,TL_DATUM,active?UI_ORANGE:UI_MUTED,bg);
-    uiDrawFit(type,r.x+32,r.y+22,r.w-39,FONT_BODY,TL_DATUM,present?UI_TEXT:UI_MUTED,bg);
-    if(present) uiDrawFit(color,r.x+32,r.y+r.h-8,r.w-66,FONT_SMALL,BL_DATUM,UI_DIM,bg);
-    uiDrawFit(remain,r.x+r.w-7,r.y+r.h-8,38,FONT_BODY,BR_DATUM,active?UI_ORANGE:UI_TEXT,bg);
-  }else{
-    const int16_t cx=r.x+r.w/2;
-    uiDrawFit(slot,r.x+8,r.y+7,r.w-16,FONT_SMALL,TL_DATUM,active?UI_ORANGE:UI_MUTED,bg);
-    uiDrawFit(remain,r.x+r.w-8,r.y+7,42,FONT_BODY,TR_DATUM,active?UI_ORANGE:UI_TEXT,bg);
-    uiSpoolScaled(cx,r.y+32,filament,active,present?tr->remain:-1,12);
-    uiDrawFit(type,cx,r.y+51,r.w-10,FONT_BODY,TC_DATUM,present?UI_TEXT:UI_MUTED,bg);
-    if(present) uiDrawFit(color,cx,r.y+r.h-8,r.w-10,FONT_SMALL,BC_DATUM,UI_DIM,bg);
-  }
-}
-
-
-static void drawAmsCompact(const HubRect&r,const BambuState&s) {
-  uiCard(r.x,r.y,r.w,r.h,UI_BORDER,false);uiSectionLabel(r.x+10,r.y+8,"AMS / FILAMENT",UI_ORANGE,r.w-28);
-  if(s.ams.present && s.ams.activeTray<4){char loaded[20];snprintf(loaded,sizeof(loaded),"A%d LOADED",(int)s.ams.activeTray+1);uiDrawFit(loaded,r.x+r.w-10,r.y+8,r.w/2,FONT_SMALL,TR_DATUM,UI_ORANGE,UI_PANEL);}
-  uint8_t trayCount=s.ams.present?s.ams.unitCount*4:0;if(trayCount>4)trayCount=4;
-  if(!trayCount){uiDrawFit(s.connected?"No AMS / external spool data":"Material data unavailable while offline",r.x+r.w/2,r.y+r.h/2+8,r.w-24,FONT_SMALL,MC_DATUM,UI_DIM,UI_PANEL);return;}
-  if(r.w<230){const int16_t gap=6,top=r.y+28,cellW=(r.w-20-gap)/2,cellH=(r.h-34-gap)/2;for(uint8_t i=0;i<4;i++){HubRect sr=hr(r.x+10+(i%2)*(cellW+gap),top+(i/2)*(cellH+gap),cellW,cellH);uiMaterialSlot(sr,(i<trayCount)?&s.ams.trays[i]:nullptr,s.ams.activeTray==i,i,true);}}
-  else if(r.h>=100){const int16_t gap=5,top=r.y+28,cellW=(r.w-20-3*gap)/4;for(uint8_t i=0;i<4;i++){HubRect sr=hr(r.x+10+i*(cellW+gap),top,cellW,r.h-36);uiMaterialSlot(sr,(i<trayCount)?&s.ams.trays[i]:nullptr,s.ams.activeTray==i,i,false);}}
-  else{const int16_t cell=(r.w-20)/4,cy=r.y+r.h/2+3;for(uint8_t i=0;i<4;i++){int16_t cx=r.x+10+cell/2+i*cell;if(i<trayCount&&s.ams.trays[i].present){const AmsTray&tr=s.ams.trays[i];uiSpoolScaled(cx,cy,tr.colorRgb565,s.ams.activeTray==i,tr.remain,11);uiSpoolCaption(cx,cy+15,tr.type,tr.remain,cell-6);}else tft.drawCircle(cx,cy,10,UI_BORDER);}}
-}
-
-static const char* uiHomeEyebrow(const BambuState& s) {
-  if(!s.connected) return "PRINTER OFFLINE";
-  if(s.gcodeStateId==GCODE_PAUSE) return "PRINT PAUSED";
-  if(s.gcodeStateId==GCODE_FAILED) return "PRINT NEEDS ATTENTION";
-  if(s.printing) return "NOW PRINTING";
-  return "READY TO PRINT";
-}
-
-static void uiHomeStatusStrip(const HubRect& r,const BambuState& s) {
-  uiPanelFill(r.x,r.y,r.w,r.h);
-  char line[96];uint16_t c=UI_GREEN;
-  if(!s.connected){strlcpy(line,"OFFLINE • check printer LAN / MQTT connection",sizeof(line));c=UI_RED;}
-  else if(uiHmsCount(s)){snprintf(line,sizeof(line),"ATTENTION • %u printer alert%s • WiFi %d dBm",(unsigned)uiHmsCount(s),uiHmsCount(s)==1?"":"s",(int)s.wifiSignal);c=UI_AMBER;}
-  else{snprintf(line,sizeof(line),"ALL CLEAR • WiFi %d dBm • %s",(int)s.wifiSignal,uiSpeedText(s.speedLevel));c=UI_GREEN;}
-  tft.fillCircle(r.x+12,r.y+r.h/2,4,c);uiDrawFit(line,r.x+23,r.y+r.h/2,r.w-34,FONT_SMALL,ML_DATUM,c,UI_PANEL_2);
-}
-
-static void uiHomeMaterialPreview(const HubRect& r,const BambuState* s) {
-  if(!s || !s->ams.present) return;
-  uint8_t n=s->ams.unitCount*4; if(n>4)n=4;
-  if(!n) return;
-  const int16_t y=r.y+r.h-23;
-  const int16_t start=r.x+14;
-  const int16_t step=(r.w-28)/4;
-  for(uint8_t i=0;i<4;i++) {
-    const AmsTray* tr=i<n?&s->ams.trays[i]:nullptr;
-    const bool present=tr&&tr->present;
-    uint16_t c=present?tr->colorRgb565:UI_BORDER;
-    if(present&&c==0)c=0x1082;
-    const int16_t x=start+i*step+step/2;
-    tft.fillCircle(x,y,7,UI_PANEL_2);
-    tft.drawCircle(x,y,7,s->ams.activeTray==i?UI_ORANGE:UI_BORDER_2);
-    if(present)tft.fillCircle(x,y,4,c);
-  }
-}
-
-
-static uint16_t uiSignatureHeroColor(const BambuState* s) {
-  if (WiFi.status()!=WL_CONNECTED) return UI_RED;
-  if (!recoveryWebReady()) return UI_AMBER;
-  if (!s) return UI_CYAN;
-  if (!s->connected) return UI_AMBER;
-  if (s->gcodeStateId==GCODE_FAILED || uiHmsCount(*s)) return UI_RED;
-  if (s->gcodeStateId==GCODE_PAUSE) return UI_AMBER;
-  if (uiLoadedFilamentLow(*s)) return UI_AMBER;
-  if (g_workshopTimerDone) return UI_AMBER;
-  if (s->printing) return UI_ORANGE;
-  return UI_GREEN;
-}
-
-static const char* uiSignatureHeroTitle(const BambuState* s) {
-  if (WiFi.status()!=WL_CONNECTED) return "NETWORK OFFLINE";
-  if (!recoveryWebReady()) return "WORKSHOP STARTING";
-  if (!s) return "READY TO SET UP";
-  if (!s->connected) return "PRINTER NEEDS ATTENTION";
-  if (s->gcodeStateId==GCODE_FAILED || uiHmsCount(*s)) return "ATTENTION NEEDED";
-  if (s->gcodeStateId==GCODE_PAUSE) return "PRINT PAUSED";
-  if (uiLoadedFilamentLow(*s)) return "FILAMENT LOW";
-  if (g_workshopTimerDone) return "TIMER COMPLETE";
-  if (s->printing) return "PRINT IN PROGRESS";
-  return "WORKSHOP READY";
-}
-
-static void uiSignatureHero(const HubRect& r,const PrinterSlot* p,const BambuState* s) {
-  const uint16_t stateColor=uiSignatureHeroColor(s);
-  uiCard(r.x,r.y,r.w,r.h,stateColor,true);
-  const char* title=uiSignatureHeroTitle(s);
-  uiDrawFit(title,r.x+14,r.y+16,r.w-28,hubLandscape()?FONT_LARGE:FONT_BODY,TL_DATUM,UI_TEXT,UI_PANEL);
-
-  // v11.19: the physical hero is deliberately two-line. The third idle helper
-  // used in v11.18 competed with the state detail on the 86px landscape card.
-  char context[100];
-  if(workshopTimerActive()||g_workshopTimerDone){
-    char tt[28];workshopTimerText(tt,sizeof(tt));snprintf(context,sizeof(context),"Timer • %s",tt);
-  }else if(g_workshopNote[0]){
-    snprintf(context,sizeof(context),"Note • %s",g_workshopNote);
-  }else if(!s){
-    strlcpy(context,"Add a printer when ready",sizeof(context));
-  }else if(s->printing){
-    char rem[22];formatDuration(s->remainingMinutes,rem,sizeof(rem));
-    snprintf(context,sizeof(context),"%u%% • %s left • %s",(unsigned)s->progress,rem,p&&p->config.name[0]?p->config.name:"Printer");
-  }else if(!s->connected){
-    snprintf(context,sizeof(context),"%s • Check connection",p&&p->config.name[0]?p->config.name:"Printer");
-  }else{
-    snprintf(context,sizeof(context),"%s • Ready • %u material%s",p&&p->config.name[0]?p->config.name:"Printer",(unsigned)uiMaterialCount(*s),uiMaterialCount(*s)==1?"":"s");
-  }
-  uiDrawFit(context,r.x+14,r.y+51,r.w-28,FONT_SMALL,TL_DATUM,
-            (workshopTimerActive()||g_workshopTimerDone)?uiExperienceAccent():UI_DIM,UI_PANEL);
-}
 
 static void uiSignatureMaterialRail(const HubRect& r,const BambuState* s);
 
@@ -1450,51 +1024,6 @@ static void uiSignatureMaterialRail(const HubRect& r,const BambuState* s) {
   }
 }
 
-static void uiSignaturePrinterCard(const HubRect& r,const PrinterSlot* p,const BambuState* s) {
-  const uint16_t c=s?uiStateColor(*s):UI_CYAN;
-  uiCard(r.x,r.y,r.w,r.h,c,false);
-  uiSectionLabel(r.x+11,r.y+8,"PRINTER",c,r.w-34);
-  const char* name=p&&p->config.name[0]?p->config.name:"NOT SET UP";
-  if(r.h<90){
-    uiDrawFit(name,r.x+11,r.y+31,r.w-22,FONT_BODY,TL_DATUM,UI_TEXT,UI_PANEL);
-    if(!s){uiDrawFit("Tap to configure",r.x+11,r.y+r.h-9,r.w-22,FONT_SMALL,BL_DATUM,UI_DIM,UI_PANEL);return;}
-    uiPill(r.x+r.w-83,r.y+7,72,uiPrinterStateLabel(*s),c);
-    char summary[42];
-    if(s->printing)snprintf(summary,sizeof(summary),"%u%% • L%u/%u",(unsigned)s->progress,(unsigned)s->layerNum,(unsigned)s->totalLayers);
-    else strlcpy(summary,s->connected?"Ready for next job":"Connection check",sizeof(summary));
-    uiDrawFit(summary,r.x+11,r.y+r.h-9,r.w-22,FONT_SMALL,BL_DATUM,s->connected?UI_DIM:UI_AMBER,UI_PANEL);
-    return;
-  }
-  uiDrawFit(name,r.x+11,r.y+35,r.w-22,FONT_LARGE,TL_DATUM,UI_TEXT,UI_PANEL);
-  if(!s){uiDrawFit("Tap to configure",r.x+11,r.y+72,r.w-22,FONT_SMALL,TL_DATUM,UI_DIM,UI_PANEL);return;}
-  uiPill(r.x+11,r.y+64,hubLandscape()?82:92,uiPrinterStateLabel(*s),c);
-  if(s->printing){
-    char line[42];snprintf(line,sizeof(line),"%u%% • L%u/%u",(unsigned)s->progress,(unsigned)s->layerNum,(unsigned)s->totalLayers);
-    uiDrawFit(line,r.x+11,r.y+r.h-13,r.w-22,FONT_SMALL,BL_DATUM,UI_DIM,UI_PANEL);
-    uiProgressBar(r.x+11,r.y+r.h-9,r.w-22,s->progress,UI_ORANGE);
-  }else{
-    uiDrawFit(s->connected?"Ready for next job":"Connection check",
-              r.x+11,r.y+r.h-13,r.w-22,FONT_SMALL,BL_DATUM,s->connected?UI_DIM:UI_AMBER,UI_PANEL);
-  }
-  const int16_t ax=r.x+r.w-17,ay=r.y+15;
-  tft.drawLine(ax-3,ay-4,ax+1,ay,c);tft.drawLine(ax+1,ay,ax-3,ay+4,c);
-}
-
-static void uiSignatureServiceChip(const HubRect& r,const char* label,const char* value,
-                                   uint16_t c,bool dim=false) {
-  tft.fillRoundRect(r.x,r.y,r.w,r.h,8,UI_PANEL_2);
-  tft.drawRoundRect(r.x,r.y,r.w,r.h,8,UI_BORDER_2);
-  tft.fillCircle(r.x+11,r.y+(hubLandscape()?r.h/2:13),3,c);
-  if(hubLandscape()){
-    const int16_t valueW=58;
-    uiDrawFit(label,r.x+19,r.y+r.h/2,r.w-27-valueW,FONT_SMALL,ML_DATUM,UI_MUTED,UI_PANEL_2);
-    uiDrawFit(value,r.x+r.w-8,r.y+r.h/2,valueW,FONT_SMALL,MR_DATUM,dim?UI_DIM:c,UI_PANEL_2);
-  }else{
-    uiDrawFit(label,r.x+18,r.y+8,r.w-24,FONT_SMALL,TL_DATUM,UI_MUTED,UI_PANEL_2);
-    uiDrawFit(value,r.x+9,r.y+29,r.w-18,FONT_SMALL,TL_DATUM,dim?UI_DIM:c,UI_PANEL_2);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Workshop OS v11.25 — whole-device 480x320 product UI
 // ---------------------------------------------------------------------------
@@ -1522,24 +1051,6 @@ static void hubV1125Card(const HubRect& r,uint16_t rail=UI_BORDER_2,bool strong=
   tft.fillRoundRect(r.x,r.y,r.w,r.h,16,bg);
   const bool semantic=rail!=UI_BORDER_2 && rail!=UI_BORDER && rail!=W25_LINE;
   if(semantic)tft.fillCircle(r.x+r.w-15,r.y+15,4,rail);
-}
-
-static uint16_t hubV1125PrinterColor(const BambuState* s) {
-  if(!s) return W25_ACCENT;
-  if(!s->connected) return W25_MUTED;
-  if(s->gcodeStateId==GCODE_FAILED || uiHmsCount(*s)) return W25_DANGER;
-  if(s->gcodeStateId==GCODE_PAUSE) return W25_WARN;
-  if(s->printing) return W25_ACCENT;
-  return W25_SUCCESS;
-}
-
-static const char* hubV1125PrinterTitle(const BambuState* s) {
-  if(!s) return "SET UP PRINTER";
-  if(!s->connected) return "PRINTER OFFLINE";
-  if(s->gcodeStateId==GCODE_FAILED || uiHmsCount(*s)) return "ATTENTION NEEDED";
-  if(s->gcodeStateId==GCODE_PAUSE) return "PRINT PAUSED";
-  if(s->printing) return "PRINTING";
-  return "READY";
 }
 
 static void hubV1125ModeTabs() {
@@ -1871,12 +1382,6 @@ static HubRect hubDisplayPagerRect() {
   const int16_t W=tft.width();
   if(hubLandscape()) return hr(W-140,207,132,48);
   return hr(18,356,W-36,48);
-}
-
-static uint8_t hubStepHour(uint8_t hour, bool reverse) {
-  hour = (uint8_t)(hour % 24U);
-  return reverse ? (uint8_t)((hour + 23U) % 24U)
-                 : (uint8_t)((hour + 1U) % 24U);
 }
 
 static uint16_t hubStepFinishDelay(uint16_t current, bool reverse) {
