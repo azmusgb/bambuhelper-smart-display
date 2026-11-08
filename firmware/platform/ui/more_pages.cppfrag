@@ -312,13 +312,6 @@ static void wsTitleCase(char* out, size_t len, const char* caps) {
   }
 }
 
-static void wsHourText(char* out, size_t len, uint8_t hour) {
-  hour = (uint8_t)(hour % 24U);
-  if (netSettings.use24h) { snprintf(out, len, "%02u:00", (unsigned)hour); return; }
-  const unsigned h12 = hour % 12U ? hour % 12U : 12U;
-  snprintf(out, len, "%u %s", h12, hour < 12U ? "AM" : "PM");
-}
-
 static void wsPercentText(char* out, size_t len, uint8_t level, const char* zeroText) {
   if (level == 0 && zeroText) { strlcpy(out, zeroText, len); return; }
   snprintf(out, len, "%u%%", (unsigned)hubLevelPct(level));
@@ -1881,14 +1874,6 @@ static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bo
     tft.drawRoundRect(r.x, r.y, r.w, r.h, 10, primary ? OS12V_ACCENT : OS12V_LINE);
   }
   uiDrawFit(label, r.x + r.w / 2, r.y + r.h / 2, r.w - 12, wsValueFont(label, r.w - 12), MC_DATUM, fg, bg);
-}
-
-// Every value slot of a row goes through here. An empty value draws nothing
-// (uiDrawFit would draw an em dash, shown on the WS350 as a stray "|").
-static void wsDrawRowValue(const char* text, int16_t x, int16_t y, int16_t w, FontID font, uint8_t datum, uint16_t color,
-                           uint16_t bg) {
-  if (!wsm::drawsValueText(text)) return;
-  uiDrawFit(text, x, y, w, font, datum, color, bg);
 }
 
 // Live level bar (12.3.6 microphone meter), right-aligned in the value slot.
