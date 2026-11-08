@@ -49,7 +49,7 @@ def main()->int:
     for marker in (
         "OS12V_BG","OS12V_SURFACE","OS12V_SURFACE2","OS12V_TEXT","OS12V_MUTED",
         "OS12V_ACCENT","OS12V_BLUE","OS12V_GREEN","OS12V_AMBER","OS12V_RED","OS12V_RADIUS",
-        "0xFBC0","0x061F"
+        "UI_COLOR_ACCENT;","UI_COLOR_ACCENT_TEXT"
     ): need(hub,marker,"visual palette")
 
     header=block(hub,"static void drawHeader(")

@@ -1,8 +1,4 @@
 {
   "note": "Files not yet on the kit's display parts (display-kit K7). May only shrink: scripts/validate_ui_raw_colours.py. Each value is the number of lines with a raw 0x.... colour or a new palette constant. Rollout steps 4 and 5 remove entries.",
-  "files": {
-    "apply_workshop_os12_ui_finish.py": 1,
-    "apply_workshop_os12_visual_overhaul.py": 12,
-    "firmware/platform/ui/tabs_pages.cppfrag": 9
-  }
+  "files": {}
 }

@@ -108,10 +108,10 @@ def install_kit(repo: Path, kit: Path, version: dict) -> int:
 
 
 def remove_definitions(text: str, names: list[str]) -> tuple[str, int]:
-    """Each old constant is defined once, as `static [constexpr|const] uint16_t NAME = 0x....;` and a comment."""
+    """Each old constant is defined once, as `static [constexpr|const] uint16_t NAME = 0x....;` (or a kit token) and a comment."""
     removed = 0
     for name in names:
-        pattern = re.compile(r"^[ \t]*static (?:constexpr |const )uint16_t " + re.escape(name) + r"\s*=\s*0x[0-9A-Fa-f]{4};[^\n]*\n", re.M)
+        pattern = re.compile(r"^[ \t]*static (?:constexpr |const )uint16_t " + re.escape(name) + r"\s*=\s*(?:0x[0-9A-Fa-f]{4}|UI_COLOR_[A-Z0-9_]+);[^\n]*\n", re.M)
         text, n = pattern.subn("", text)
         if n != 1:
             raise PatchError(f"{name}: expected one definition in smart_hub.cpp, found {n}")

@@ -135,7 +135,7 @@ static void hubV1125AmsSlot(const HubRect& r,const AmsTray* tr,bool active,uint8
   char slot[8];snprintf(slot,sizeof(slot),"%u",(unsigned)(index+1));char remain[12];
   if(present&&tr->remain>=0)snprintf(remain,sizeof(remain),"%d%%",(int)tr->remain);else strlcpy(remain,"--",sizeof(remain));
   uiDrawFit(slot,r.x+12,r.y+10,28,FONT_BODY,TL_DATUM,active?C10_ACCENT:C10_MUTED,bg);uiDrawFit(remain,r.x+r.w-12,r.y+10,42,FONT_SMALL,TR_DATUM,present?C10_TEXT:C10_MUTED,bg);
-  uint16_t filament=present?tr->colorRgb565:C10_SEPARATOR;if(present&&filament==0)filament=0x1082;uiSpoolScaled(r.x+r.w/2,r.y+49,filament,active,present?tr->remain:-1,13);
+  uint16_t filament=present?tr->colorRgb565:C10_SEPARATOR;if(present&&filament==0)filament=C10_SEPARATOR;uiSpoolScaled(r.x+r.w/2,r.y+49,filament,active,present?tr->remain:-1,13);
   uiDrawFit(present&&tr->type[0]?tr->type:"Empty",r.x+r.w/2,r.y+74,r.w-18,FONT_BODY,TC_DATUM,present?C10_TEXT:C10_MUTED,bg);
 }
 '''
