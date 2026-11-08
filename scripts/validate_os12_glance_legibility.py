@@ -84,14 +84,7 @@ def validate_rows(hub: str) -> None:
     """Values, reasons, button labels and toasts are 14 px when they fit."""
     need(block(hub, "static FontID wsValueFont(const char* text, int16_t w)"), "wsFitFont(text, w, FONT_BODY, FONT_SMALL)",
          "14 px value font with a 10 px fallback")
-    body = block(hub, "static void wsDrawRowBodyLegacy(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")  # the tabs' 44 px slots
-    if len(re.findall(r"wsDrawRowValue\([^;]*wsValueFont\(", body, re.S)) < 7:
-        raise ValidationError("every row value slot must pick its font with wsValueFont")
-    for old in ("FONT_SMALL, MR_DATUM, valueColor", "FONT_SMALL, MC_DATUM, valueColor"):
-        forbid(body, old, "a row value fixed at 10 px")
-    need(body, "const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_MUTED;", "disabled reasons muted, not amber")
-    forbid(body, "v.enabled ? v.valueColor : OS12V_AMBER", "disabled reasons in amber")
-    need(body, "on ? OS12V_ACCENT : OS12V_MUTED", "an off switch keeps a visible track")
+    # Values, reasons and button labels: the kit row's (the only row body) never shrinks them.
     kit_body = block(hub, "static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")  # More's 48 px rows: the kit's Switch draws its own track
     # The kit row never shrinks a value: wkit::rowValue is the row value size (Fs4), cut at a word (row_kit.hpp, host-tested).
     if kit_body.count("wkit::rowValue(") < 5 or "wkit::rowStepper(" not in kit_body:

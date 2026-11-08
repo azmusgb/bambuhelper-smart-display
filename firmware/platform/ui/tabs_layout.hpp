@@ -98,7 +98,7 @@ struct ViewSpec {
   View id;
   Tab tab;
   bool segments;    // Printer's Status / AMS / Control control in the first slot
-  bool list;        // one-slot rows only; scrolls when longer than the screen
+  bool list;        // scrolls (by items) when longer than the screen
   bool repeat;      // items[0] repeated for a runtime count (AMS trays)
   const char* title;
   const ItemSpec* items;
@@ -176,10 +176,10 @@ static const ItemSpec kHomeIdleItems[] = {
 };
 
 static const ViewSpec kViews[] = {
-  {View::Home, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeItems), false},
-  {View::PrinterStatus, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterStatusItems), false},
+  {View::Home, Tab::Home, false, true, false, "Home", WT_ITEMS(kHomeItems), false},
+  {View::PrinterStatus, Tab::Printer, true, true, false, "Printer", WT_ITEMS(kPrinterStatusItems), false},
   {View::PrinterAms, Tab::Printer, true, true, true, "Printer", WT_ITEMS(kPrinterAmsItems), false},
-  {View::PrinterControl, Tab::Printer, true, false, false, "Printer", WT_ITEMS(kPrinterControlItems), false},
+  {View::PrinterControl, Tab::Printer, true, true, false, "Printer", WT_ITEMS(kPrinterControlItems), false},
   {View::WorkshopSetup, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopSetupItems), true},
   {View::WorkshopInventory, Tab::Workshop, false, true, false, "Local AI", WT_ITEMS(kWorkshopInventoryItems), true},
   {View::HomeIdle, Tab::Home, false, false, false, "Home", WT_ITEMS(kHomeIdleItems), false},
@@ -241,11 +241,12 @@ inline uint8_t headIndex(const ViewSpec& v, uint8_t i, uint8_t runtimeCount) {
 
 inline uint8_t firstSlot(const ViewSpec& v) { return v.segments ? 1 : 0; }
 
+// How many of the kit's 48 px rows (4 px apart) an item takes: a card or the temperatures take two or three.
 inline uint8_t itemSlots(Screen s, const ViewSpec& v, const ItemSpec& it) {
   (void)v;
   switch (it.kind) {
     case ItemKind::Card:
-      if (it.id == ItemId::HomeCard) return 3;
+      if (it.id == ItemId::HomeCard) return 3;  // the running print's card: 152 px, in the 132 px layout
       return s.landscape() ? 2 : 3;
     case ItemKind::Temps:
       return s.landscape() ? 1 : 3;
@@ -255,14 +256,22 @@ inline uint8_t itemSlots(Screen s, const ViewSpec& v, const ItemSpec& it) {
 }
 
 inline uint8_t listCapacity(Screen s, const ViewSpec& v) {
-  const int n = more::tabVisibleRows(s) - firstSlot(v);
+  const int n = more::visibleRows(s) - firstSlot(v);
   return static_cast<uint8_t>(n > 0 ? n : 0);
 }
 
+// The first item from which every later one fits (a list scrolls by items, which may take more than one slot).
 inline uint8_t maxScroll(Screen s, const ViewSpec& v, uint8_t runtimeCount) {
   if (!v.list) return 0;
   const uint8_t n = itemCount(v, runtimeCount), cap = listCapacity(s, v);
-  return static_cast<uint8_t>(n > cap ? n - cap : 0);
+  int tail = 0;
+  uint8_t first = n;
+  for (int j = n - 1; j >= 0; --j) {
+    tail += itemSlots(s, v, item(v, static_cast<uint8_t>(j), runtimeCount));
+    if (tail > cap) break;
+    first = static_cast<uint8_t>(j);
+  }
+  return first >= n ? static_cast<uint8_t>(n ? n - 1 : 0) : first;
 }
 
 inline bool scrolls(Screen s, const ViewSpec& v, uint8_t runtimeCount) { return maxScroll(s, v, runtimeCount) > 0; }
@@ -304,21 +313,8 @@ inline Rect homeIdleRect(uint8_t i) {
   }
 }
 
-// Printer's tab strip is the display kit's Tabs part: 48 px high (ui::Tabs::kHeight), drawn in the first slot's place.
-// The slots under it share what is left above the tab bar, so the Control view's four rows still fit on the
-// 480 x 320 panel (173 px: 43 px each). Taller panels keep the 44 px slot.
-static const int16_t kSegmentH = 48;
-
-inline int16_t segmentBottom() { return static_cast<int16_t>(more::kRowTop + kSegmentH); }
-
-// Height of one slot of a view; only a view with the strip is ever squeezed below 44 px.
-inline int itemPitch(Screen s, const ViewSpec& v) {
-  if (!v.segments) return more::kTabRowH;
-  const int rows = more::tabVisibleRows(s) - 1;  // the slots under the strip
-  if (rows <= 0) return more::kTabRowH;
-  const int fit = (s.h - more::kTabH - segmentBottom()) / rows;
-  return fit < more::kTabRowH ? fit : more::kTabRowH;
-}
+// Printer's tab strip is the display kit's Tabs part: 48 px high (ui::Tabs::kHeight), the first slot's row.
+static const int16_t kSegmentH = more::kRowH;
 
 // Rectangle of item `i`, or empty when it is scrolled out of view or does
 // not fit.
@@ -331,13 +327,9 @@ inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t 
   int slot = firstSlot(v);
   for (uint8_t j = scroll; j < i; ++j) slot += itemSlots(s, v, item(v, j, runtimeCount));
   const int span = itemSlots(s, v, item(v, i, runtimeCount));
-  if (slot + span > more::tabVisibleRows(s)) return makeRect(0, 0, 0, 0);
-  const Rect top = more::tabSlotRect(s, static_cast<uint8_t>(slot));
-  if (v.segments) {
-    const int pitch = itemPitch(s, v);
-    return makeRect(top.x, segmentBottom() + (slot - 1) * pitch, top.w, span * pitch);
-  }
-  return makeRect(top.x, top.y, top.w, span * more::kTabRowH);
+  if (slot + span > more::visibleRows(s)) return makeRect(0, 0, 0, 0);
+  const Rect top = more::slotRect(s, static_cast<uint8_t>(slot));
+  return makeRect(top.x, top.y, top.w, span * more::kRowPitch - more::kRowGap);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +344,7 @@ static const uint8_t kCameraSegment = 3;
 
 // The strip is ui::Tabs::tabRect's own arithmetic (equal shares of the width, no gaps), so what is drawn is what is hit.
 inline Rect segmentBand(Screen s) {
-  const Rect slot = more::tabSlotRect(s, 0);
+  const Rect slot = more::slotRect(s, 0);
   return makeRect(slot.x, slot.y, slot.w, kSegmentH);
 }
 
@@ -400,18 +392,18 @@ inline Rect tempCellRect(Screen s, const Rect& area, uint8_t i) {
     const int x = area.x + i * cell;
     return makeRect(x, area.y, i == 2 ? area.right() - x : cell, area.h);
   }
-  return makeRect(area.x, area.y + i * more::kTabRowH, area.w, more::kTabRowH);
+  return makeRect(area.x, area.y + i * more::kRowPitch, area.w, more::kRowH);
 }
 
 // Primary button: drawn across the row; the whole row is the target.
-inline Rect primaryDrawRect(const Rect& row) { return makeRect(row.x, row.y + 2, row.w, row.h - 4); }
+inline Rect primaryDrawRect(const Rect& row) { return row; }  // the kit's 48 px Button is the whole row
 
 // Hold button (Stop): right-aligned, smaller than a primary button and
 // outlined. The touch area is the button widened by 4 px and the full row
 // height; the rest of the row is not a target.
 inline Rect holdDrawRect(Screen s, const Rect& row) {
   const int w = s.landscape() ? 136 : 116;
-  return makeRect(row.right() - 8 - w, row.y + 5, w, 34);
+  return makeRect(row.right() - 8 - w, row.y, w, row.h);  // the kit's 48 px Button
 }
 
 inline Rect holdTouchRect(Screen s, const Rect& row) {
@@ -731,6 +723,7 @@ struct CalmLayout {
   Rect hint;    // "Tap anywhere to wake", where the tab bar would be
 };
 
+static const int16_t kCalmRowH = 44;  // the calm screen's status lines are cards, not rows
 static const int16_t kCalmClockH = 96;
 static const int16_t kCalmDateH = 32;
 static const int16_t kCalmGapWithAi = 10;
@@ -743,14 +736,14 @@ inline CalmLayout calmLayout(Screen s, bool withAi = false) {
   CalmLayout c;
   c.hint = more::tabBand(s);
   const int gap = withAi ? kCalmGapWithAi : kCalmGap;
-  const int total = kCalmClockH + kCalmDateH + gap + more::kTabRowH + (withAi ? kCalmAiGap + more::kTabRowH : 0);
+  const int total = kCalmClockH + kCalmDateH + gap + kCalmRowH + (withAi ? kCalmAiGap + kCalmRowH : 0);
   const int top = (c.hint.y - total) / 2;
   const int margin = 16;
   c.clock = makeRect(margin, top, s.w - 2 * margin, kCalmClockH);
   c.date = makeRect(margin, top + kCalmClockH, s.w - 2 * margin, kCalmDateH);
   const int statusW = s.landscape() ? 384 : s.w - 2 * margin;
-  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + gap, statusW, more::kTabRowH);
-  c.ai = withAi ? makeRect(c.status.x, c.status.bottom() + kCalmAiGap, statusW, more::kTabRowH) : makeRect(0, 0, 0, 0);
+  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + gap, statusW, kCalmRowH);
+  c.ai = withAi ? makeRect(c.status.x, c.status.bottom() + kCalmAiGap, statusW, kCalmRowH) : makeRect(0, 0, 0, 0);
   return c;
 }
 

@@ -1902,113 +1902,6 @@ static void wsDrawMeter(const wsm::Rect& slot, int16_t mid, uint8_t level, uint1
   (void)bg;
 }
 
-// One row of any page: More, and (12.3) the Home, Printer and Workshop tabs.
-//
-// 12.3.6: only a row that does something right now is raised (surface and
-// border, wsm::rowRaised). Read-only and disabled rows are drawn flat on the
-// page background with a hairline under them, so nothing that does nothing
-// looks like a button. A disabled switch is an empty outline (no knob), a
-// disabled stepper hides its "-" and "+", and a disabled button is only its
-// muted label; the reason stays in the value slot.
-static void wsDrawRowBodyLegacy(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
-                                const wsm::Rect& row) {
-  const wsm::Rect surface = wsm::rowSurface(row);
-  const bool raised = wsm::rowRaised(kind, v.enabled);
-  const uint16_t bg = raised ? OS12V_SURFACE : OS12V_BG;
-  if (raised) {
-    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
-    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
-  } else {
-    tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
-    tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
-  }
-  const int16_t mid = row.y + row.h / 2;
-  const wsm::Rect label = wsm::labelRect(s, row, kind);
-  const wsm::Rect valueSlot = wsm::valueRect(s, row, kind);
-  const char* value = v.enabled ? v.value : (v.reason ? v.reason : v.value);
-  const bool infoOnly = kind == wsm::RowKind::Info && !value[0];
-  int16_t labelW = label.w;
-  if (value[0] && kind != wsm::RowKind::Stepper && kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
-    labelW = valueSlot.x - 8 - label.x;
-  uiDrawFit(labelText, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
-            (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, bg);
-  // 12.3.9: a disabled control's reason ("Set up in Local Portal") is not a
-  // warning; amber and red stay for real problems.
-  const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_MUTED;
-
-  switch (kind) {
-    case wsm::RowKind::Info:
-    case wsm::RowKind::Nav:
-    case wsm::RowKind::Choice:
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
-      if (kind == wsm::RowKind::Nav || kind == wsm::RowKind::Choice) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
-      break;
-    case wsm::RowKind::Code:
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w,
-                     strlen(value) <= 13 ? wsFitFont(value, valueSlot.w, FONT_LARGE, FONT_BODY) : FONT_SMALL,
-                     MR_DATUM, valueColor, bg);
-      break;
-    case wsm::RowKind::Toggle: {
-      const wsm::Rect sw = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
-      const bool on = v.enabled && v.on;
-      if (!v.enabled) {
-        // Disabled: an empty outline, no knob (an "off" switch has a knob).
-        tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, OS12V_LINE);
-        break;
-      }
-      tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_SURFACE2);
-      // 12.3.9: an off switch keeps a visible track (the line colour is
-      // 1.1:1 on the row, so only the knob showed).
-      tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, sw.h / 2, on ? OS12V_ACCENT : OS12V_MUTED);
-      const int16_t d = sw.h - 8;
-      const int16_t cx = on ? sw.right() - 4 - d / 2 : sw.x + 4 + d / 2;
-      tft.fillCircle(cx, sw.y + sw.h / 2, d / 2, on ? OS12V_BG : OS12V_MUTED);
-      break;
-    }
-    case wsm::RowKind::Stepper: {
-      const wsm::Rect minus = wsm::partDrawRect(s, row, kind, wsm::Part::Minus);
-      const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
-      if (!v.enabled) {
-        // Disabled: no "-" / "+"; the reason uses the whole control area, ending 12 px from the row's edge like
-        // every other row's value (the "+" button's edge is 6 px further right).
-        const int16_t right = (int16_t)(row.right() - 12), w = (int16_t)(right - minus.x);
-        wsDrawRowValue(value, right, mid, w, wsValueFont(value, w), MR_DATUM, valueColor, bg);
-        break;
-      }
-      for (uint8_t i = 0; i < 2; ++i) {
-        const wsm::Rect b = i == 0 ? minus : plus;
-        tft.fillRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_SURFACE2);
-        tft.drawRoundRect(b.x, b.y, b.w, b.h, 10, OS12V_LINE);
-        const int16_t cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-        tft.fillRect(cx - 7, cy - 1, 15, 3, OS12V_ACCENT);
-        if (i == 1) tft.fillRect(cx - 1, cy - 7, 3, 15, OS12V_ACCENT);
-      }
-      const wsm::Rect valueRect = wsm::stepperValueRect(s, row);
-      wsDrawRowValue(value, valueRect.x + valueRect.w / 2, mid, valueRect.w - 4, wsValueFont(value, valueRect.w - 4), MC_DATUM,
-                     valueColor, bg);
-      break;
-    }
-    case wsm::RowKind::Action: {
-      if (v.meter >= 0 && v.enabled) {
-        wsDrawMeter(valueSlot, mid, (uint8_t)v.meter, bg);
-        const int16_t textR = valueSlot.right() - (valueSlot.w < 96 ? valueSlot.w : 96) - 6;
-        wsDrawRowValue(value, textR, mid, textR - valueSlot.x, wsValueFont(value, textR - valueSlot.x), MR_DATUM, valueColor, bg);
-      } else {
-        wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
-      }
-      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::Whole), v.button ? v.button : "Open", v.enabled, false, bg);
-      break;
-    }
-    case wsm::RowKind::Action2: {
-      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
-      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), v.button ? v.button : "", v.enabled, false, bg);
-      wsDrawButton(wsm::partDrawRect(s, row, kind, wsm::Part::ActionB), v.buttonB ? v.buttonB : "", v.enabledB, false, bg);
-      break;
-    }
-  }
-}
-
 // The kit's row (More pages): 48 px, the whole row is the target. The kit's Switch, Stepper and Button draw the controls
 // inside it (the Switch's track and knob and the Stepper's keys smaller than the row, so the row is what a tap hits), and
 // the value text is the row value size (wkit::rowValue: Fs4, cut at a word, never shrunk). The label, the chevron and the
@@ -2099,11 +1992,10 @@ static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char
   canvas.release();  // the older draws select their own fonts
 }
 
-// One row of any page: the kit's 48 px row, or (until the tabs move over) a tab's 44 px slot in the older drawing.
+// One row of any page: More, and the Home, Printer and Local AI tabs.
 static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
                           const wsm::Rect& row) {
-  if (wsm::kitRow(row)) wsDrawRowBodyKit(s, kind, labelText, v, row);
-  else wsDrawRowBodyLegacy(s, kind, labelText, v, row);
+  wsDrawRowBodyKit(s, kind, labelText, v, row);
 }
 
 // Premium v2 More/System semantic row hierarchy.

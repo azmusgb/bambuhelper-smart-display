@@ -1396,6 +1396,11 @@ static void wtDrawHomeIdle(const WtPrint& w) {
 static uint8_t g_wtBootPreview = 0;  // 0 off, else percent + 1
 static uint32_t g_wtBootPreviewAt = 0;
 
+// Where Home's and Printer's lists are scrolled to (by items; on the 480 x 320 panel Home's card leaves room for the Local AI
+// row or the temperatures, and Printer's Status and Control have more rows than fit under the tab strip).
+static uint8_t g_wtHomeScroll = 0;
+static uint8_t g_wtPrinterScroll = 0;
+
 static void wtDrawHome(bool full) {
   (void)full;
   wtPollMessage();  // 12.6: a message from Local AI wakes the calm screen
@@ -1410,9 +1415,10 @@ static void wtDrawHome(bool full) {
   tft.fillScreen(OS12V_BG);
   char clock[16];
   wtHomeClock(clock, sizeof(clock));  // Home at a glance: the time, as on idle Home; the chip keeps the print state
-  wtDrawHeader(s, clock, w.chip, w.color, false, 0, 0);
+  g_wtHomeScroll = wtl::clampScroll(s, v, 0, g_wtHomeScroll);
+  wtDrawHeader(s, clock, w.chip, w.color, wtl::scrolls(s, v, 0), g_wtHomeScroll, wtl::maxScroll(s, v, 0));
   for (uint8_t i = 0; i < v.itemCount; ++i) {
-    const wsm::Rect r = wtl::itemRect(s, v, 0, 0, i);
+    const wsm::Rect r = wtl::itemRect(s, v, 0, g_wtHomeScroll, i);
     if (r.empty()) continue;
     switch (v.items[i].id) {
       case wtl::ItemId::HomeCard: wtDrawHomeCard(s, r, w); break;
@@ -1436,7 +1442,6 @@ static void wtDrawHome(bool full) {
 // Printer: Status, AMS and Control
 // ---------------------------------------------------------------------------
 
-static uint8_t g_wtAmsScroll = 0;
 
 static wtl::View wtPrinterView() { return wtl::segmentView(g_printerMode < wtl::kViewSegments ? g_printerMode : 0); }
 
@@ -1824,95 +1829,23 @@ static WtControls wtControls(const WtPrint& w) {
 static void wtDrawPrimary(const wsm::Rect& row, const WtControls& c) {
   const wsm::Rect b = wtl::primaryDrawRect(row);
   const bool enabled = c.pauseEnabled;
-  const uint16_t tone = c.resume ? OS12V_GREEN : OS12V_ACCENT;
-  const uint16_t bg = enabled ? tone : OS12V_SURFACE;
-
-  // Premium v2 Printer Control primary action. Presentation only:
-  // primaryDrawRect remains the canonical draw/touch geometry.
-  tft.fillRoundRect(b.x, b.y, b.w, b.h, 14, bg);
-  tft.drawRoundRect(
-      b.x, b.y, b.w, b.h, 14,
-      enabled ? tone : OS12V_LINE);
-
-  if (enabled) {
-    if (b.w > 36) {
-      tft.drawFastHLine(
-          (int16_t)(b.x + 18),
-          (int16_t)(b.y + 1),
-          (int16_t)(b.w - 36),
-          OS12V_SURFACE2);
-    }
-
-    const int16_t cy = (int16_t)(b.y + b.h / 2);
-    const int16_t ix = (int16_t)(b.x + b.w / 2 - 72);
-    const int16_t iconCx = (int16_t)(ix + 6);
-
-    // Dark inset icon medallion gives Pause/Resume a strong appliance-level
-    // primary-action hierarchy without changing the button rectangle.
-    tft.fillCircle(iconCx, cy, 16, OS12V_BG);
-    tft.drawCircle(iconCx, cy, 16, OS12V_SURFACE2);
-
-    if (c.resume) {
-      tft.fillTriangle(
-          (int16_t)(iconCx - 4), (int16_t)(cy - 8),
-          (int16_t)(iconCx - 4), (int16_t)(cy + 8),
-          (int16_t)(iconCx + 9), cy,
-          tone);
-    } else {
-      tft.fillRect(
-          (int16_t)(iconCx - 6), (int16_t)(cy - 8),
-          4, 16, tone);
-      tft.fillRect(
-          (int16_t)(iconCx + 2), (int16_t)(cy - 8),
-          4, 16, tone);
-    }
-
-    uiDrawFit(
-        c.pauseLabel,
-        (int16_t)(b.x + b.w / 2 + 10),
-        cy,
-        (int16_t)(b.w - 120),
-        FONT_LARGE,
-        MC_DATUM,
-        OS12V_BG,
-        bg);
-
-    const char* sp = wtSpeedText(c.speedLevel);
-    if (sp && sp[0]) {
-      setFont(tft, FONT_SMALL);
-      const int16_t spW = (int16_t)(tft.textWidth(sp) + 16);
-      const int16_t spX = (int16_t)(b.right() - 14 - spW);
-
-      tft.fillRoundRect(
-          spX, (int16_t)(cy - 11),
-          spW, 22, 7,
-          OS12V_BG);
-      tft.drawRoundRect(
-          spX, (int16_t)(cy - 11),
-          spW, 22, 7,
-          OS12V_SURFACE2);
-
-      uiDrawFit(
-          sp,
-          (int16_t)(spX + spW / 2),
-          cy,
-          (int16_t)(spW - 8),
-          FONT_SMALL,
-          MC_DATUM,
-          tone,
-          OS12V_BG);
-    }
-  } else {
-    uiDrawFit(
-        c.pauseReason,
-        (int16_t)(b.x + b.w / 2),
-        (int16_t)(b.y + b.h / 2),
-        (int16_t)(b.w - 24),
-        FONT_BODY,
-        MC_DATUM,
-        OS12V_MUTED,
-        bg);
+  {
+    // The kit's primary Button (the screen's one primary): Pause or Resume, or why it is not available.
+    UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wtKitFontsReleased);
+    ::ui::Button::draw(canvas, ::ui::Rect{b.x, b.y, b.w, b.h}, enabled ? c.pauseLabel : c.pauseReason,
+                       ::ui::ButtonStyle::Primary, enabled);
+    canvas.release();  // the older draws below select their own fonts
   }
+  if (!enabled) return;
+  const char* sp = wtSpeedText(c.speedLevel);
+  if (!sp || !sp[0]) return;
+  const int16_t cy = (int16_t)(b.y + b.h / 2);
+  setFont(tft, FONT_SMALL);
+  const int16_t spW = (int16_t)(tft.textWidth(sp) + 16);
+  const int16_t spX = (int16_t)(b.right() - 14 - spW);
+  tft.fillRoundRect(spX, (int16_t)(cy - 11), spW, 22, 7, OS12V_BG);
+  tft.drawRoundRect(spX, (int16_t)(cy - 11), spW, 22, 7, OS12V_SURFACE2);
+  uiDrawFit(sp, (int16_t)(spX + spW / 2), cy, (int16_t)(spW - 8), FONT_SMALL, MC_DATUM, OS12V_ACCENT, OS12V_BG);
 }
 
 // Stop: label on the left, an outlined red "Hold to stop" button on the right.
@@ -1965,51 +1898,19 @@ static void wtDrawStop(const wsm::Screen& s, const wsm::Rect& row, const WtContr
         (int16_t)(b.x - 8),
         mid,
         (int16_t)(b.x - 8 - hintX),
-        wsValueFont(hint, (int16_t)(b.x - 8 - hintX)),
+        FONT_BODY,  // never shrunk: a hint that does not fit is cut
         MR_DATUM,
         OS12V_MUTED,
         OS12V_SURFACE);
   }
 
-  tft.fillRoundRect(
-      b.x, b.y,
-      b.w, b.h,
-      10,
-      OS12V_SURFACE2);
-
-  tft.drawRoundRect(
-      b.x, b.y,
-      b.w, b.h,
-      10,
-      c.stopEnabled ? OS12V_RED : OS12V_LINE);
-
-  if (c.stopEnabled) {
-    tft.drawRoundRect(
-        (int16_t)(b.x + 1),
-        (int16_t)(b.y + 1),
-        (int16_t)(b.w - 2),
-        (int16_t)(b.h - 2),
-        9,
-        OS12V_RED);
-
-    if (b.w > 24) {
-      tft.drawFastHLine(
-          (int16_t)(b.x + 12),
-          (int16_t)(b.y + 2),
-          (int16_t)(b.w - 24),
-          OS12V_RED);
-    }
+  {
+    // The kit's Button, as tall as the row; the hold itself is checked and drawn over it (wtDrawStopHold).
+    UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wtKitFontsReleased);
+    ::ui::Button::draw(canvas, ::ui::Rect{b.x, b.y, b.w, b.h}, printerFeedbackLabel(3, "Hold to stop"), ::ui::ButtonStyle::Plain,
+                       c.stopEnabled);
+    canvas.release();
   }
-
-  uiDrawFit(
-      printerFeedbackLabel(3, "Hold to stop"),
-      (int16_t)(b.x + b.w / 2),
-      (int16_t)(b.y + b.h / 2),
-      (int16_t)(b.w - 16),
-      FONT_BODY,
-      MC_DATUM,
-      c.stopEnabled ? OS12V_RED : OS12V_MUTED,
-      OS12V_SURFACE2);
 }
 
 // Drawn over the Stop button while it is held (smartHubUpdateHoldProgress).
@@ -2120,12 +2021,10 @@ static void wtDrawPrinter(bool full) {
   const wtl::ViewSpec& v = wtl::view(id);
   WtTray trays[wtl::kMaxAmsRows];
   uint8_t n = 0;
-  if (id == wtl::View::PrinterAms) {
-    n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
-    g_wtAmsScroll = wtl::clampScroll(s, v, n ? n : 1, g_wtAmsScroll);
-  }
+  if (id == wtl::View::PrinterAms) n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
   const uint8_t count = id == wtl::View::PrinterAms ? (n ? n : 1) : 0;
-  const uint8_t scroll = id == wtl::View::PrinterAms ? g_wtAmsScroll : 0;
+  g_wtPrinterScroll = wtl::clampScroll(s, v, count, g_wtPrinterScroll);
+  const uint8_t scroll = g_wtPrinterScroll;
   const bool scrollButtons = wtl::scrolls(s, v, count);
   tft.fillScreen(OS12V_BG);
   wtDrawHeader(s, v.title, w.chip, w.color, scrollButtons, scroll, wtl::maxScroll(s, v, count));
@@ -2171,8 +2070,9 @@ static void wtDrawPrinter(bool full) {
     // Scroll position, as on the long More pages.
     const uint8_t maxS = wtl::maxScroll(s, v, count);
     const wsm::Rect first = wtl::itemRect(s, v, count, scroll, scroll);
-    const int16_t top = first.y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wtl::itemPitch(s, v) - 8);
-    const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / count);
+    const uint8_t total = wtl::itemCount(v, count);
+    const int16_t top = first.y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowPitch - wsm::kRowGap - 8);
+    const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / (total ? total : 1));
     tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * scroll / maxS), 2, thumb, OS12V_MUTED);
   }
@@ -2704,7 +2604,7 @@ static void wtDrawWorkshop(bool full) {
     wtDrawWorkshopToolRow(s, it, row, r);
   }
   if (scrollButtons) {
-    const int16_t top = wsm::tabSlotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kTabRowH - 8);
+    const int16_t top = wsm::slotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowPitch - wsm::kRowGap - 8);
     const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / items);
     tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * g_wtWorkshopScroll / maxS), 2, thumb, OS12V_MUTED);
@@ -2802,7 +2702,7 @@ static bool wtShowPrinterView(const char* name) {
   wtl::View v = wtl::View::PrinterStatus;
   if (!wtl::printerViewFromId(name, v)) return false;
   g_printerMode = wtl::segmentOf(v);
-  g_wtAmsScroll = 0;
+  g_wtPrinterScroll = 0;
   setPage(SCREEN_HUB_PRINTER);
   return true;
 }
@@ -2870,8 +2770,17 @@ static bool wtHomeTouch(int16_t x, int16_t y) {
     g_dirty = true;
     return true;
   }
-  const wtl::Hit h = wtl::hitTest(s, wtl::View::Home, 0, 0, x, y);
+  const wtl::ViewSpec& hv = wtl::view(wtl::View::Home);
+  const wtl::Hit h = wtl::hitTest(s, wtl::View::Home, 0, g_wtHomeScroll, x, y);
   if (h.kind == wtl::HitKind::Tab) { wtTab(h.index); return true; }
+  if (h.kind == wtl::HitKind::ScrollUp) {
+    if (g_wtHomeScroll > 0) { g_wtHomeScroll = wtl::clampScroll(s, hv, 0, (int)g_wtHomeScroll - wsm::scrollStep(s)); wsClick(); g_dirty = true; }
+    return true;
+  }
+  if (h.kind == wtl::HitKind::ScrollDown) {
+    if (g_wtHomeScroll < wtl::maxScroll(s, hv, 0)) { g_wtHomeScroll = wtl::clampScroll(s, hv, 0, (int)g_wtHomeScroll + wsm::scrollStep(s)); wsClick(); g_dirty = true; }
+    return true;
+  }
   if (h.kind != wtl::HitKind::Item) return true;
   const wtl::ItemId id = wtl::view(wtl::View::Home).items[h.index].id;
   if (id == wtl::ItemId::HomeCard) {
@@ -2901,7 +2810,7 @@ static bool g_wtStopHoldStarted = false;
 static bool g_wtStopHoldValid = false;
 
 static wsm::Rect wtStopTouchRect() {
-  return wtl::holdItemTouch(wsScreen(), wtl::View::PrinterControl, 0, 0, wtl::ItemId::ControlStop);
+  return wtl::holdItemTouch(wsScreen(), wtl::View::PrinterControl, 0, g_wtPrinterScroll, wtl::ItemId::ControlStop);  // off screen (empty) until the list is scrolled to it
 }
 
 // True (with the drawn button) while a valid Stop hold is in progress.
@@ -2914,7 +2823,7 @@ static bool wtStopHoldTrack(int16_t x, int16_t y, wsm::Rect& drawn) {
   if (!g_wtStopHoldValid) return false;
   const wsm::Screen s = wsScreen();
   const wtl::ViewSpec& v = wtl::view(wtl::View::PrinterControl);
-  drawn = wtl::holdDrawRect(s, wtl::itemRect(s, v, 0, 0, (uint8_t)(v.itemCount - 1)));
+  drawn = wtl::holdDrawRect(s, wtl::itemRect(s, v, 0, g_wtPrinterScroll, (uint8_t)(v.itemCount - 1)));
   return true;
 }
 
@@ -2939,7 +2848,7 @@ static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress) {
     const uint8_t n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
     count = n ? n : 1;
   }
-  const uint8_t scroll = id == wtl::View::PrinterAms ? g_wtAmsScroll : 0;
+  const uint8_t scroll = g_wtPrinterScroll;
   const wtl::Hit h = wtl::hitTest(s, id, count, scroll, x, y);
   switch (h.kind) {
     case wtl::HitKind::Tab:
@@ -2947,13 +2856,13 @@ static bool wtPrinterTouch(int16_t x, int16_t y, bool longPress) {
       return true;
     case wtl::HitKind::Segment:
       if (h.index == wtl::kCameraSegment) { wsOpenCamera(1); wsClick(); return true; }
-      if (g_printerMode != h.index) { g_printerMode = h.index; g_wtAmsScroll = 0; wsClick(); }
+      if (g_printerMode != h.index) { g_printerMode = h.index; g_wtPrinterScroll = 0; wsClick(); }
       return true;
     case wtl::HitKind::ScrollUp:
-      if (g_wtAmsScroll > 0) { g_wtAmsScroll = wtl::clampScroll(s, v, count, (int)g_wtAmsScroll - wsm::scrollStep(s)); wsClick(); }
+      if (g_wtPrinterScroll > 0) { g_wtPrinterScroll = wtl::clampScroll(s, v, count, (int)g_wtPrinterScroll - wsm::scrollStep(s)); wsClick(); }
       return true;
     case wtl::HitKind::ScrollDown:
-      if (g_wtAmsScroll < wtl::maxScroll(s, v, count)) { g_wtAmsScroll = wtl::clampScroll(s, v, count, (int)g_wtAmsScroll + wsm::scrollStep(s)); wsClick(); }
+      if (g_wtPrinterScroll < wtl::maxScroll(s, v, count)) { g_wtPrinterScroll = wtl::clampScroll(s, v, count, (int)g_wtPrinterScroll + wsm::scrollStep(s)); wsClick(); }
       return true;
     case wtl::HitKind::Item:
       break;
@@ -3209,14 +3118,15 @@ static bool hubPressRect(int16_t x, int16_t y, wsm::Rect& out) {
   if (cur == SCREEN_HUB_HOME) {
     if (wtCalmShown()) return false;
     if (wtHomeIdle(w)) id = wtl::View::HomeIdle;  // fixed, no runtime rows
+    else scroll = g_wtHomeScroll;
   } else if (cur == SCREEN_HUB_PRINTER) {
     id = wtPrinterView();
     if (id == wtl::View::PrinterAms) {
       WtTray trays[wtl::kMaxAmsRows];
       const uint8_t n = wtAmsRows(w, trays, wtl::kMaxAmsRows);
       count = n ? n : 1;
-      scroll = g_wtAmsScroll;
     }
+    scroll = g_wtPrinterScroll;
   } else if (cur == SCREEN_HUB_WORKSHOP) {
     if (g_wtAiOverlay == 2) return false;  // the picture: no targets, a tap anywhere closes it
     if (g_wtAiOverlay == 5) return wtJudgePressRect(s, x, y, out);  // 26 Oct 2026: Judge it
