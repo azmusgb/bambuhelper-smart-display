@@ -93,8 +93,11 @@ def validate_rows(hub: str) -> None:
     forbid(body, "v.enabled ? v.valueColor : OS12V_AMBER", "disabled reasons in amber")
     need(body, "on ? OS12V_ACCENT : OS12V_MUTED", "an off switch keeps a visible track")
     kit_body = block(hub, "static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,")  # More's 48 px rows: the kit's Switch draws its own track
-    if len(re.findall(r"wsDrawRowValue\([^;]*wsValueFont\(", kit_body, re.S)) < 4:
-        raise ValidationError("every row value slot of the kit's row must pick its font with wsValueFont")
+    # The kit row never shrinks a value: wkit::rowValue is the row value size (Fs4), cut at a word (row_kit.hpp, host-tested).
+    if kit_body.count("wkit::rowValue(") < 5 or "wkit::rowStepper(" not in kit_body:
+        raise ValidationError("every value slot of the kit's row must go through wkit::rowValue / rowStepper")
+    forbid(kit_body, "wsValueFont(", "a kit row value that can shrink")
+    forbid(kit_body, "FONT_SMALL, MR_DATUM", "a row value fixed at 10 px")
     need(kit_body, "const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_MUTED;", "disabled reasons muted, not amber (kit row)")
     need(block(hub, "static void wsDrawButton(const wsm::Rect& r, const char* label, bool enabled, bool primary, uint16_t rowBg)"),
          "wsValueFont(label, r.w - 12)", "14 px button labels")

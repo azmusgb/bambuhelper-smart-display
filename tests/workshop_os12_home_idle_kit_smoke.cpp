@@ -19,6 +19,7 @@
 #include "../firmware/platform/localai/workshop_localai_feed_core.hpp"
 #include "../firmware/platform/ui/home_idle_kit.hpp"
 #include "../firmware/platform/ui/lab_judge.hpp"
+#include "../firmware/platform/ui/row_kit.hpp"
 #include "../firmware/platform/ui/more_layout.hpp"
 #include "../firmware/platform/ui/tabs_layout.hpp"
 
@@ -400,6 +401,55 @@ void labJudgeKit(const char* dir) {
           "a chip's padding is the Button's", w);
 }
 
+// More's row text and Stepper (wkit::rowValue, rowStepper): a setting's value is the row value size and is never shrunk, a
+// value that does not fit is cut at a word, and a stepper's value never touches a key.
+void rowParts(const char* dir) {
+  namespace more = workshop::ui::more;
+  const more::Screen s = more::makeScreen(480, 320);
+  const more::Rect row = more::slotRect(s, 1);
+  const more::Rect minus = more::partDrawRect(s, row, more::RowKind::Stepper, more::Part::Minus);
+  const more::Rect plus = more::partDrawRect(s, row, more::RowKind::Stepper, more::Part::Plus);
+  const int pad = (::ui::kTarget - more::kKitKey) / 2;
+  const ::ui::Rect cells{minus.x - pad, row.y, plus.right() + pad - (minus.x - pad), row.h};
+  const char* values[] = {"25%", "Screen off", "70%", "12%", "Immediately", "Show clock", "Stay on"};
+  for (const char* v : values) {
+    MemCanvas c(dir);
+    if (!c.ok) { check(false, "the Archivo VLW files load"); return; }
+    wkit::rowStepper(c, cells, v, UI_COLOR_TEXT, UI_COLOR_SURFACE);
+    const TextOp* shown = nullptr;
+    int ops = 0;
+    for (const TextOp& op : c.texts) if (op.s == v) { shown = &op; ++ops; }
+    check(ops == 1 && shown, "a stepper shows its value once", v);
+    if (!shown) continue;
+    check(shown->font == wkit::kRowValueFont, "a stepper's value is the row value size, not the 26 or 34 px face", v);
+    check(shown->x >= minus.right() + ::ui::kGap && shown->x + shown->w <= plus.x - ::ui::kGap, "a stepper's value keeps 8 px from both keys", v);
+  }
+  // A value too long for its slot is cut at a word, in the same size.
+  const char* reasons[] = {"Set up in Local Portal", "Wait for the update to finish", "Turn on Network > Name on network", "Not available on this device"};
+  for (int w : {184, 140, 100}) {
+    for (const char* r : reasons) {
+      MemCanvas c(dir);
+      if (!c.ok) { check(false, "the Archivo VLW files load"); return; }
+      wkit::rowValue(c, ::ui::Rect{300 - w, row.y, w, row.h}, r, UI_COLOR_MUTED, UI_COLOR_SURFACE);
+      check(c.texts.size() == 1, "a row value draws once", r);
+      if (c.texts.empty()) continue;
+      const TextOp& op = c.texts[0];
+      check(op.font == wkit::kRowValueFont, "a row value is never shrunk below the row value size", r);
+      check(op.w <= w, "a row value stays inside its slot", r);
+      const bool whole = op.s == r;
+      const bool atWord = op.s.size() > 3 && op.s.compare(op.s.size() - 3, 3, "\xE2\x80\xA6") == 0;
+      check(whole || atWord, "a row value that does not fit is cut at a word and ends in an ellipsis", r);
+      if (!whole && atWord) {
+        const std::string head = op.s.substr(0, op.s.size() - 3);
+        check(std::string(r).compare(0, head.size(), head) == 0 && (std::string(r).size() == head.size() || r[head.size()] == ' '), "cut at a word", r);
+      }
+    }
+  }
+  check(wkit::repeatsSwitchWord("On") && wkit::repeatsSwitchWord("Off") && !wkit::repeatsSwitchWord("Online") && !wkit::repeatsSwitchWord("Stable only") &&
+            !wkit::repeatsSwitchWord("") && !wkit::repeatsSwitchWord(nullptr),
+        "only the switch's own words are not drawn twice");
+}
+
 void printerLines(const char* dir) {
   {  // healthy idle: the readings, whole, on the one line
     wkit::HomeIdleModel m = baseModel();
@@ -518,6 +568,7 @@ int main(int argc, char** argv) {
   printerLines(dir);
   printerStrip(dir);
   labJudgeKit(dir);
+  rowParts(dir);
   needTones(dir);
   headerHasNoButtons(dir);
 

@@ -228,7 +228,7 @@ static const RowSpec kTimeLocaleRows[] = {
 
 static const RowSpec kDisplayRows[] = {
   {RowId::Brightness, RowKind::Stepper, "Brightness", PageId::Root},
-  {RowId::StandbyBrightness, RowKind::Stepper, "Standby", PageId::Root},
+  {RowId::StandbyBrightness, RowKind::Choice, "Standby", PageId::Root},  // a named choice ("Screen off", 25 to 100 %): the Picker
   {RowId::ClockScheduleNav, RowKind::Nav, "Clock & schedule", PageId::ClockSchedule},
   {RowId::GaugesNav, RowKind::Nav, "Gauges", PageId::Gauges},
   {RowId::AfterPrint, RowKind::Choice, "After a print", PageId::Root},
