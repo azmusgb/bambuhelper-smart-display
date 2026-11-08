@@ -52,17 +52,17 @@ def replace_function(text: str, signature: str, replacement: str) -> str:
     return text[:start]+replacement.strip()+text[braced_end(text,start,signature):]
 
 PALETTE=r'''
-static constexpr uint16_t OS12V_BG       = 0x0841; // graphite
-static constexpr uint16_t OS12V_SURFACE  = 0x10A2; // raised graphite
-static constexpr uint16_t OS12V_SURFACE2 = 0x18E3; // selected/interactive
-static constexpr uint16_t OS12V_LINE     = 0x2945; // quiet separator
-static constexpr uint16_t OS12V_TEXT     = 0xF7BE; // warm white
-static constexpr uint16_t OS12V_MUTED    = 0x9D33; // cool gray
-static constexpr uint16_t OS12V_ACCENT   = 0xFBC0; // primary / selected orange
-static constexpr uint16_t OS12V_BLUE     = 0x061F; // information cyan
-static constexpr uint16_t OS12V_GREEN    = 0x36EA; // ready
-static constexpr uint16_t OS12V_AMBER    = 0xFDC0; // attention
-static constexpr uint16_t OS12V_RED      = 0xF3AA; // destructive/fault
+static constexpr uint16_t OS12V_BG       = UI_COLOR_BG; // graphite
+static constexpr uint16_t OS12V_SURFACE  = UI_COLOR_SURFACE; // raised graphite
+static constexpr uint16_t OS12V_SURFACE2 = UI_COLOR_SURFACE_2; // selected/interactive
+static constexpr uint16_t OS12V_LINE     = UI_COLOR_LINE; // quiet separator
+static constexpr uint16_t OS12V_TEXT     = UI_COLOR_TEXT; // warm white
+static constexpr uint16_t OS12V_MUTED    = UI_COLOR_MUTED; // cool gray
+static constexpr uint16_t OS12V_ACCENT   = UI_COLOR_ACCENT; // primary / selected orange
+static constexpr uint16_t OS12V_BLUE     = UI_COLOR_ACCENT_TEXT; // information cyan
+static constexpr uint16_t OS12V_GREEN    = UI_COLOR_OK; // ready
+static constexpr uint16_t OS12V_AMBER    = UI_COLOR_WARN; // attention
+static constexpr uint16_t OS12V_RED      = UI_COLOR_BAD; // destructive/fault
 static constexpr int16_t OS12V_RADIUS    = 12;
 static constexpr int16_t OS12V_INSET     = 12;
 '''
@@ -119,7 +119,7 @@ static void hubV1125AmsSlot(const HubRect& r,const AmsTray* tr,bool active,uint8
   char slot[8];snprintf(slot,sizeof(slot),"%u",(unsigned)(index+1));char remain[12];
   if(present&&tr->remain>=0)snprintf(remain,sizeof(remain),"%d%%",(int)tr->remain);else strlcpy(remain,"--",sizeof(remain));
   uiDrawFit(slot,r.x+12,r.y+10,28,FONT_BODY,TL_DATUM,active?OS12V_ACCENT:OS12V_MUTED,bg);uiDrawFit(remain,r.x+r.w-12,r.y+10,42,FONT_SMALL,TR_DATUM,present?OS12V_TEXT:OS12V_MUTED,bg);
-  uint16_t filament=present?tr->colorRgb565:OS12V_LINE;if(present&&filament==0)filament=0x1082;uiSpoolScaled(r.x+r.w/2,r.y+49,filament,active,present?tr->remain:-1,13);
+  uint16_t filament=present?tr->colorRgb565:OS12V_LINE;if(present&&filament==0)filament=OS12V_LINE;uiSpoolScaled(r.x+r.w/2,r.y+49,filament,active,present?tr->remain:-1,13);
   uiDrawFit(present&&tr->type[0]?tr->type:"Empty",r.x+r.w/2,r.y+74,r.w-18,FONT_BODY,TC_DATUM,present?OS12V_TEXT:OS12V_MUTED,bg);
 }
 '''

@@ -441,16 +441,16 @@ static void wtDrawTemps(const wsm::Screen& s, const wsm::Rect& area, const WtPri
       const bool heating = live && (want[i] > 1.0f && (want[i] - now[i]) >= 2.0f);
       uint16_t diodeCol = OS12V_MUTED;
       if (i == 0) {
-        diodeCol = heating ? OS12V_AMBER : (live && now[0] >= 50.0f ? 0xE2A5 : OS12V_MUTED);
+        diodeCol = heating ? OS12V_AMBER : (live && now[0] >= 50.0f ? UI_COLOR_WARN : OS12V_MUTED);
       } else if (i == 1) {
-        diodeCol = heating ? OS12V_AMBER : (live && now[1] >= 40.0f ? 0xFA60 : OS12V_MUTED);
+        diodeCol = heating ? OS12V_AMBER : (live && now[1] >= 40.0f ? UI_COLOR_BAD : OS12V_MUTED);
       } else {
         diodeCol = live ? OS12V_ACCENT : OS12V_MUTED;
       }
       const int16_t dx = c.x + 12;
       tft.drawCircle(dx, mid, 5, OS12V_LINE);
       tft.fillCircle(dx, mid, 3, diodeCol);
-      tft.fillCircle(dx - 1, mid - 1, 1, 0xFFFF);
+      tft.fillCircle(dx - 1, mid - 1, 1, UI_COLOR_TEXT);
       const uint16_t valCol = heating ? OS12V_AMBER : (live ? OS12V_TEXT : OS12V_MUTED);
       uiDrawFit(labels[i], c.x + 22, mid, 52, FONT_SMALL, ML_DATUM, OS12V_MUTED, OS12V_SURFACE);
       uiDrawFit(values[i], c.right() - 8, mid, c.w - 76, FONT_BODY, MR_DATUM, valCol, OS12V_SURFACE);
@@ -682,7 +682,7 @@ static void wtDrawBanner(const wsm::Screen& s) {
   if (!wtBannerShown()) return;
   const wsm::Rect r = wtl::bannerRect(s);
   const uint16_t tone = wtToneColor(g_wtBanner.tone);
-  tft.fillRoundRect(r.x + 2, r.y + 4, r.w, r.h, 14, 0x0000);  // a soft shadow
+  tft.fillRoundRect(r.x + 2, r.y + 4, r.w, r.h, 14, UI_COLOR_BG);  // a soft shadow
   tft.fillRoundRect(r.x, r.y, r.w, r.h, 14, OS12V_SURFACE2);
   tft.drawRoundRect(r.x, r.y, r.w, r.h, 14, tone);
   tft.fillRoundRect(r.x + 10, r.y + 12, 4, r.h - 24, 2, tone);
@@ -1478,7 +1478,7 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
         else if (units > 1) snprintf(r.label, sizeof(r.label), "AMS %u · Slot %u", (unsigned)(u + 1), (unsigned)(i + 1));
         else snprintf(r.label, sizeof(r.label), "Slot %u", (unsigned)(i + 1));
         r.present = tr.present;
-        r.color = tr.present ? (tr.colorRgb565 ? tr.colorRgb565 : (uint16_t)0x1082) : OS12V_LINE;
+        r.color = tr.present ? (tr.colorRgb565 ? tr.colorRgb565 : (uint16_t)UI_COLOR_LINE) : OS12V_LINE;
         r.inUse = a.activeTray == index;
         r.remain = tr.remain;
         r.grams = tr.remain >= 0 ? (int16_t)((int32_t)tr.remain * 10) : (int16_t)-1;
@@ -1493,7 +1493,7 @@ static uint8_t wtAmsRows(const WtPrint& w, WtTray* out, uint8_t max) {
     strlcpy(r.label, "External spool", sizeof(r.label));
     strlcpy(r.value, a.vtType[0] ? a.vtType : "Filament", sizeof(r.value));
     r.present = true;
-    r.color = a.vtColorRgb565 ? a.vtColorRgb565 : (uint16_t)0x1082;
+    r.color = a.vtColorRgb565 ? a.vtColorRgb565 : (uint16_t)UI_COLOR_LINE;
     r.inUse = a.activeTray == 254;
     r.remain = -1;
     r.grams = -1;
@@ -1593,7 +1593,7 @@ static void wtDrawTray(const wsm::Screen& s, const wsm::Rect& row, const WtTray&
       uint16_t fillCol = OS12V_ACCENT;
       if (pct <= 10) fillCol = OS12V_RED;
       else if (pct <= 25) fillCol = OS12V_AMBER;
-      else if (t.color != 0x0000 && t.color != 0x1082) fillCol = t.color;
+      else if (t.color != 0 && t.color != UI_COLOR_LINE) fillCol = t.color;
 
       int16_t fillW = (int16_t)(((barW - 4) * pct) / 100);
       if (fillW < 3 && pct > 0) fillW = 3;
@@ -1763,7 +1763,7 @@ static const char* wtPrinterDetail(const WtPrint& w, WsRowView& v) {
       strlcat(v.value, speed, sizeof(v.value));
     }
     if (st.speedLevel == 3) v.valueColor = OS12V_AMBER;
-    else if (st.speedLevel == 4) v.valueColor = 0xF81F;
+    else if (st.speedLevel == 4) v.valueColor = UI_COLOR_ACCENT_TEXT;
     else if (st.speedLevel == 1) v.valueColor = OS12V_MUTED;
     else v.valueColor = OS12V_TEXT;
     return "Layer";
@@ -1953,7 +1953,7 @@ static void wtDrawStopHold(const wsm::Rect& b, uint8_t segments) {
         sw,
         6,
         3,
-        i < segments ? OS12V_BG : 0x9000);
+        i < segments ? OS12V_BG : uiTint565(UI_COLOR_BAD, UI_COLOR_BG, 55));
   }
 }
 
