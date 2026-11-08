@@ -114,8 +114,7 @@ Automation may establish objective machine-observable behavior, but it must not 
 
 ## Repository map
 
-- `apply_smart_home_*.py` — inherited deterministic firmware evolution inputs.
-- `apply_workshop_os_*.py` — Workshop OS source evolution and product-finish layers.
+- `baseline/` — the pinned upstream BambuHelper's files as Workshop OS changed them (see `docs/UPSTREAM_SYNC.md`); the build lays it over the pinned upstream.
 - `apply_workshop_os12_*.py` — OS12 platform/control/security/update reconstruction layers.
 - `.bambuhelper-validation/` — verified patch payloads required by selected loaders.
 - `.github/workflows/validate.yml` — every change: repository, release, static-installer and tooling contracts.

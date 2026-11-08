@@ -13,13 +13,9 @@ echo "BUILD=$BUILD"
 echo "OS12_RELEASE_VERSION=$OS12_RELEASE_VERSION"
 echo "OS12_SOURCE_SHA=$OS12_SOURCE_SHA"
 
-# The tree after the legacy v8 to v11.28 layers is the checked-in baseline (baseline/, scripts/baseline.py) laid over the
-# pinned upstream. LEGACY_CHAIN=1 rebuilds it with the layers instead (CI compares the two).
-if [[ "${LEGACY_CHAIN:-0}" == "1" ]]; then
-  BUILD="$BUILD" bash "$ROOT/scripts/run_ui13_local.sh"
-else
-  python3 "$ROOT/scripts/baseline.py" apply --build "$BUILD"
-fi
+# The tree the newer layers apply to is the checked-in baseline (baseline/, scripts/baseline.py) laid over the pinned
+# upstream; see docs/UPSTREAM_SYNC.md.
+python3 "$ROOT/scripts/baseline.py" apply --build "$BUILD"
 python3 "$ROOT/apply_workshop_os12_platform_bridge.py" --repo "$BUILD" --source-root "$ROOT" --apply
 python3 "$ROOT/scripts/validate_os12_platform_bridge.py"
 

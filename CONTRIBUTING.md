@@ -11,7 +11,7 @@ Workshop OS controls real hardware. Contributions are welcome, but the bar for a
 
 ## Repository boundaries
 
-The incremental `apply_smart_home_*.py` files, selected assets and `.bambuhelper-validation/` payloads are deterministic source inputs. Do not remove them merely because they look historical.
+The `baseline/` tree (the pinned upstream's changes), the `apply_workshop_os12_*.py` layers, selected assets and `.bambuhelper-validation/` payloads are deterministic source inputs. Do not remove them merely because they look historical.
 
 Do not commit:
 

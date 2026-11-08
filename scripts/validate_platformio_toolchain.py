@@ -30,7 +30,7 @@ def main() -> int:
     ensure = read(root / "scripts/ensure-platformio.sh")
     bootstrap = read(root / "scripts/bootstrap_ws350_os12_usb_macos.sh")
     exact_ci_installer = read(root / "scripts/flash_os12_ci_candidate_macos.sh")
-    ui13_runner = read(root / "scripts/run_ui13_local.sh")
+    platform_runner = read(root / "scripts/run_os12_platform_local.sh")
     firmware_workflow = read(root / ".github/workflows/firmware.yml")
 
     for needle in (
@@ -84,13 +84,13 @@ def main() -> int:
         '"$PIO_BIN" run -e ws_lcd_350',
         '"$PIO_BIN" run -e jc3248w535',
     ):
-        require(ui13_runner, needle, "UI13 build toolchain")
+        require(platform_runner, needle, "device build toolchain")
     for needle in (
         "pip install --user --upgrade platformio",
         '(cd "$BUILD" && pio run -e ws_lcd_350)',
         '(cd "$BUILD" && pio run -e jc3248w535)',
     ):
-        forbid(ui13_runner, needle, "parallel/global PlatformIO path")
+        forbid(platform_runner, needle, "parallel/global PlatformIO path")
 
     label = "Firmware workflow"
     require(firmware_workflow, "actions/setup-python@v6", label)
