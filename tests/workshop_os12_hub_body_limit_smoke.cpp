@@ -116,6 +116,30 @@ void stallsAndTruncation() {
   }
 }
 
+// A stream that keeps saying bytes are available but never gives one (read() returns 0, or less): the deadline still ends it.
+struct Liar {
+  int answer;
+  uint32_t t = 0;
+  std::size_t reads = 0;
+  explicit Liar(int a) : answer(a) {}
+  int available() { return 10; }
+  int read(uint8_t*, std::size_t) { ++reads; return answer; }
+  bool connected() { return true; }
+  uint32_t nowMs() { return t; }
+  void idle() { ++t; }
+};
+
+void availableButReadsNothing() {
+  std::vector<char> buf(kLimit + 1);
+  for (int answer : {0, -1}) {
+    Liar f(answer);
+    ReadResult r = readBounded(f, 50, kLimit, 4500, buf.data());
+    assert(r.status == ReadStatus::Timeout);
+    assert(f.t > 4500 && f.t <= 4502);  // it stopped at the deadline, not long after
+    assert(r.length == 0);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -124,5 +148,6 @@ int main() {
   overDeclared();
   overLimit();
   stallsAndTruncation();
+  availableButReadsNothing();
   return 0;
 }

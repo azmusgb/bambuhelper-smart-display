@@ -40,12 +40,18 @@ ReadResult readBounded(Source& s, long declared, unsigned long limit, uint32_t d
   std::size_t total = 0;
   const uint32_t start = s.nowMs();
   for (;;) {
+    // The deadline is checked on every pass, before anything else, so no stream behaviour can outlast it.
+    if (static_cast<uint32_t>(s.nowMs() - start) > deadlineMs) return ReadResult{ReadStatus::Timeout, total};
     const int avail = s.available();
     if (avail > 0) {
       const std::size_t room = cap - total;
       const std::size_t want = static_cast<std::size_t>(avail) < room ? static_cast<std::size_t>(avail) : room;
       const int got = want ? s.read(reinterpret_cast<uint8_t*>(buf) + total, want) : 0;
-      if (got > 0) total += static_cast<std::size_t>(got);
+      if (got <= 0) {  // it says bytes are there but gives none: wait a tick and let the deadline decide
+        s.idle();
+        continue;
+      }
+      total += static_cast<std::size_t>(got);
       if (total > limit) return ReadResult{ReadStatus::TooLarge, total};
       if (declared >= 0 && total > static_cast<std::size_t>(declared)) return ReadResult{ReadStatus::OverDeclared, total};
       continue;
@@ -55,7 +61,6 @@ ReadResult readBounded(Source& s, long declared, unsigned long limit, uint32_t d
       return ReadResult{ReadStatus::Ok, total};
     }
     if (!s.connected()) return ReadResult{ReadStatus::Truncated, total};
-    if (static_cast<uint32_t>(s.nowMs() - start) > deadlineMs) return ReadResult{ReadStatus::Timeout, total};
     s.idle();
   }
 }
