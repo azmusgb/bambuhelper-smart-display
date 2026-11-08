@@ -77,7 +77,13 @@ inline Screen makeScreen(int w, int h) {
 
 static const int16_t kHeaderH = 44;
 static const int16_t kTabH = 54;      // same as hubNavH()
-static const int16_t kRowH = 44;
+// More's rows are the display kit's: a row is 48 px (the kit's target; the whole row is what a tap hits), 4 px apart, so
+// four fit between the header and the tab bar. The Home, Printer and Local AI tabs keep the 44 px slot (kTabRowH) until
+// they move over too.
+static const int16_t kRowH = 48;
+static const int16_t kRowGap = 4;
+static const int16_t kRowPitch = kRowH + kRowGap;
+static const int16_t kTabRowH = 44;
 static const int16_t kRowTop = 45;
 static const int16_t kMarginX = 8;
 static const int16_t kMinTouch = 44;
@@ -320,8 +326,8 @@ static const RowSpec kVideoRows[] = {
 };
 
 static const RowSpec kLocalPortalRows[] = {
+  {RowId::PortalCode, RowKind::Code, "Access code", PageId::Root},  // first: the page scrolls, and only here is the code at a fixed place
   {RowId::PortalAddress, RowKind::Info, "Address", PageId::Root},
-  {RowId::PortalCode, RowKind::Code, "Access code", PageId::Root},
   {RowId::PortalSignIn, RowKind::Info, "Require access code", PageId::Root},
   {RowId::PortalName, RowKind::Info, "Name", PageId::Root},
   {RowId::PortalCodeKey, RowKind::Info, "Local AI code access", PageId::Root},
@@ -429,7 +435,13 @@ inline Rect chipRect(Screen s) { return makeRect(s.w - 116, 9, 108, 26); }
 // ---------------------------------------------------------------------------
 
 inline uint8_t visibleRows(Screen s) {
-  const int n = (s.h - kTabH - kRowTop) / kRowH;
+  const int n = (s.h - kTabH - kRowTop + kRowGap) / kRowPitch;
+  return static_cast<uint8_t>(n > 0 ? n : 0);
+}
+
+// The tabs' 44 px slots (Home, Printer, Local AI).
+inline uint8_t tabVisibleRows(Screen s) {
+  const int n = (s.h - kTabH - kRowTop) / kTabRowH;
   return static_cast<uint8_t>(n > 0 ? n : 0);
 }
 
@@ -481,7 +493,11 @@ inline uint8_t scrollToRow(Screen s, PageId id, RowId first) {
 }
 
 inline Rect slotRect(Screen s, uint8_t slot) {
-  return makeRect(kMarginX, kRowTop + slot * kRowH, s.w - 2 * kMarginX, kRowH);
+  return makeRect(kMarginX, kRowTop + slot * kRowPitch, s.w - 2 * kMarginX, kRowH);
+}
+
+inline Rect tabSlotRect(Screen s, uint8_t slot) {
+  return makeRect(kMarginX, kRowTop + slot * kTabRowH, s.w - 2 * kMarginX, kTabRowH);
 }
 
 // Rectangle of row `row` when the list is scrolled by `scroll`; empty if the
@@ -513,25 +529,47 @@ inline int stepperValueWidth(Screen s) { return s.landscape() ? 150 : 76; }
 inline int actionButtonWidth(Screen s) { return s.landscape() ? 112 : 84; }
 inline int action2ButtonWidth(Screen s) { return s.landscape() ? 96 : 70; }
 
+// A row is either the kit's 48 px row or a tab's 44 px slot (the older drawing, until the tabs move over).
+inline bool kitRow(const Rect& row) { return row.h >= kRowH; }
+
+static const int16_t kKitKey = 40;      // ui::Stepper::kKey: a key is drawn 40 px square in its 48 px cell
+static const int16_t kKitTrackW = 48;   // ui::Switch::kTrackW, kTrackH
+static const int16_t kKitTrackH = 28;
+static const int16_t kKitSwitchWord = 56;  // the word ui::Switch draws left of its track, with the gap either side
+
 // Drawn button for a row part (the thing the user sees).
 inline Rect partDrawRect(Screen s, const Rect& row, RowKind kind, Part part) {
+  const bool kit = kitRow(row);
   switch (kind) {
     case RowKind::Stepper: {
+      if (kit) {
+        const int cell = 48;
+        const int plusCell = row.right() - 4 - cell;
+        const int minusCell = plusCell - stepperValueWidth(s) - cell;
+        const int pad = (cell - kKitKey) / 2, y = row.y + (row.h - kKitKey) / 2;
+        if (part == Part::Plus) return makeRect(plusCell + pad, y, kKitKey, kKitKey);
+        if (part == Part::Minus) return makeRect(minusCell + pad, y, kKitKey, kKitKey);
+        return makeRect(0, 0, 0, 0);
+      }
       const Rect plus = makeRect(row.right() - 6 - 44, row.y + 4, 44, 36);
       if (part == Part::Plus) return plus;
       if (part == Part::Minus) return makeRect(plus.x - stepperValueWidth(s) - 44, row.y + 4, 44, 36);
       return makeRect(0, 0, 0, 0);
     }
     case RowKind::Toggle:
-      return part == Part::Whole ? makeRect(row.right() - 12 - 52, row.y + 7, 52, 30) : makeRect(0, 0, 0, 0);
+      if (part != Part::Whole) return makeRect(0, 0, 0, 0);
+      return kit ? makeRect(row.right() - 12 - kKitTrackW, row.y + (row.h - kKitTrackH) / 2, kKitTrackW, kKitTrackH)
+                 : makeRect(row.right() - 12 - 52, row.y + 7, 52, 30);
     case RowKind::Action:
-      return part == Part::Whole ? makeRect(row.right() - 8 - actionButtonWidth(s), row.y + 5, actionButtonWidth(s), 34)
-                                 : makeRect(0, 0, 0, 0);
+      if (part != Part::Whole) return makeRect(0, 0, 0, 0);
+      return kit ? makeRect(row.right() - 8 - actionButtonWidth(s), row.y, actionButtonWidth(s), kRowH)
+                 : makeRect(row.right() - 8 - actionButtonWidth(s), row.y + 5, actionButtonWidth(s), 34);
     case RowKind::Action2: {
       const int bw = action2ButtonWidth(s);
-      const Rect b = makeRect(row.right() - 8 - bw, row.y + 5, bw, 34);
+      const int y = kit ? row.y : row.y + 5, h = kit ? kRowH : 34;
+      const Rect b = makeRect(row.right() - 8 - bw, y, bw, h);
       if (part == Part::ActionB) return b;
-      if (part == Part::ActionA) return makeRect(b.x - 8 - bw, row.y + 5, bw, 34);
+      if (part == Part::ActionA) return makeRect(b.x - 8 - bw, y, bw, h);
       return makeRect(0, 0, 0, 0);
     }
     default:
@@ -584,7 +622,8 @@ inline Rect valueRect(Screen s, const Rect& row, RowKind kind) {
   const int labelShare = s.landscape() ? 200 : 116;
   int right = row.right() - 12;
   if (kind == RowKind::Nav || kind == RowKind::Choice) right = row.right() - 28;  // room for the chevron
-  if (kind == RowKind::Toggle) right = partDrawRect(s, row, kind, Part::Whole).x - 8;
+  // The kit's Switch says On or Off (Fs3, about 30 px) left of its track; the row's own value text stays left of that word.
+  if (kind == RowKind::Toggle) right = partDrawRect(s, row, kind, Part::Whole).x - (kitRow(row) ? kKitSwitchWord : 8);
   if (kind == RowKind::Action) right = partDrawRect(s, row, kind, Part::Whole).x - 8;
   if (kind == RowKind::Action2) right = partDrawRect(s, row, kind, Part::ActionA).x - 8;
   const int left = row.x + 12 + labelShare;

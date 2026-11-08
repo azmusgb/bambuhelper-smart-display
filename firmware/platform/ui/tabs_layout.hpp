@@ -255,7 +255,7 @@ inline uint8_t itemSlots(Screen s, const ViewSpec& v, const ItemSpec& it) {
 }
 
 inline uint8_t listCapacity(Screen s, const ViewSpec& v) {
-  const int n = more::visibleRows(s) - firstSlot(v);
+  const int n = more::tabVisibleRows(s) - firstSlot(v);
   return static_cast<uint8_t>(n > 0 ? n : 0);
 }
 
@@ -313,11 +313,11 @@ inline int16_t segmentBottom() { return static_cast<int16_t>(more::kRowTop + kSe
 
 // Height of one slot of a view; only a view with the strip is ever squeezed below 44 px.
 inline int itemPitch(Screen s, const ViewSpec& v) {
-  if (!v.segments) return more::kRowH;
-  const int rows = more::visibleRows(s) - 1;  // the slots under the strip
-  if (rows <= 0) return more::kRowH;
+  if (!v.segments) return more::kTabRowH;
+  const int rows = more::tabVisibleRows(s) - 1;  // the slots under the strip
+  if (rows <= 0) return more::kTabRowH;
   const int fit = (s.h - more::kTabH - segmentBottom()) / rows;
-  return fit < more::kRowH ? fit : more::kRowH;
+  return fit < more::kTabRowH ? fit : more::kTabRowH;
 }
 
 // Rectangle of item `i`, or empty when it is scrolled out of view or does
@@ -331,13 +331,13 @@ inline Rect itemRect(Screen s, const ViewSpec& v, uint8_t runtimeCount, uint8_t 
   int slot = firstSlot(v);
   for (uint8_t j = scroll; j < i; ++j) slot += itemSlots(s, v, item(v, j, runtimeCount));
   const int span = itemSlots(s, v, item(v, i, runtimeCount));
-  if (slot + span > more::visibleRows(s)) return makeRect(0, 0, 0, 0);
-  const Rect top = more::slotRect(s, static_cast<uint8_t>(slot));
+  if (slot + span > more::tabVisibleRows(s)) return makeRect(0, 0, 0, 0);
+  const Rect top = more::tabSlotRect(s, static_cast<uint8_t>(slot));
   if (v.segments) {
     const int pitch = itemPitch(s, v);
     return makeRect(top.x, segmentBottom() + (slot - 1) * pitch, top.w, span * pitch);
   }
-  return makeRect(top.x, top.y, top.w, span * more::kRowH);
+  return makeRect(top.x, top.y, top.w, span * more::kTabRowH);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +352,7 @@ static const uint8_t kCameraSegment = 3;
 
 // The strip is ui::Tabs::tabRect's own arithmetic (equal shares of the width, no gaps), so what is drawn is what is hit.
 inline Rect segmentBand(Screen s) {
-  const Rect slot = more::slotRect(s, 0);
+  const Rect slot = more::tabSlotRect(s, 0);
   return makeRect(slot.x, slot.y, slot.w, kSegmentH);
 }
 
@@ -400,7 +400,7 @@ inline Rect tempCellRect(Screen s, const Rect& area, uint8_t i) {
     const int x = area.x + i * cell;
     return makeRect(x, area.y, i == 2 ? area.right() - x : cell, area.h);
   }
-  return makeRect(area.x, area.y + i * more::kRowH, area.w, more::kRowH);
+  return makeRect(area.x, area.y + i * more::kTabRowH, area.w, more::kTabRowH);
 }
 
 // Primary button: drawn across the row; the whole row is the target.
@@ -743,14 +743,14 @@ inline CalmLayout calmLayout(Screen s, bool withAi = false) {
   CalmLayout c;
   c.hint = more::tabBand(s);
   const int gap = withAi ? kCalmGapWithAi : kCalmGap;
-  const int total = kCalmClockH + kCalmDateH + gap + more::kRowH + (withAi ? kCalmAiGap + more::kRowH : 0);
+  const int total = kCalmClockH + kCalmDateH + gap + more::kTabRowH + (withAi ? kCalmAiGap + more::kTabRowH : 0);
   const int top = (c.hint.y - total) / 2;
   const int margin = 16;
   c.clock = makeRect(margin, top, s.w - 2 * margin, kCalmClockH);
   c.date = makeRect(margin, top + kCalmClockH, s.w - 2 * margin, kCalmDateH);
   const int statusW = s.landscape() ? 384 : s.w - 2 * margin;
-  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + gap, statusW, more::kRowH);
-  c.ai = withAi ? makeRect(c.status.x, c.status.bottom() + kCalmAiGap, statusW, more::kRowH) : makeRect(0, 0, 0, 0);
+  c.status = makeRect((s.w - statusW) / 2, c.date.bottom() + gap, statusW, more::kTabRowH);
+  c.ai = withAi ? makeRect(c.status.x, c.status.bottom() + kCalmAiGap, statusW, more::kTabRowH) : makeRect(0, 0, 0, 0);
   return c;
 }
 

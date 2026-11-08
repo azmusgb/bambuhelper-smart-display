@@ -85,7 +85,7 @@ void checkChrome(Screen s, const char* o) {
   check(!intersects(up, down) && !intersects(back, up), "header controls do not overlap", o);
   check(titleRect(s, false, true).w >= 96, "title has room next to the scroll buttons", o, titleRect(s, false, true).w);
   check(!intersects(header, band), "header and tab bar are apart", o);
-  check(visibleRows(s) >= 5, "at least five rows fit", o, visibleRows(s));
+  check(visibleRows(s) >= 4, "at least four rows fit (48 px rows)", o, visibleRows(s));
   check(scrollStep(s) >= 1, "scroll step positive", o);
 
   const Rect card = dialogCard(s), cancel = dialogCancelRect(s), confirm = dialogConfirmRect(s);
@@ -138,14 +138,17 @@ void checkTree(const char* o) {
   int codeRows = 0;
   for (uint8_t r = 0; r < portal.rowCount; ++r) if (portal.rows[r].kind == RowKind::Code) ++codeRows;
   check(codeRows == 1, "Local Portal shows the access code", o, codeRows);
-  // scripts/capture-ws350-views.zsh redacts (8, 89)-(472, 133) on catalog v3:
-  // the access-code row must be exactly there in 480x320 and never scroll.
+  // scripts/capture-ws350-views.zsh redacts (8, 45)-(472, 93) on catalog v3:
+  // the access-code row is the first row, exactly there in 480x320 at scroll 0, and scrolled out of view otherwise.
   const Screen land = makeScreen(480, 320);
-  check(maxScroll(land, PageId::LocalPortal) == 0, "Local Portal does not scroll", o);
+  check(maxScroll(land, PageId::LocalPortal) > 0, "Local Portal scrolls (five 48 px rows)", o);
+  for (uint8_t sc = 1; sc <= maxScroll(land, PageId::LocalPortal); ++sc)
+    for (uint8_t r = 0; r < portal.rowCount; ++r)
+      if (portal.rows[r].kind == RowKind::Code) check(rowRect(land, PageId::LocalPortal, sc, r).empty(), "the access code is off screen once scrolled", o, sc);
   for (uint8_t r = 0; r < portal.rowCount; ++r) {
     if (portal.rows[r].kind != RowKind::Code) continue;
     const Rect code = rowRect(land, PageId::LocalPortal, 0, r);
-    check(code.x == 8 && code.y == 89 && code.right() == 472 && code.bottom() == 133,
+    check(code.x == 8 && code.y == 45 && code.right() == 472 && code.bottom() == 93,
           "access-code row matches the capture redaction", o, code.y, code.bottom());
   }
 }
@@ -155,7 +158,7 @@ void checkRow(Screen s, PageId id, uint8_t scroll, uint8_t r, const Rect& row, c
   const RowSpec& spec = p.rows[r];
   char where[96];
   snprintf(where, sizeof(where), "%s / %s / %s", o, p.title, spec.label);
-  check(row.h >= kMinTouch, "row at least 44 tall", where, row.h);
+  check(row.h == kRowH && kRowH >= 48, "a row is the kit's 48 px", where, row.h);
   check(inside(row, contentBand(s)), "row inside the content area", where, row.y, row.bottom());
   check(!intersects(row, tabBand(s)), "row clear of the tab bar", where);
   check(!intersects(row, headerBand(s)), "row clear of the header", where);

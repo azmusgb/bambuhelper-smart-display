@@ -86,7 +86,7 @@ def main() -> int:
     # More/System retains its independent canonical interaction geometry.
     required_more_contract = {
         "static const int16_t kHeaderH = 44;": "44 px More header",
-        "static const int16_t kRowH = 44;": "44 px More rows",
+        "static const int16_t kRowH = 48;": "48 px More rows (the kit's)",
         "static const int16_t kMinTouch = 44;": "44 px minimum More touch target",
         "inline Rect rowSurface(": "canonical More row surface",
         "inline bool rowInteractive(": "More row interactivity predicate",

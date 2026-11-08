@@ -1893,8 +1893,8 @@ static void wsDrawMeter(const wsm::Rect& slot, int16_t mid, uint8_t level, uint1
 // looks like a button. A disabled switch is an empty outline (no knob), a
 // disabled stepper hides its "-" and "+", and a disabled button is only its
 // muted label; the reason stays in the value slot.
-static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
-                          const wsm::Rect& row) {
+static void wsDrawRowBodyLegacy(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                                const wsm::Rect& row) {
   const wsm::Rect surface = wsm::rowSurface(row);
   const bool raised = wsm::rowRaised(kind, v.enabled);
   const uint16_t bg = raised ? OS12V_SURFACE : OS12V_BG;
@@ -1990,6 +1990,107 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
       break;
     }
   }
+}
+
+// The kit's row (More pages): 48 px, the whole row is the target. The kit's Switch, Stepper and Button draw the controls
+// inside it (the Switch's track and knob and the Stepper's keys smaller than the row, so the row is what a tap hits).
+// The label, the row's own value text, the chevron and the meter keep their older drawing until the text moves over.
+static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                             const wsm::Rect& row) {
+  const bool buttons = kind == wsm::RowKind::Action || kind == wsm::RowKind::Action2;
+  const wsm::Rect surface = wsm::rowSurface(row);
+  const bool raised = wsm::rowRaised(kind, v.enabled) && !buttons;  // a button is its own 48 px target: no card behind it
+  const uint16_t bg = raised ? OS12V_SURFACE : OS12V_BG;
+  if (raised) {
+    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  } else {
+    tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
+    tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
+  }
+  const int16_t mid = row.y + row.h / 2;
+  const wsm::Rect label = wsm::labelRect(s, row, kind);
+  const wsm::Rect valueSlot = wsm::valueRect(s, row, kind);
+  const char* value = v.enabled ? v.value : (v.reason ? v.reason : v.value);
+  const bool infoOnly = kind == wsm::RowKind::Info && !value[0];
+  int16_t labelW = label.w;
+  if (value[0] && kind != wsm::RowKind::Stepper && kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
+    labelW = valueSlot.x - 8 - label.x;
+  uiDrawFit(labelText, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
+            (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, bg);
+  const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_MUTED;
+
+  switch (kind) {
+    case wsm::RowKind::Info:
+    case wsm::RowKind::Nav:
+    case wsm::RowKind::Choice:
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
+      if (kind == wsm::RowKind::Nav || kind == wsm::RowKind::Choice) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
+      return;
+    case wsm::RowKind::Code:
+      wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w,
+                     strlen(value) <= 13 ? wsFitFont(value, valueSlot.w, FONT_LARGE, FONT_BODY) : FONT_SMALL,
+                     MR_DATUM, valueColor, bg);
+      return;
+    case wsm::RowKind::Toggle:
+    case wsm::RowKind::Action:
+    case wsm::RowKind::Action2:
+      if (kind == wsm::RowKind::Action && v.meter >= 0 && v.enabled) {  // the live level bar, the words left of it
+        wsDrawMeter(valueSlot, mid, (uint8_t)v.meter, bg);
+        const int16_t textR = valueSlot.right() - (valueSlot.w < 96 ? valueSlot.w : 96) - 6;
+        wsDrawRowValue(value, textR, mid, textR - valueSlot.x, wsValueFont(value, textR - valueSlot.x), MR_DATUM, valueColor, bg);
+      } else {
+        wsDrawRowValue(value, valueSlot.right(), mid, valueSlot.w, wsValueFont(value, valueSlot.w), MR_DATUM, valueColor, bg);
+      }
+      break;
+    case wsm::RowKind::Stepper:
+      if (!v.enabled) {
+        const int16_t right = (int16_t)(row.right() - 12), w = (int16_t)(right - wsm::partDrawRect(s, row, kind, wsm::Part::Minus).x);
+        wsDrawRowValue(value, right, mid, w, wsValueFont(value, w), MR_DATUM, valueColor, bg);
+        return;
+      }
+      break;
+  }
+  // The kit's parts, once the older text has let go of the fonts.
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wsKitFontsReleased);
+  const ::ui::Rect rr{row.x, row.y, row.w, row.h};
+  switch (kind) {
+    case wsm::RowKind::Toggle:
+      if (v.enabled) {
+        const wsm::Rect track = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
+        ::ui::Switch::draw(canvas, ::ui::Rect{track.right() + 12 - 120, row.y, 120, row.h}, "",
+                           v.on ? ::ui::SwitchState::On : ::ui::SwitchState::Off, bg);
+      }
+      break;
+    case wsm::RowKind::Stepper: {
+      const wsm::Rect minus = wsm::partDrawRect(s, row, kind, wsm::Part::Minus);
+      const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
+      const int pad = (48 - wsm::kKitKey) / 2;  // a key is drawn inside its 48 px cell
+      ::ui::Stepper::draw(canvas, ::ui::Rect{minus.x - pad, row.y, plus.right() + pad - (minus.x - pad), row.h},
+                          v.value[0] ? v.value : nullptr, nullptr, true, true, bg);
+      break;
+    }
+    case wsm::RowKind::Action:
+      ::ui::Button::draw(canvas, ::ui::Rect{wsm::partDrawRect(s, row, kind, wsm::Part::Whole).x, rr.y,
+                                            wsm::partDrawRect(s, row, kind, wsm::Part::Whole).w, wsm::kRowH},
+                         v.button ? v.button : "Open", ::ui::ButtonStyle::Plain, v.enabled);
+      break;
+    case wsm::RowKind::Action2: {
+      const wsm::Rect a = wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), b = wsm::partDrawRect(s, row, kind, wsm::Part::ActionB);
+      ::ui::Button::draw(canvas, ::ui::Rect{a.x, a.y, a.w, a.h}, v.button ? v.button : "", ::ui::ButtonStyle::Plain, v.enabled);
+      ::ui::Button::draw(canvas, ::ui::Rect{b.x, b.y, b.w, b.h}, v.buttonB ? v.buttonB : "", ::ui::ButtonStyle::Plain, v.enabledB);
+      break;
+    }
+    default: break;
+  }
+  canvas.release();  // the older draws select their own fonts
+}
+
+// One row of any page: the kit's 48 px row, or (until the tabs move over) a tab's 44 px slot in the older drawing.
+static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                          const wsm::Rect& row) {
+  if (wsm::kitRow(row)) wsDrawRowBodyKit(s, kind, labelText, v, row);
+  else wsDrawRowBodyLegacy(s, kind, labelText, v, row);
 }
 
 // Premium v2 More/System semantic row hierarchy.

@@ -2704,7 +2704,7 @@ static void wtDrawWorkshop(bool full) {
     wtDrawWorkshopToolRow(s, it, row, r);
   }
   if (scrollButtons) {
-    const int16_t top = wsm::slotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kRowH - 8);
+    const int16_t top = wsm::tabSlotRect(s, 0).y + 4, h = (int16_t)(wtl::listCapacity(s, v) * wsm::kTabRowH - 8);
     const int16_t thumb = (int16_t)(h * wtl::listCapacity(s, v) / items);
     tft.fillRect(s.w - 4, top, 2, h, OS12V_SURFACE);
     tft.fillRect(s.w - 4, (int16_t)(top + (h - thumb) * g_wtWorkshopScroll / maxS), 2, thumb, OS12V_MUTED);
