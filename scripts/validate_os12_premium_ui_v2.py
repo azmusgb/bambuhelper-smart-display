@@ -178,8 +178,8 @@ def main() -> int:
     # geometry, hold guard and state gating remain canonical.
     need(
         pages,
-        "Premium v2 Printer Control primary action.",
-        "Printer Control primary hierarchy",
+        "::ui::Button::draw(canvas, ::ui::Rect{b.x, b.y, b.w, b.h}, enabled ? c.pauseLabel : c.pauseReason,",
+        "Printer Control primary hierarchy (the kit's primary Button)",
     )
     need(
         pages,
