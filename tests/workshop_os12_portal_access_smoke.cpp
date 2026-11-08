@@ -153,18 +153,41 @@ void captiveOnboardingStaysMinimal() {
 }
 
 void recoverySafeModeStaysIndependent() {
-    const char* const rescue[] = {"/recovery", "/recovery/status", "/recovery/touch", "/recovery/rollback",
-                                  "/ota/upload", "/reset"};
-    for (const char* uri : rescue) {
+    // The recovery page and its status stay readable without a code: they are read-only, and they are where a person
+    // at a broken device starts.
+    const char* const readable[] = {"/recovery", "/recovery/status"};
+    for (const char* uri : readable) {
         PortalRequestFacts r = lan(uri, false);
         r.apMode = true;
         r.recoverySafeMode = true;
         assert(decidePortalAccess(r) == PortalAccess::Allow);
-        r.mutating = true;
+    }
+
+    // Every recovery mutation, the firmware upload and the factory reset need the sign-in code's session, even in Safe
+    // Mode on the AP (the person at the device reads the code on its screen and signs in at /login, which stays open).
+    const char* const mutations[] = {"/recovery/touch", "/recovery/reboot", "/recovery/safe", "/recovery/rollback",
+                                     "/recovery/reset-ui", "/recovery/reset-auth", "/recovery/reset-wifi",
+                                     "/ota/upload", "/reset"};
+    for (const char* uri : mutations) {
+        PortalRequestFacts r = lan(uri, true);
+        r.apMode = true;
+        r.recoverySafeMode = true;
+        // No session: refused, whatever the origin.
         assert(decidePortalAccess(r) == PortalAccess::RejectCrossOrigin);
         r.sameOrigin = true;
+        assert(decidePortalAccess(r) == PortalAccess::SignInRequired);
+        // Signed in with the code: allowed, still bound to the same origin.
+        r.sessionValid = true;
         assert(decidePortalAccess(r) == PortalAccess::Allow);
+        r.sameOrigin = false;
+        assert(decidePortalAccess(r) == PortalAccess::RejectCrossOrigin);
     }
+
+    // The same routes read with GET (a navigation) without a session are not opened either, except the two above.
+    PortalRequestFacts getReset = lan("/reset", false);
+    getReset.apMode = true;
+    getReset.recoverySafeMode = true;
+    assert(decidePortalAccess(getReset) != PortalAccess::Allow);
 
     // Unrelated privileged routes stay protected in Recovery Safe Mode.
     const char* const unrelated[] = {"/printer/control", "/printer/power", "/settings/export", "/debug",

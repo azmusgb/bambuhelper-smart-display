@@ -163,6 +163,20 @@ A PASS proves the current-device full-image recovery/write/boot path while prese
 
 CI, USB upload success, and runtime API success do not substitute for the physical recovery round-trip actually running and passing on the WS350.
 
+### Recovery Safe Mode sign-in
+
+In Recovery Safe Mode the device runs its own access point (`Waveshare-Recovery-XXXX`, entered by three quick resets). Only the read-only recovery page and status (`/recovery`, `/recovery/status`) open without a code. Every recovery action (`/recovery/*` POSTs), the firmware upload (`/ota/upload`) and factory reset (`/reset`) need the portal-code session, as on the normal LAN.
+
+A real recovery, with the person at the device:
+
+1. Join `Waveshare-Recovery-XXXX` and open `http://192.168.4.1/recovery` (the status page loads without a code).
+2. Read the sign-in code on the device's screen (More, System, Local Portal) and sign in at `http://192.168.4.1/login`. The code changes at every boot, so read it after the reboot into Safe Mode.
+3. Reload `/recovery`; the actions and the firmware upload now work. A cross-origin page or a client with no session gets 401 or 403.
+
+If the touchscreen does not respond, the code cannot be read and Safe Mode cannot be signed in to: recover over USB with `scripts/bootstrap_ws350_os12_usb_macos.sh` (the exact CI artifact, `--expect-source-sha`/`--expect-firmware-sha256`), which does not use the web plane.
+
+Acceptance check for this section: in Safe Mode, an unauthenticated `POST /recovery/reboot`, `POST /ota/upload` and `POST /reset` return 401 (or 403 without a same-origin header), `GET /recovery/status` returns 200, and after signing in with the on-screen code the same actions succeed.
+
 ## Release-state boundary
 
 Only evidence actually obtained may advance the state:

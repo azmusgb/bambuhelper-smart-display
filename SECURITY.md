@@ -54,7 +54,7 @@ For an authenticated Workshop OS source line:
 - normal-LAN Recovery access is authenticated;
 - **AP mode is not itself an authorization credential**;
 - ordinary first-boot/fallback AP access is limited to captive Wi-Fi onboarding essentials unless the owner establishes a portal-code session;
-- independent unauthenticated rescue access exists only in deliberate Recovery Safe Mode and is scoped to the dedicated recovery/status/actions plus application OTA/factory-reset surface;
+- in deliberate Recovery Safe Mode on the AP only the read-only recovery page and status (`GET /recovery`, `GET /recovery/status`) are open without a code; recovery actions (`POST /recovery/*`), the application OTA upload (`/ota/upload`) and factory reset (`/reset`) need the portal-code session, like every other mutation, and stay bound to the same origin. The code is on the device's screen and `/login` stays open on the AP (see docs/OS12_PHYSICAL_ACCEPTANCE.md, Recovery Safe Mode sign-in);
 - printer control, mapped printer power, settings export, debug and unrelated privileged surfaces must not become anonymously accessible merely because the device entered AP mode;
 - portal-code login may remain available on AP so the owner can establish authenticated access to protected surfaces when needed;
 - the portal credential must not be embedded in command-line arguments, shared captures, diagnostics, or support artifacts.

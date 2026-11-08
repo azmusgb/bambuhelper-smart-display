@@ -117,6 +117,8 @@ jobs:
           /tmp/workshop-os12-tests/more-layout-smoke
           g++ -std=c++11 -O1 -Wall -Wextra -Werror -pedantic tests/workshop_os12_tabs_layout_smoke.cpp -o /tmp/workshop-os12-tests/tabs-layout-smoke
           /tmp/workshop-os12-tests/tabs-layout-smoke
+          g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/workshop_os12_hub_body_limit_smoke.cpp -o /tmp/workshop-os12-tests/hub-body-limit-smoke
+          /tmp/workshop-os12-tests/hub-body-limit-smoke
           g++ -std=c++11 -O1 -Wall -Wextra -Werror -pedantic tests/workshop_os12_localai_feed_smoke.cpp -o /tmp/workshop-os12-tests/localai-feed-smoke
           /tmp/workshop-os12-tests/localai-feed-smoke
           g++ -std=c++11 -O1 -Wall -Wextra -Werror -pedantic tests/workshop_os12_lab_judge_smoke.cpp -o /tmp/workshop-os12-tests/lab-judge-smoke
@@ -155,6 +157,7 @@ jobs:
           python3 scripts/validate_os12_candidate_publisher.py
           python3 scripts/validate_os12_media_service.py
           python3 scripts/validate_os12_premium_ui_v2.py --repo .
+          python3 scripts/validate_hub_fetch_limit.py
           python3 scripts/validate_platformio_toolchain.py
 
       - name: Validate acceptance and recovery tooling

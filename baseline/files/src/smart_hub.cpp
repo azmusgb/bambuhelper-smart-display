@@ -1,5 +1,6 @@
 #include "security_manager.h"
 #include "smart_home_build.h"
+#include "workshop_http_body_limit.hpp"
 #include "recovery_manager.h"
 #include "button.h"
 #include "buzzer.h"
@@ -394,6 +395,24 @@ static void parseCustomPayload(const String& body, int httpCode) {
   g_dirty = true;
 }
 
+// Reads the reply body only when its declared length is known and within HUB_HTTP_LIMIT (it used to read the whole
+// body first and compare afterwards). False after reporting why.
+static bool readBoundedBody(HTTPClient& http, int code, String& out) {
+  switch (workshop::http::checkBodyLength(http.getSize(), HUB_HTTP_LIMIT)) {
+    case workshop::http::BodyLength::Ok:
+      break;
+    case workshop::http::BodyLength::TooLarge:
+      customFail("JSON response is larger than 4 KB", code);
+      return false;
+    case workshop::http::BodyLength::Missing:
+    default:
+      customFail("Endpoint did not send a Content-Length", code);
+      return false;
+  }
+  out = http.getString();
+  return true;
+}
+
 static void fetchCustom() {
   if (!g_cfg.customUrl[0]) {
     customFail("No custom endpoint configured");
@@ -418,9 +437,10 @@ static void fetchCustom() {
       return;
     }
     code = http.GET();
-    if (code > 0 && code < 400)
-      parseCustomPayload(http.getString(), code);
-    else
+    if (code > 0 && code < 400) {
+      String body;
+      if (readBoundedBody(http, code, body)) parseCustomPayload(body, code);
+    } else
       customFail("Custom HTTPS request failed", code);
     http.end();
     return;
@@ -432,10 +452,12 @@ static void fetchCustom() {
     return;
   }
   code = http.GET();
-  if (code > 0 && code < 400)
-    parseCustomPayload(http.getString(), code);
-  else
+  if (code > 0 && code < 400) {
+    String body;
+    if (readBoundedBody(http, code, body)) parseCustomPayload(body, code);
+  } else {
     customFail("Custom HTTP request failed", code);
+  }
   http.end();
 }
 
