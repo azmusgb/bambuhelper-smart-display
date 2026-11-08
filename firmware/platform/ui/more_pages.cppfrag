@@ -401,7 +401,7 @@ static bool wsPickKnown(wsm::RowId id) {
   return wsPickIsColour(id) || id == R::TimeZone || id == R::DateFormat || id == R::AfterPrint || id == R::Theme || id == R::NightStart ||
          id == R::NightEnd || id == R::GaugeSelect || id == R::Smoothing || id == R::ClockTimeSize || id == R::ClockDateSize ||
          id == R::TimeReadout || id == R::FinishTimeout || id == R::FanReadout || id == R::PlugReadout || id == R::GlowMode ||
-         id == R::GlowStyle || id == R::GlowDuration || id == R::LedFinishEffect || id == R::QuietStart || id == R::QuietEnd ||
+         id == R::GlowStyle || id == R::GlowDuration || id == R::StandbyBrightness || id == R::LedFinishEffect || id == R::QuietStart || id == R::QuietEnd ||
          wsPickIsHms(id);
 }
 
@@ -433,6 +433,9 @@ static int wsPickCurrent(wsm::RowId id) {
     case R::TimeReadout: return dispSettings.timeDisplayMode < 3U ? (int)dispSettings.timeDisplayMode : -1;
     case R::FinishTimeout:
       for (unsigned i = 0; i < sizeof(kWsFinishMins) / sizeof(kWsFinishMins[0]); ++i) if (kWsFinishMins[i] == dpSettings.finishDisplayMins) return (int)i;
+      return -1;
+    case R::StandbyBrightness:
+      for (unsigned i = 0; i < sizeof(kWsLevels) / sizeof(kWsLevels[0]); ++i) if (kWsLevels[i] == dpSettings.screensaverBrightness) return (int)i;
       return -1;
     case R::FanReadout: return dispSettings.fanMatchPrinter ? 1 : 0;
     case R::PlugReadout: {
@@ -513,6 +516,15 @@ static int wsPickBuild(wsm::RowId id) {
       for (n = 0; n < count; ++n) {
         if (kWsFinishMins[n] == 0) strlcpy(g_wsPickText[n], "Immediately", sizeof(g_wsPickText[n]));
         else snprintf(g_wsPickText[n], sizeof(g_wsPickText[n]), "%u min", (unsigned)kWsFinishMins[n]);
+        g_wsPickOpt[n] = ::ui::PickerOption();
+        g_wsPickOpt[n].label = g_wsPickText[n];
+      }
+      return n;
+    }
+    case R::StandbyBrightness: {
+      const int count = (int)(sizeof(kWsLevels) / sizeof(kWsLevels[0]));
+      for (n = 0; n < count; ++n) {
+        wsPercentText(g_wsPickText[n], sizeof(g_wsPickText[n]), (uint8_t)kWsLevels[n], "Screen off");
         g_wsPickOpt[n] = ::ui::PickerOption();
         g_wsPickOpt[n].label = g_wsPickText[n];
       }
@@ -662,6 +674,11 @@ static const char* wsPickApply(int index) {
     case R::FinishTimeout:
       if ((size_t)index >= sizeof(kWsFinishMins) / sizeof(kWsFinishMins[0])) return wkit::PickerSession::kNotKept;
       dpSettings.finishDisplayMins = kWsFinishMins[index];
+      hubPersistDisplay(false);
+      return nullptr;
+    case R::StandbyBrightness:
+      if ((size_t)index >= sizeof(kWsLevels) / sizeof(kWsLevels[0])) return wkit::PickerSession::kNotKept;
+      dpSettings.screensaverBrightness = (uint8_t)kWsLevels[index];
       hubPersistDisplay(false);
       return nullptr;
     case R::FanReadout:
@@ -968,7 +985,7 @@ static void wsRowView(wsm::RowId id, WsRowView& v) {
     case R::UpdateChannel: {
       const workshop::platform::UpdateState& u = workshopPlatformUpdateState();
       v.on = u.channel == workshop::platform::UpdateChannel::Candidate;
-      strlcpy(v.value, v.on ? "On" : "Off (stable)", sizeof(v.value));
+      strlcpy(v.value, v.on ? "On" : "Stable only", sizeof(v.value));  // the Switch says On or Off; this is the words beside it
       if (u.busy) { v.enabled = false; v.reason = "Wait for the update to finish"; }
       break;
     }
@@ -1893,8 +1910,8 @@ static void wsDrawMeter(const wsm::Rect& slot, int16_t mid, uint8_t level, uint1
 // looks like a button. A disabled switch is an empty outline (no knob), a
 // disabled stepper hides its "-" and "+", and a disabled button is only its
 // muted label; the reason stays in the value slot.
-static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
-                          const wsm::Rect& row) {
+static void wsDrawRowBodyLegacy(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                                const wsm::Rect& row) {
   const wsm::Rect surface = wsm::rowSurface(row);
   const bool raised = wsm::rowRaised(kind, v.enabled);
   const uint16_t bg = raised ? OS12V_SURFACE : OS12V_BG;
@@ -1990,6 +2007,103 @@ static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* l
       break;
     }
   }
+}
+
+// The kit's row (More pages): 48 px, the whole row is the target. The kit's Switch, Stepper and Button draw the controls
+// inside it (the Switch's track and knob and the Stepper's keys smaller than the row, so the row is what a tap hits), and
+// the value text is the row value size (wkit::rowValue: Fs4, cut at a word, never shrunk). The label, the chevron and the
+// meter keep their older drawing until the label moves over.
+static void wsDrawRowBodyKit(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                             const wsm::Rect& row) {
+  const bool buttons = kind == wsm::RowKind::Action || kind == wsm::RowKind::Action2;
+  const wsm::Rect surface = wsm::rowSurface(row);
+  const bool raised = wsm::rowRaised(kind, v.enabled) && !buttons;  // a button is its own 48 px target: no card behind it
+  const uint16_t bg = raised ? OS12V_SURFACE : OS12V_BG;
+  if (raised) {
+    tft.fillRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_SURFACE);
+    tft.drawRoundRect(surface.x, surface.y, surface.w, surface.h, 10, OS12V_LINE);
+  } else {
+    tft.fillRect(surface.x, surface.y, surface.w, surface.h, OS12V_BG);
+    tft.drawFastHLine(surface.x + 12, surface.bottom() - 1, surface.w - 24, OS12V_LINE);
+  }
+  const int16_t mid = row.y + row.h / 2;
+  const wsm::Rect label = wsm::labelRect(s, row, kind);
+  wsm::Rect valueSlot = wsm::valueRect(s, row, kind);
+  // A disabled switch draws no track or word, so its reason has the room up to the row's edge.
+  if (kind == wsm::RowKind::Toggle && !v.enabled) valueSlot = wsm::makeRect(valueSlot.x, valueSlot.y, row.right() - 12 - valueSlot.x, valueSlot.h);
+  const char* value = v.enabled ? v.value : (v.reason ? v.reason : v.value);
+  if (kind == wsm::RowKind::Toggle && v.enabled && wkit::repeatsSwitchWord(value)) value = "";  // the Switch says On or Off itself
+  const bool infoOnly = kind == wsm::RowKind::Info && !value[0];
+  int16_t labelW = label.w;
+  if (value[0] && kind != wsm::RowKind::Stepper && kind != wsm::RowKind::Action2 && valueSlot.x - 8 - label.x < labelW)
+    labelW = valueSlot.x - 8 - label.x;
+  uiDrawFit(labelText, label.x, mid, labelW, infoOnly ? FONT_SMALL : FONT_BODY, ML_DATUM,
+            (v.enabled && !infoOnly) ? OS12V_TEXT : OS12V_MUTED, bg);
+  const uint16_t valueColor = v.enabled ? v.valueColor : OS12V_MUTED;
+  if (kind == wsm::RowKind::Nav || kind == wsm::RowKind::Choice) wsDrawChevronRight(row.right() - 16, mid, v.enabled ? OS12V_MUTED : OS12V_LINE);
+  wsm::Rect textSlot = valueSlot;  // where the value text goes
+  if (kind == wsm::RowKind::Action && v.meter >= 0 && v.enabled) {  // the live level bar, the words left of it
+    wsDrawMeter(valueSlot, mid, (uint8_t)v.meter, bg);
+    textSlot = wsm::makeRect(valueSlot.x, valueSlot.y, valueSlot.w - (valueSlot.w < 96 ? valueSlot.w : 96) - 6, valueSlot.h);
+  }
+
+  // The kit's text and parts, once the older text has let go of the fonts.
+  UiLgfxCanvas<lgfx::LovyanGFX> canvas(tft, kWorkshopArchivoFonts, wsKitFontsReleased);
+  const ::ui::Rect slot{textSlot.x, textSlot.y, textSlot.w, textSlot.h};
+  switch (kind) {
+    case wsm::RowKind::Code:
+      // The access code: the 26 px face when it fits whole, else the row value size.
+      if (value[0] && strlen(value) <= 13 && canvas.textWidth(value, UiFont::Fs6) <= slot.w)
+        ::ui::drawTextRight(canvas, slot.right(), ::ui::baselineIn(slot, UiFont::Fs6), value, UiFont::Fs6, valueColor, bg);
+      else wkit::rowValue(canvas, slot, value, valueColor, bg);
+      break;
+    case wsm::RowKind::Stepper:
+      if (!v.enabled) {
+        const int16_t right = (int16_t)(row.right() - 12), left = wsm::partDrawRect(s, row, kind, wsm::Part::Minus).x;
+        wkit::rowValue(canvas, ::ui::Rect{left, row.y, right - left, row.h}, value, valueColor, bg);
+      } else {
+        const wsm::Rect minus = wsm::partDrawRect(s, row, kind, wsm::Part::Minus);
+        const wsm::Rect plus = wsm::partDrawRect(s, row, kind, wsm::Part::Plus);
+        const int pad = (::ui::kTarget - wsm::kKitKey) / 2;  // a key is drawn inside its 48 px cell
+        wkit::rowStepper(canvas, ::ui::Rect{minus.x - pad, row.y, plus.right() + pad - (minus.x - pad), row.h}, v.value, valueColor, bg);
+      }
+      break;
+    case wsm::RowKind::Toggle: {
+      wkit::rowValue(canvas, slot, value, valueColor, bg);
+      if (v.enabled) {
+        const wsm::Rect track = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
+        ::ui::Switch::draw(canvas, ::ui::Rect{track.right() + 12 - 120, row.y, 120, row.h}, "",
+                           v.on ? ::ui::SwitchState::On : ::ui::SwitchState::Off, bg);
+      }
+      break;
+    }
+    case wsm::RowKind::Action: {
+      wkit::rowValue(canvas, slot, value, valueColor, bg);
+      const wsm::Rect b = wsm::partDrawRect(s, row, kind, wsm::Part::Whole);
+      ::ui::Button::draw(canvas, ::ui::Rect{b.x, b.y, b.w, b.h}, v.button ? v.button : "Open", ::ui::ButtonStyle::Plain, v.enabled);
+      break;
+    }
+    case wsm::RowKind::Action2: {
+      wkit::rowValue(canvas, slot, value, valueColor, bg);
+      const wsm::Rect a = wsm::partDrawRect(s, row, kind, wsm::Part::ActionA), b = wsm::partDrawRect(s, row, kind, wsm::Part::ActionB);
+      ::ui::Button::draw(canvas, ::ui::Rect{a.x, a.y, a.w, a.h}, v.button ? v.button : "", ::ui::ButtonStyle::Plain, v.enabled);
+      ::ui::Button::draw(canvas, ::ui::Rect{b.x, b.y, b.w, b.h}, v.buttonB ? v.buttonB : "", ::ui::ButtonStyle::Plain, v.enabledB);
+      break;
+    }
+    case wsm::RowKind::Info:
+    case wsm::RowKind::Nav:
+    case wsm::RowKind::Choice:
+      wkit::rowValue(canvas, slot, value, valueColor, bg);
+      break;
+  }
+  canvas.release();  // the older draws select their own fonts
+}
+
+// One row of any page: the kit's 48 px row, or (until the tabs move over) a tab's 44 px slot in the older drawing.
+static void wsDrawRowBody(const wsm::Screen& s, wsm::RowKind kind, const char* labelText, const WsRowView& v,
+                          const wsm::Rect& row) {
+  if (wsm::kitRow(row)) wsDrawRowBodyKit(s, kind, labelText, v, row);
+  else wsDrawRowBodyLegacy(s, kind, labelText, v, row);
 }
 
 // Premium v2 More/System semantic row hierarchy.

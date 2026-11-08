@@ -197,8 +197,8 @@ void checkItem(Screen s, const ViewSpec& v, uint8_t n, uint8_t scroll, uint8_t i
   // grid: tests/workshop_os12_home_idle_kit_smoke.cpp checks it against the kit's headers.
   const bool kitGeometry = v.id == View::HomeIdle && homeIdleKit(s);
   // Under the Printer's 48 px kit strip the slots share what is left (itemPitch: 43 px on the 480 x 320 panel).
-  const int pitch = v.segments ? itemPitch(s, v) : more::kRowH;
-  check(v.segments ? pitch >= kMinTouch - 1 && pitch <= more::kRowH : true, "Printer slot is 43 to 44 px", where, pitch);
+  const int pitch = v.segments ? itemPitch(s, v) : more::kTabRowH;
+  check(v.segments ? pitch >= kMinTouch - 1 && pitch <= more::kTabRowH : true, "Printer slot is 43 to 44 px", where, pitch);
   check(r.h >= pitch && (kitGeometry || r.h % pitch == 0), "item is whole slots", where, r.h);
   check(v.segments || r.h >= kMinTouch, "item at least 44 px (Printer 43)", where, r.h);
   check(inside(r, more::contentBand(s)), "item inside the content area", where, r.y, r.bottom());
@@ -353,7 +353,7 @@ void checkCalm(Screen s, const char* o) {
     if (i < 3) check(parts[i].bottom() <= parts[i + 1].y, "calm parts top to bottom", o, i);
   }
   check(c.clock.h >= 90 && c.clock.w >= 280, "calm clock is large", o, c.clock.w, c.clock.h);
-  check(c.status.h == more::kRowH, "calm status is one line", o, c.status.h);
+  check(c.status.h == more::kTabRowH, "calm status is one line", o, c.status.h);
   check(c.hint.y == more::tabBand(s).y && c.hint.h == more::tabBand(s).h, "wake hint where the tab bar would be", o);
   check(c.clock.y >= 16, "calm clock clear of the top edge", o, c.clock.y);
   check(c.ai.empty(), "no Local AI card slot unless asked for", o);
@@ -366,7 +366,7 @@ void checkCalm(Screen s, const char* o) {
     for (int j = i + 1; j < 5; ++j) check(!intersects(ap[i], ap[j]), "calm parts do not overlap (with Local AI)", o, i, j);
     if (i < 4) check(ap[i].bottom() <= ap[i + 1].y, "calm parts top to bottom (with Local AI)", o, i);
   }
-  check(a.ai.h == more::kRowH && a.ai.w == a.status.w && a.ai.x == a.status.x, "Local AI card lines up with the status", o);
+  check(a.ai.h == more::kTabRowH && a.ai.w == a.status.w && a.ai.x == a.status.x, "Local AI card lines up with the status", o);
   check(a.clock.y >= 16 && a.clock.h == c.clock.h, "the clock keeps its size and stays clear of the top", o, a.clock.y);
 
   // Full-screen scan: every pixel is the wake target, including every pixel
