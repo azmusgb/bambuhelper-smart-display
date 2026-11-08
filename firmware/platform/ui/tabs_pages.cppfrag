@@ -1262,7 +1262,7 @@ static void wtDrawHomePrinter(const wsm::Screen& s, const wsm::Rect& r, const Wt
 }
 
 // The adapter loads the kit's Archivo faces into the panel's one current font. setFont() remembers which of its own
-// Figtree faces that is, so when the adapter lets go it says nothing is loaded and the next setFont() loads its own.
+// faces that is, so when the adapter lets go it says nothing is loaded and the next setFont() loads its own.
 static void wtKitFontsReleased() { setFont(tft, FONT_NONE); }
 
 // The kit's clock for its ages ("since 10:32"): the epoch and this display's offset from UTC (0 epoch until the

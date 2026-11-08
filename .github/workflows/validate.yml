@@ -77,6 +77,9 @@ jobs:
             base_args=(--base "origin/${GITHUB_BASE_REF}")
           fi
           python3 scripts/validate_ui_raw_colours.py "${base_args[@]}"
+          # Display-kit K3: Archivo everywhere, no text font under 14 px reachable.
+          python3 scripts/validate_text_font_floor.py
+          python3 scripts/test_text_font_floor.py
           # The LovyanGFX adapter and the palette header, against the kit's C++17 headers.
           mkdir -p /tmp/display-kit-tests/inc
           ln -sfn "$PWD/assets/ui" /tmp/display-kit-tests/inc/kit

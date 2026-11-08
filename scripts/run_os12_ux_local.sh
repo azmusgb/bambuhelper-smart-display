@@ -114,9 +114,6 @@ python3 "$ROOT/scripts/validate_os12_more_overhaul.py" --repo "$BUILD"
 # Touchscreen palette (display kit, rollout step 3): the kit's header files and LovyanGFX adapter are installed, and
 # every role-named RGB565 constant (UI_*, OS12V_*, C10_*, W25_*) becomes a kit token (accent coolant teal, graphite greys).
 python3 "$ROOT/apply_workshop_os12_display_kit_palette.py" --repo "$BUILD" --source-root "$ROOT" --apply
-# Brand typography: install Figtree vector typography tables across all font sizes.
-python3 "$ROOT/apply_workshop_os12_figtree_typography.py" --repo "$BUILD" --apply
-python3 "$ROOT/scripts/validate_os12_figtree_typography.py" --repo "$BUILD"
 # 12.3.x Home, Printer and Workshop tabs on the More design system. Owning
 # patch for the three tabs; runs after the More overhaul, whose layout and rows
 # it builds on.

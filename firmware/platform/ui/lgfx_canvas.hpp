@@ -8,7 +8,7 @@
 // firmware instantiates it with lgfx::LovyanGFX, so every member is compiled against the real library.
 //
 // Fonts: the kit's five faces are Archivo VLW files (appliance-ui display/fonts/*.vlw, 225,129 bytes in all). The
-// caller links them in as byte arrays, the way fonts.cpp links the Figtree ones, and passes them in UiLgfxFonts. A face
+// caller links them in as byte arrays, the way fonts.cpp links them, and passes them in UiLgfxFonts. A face
 // with no data draws nothing and measures 0: the adapter never substitutes another size. Idle Home (rollout step 4)
 // is the first screen on it: apply_workshop_os12_display_kit_home.py links the five faces (src/workshop_archivo_fonts.cpp,
 // generated from the kit's .vlw files) and wtDrawHomeIdleKit draws through this class.
