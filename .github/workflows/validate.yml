@@ -92,6 +92,24 @@ jobs:
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/tmp/display-kit-tests/inc tests/workshop_os12_more_picker_smoke.cpp -o /tmp/display-kit-tests/more-picker-smoke
           /tmp/display-kit-tests/more-picker-smoke
 
+      - name: Print the display kit's drift line
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Warn-only: always passes, even for a modified or behind copy, unless KIT_DRIFT_ENFORCE=1. Never fails for the
+          # network: no clone, no node or gh, or no drift.mjs on the kit's main yet prints "unavailable".
+          unavailable() { echo "kit drift check unavailable: $1"; exit 0; }
+          for c in git node gh; do command -v "$c" >/dev/null 2>&1 || unavailable "$c not found"; done
+          kit="$(mktemp -d)/kit"
+          git clone --depth 1 -q https://github.com/azmusgb/appliance-ui "$kit" 2>/dev/null || unavailable "could not clone appliance-ui"
+          [[ -f "$kit/scripts/drift.mjs" ]] || unavailable "scripts/drift.mjs is not on the kit's main yet"
+          code=0
+          line="$(node "$kit/scripts/drift.mjs" --only bambuhelper-smart-display 2>&1)" || code=$?
+          if [[ "$code" -gt 1 ]]; then unavailable "drift.mjs exited $code: ${line%%$'\n'*}"; fi
+          echo "$line"
+          if [[ "$code" -eq 1 && "${KIT_DRIFT_ENFORCE:-}" == 1 ]]; then exit 1; fi
+
       - name: Validate tracked shell syntax
         shell: bash
         run: |
