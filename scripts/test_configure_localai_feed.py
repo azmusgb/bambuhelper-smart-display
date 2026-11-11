@@ -31,7 +31,7 @@ class CaTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as caught:
                 run("--backend", "pihub")
         self.assertNotEqual(caught.exception.code, 0)
-        self.assertIn("For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.30/home-ca.crt), or pair from the display or the portal.",
+        self.assertIn("For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.80/home-ca.crt), or pair from the display or the portal.",
                       str(caught.exception.code))
 
     def test_localai_default_ca_is_unchanged(self) -> None:
@@ -91,7 +91,7 @@ class CaTests(unittest.TestCase):
                  mock.patch.object(configure.time, "sleep", lambda s: None):
                 with mock.patch.object(sys, "argv", ["configure_localai_feed.py", "--backend", "pihub", "--ca", str(ca)]):
                     self.assertEqual(configure.main(), 0)
-            self.assertEqual((sent["address"], sent["name"], sent["backend"], sent["ca"]), ("10.0.0.30", "home.home.arpa", "pihub", PEM))
+            self.assertEqual((sent["address"], sent["name"], sent["backend"], sent["ca"]), ("10.0.0.80", "home.home.arpa", "pihub", PEM))
 
 
 if __name__ == "__main__":

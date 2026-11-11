@@ -15,7 +15,7 @@ This repository is the authoritative product boundary for **Waveshare Workshop O
 
 ## This repository does not own
 
-Filament inventory data (spools, remaining quantities, AMS placement, projects) is owned by **Bambuddy**, which runs in Docker on the household Pi (`http://10.0.0.30:8000`). It reads the printer and the AMS itself and takes each print's filament off its spool.
+Filament inventory data (spools, remaining quantities, AMS placement, projects) is owned by **Bambuddy**, which runs in Docker on the household Pi (`http://10.0.0.80:8000`). It reads the printer and the AMS itself and takes each print's filament off its spool.
 
 Workshop OS must not become a second inventory database, quantity authority, ownership authority or placement authority. Filament facts reach the display through Local AI's display feed (a `materials` card), not through a direct inventory link.
 

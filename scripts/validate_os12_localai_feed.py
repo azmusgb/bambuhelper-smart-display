@@ -291,7 +291,7 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     address = block(hub, "static void wtPairAddress(char* out, size_t len) {")
     need(address, "workshopLocalAiFeedBackend() == g_wtPairBackend", "the saved address only for the saved service")
     need(address, "lai::backendInfo(g_wtPairBackend).defaultAddress", "else the chosen service's usual address")
-    forbid(address, '"10.0.0.21"', "no fixed Local AI address")
+    forbid(address, '"10.0.0.81"', "no fixed Local AI address")
     forbid(hub, "workshopLocalAiFeedPair(address, g_wtPairCode)", "every pairing names the chosen service")
     if hub.count("workshopLocalAiFeedPair(address, g_wtPairCode, g_wtPairBackend)") != 2:
         raise ValidationError("the keypad's Pair and the capture's -go both pair with the chosen service")
@@ -313,7 +313,7 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
          "the portal pairs with the chosen service")
     need(pages, '<select id="localAiPairBackend"', "the portal's Pi Hub / Local AI choice")
     need(pages, '<option value="pihub">Pi Hub</option><option value="localai">Local AI</option>', "Pi Hub first, then Local AI")
-    need(app_js, "var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.30',localai:'10.0.0.21'};", "the choice fills the address")
+    need(app_js, "var LOCAL_AI_PAIR_ADDRESS={pihub:'10.0.0.80',localai:'10.0.0.81'};", "the choice fills the address")
     need(app_js, "'&backend='+encodeURIComponent(backend)", "the pairing request names the service")
     need(app_js, "return (localAiLinkConfigured&&backend===localAiLinkBackend&&localAiLinkAddress)||LOCAL_AI_PAIR_ADDRESS[backend]||'';",
          "fix 15: the saved service's own address when it is chosen again")
@@ -321,13 +321,13 @@ def validate_pair_choice(hub: str, web: str, pages: str, app_js: str) -> None:
     forbid(app_js, "'Paired with Local AI.'", "the paired line is the service's own words or the chosen label")
     script = (ROOT / "scripts/configure_localai_feed.py").read_text(encoding="utf-8")
     need(script, 'parser.add_argument("--backend", choices=("localai", "pihub"), default="localai"', "the script's --backend")
-    need(script, '"pihub": ("10.0.0.30", "home.home.arpa")', "Pi Hub's address and name defaults")
+    need(script, '"pihub": ("10.0.0.80", "home.home.arpa")', "Pi Hub's address and name defaults")
     need(script, '"backend": args.backend', "the script sends the backend")
     # Fix round 1: the CA sent is the chosen service's: Local AI's default path is unchanged; Pi Hub has none and the
     # script refuses without --ca, before contacting the display; the file must hold a PEM certificate.
     need(script, 'CA_PATH = Path.home() / ".claude" / "localai-chat" / "localai-ca.crt"', "Local AI's default CA unchanged")
     need(script, 'return CA_PATH if backend == "localai" else None', "no default CA for Pi Hub")
-    need(script, "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.30/home-ca.crt), or pair from the display or the portal.",
+    need(script, "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.80/home-ca.crt), or pair from the display or the portal.",
          "Pi Hub without --ca says what to do")
     need(script, '"-----BEGIN CERTIFICATE-----" not in text', "the CA file must be a PEM certificate")
     test = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/test_configure_localai_feed.py")], check=False,

@@ -12,7 +12,7 @@ The canonical Workshop OS 12 media backend under `firmware/platform/media/` rema
 
 X2D networking is installed only by `apply_workshop_os12_x2d_bridge_camera.py` into the **reconstructed firmware tree**, as the last step of the canonical reconstruction (`scripts/run_os12_ux_local.sh`). The repository backend and the earlier media validators keep the transport-agnostic OS12 media contract; the CI WS350 candidate, and so Stable, includes the camera.
 
-The compiled bridge address is set in one place, `X2D_BRIDGE_URL` in `scripts/run_os12_ux_local.sh`. Its default is the Pi's camera failover, `http://10.0.0.30:8091/x2d/frame.jpg` (pi-hub `deploy/x2d-camera-failover.py`), which serves the Pi's own bridge and falls back to the MacBook's.
+The compiled bridge address is set in one place, `X2D_BRIDGE_URL` in `scripts/run_os12_ux_local.sh`. Its default is the Pi's camera failover, `http://10.0.0.80:8091/x2d/frame.jpg` (pi-hub `deploy/x2d-camera-failover.py`), which serves the Pi's own bridge and falls back to the MacBook's.
 
 ```text
 Bambu X2D
@@ -110,7 +110,7 @@ printer's own stream, `rtsps://bblp:<access code>@<printer>:322/streaming/live/1
 3. `bash tools/install_x2d_bridge_pi.sh --set-code` asks for the 8-character access code shown on the printer and
    saves the URL on the Pi in `/etc/x2d-bridge/rtsp-url` (mode 600). The bridge refuses a file anyone else can read,
    and removes the code from FFmpeg's log lines.
-4. Build the display with `X2D_BRIDGE_URL=http://10.0.0.30:8091/x2d/frame.jpg` and install it.
+4. Build the display with `X2D_BRIDGE_URL=http://10.0.0.80:8091/x2d/frame.jpg` and install it.
 
 `--status` and `--uninstall` do what they say.
 
