@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.9.0}"
+OS12_RELEASE_VERSION="${OS12_RELEASE_VERSION:-12.9.1}"
 OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 # Printer -> Camera: the X2D bridge frame address compiled into the image. The default is the Pi's camera failover
 # (pi-hub deploy/x2d-camera-failover.py), which serves the Pi's own bridge and falls back to the MacBook's. This is
