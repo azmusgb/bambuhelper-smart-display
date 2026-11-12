@@ -32,7 +32,7 @@ using workshop::platform::UpdateState;
 // https://updates.home.arpa/). The router's DNS does not serve home.arpa, so the client below pins the name to the
 // Pi's address and still verifies the certificate against that name.
 constexpr char kUpdateHost[] = "updates.home.arpa";
-constexpr std::uint8_t kUpdateHostIp[4] = {10, 0, 0, 30};
+constexpr std::uint8_t kUpdateHostIp[4] = {10, 0, 0, 80};
 constexpr char kManifestUrl[] = "https://updates.home.arpa/releases/device-update.json";
 constexpr char kAuthority[] = "azmusgb/bambuhelper-smart-display";
 constexpr char kBoard[] = "ws_lcd_350";
