@@ -6,7 +6,7 @@ signed-in portal, then waits for the first cards. The key is read from the Mac's
 service localai-display-key, made by Local AI's host/workshop-display/set-key.sh) and the CA from
 ~/.claude/localai-chat/localai-ca.crt (made by host/claude-chat/install.sh). Neither is printed.
 
-31 Oct 2026: --backend pihub points it at Pi Hub instead (address 10.0.0.30, name home.home.arpa unless --address or
+31 Oct 2026: --backend pihub points it at Pi Hub instead (address 10.0.0.80, name home.home.arpa unless --address or
 --name say otherwise). The key is then Pi Hub's display key (hubd_), read from Keychain service pihub-display-key if
 one was stored there, and the CA must be Pi Hub's, given with --ca (there is no default for Pi Hub). Pairing from the
 display or the portal is the normal route: it fetches the key and the CA itself.
@@ -30,9 +30,9 @@ from accept_os12_portal_runtime import Client, establish_portal_session
 KEYCHAIN = {"localai": ("ws350", "localai-display-key"), "pihub": ("ws350", "pihub-display-key")}
 KEY_PREFIX = {"localai": "wsd_", "pihub": "hubd_"}
 # The address and certificate name each backend has on the home network (firmware: backendInfo()).
-DEFAULTS = {"localai": ("10.0.0.21", "localai.home.arpa"), "pihub": ("10.0.0.30", "home.home.arpa")}
+DEFAULTS = {"localai": ("10.0.0.81", "localai.home.arpa"), "pihub": ("10.0.0.80", "home.home.arpa")}
 CA_PATH = Path.home() / ".claude" / "localai-chat" / "localai-ca.crt"
-PIHUB_NEEDS_CA = "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.30/home-ca.crt), or pair from the display or the portal."
+PIHUB_NEEDS_CA = "For Pi Hub, pass --ca with Pi Hub's CA (http://10.0.0.80/home-ca.crt), or pair from the display or the portal."
 
 
 def default_ca(backend: str) -> Path | None:
@@ -75,11 +75,11 @@ def main() -> int:
     parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
     parser.add_argument("--backend", choices=("localai", "pihub"), default="localai",
                         help="the service the display takes its feed from (pihub: Pi Hub; its CA is Pi Hub's home-ca.crt)")
-    parser.add_argument("--address", default=None, help="the service's IPv4 address (default: 10.0.0.21 Local AI, 10.0.0.30 Pi Hub)")
+    parser.add_argument("--address", default=None, help="the service's IPv4 address (default: 10.0.0.81 Local AI, 10.0.0.80 Pi Hub)")
     parser.add_argument("--name", default=None, help="the name on its certificate (default: localai.home.arpa, home.home.arpa)")
     parser.add_argument("--ca", type=Path, default=None,
                         help=f"the service's CA certificate (PEM). Local AI default: {CA_PATH}; Pi Hub: required "
-                             "(http://10.0.0.30/home-ca.crt)")
+                             "(http://10.0.0.80/home-ca.crt)")
     parser.add_argument("--clear", action="store_true", help="forget the settings on the display")
     parser.epilog = ("Keys come from the login Keychain, account ws350: service localai-display-key (Local AI) or "
                      "pihub-display-key (where a Pi Hub key would be stored; pairing from the display or the portal "

@@ -98,8 +98,8 @@ struct BackendInfo {
   const char* defaultName;     // the TLS name its certificate carries
 };
 inline const BackendInfo& backendInfo(Backend b) {
-  static const BackendInfo kLocalAi = {"Local AI", "X-LocalAI-Display-Key", "/localai-ca.crt", "10.0.0.21", "localai.home.arpa"};
-  static const BackendInfo kPiHub = {"Pi Hub", "X-Hub-Display-Key", "/home-ca.crt", "10.0.0.30", "home.home.arpa"};
+  static const BackendInfo kLocalAi = {"Local AI", "X-LocalAI-Display-Key", "/localai-ca.crt", "10.0.0.81", "localai.home.arpa"};
+  static const BackendInfo kPiHub = {"Pi Hub", "X-Hub-Display-Key", "/home-ca.crt", "10.0.0.80", "home.home.arpa"};
   return b == Backend::PiHub ? kPiHub : kLocalAi;
 }
 // The settings value: "pihub" or anything else (not set, "", a typo) for Local AI, what every display did before.

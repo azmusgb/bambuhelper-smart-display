@@ -52,12 +52,12 @@ static bool g_wtFailedDismissed = false;
 static void wtBambuddyClearTask(void*) {
   WiFiClient client;
   client.setTimeout(2);
-  if (client.connect("10.0.0.30", 8000)) {
-    client.print("POST /api/v1/printers/1/clear-plate HTTP/1.1\r\nHost: 10.0.0.30:8000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+  if (client.connect("10.0.0.80", 8000)) {
+    client.print("POST /api/v1/printers/1/clear-plate HTTP/1.1\r\nHost: 10.0.0.80:8000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     client.stop();
   }
-  if (client.connect("10.0.0.30", 8000)) {
-    client.print("POST /api/v1/printers/1/hms/clear HTTP/1.1\r\nHost: 10.0.0.30:8000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+  if (client.connect("10.0.0.80", 8000)) {
+    client.print("POST /api/v1/printers/1/hms/clear HTTP/1.1\r\nHost: 10.0.0.80:8000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     client.stop();
   }
   vTaskDelete(nullptr);

@@ -8,7 +8,7 @@ OS12_SOURCE_SHA="${OS12_SOURCE_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 # Printer -> Camera: the X2D bridge frame address compiled into the image. The default is the Pi's camera failover
 # (pi-hub deploy/x2d-camera-failover.py), which serves the Pi's own bridge and falls back to the MacBook's. This is
 # the one place it is set; scripts/run_x2d_local.sh passes another address for a development build.
-X2D_BRIDGE_URL="${X2D_BRIDGE_URL:-http://10.0.0.30:8091/x2d/frame.jpg}"
+X2D_BRIDGE_URL="${X2D_BRIDGE_URL:-http://10.0.0.80:8091/x2d/frame.jpg}"
 
 cd "$ROOT"
 

@@ -39,7 +39,7 @@ class ApplianceNav extends HTMLElement {
   }
 
   get hubUrl() {
-    return this.getAttribute('hub-url') || (window.location.hostname === '10.0.0.21' && window.location.port === '3080' ? '/' : 'http://10.0.0.21:3080');
+    return this.getAttribute('hub-url') || (window.location.hostname === '10.0.0.81' && window.location.port === '3080' ? '/' : 'http://10.0.0.81:3080');
   }
 
   get terminalUrl() {
@@ -47,7 +47,7 @@ class ApplianceNav extends HTMLElement {
   }
 
   get materialsUrl() {
-    return this.getAttribute('materials-url') || (window.location.port === '3000' ? '/' : 'http://10.0.0.21:3000');
+    return this.getAttribute('materials-url') || (window.location.port === '3000' ? '/' : 'http://10.0.0.81:3000');
   }
 
   async checkHealth() {

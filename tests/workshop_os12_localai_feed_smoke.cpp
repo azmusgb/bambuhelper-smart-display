@@ -230,10 +230,10 @@ static void checkPiHub() {
   CHECK(!strcmp(backendInfo(Backend::PiHub).keyHeader, "X-Hub-Display-Key") &&
         !strcmp(backendInfo(Backend::PiHub).caPath, "/home-ca.crt") &&
         !strcmp(backendInfo(Backend::PiHub).defaultName, "home.home.arpa"), "pi hub connection");
-  CHECK(!strcmp(backendInfo(Backend::PiHub).label, "Pi Hub") && !strcmp(backendInfo(Backend::PiHub).defaultAddress, "10.0.0.30"),
+  CHECK(!strcmp(backendInfo(Backend::PiHub).label, "Pi Hub") && !strcmp(backendInfo(Backend::PiHub).defaultAddress, "10.0.0.80"),
         "pi hub label and address");
   CHECK(!strcmp(backendInfo(Backend::LocalAi).label, "Local AI") && !strcmp(backendInfo(Backend::LocalAi).keyHeader, "X-LocalAI-Display-Key") &&
-        !strcmp(backendInfo(Backend::LocalAi).caPath, "/localai-ca.crt") && !strcmp(backendInfo(Backend::LocalAi).defaultAddress, "10.0.0.21") &&
+        !strcmp(backendInfo(Backend::LocalAi).caPath, "/localai-ca.crt") && !strcmp(backendInfo(Backend::LocalAi).defaultAddress, "10.0.0.81") &&
         !strcmp(backendInfo(Backend::LocalAi).defaultName, "localai.home.arpa"), "local ai connection");
 
   // key_per_backend
@@ -307,7 +307,7 @@ int main() {
   CHECK(!validKey("wsc_0123456789abcdef0123456789abcdef0123456789abcdef"), "other key kinds refused");
   CHECK(!validKey("wsd_0123") && !validKey(nullptr), "short or missing refused");
 
-  CHECK(validPrivateIp("10.0.0.21") && validPrivateIp("192.168.1.2") && validPrivateIp("172.16.0.1") && validPrivateIp("172.31.255.254"), "private IPs");
+  CHECK(validPrivateIp("10.0.0.81") && validPrivateIp("192.168.1.2") && validPrivateIp("172.16.0.1") && validPrivateIp("172.31.255.254"), "private IPs");
   CHECK(!validPrivateIp("8.8.8.8") && !validPrivateIp("172.32.0.1") && !validPrivateIp("10.0.0") && !validPrivateIp("10.0.0.256"), "public or malformed refused");
   CHECK(!validPrivateIp("10.0.0.21x") && !validPrivateIp("") && !validPrivateIp(nullptr) && !validPrivateIp("10..0.1"), "junk refused");
 

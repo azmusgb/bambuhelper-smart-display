@@ -69,7 +69,7 @@ a file without it means Local AI, so existing displays are unchanged.
 1. On Pi Hub, open **System › Workshop display › Pair display**. It shows a 6-digit code for 10 minutes.
 2. On the display's pairing screen (**Local AI tab › Local AI connection**) or in the Local Portal (**More › Local AI
    on the display**), choose **Pi Hub** and type the code.
-3. The display reads Pi Hub's CA from `http://10.0.0.30/home-ca.crt`, sends the code over HTTPS pinned to it (name
+3. The display reads Pi Hub's CA from `http://10.0.0.80/home-ca.crt`, sends the code over HTTPS pinned to it (name
    `home.home.arpa`) and saves the new key, which starts `hubd_`, with the CA.
 
 Pairing on the display or in the portal is the way to connect to Pi Hub. The Mac script
@@ -109,7 +109,7 @@ The Mac way, from before pairing, still works. On the Mac:
    WORKSHOP_OS_COOKIE_JAR=<jar> python3 scripts/configure_localai_feed.py
    ```
 
-   It sends the display Local AI's address (`10.0.0.21`), the name on its certificate (`localai.home.arpa`), the key
+   It sends the display Local AI's address (`10.0.0.81`), the name on its certificate (`localai.home.arpa`), the key
    and Local AI's CA (`~/.claude/localai-chat/localai-ca.crt`), then waits for the first card:
    `PASS: 1 card(s): All clear: Nothing needs you right now.`
 
@@ -181,7 +181,7 @@ Read `GET /os12/localai/status` and look at `status`:
 |---|---|
 | "Local AI isn't answering, or its certificate didn't match." | Local AI is down (the watchdog's Mac notice says so), or the CA changed: re-run `configure_localai_feed.py`. |
 | "Local AI turned the display key down (HTTP 401/403)." | Local AI's sign-in is enforced and the key fingerprint is missing: re-run `set-key.sh`, then `configure_localai_feed.py`. |
-| "Pi Hub isn't answering, or its certificate didn't match." | Pi Hub (10.0.0.30) is down or off the network, or its CA changed: pair again from the display or the portal (pairing fetches the CA again). |
+| "Pi Hub isn't answering, or its certificate didn't match." | Pi Hub (10.0.0.80) is down or off the network, or its CA changed: pair again from the display or the portal (pairing fetches the CA again). |
 | "Pi Hub turned the display key down (HTTP 401)." | Pi Hub no longer knows the key (unpaired there, or its display key was reset): pair again (Pi Hub › System › Workshop display › Pair display). |
 | "AI unavailable — PC asleep" (on Ask, approvals or pictures; also the `ai` card) | Connected to Pi Hub and the PC with Local AI sleeps or doesn't answer. Printer, Needs you, Clear plate, Judge it and now playing keep working; wake the PC for the AI. Nothing to fix on the display. |
 | "Waiting for Wi-Fi." | The display is off Wi-Fi. |
