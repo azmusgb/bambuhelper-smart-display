@@ -222,8 +222,8 @@ class DetectPipelineTests(unittest.TestCase):
 class BridgeUrlTests(unittest.TestCase):
     def test_accepts_private_literal_ip_and_fixed_path(self) -> None:
         self.assertEqual(
-            patch.validate_bridge_url("http://10.0.0.92:8091/x2d/frame.jpg"),
-            "http://10.0.0.92:8091/x2d/frame.jpg",
+            patch.validate_bridge_url("http://10.0.0.82:8091/x2d/frame.jpg"),
+            "http://10.0.0.82:8091/x2d/frame.jpg",
         )
 
     def test_rejects_public_ip(self) -> None:
@@ -232,9 +232,9 @@ class BridgeUrlTests(unittest.TestCase):
 
     def test_rejects_credentials_query_and_wrong_path(self) -> None:
         bad = (
-            "http://user:pass@10.0.0.92:8091/x2d/frame.jpg",
-            "http://10.0.0.92:8091/x2d/frame.jpg?token=secret",
-            "http://10.0.0.92:8091/arbitrary.jpg",
+            "http://user:pass@10.0.0.82:8091/x2d/frame.jpg",
+            "http://10.0.0.82:8091/x2d/frame.jpg?token=secret",
+            "http://10.0.0.82:8091/arbitrary.jpg",
         )
         for raw in bad:
             with self.subTest(raw=raw), self.assertRaises(patch.PatchError):
@@ -249,7 +249,7 @@ WEB_FIXTURE = (
     '  SECURE_POST("/os12/media/video/start", handleWorkshopMediaVideoStart);\n'
     '}\n'
 )
-CONFIGURED = "http://10.0.0.92:8091/x2d/frame.jpg"
+CONFIGURED = "http://10.0.0.82:8091/x2d/frame.jpg"
 
 
 def make_repo(root: Path, ownership_stop: bool = True) -> None:
@@ -360,7 +360,7 @@ class PatchIntegrationTests(unittest.TestCase):
             )
             write_smart_hub_fixture(smart_hub)
 
-            configured = "http://10.0.0.92:8091/x2d/frame.jpg"
+            configured = "http://10.0.0.82:8091/x2d/frame.jpg"
             patch.apply(repo, configured)
 
             backend_text = backend.read_text(encoding="utf-8")
