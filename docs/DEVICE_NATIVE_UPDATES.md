@@ -12,7 +12,7 @@ The repository is private, so the display cannot read GitHub. Updates come from 
 
 - `git push pi main` (remote `pi:/srv/bambuhelper-smart-display.git`) runs the bare repo's `post-receive` hook, which copies `releases/` and `firmware/*.bin` from that commit into `/srv/bambuhelper-updates/publish-<sha>` and swaps the `current` symlink to it. The previous publish is kept.
 - Caddy (configured in the pi-hub repo, `deploy/caddy/Caddyfile`) serves `current` at `https://updates.home.arpa/` with its local CA. The site is not behind the hub sign-in.
-- The router's DNS does not resolve `home.arpa`, so `UpdateHostClient` in the firmware maps `updates.home.arpa` to `10.0.0.80` itself and still verifies the certificate against that name. It trusts only the Caddy local root (valid to 2036-09-02) and refuses any other host. A new Caddy CA, or a new Pi address, needs a USB flash.
+- The router's DNS does not resolve `home.arpa`, so `UpdateHostClient` in the firmware maps `updates.home.arpa` to `10.0.0.80` itself and still verifies the certificate against that name. It trusts only the Caddy local root (valid to 2036-09-02) and refuses any other host. A new Caddy CA needs a USB flash, and so does a new Pi address once the old address has stopped answering.
 - When the Pi's address changes, publish a release built with the new address and let the display install it while the old address still answers; drop the old address only after that. `scripts/validate_os12_device_update.py` fails when the updater's address and the other built-in Pi addresses disagree.
 - Push `main` to `pi` after every release change that should reach the display; GitHub alone no longer updates it.
 
