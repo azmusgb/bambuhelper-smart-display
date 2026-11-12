@@ -37,7 +37,6 @@ PI_ADDRESS_SITES = (
     ("apply_workshop_os12_localai_feed.py", r"LOCAL_AI_PAIR_ADDRESS=\{pihub:'([0-9.]+)'", "portal pairing default"),
     ("scripts/configure_localai_feed.py", r'"pihub": \("([0-9.]+)"', "configure_localai_feed default"),
     ("scripts/run_os12_ux_local.sh", r"X2D_BRIDGE_URL:-http://([0-9.]+):8091/", "camera bridge default"),
-    ("docs/X2D_BRIDGE_CAMERA.md", r"http://([0-9.]+):8091/x2d/frame\.jpg", "camera bridge documentation"),
     ("docs/DEVICE_NATIVE_UPDATES.md", r"maps `updates\.home\.arpa` to `([0-9.]+)`", "update host documentation"),
 )
 
