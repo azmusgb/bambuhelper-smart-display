@@ -51,7 +51,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OS12_RELEASE_VERSION: '12.9.0'
+  OS12_RELEASE_VERSION: '12.9.1'
   OS12_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:

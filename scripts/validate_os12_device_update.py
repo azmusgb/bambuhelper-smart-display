@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -26,6 +27,37 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Every place the firmware and its tools have the Pi's address built in. The updater's copy is the one a display
+# cannot recover from over the air, so the others must agree with it. A pattern that finds nothing fails too.
+PI_ADDRESS_SITES = (
+    ("firmware/platform/localai/workshop_localai_feed_core.hpp", r'kPiHub = \{"Pi Hub", "[^"]*", "[^"]*", "([0-9.]+)"',
+     "Pi Hub feed default"),
+    ("firmware/platform/ui/tabs_pages.cppfrag", r'client\.connect\("([0-9.]+)", 8000\)', "port-8000 client"),
+    ("firmware/platform/ui/tabs_pages.cppfrag", r"Host: ([0-9.]+):8000", "port-8000 Host header"),
+    ("apply_workshop_os12_localai_feed.py", r"LOCAL_AI_PAIR_ADDRESS=\{pihub:'([0-9.]+)'", "portal pairing default"),
+    ("scripts/configure_localai_feed.py", r'"pihub": \("([0-9.]+)"', "configure_localai_feed default"),
+    ("scripts/run_os12_ux_local.sh", r"X2D_BRIDGE_URL:-http://([0-9.]+):8091/", "camera bridge default"),
+    ("docs/DEVICE_NATIVE_UPDATES.md", r"maps `updates\.home\.arpa` to `([0-9.]+)`", "update host documentation"),
+)
+
+
+def validate_pi_address(source_root: Path) -> None:
+    cpp = read(source_root / "firmware/platform/update/workshop_update_service.cpp")
+    match = re.search(r"constexpr std::uint8_t kUpdateHostIp\[4\] = \{(\d+), (\d+), (\d+), (\d+)\};", cpp)
+    if not match:
+        raise ValidationError("update host address: kUpdateHostIp not found in workshop_update_service.cpp")
+    updater = ".".join(match.groups())
+    for relative, pattern, label in PI_ADDRESS_SITES:
+        found = re.findall(pattern, read(source_root / relative))
+        if not found:
+            raise ValidationError(f"Pi address ({label}): no address found in {relative}")
+        for address in found:
+            if address != updater:
+                raise ValidationError(
+                    f"Pi address ({label}): {relative} has {address} but the updater's kUpdateHostIp is {updater}"
+                )
+
+
 def validate_source(source_root: Path) -> None:
     header = read(source_root / "firmware/platform/update/workshop_update_service.h")
     cpp = read(source_root / "firmware/platform/update/workshop_update_service.cpp")
@@ -34,6 +66,8 @@ def validate_source(source_root: Path) -> None:
     patcher = read(source_root / "apply_workshop_os12_device_update.py")
     identity = read(source_root / "apply_workshop_os12_release_identity.py")
     acceptance = read(source_root / "scripts/accept_os12_update_runtime.py")
+
+    validate_pi_address(source_root)
 
     for needle in (
         "workshopUpdateRequestCheck",
