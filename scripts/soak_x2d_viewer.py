@@ -26,7 +26,7 @@ VIDEO_STATES = ("PlayingVideo", "Paused")
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--minutes", type=float, default=30)
-    parser.add_argument("--url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    parser.add_argument("--url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     parser.add_argument("--no-captures", action="store_true",
                         help="skip framebuffer captures (each stalls drawing for ~5 s)")
     args = parser.parse_args()

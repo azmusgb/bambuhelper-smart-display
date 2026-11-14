@@ -12,7 +12,7 @@ from accept_os12_media_runtime import api, start_video_after_page_open, status, 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     ap.add_argument("--seconds", type=int, default=30)
     args = ap.parse_args()
 

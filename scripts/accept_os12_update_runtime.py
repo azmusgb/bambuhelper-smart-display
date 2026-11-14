@@ -209,7 +209,7 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     parser.add_argument("--channel", choices=("stable", "candidate"), default="candidate")
     parser.add_argument("--check-timeout", type=float, default=45.0)
     parser.add_argument("--install-timeout", type=float, default=180.0)

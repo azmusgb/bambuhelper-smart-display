@@ -157,7 +157,7 @@ def run(base: str, token: str, pause: float = 2.2) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     args = ap.parse_args()
     base = args.base_url.rstrip("/")
     try:

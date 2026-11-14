@@ -350,7 +350,7 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"),
+    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"),
                         help="Workshop OS device URL")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--probe-only", action="store_true", help="signed-out boundary checks only; no code needed")

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
+BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.28}"
 ARTIFACT_ZIP=""
 CONFIRM_IDLE=0
 FULL_BACKUP=0
@@ -14,7 +14,7 @@ Usage:
     --artifact-zip ~/Downloads/os12-ux-ws350-<sha>.zip \
     --confirm-printer-idle \
     --full-backup \
-    [--base-url http://10.0.0.124]
+    [--base-url http://10.0.0.28]
 
 One-command exact-candidate install + unattended acceptance.
 

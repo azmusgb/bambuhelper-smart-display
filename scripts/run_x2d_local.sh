@@ -11,7 +11,7 @@ set -Eeuo pipefail
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BASE="${BASE:-/tmp/ws350-os12-ux-build}"
 BUILD="${BUILD:-/tmp/ws350-os12-x2d-build}"
-BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
+BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.28}"
 BRIDGE_URL="${X2D_BRIDGE_URL:-}"
 RECONSTRUCT=0
 IN_PLACE=0
