@@ -190,7 +190,7 @@ class CameraPipeline:
 
     def _read_p1s_frames(self) -> None:
         parsed = urlsplit(self.rtsp_url())
-        host = parsed.hostname or "10.0.0.136"
+        host = parsed.hostname or "10.0.0.38"
         port = parsed.port or 6000
         user = parsed.username or "bblp"
         password = parsed.password or ""

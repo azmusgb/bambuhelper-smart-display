@@ -136,7 +136,7 @@ class SupervisorTests(unittest.TestCase):
 class RtspSourceTests(unittest.TestCase):
     """--rtsp-url-file: the printer's LAN stream read by FFmpeg alone (the Raspberry Pi bridge)."""
 
-    URL = "rtsps://bblp:abcd1234@10.0.0.136:322/streaming/live/1"
+    URL = "rtsps://bblp:abcd1234@10.0.0.38:322/streaming/live/1"
 
     def pipeline(self, folder: Path, ffmpeg: str = "ffmpeg", text: str = URL, mode: int = 0o600):
         url = folder / "rtsp-url"
@@ -151,12 +151,12 @@ class RtspSourceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "owner only"):
                 self.pipeline(folder, mode=0o644).validate()
             with self.assertRaisesRegex(RuntimeError, "one rtsps:// or bambu:// URL"):
-                self.pipeline(folder, text="http://10.0.0.136/").validate()
+                self.pipeline(folder, text="http://10.0.0.38/").validate()
 
     def test_access_code_never_logged(self) -> None:
-        line = b"[tls] rtsps://bblp:abcd1234@10.0.0.136:322/streaming/live/1: Connection refused\n"
+        line = b"[tls] rtsps://bblp:abcd1234@10.0.0.38:322/streaming/live/1: Connection refused\n"
         self.assertNotIn(b"abcd1234", bridge.redact(line))
-        self.assertIn(b"rtsps://***@10.0.0.136:322", bridge.redact(line))
+        self.assertIn(b"rtsps://***@10.0.0.38:322", bridge.redact(line))
 
     def test_ffmpeg_alone_produces_frames(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

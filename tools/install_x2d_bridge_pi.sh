@@ -10,13 +10,13 @@
 #   bash tools/install_x2d_bridge_pi.sh --status
 #   bash tools/install_x2d_bridge_pi.sh --uninstall
 #
-# Environment: PI_HOST (default pi), PRINTER_IP (default 10.0.0.136).
+# Environment: PI_HOST (default pi), PRINTER_IP (default 10.0.0.38).
 # The access code is typed here, sent to the Pi on stdin and kept in /etc/x2d-bridge/rtsp-url (mode 600,
 # owner x2dbridge). It is never put on a command line or in a log.
 set -euo pipefail
 
 HOST="${PI_HOST:-pi}"
-PRINTER_IP="${PRINTER_IP:-10.0.0.136}"
+PRINTER_IP="${PRINTER_IP:-10.0.0.38}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT=x2d-camera-bridge.service
 
