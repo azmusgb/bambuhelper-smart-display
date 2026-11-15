@@ -190,7 +190,7 @@ def validate_capture_security() -> None:
         if marker not in capture:
             fail(f"visual capture credential-safety contract missing: {marker}")
     forbidden = [
-        "10.0.0.124", '--data-urlencode "code=$CODE"', 'echo "$CODE"',
+        "10.0.0.28", '--data-urlencode "code=$CODE"', 'echo "$CODE"',
         '"$BASE/printer/config?slot=0"', '"$BASE/settings/export"', "set -x",
     ]
     for marker in forbidden:

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
+BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.28}"
 CANDIDATE_DIR=""
 EXPECT_SOURCE_SHA=""
 EXPECT_FIRMWARE_SHA256=""

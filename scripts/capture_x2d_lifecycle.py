@@ -233,7 +233,7 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     parser.add_argument("--output-dir")
     parser.add_argument("--live-samples", type=int, default=8)
     parser.add_argument("--cycles", type=int, default=3)

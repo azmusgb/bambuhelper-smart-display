@@ -33,7 +33,7 @@ class ApplianceNav extends HTMLElement {
     if (attr) return attr.toLowerCase();
     const host = window.location.hostname;
     const port = window.location.port;
-    if (host === '10.0.0.124' || host.includes('workshop') || host.includes('bambuhelper')) return 'terminal';
+    if (host === '10.0.0.28' || host.includes('workshop') || host.includes('bambuhelper')) return 'terminal';
     if (port === '3000' || window.location.pathname.startsWith('/materials')) return 'materials';
     return 'hub';
   }
@@ -43,7 +43,7 @@ class ApplianceNav extends HTMLElement {
   }
 
   get terminalUrl() {
-    return this.getAttribute('terminal-url') || (window.location.hostname === '10.0.0.124' ? '/' : 'http://10.0.0.124');
+    return this.getAttribute('terminal-url') || (window.location.hostname === '10.0.0.28' ? '/' : 'http://10.0.0.28');
   }
 
   get materialsUrl() {

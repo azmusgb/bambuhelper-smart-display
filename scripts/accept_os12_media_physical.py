@@ -573,7 +573,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"),
+        default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"),
     )
     parser.add_argument(
         "--expect-source-sha",

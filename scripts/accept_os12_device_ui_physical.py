@@ -108,7 +108,7 @@ def output_path(arg: str|None, stamp: str)->Path:
 
 def main()->int:
     ap=argparse.ArgumentParser()
-    ap.add_argument("--base-url",default=os.environ.get("WORKSHOP_OS_URL","http://10.0.0.124"))
+    ap.add_argument("--base-url",default=os.environ.get("WORKSHOP_OS_URL","http://10.0.0.28"))
     ap.add_argument("--expect-source-sha",required=True,help="exact 40-character source SHA of the CI physical candidate")
     ap.add_argument("--output")
     args=ap.parse_args()

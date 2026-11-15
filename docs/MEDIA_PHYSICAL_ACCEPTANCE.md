@@ -20,7 +20,7 @@ Routine candidate validation should now start with the unattended runner rather 
 
 ```bash
 python3 scripts/accept_os12_unattended.py \\
-  --base-url http://10.0.0.124
+  --base-url http://10.0.0.28
 ```
 
 By default, the runner resolves the exact expected source SHA from the `candidate` entry in `releases/device-update.json`, refuses to test a different running source, and requires no operator prompts. It automatically records:
@@ -46,7 +46,7 @@ From the repository root:
 
 ```bash
 python3 scripts/accept_os12_media_runtime.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --exercise \
   --exercise-video
 ```
@@ -71,7 +71,7 @@ Run:
 
 ```bash
 python3 scripts/accept_os12_media_physical.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --expect-source-sha <EXACT_CI_SOURCE_SHA>
 ```
 

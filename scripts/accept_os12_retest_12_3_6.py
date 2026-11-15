@@ -250,7 +250,7 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    ap.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     ap.add_argument("--expect-source-sha", required=True,
                     help="exact 40-character source SHA of the installed 12.3.6 CI candidate")
     ap.add_argument("--output", help="evidence JSON path; defaults to ~/Downloads")

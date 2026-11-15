@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 BUILD="${BUILD:-/tmp/ws350-os12-ux-build}"
-BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
+BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.28}"
 FLASH=0
 CONFIRM_IDLE=0
 ALLOW_DIRTY=0

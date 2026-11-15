@@ -69,7 +69,7 @@ First prove the temporary/open-LAN test path is absent:
 
 ```bash
 python3 scripts/accept_os12_portal_runtime.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --exercise-rate-limit
 ```
 
@@ -79,12 +79,12 @@ If the supported persisted policy is `open-readonly`, re-enable **Require access
 
 ```bash
 python3 scripts/accept_os12_media_runtime.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --exercise \
   --exercise-video
 
 python3 scripts/accept_os12_media_physical.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --expect-source-sha <EXACT_HEAD_SHA>
 ```
 
@@ -94,7 +94,7 @@ Unknown or failed operator observations remain pending; they are not coerced to 
 
 ```bash
 python3 scripts/accept_os12_device_ui_physical.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --expect-source-sha <EXACT_HEAD_SHA>
 ```
 
@@ -141,7 +141,7 @@ Run a non-installing candidate-channel check:
 
 ```bash
 python3 scripts/accept_os12_update_runtime.py \
-  --base-url http://10.0.0.124 \
+  --base-url http://10.0.0.28 \
   --channel candidate
 ```
 
@@ -154,7 +154,7 @@ bash scripts/accept_os12_recovery_roundtrip_macos.sh \
   --artifact-zip ~/Downloads/os12-ux-ws350-<source-sha>.zip \
   --confirm-printer-idle \
   --exercise \
-  --base-url http://10.0.0.124
+  --base-url http://10.0.0.28
 ```
 
 This helper validates the exact CI artifact against `releases/current.json`, verifies the running source, byte-compares the live partition table to the CI artifact, captures the current full 16 MB flash, writes **only that just-captured image** back at offset `0x0`, and requires the same exact source SHA after reboot. It uses no interactive `y/n/u` prompts and does not rebuild firmware.

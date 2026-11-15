@@ -72,7 +72,7 @@ def keychain_secret(account: str, service: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "Configure the display's feed.").splitlines()[0])
-    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.124"))
+    parser.add_argument("--base-url", default=os.environ.get("WORKSHOP_OS_URL", "http://10.0.0.28"))
     parser.add_argument("--backend", choices=("localai", "pihub"), default="localai",
                         help="the service the display takes its feed from (pihub: Pi Hub; its CA is Pi Hub's home-ca.crt)")
     parser.add_argument("--address", default=None, help="the service's IPv4 address (default: 10.0.0.81 Local AI, 10.0.0.80 Pi Hub)")

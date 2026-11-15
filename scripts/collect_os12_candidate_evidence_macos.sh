@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
+BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.28}"
 ARTIFACT_ZIP=""
 OUTPUT_DIR=""
 
@@ -11,7 +11,7 @@ usage() {
 Usage:
   bash scripts/collect_os12_candidate_evidence_macos.sh \
     --artifact-zip ~/Downloads/os12-ux-ws350-<sha>.zip \
-    [--base-url http://10.0.0.124] \
+    [--base-url http://10.0.0.28] \
     [--output-dir ~/Downloads/workshop-os12-evidence-...]
 
 Purpose:

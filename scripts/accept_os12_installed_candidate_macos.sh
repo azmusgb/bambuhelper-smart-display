@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="${ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.124}"
+BASE_URL="${WORKSHOP_OS_URL:-http://10.0.0.28}"
 ARTIFACT_ZIP=""
 EXERCISE_RECOVERY=0
 CONFIRM_IDLE=0
@@ -12,7 +12,7 @@ usage() {
 Usage:
   bash scripts/accept_os12_installed_candidate_macos.sh \
     --artifact-zip ~/Downloads/os12-ux-ws350-<sha>.zip \
-    [--base-url http://10.0.0.124] \
+    [--base-url http://10.0.0.28] \
     [--exercise-recovery --confirm-printer-idle]
 
 Runs the complete machine-verifiable acceptance set against an already-installed

@@ -293,7 +293,7 @@ Notes:
 
 ## Framebuffer evidence
 
-With the device on the LAN, these runners collect screenshots from `/hub/frame.ppm` unattended (set `WORKSHOP_OS_URL` if the device is not at `10.0.0.124`):
+With the device on the LAN, these runners collect screenshots from `/hub/frame.ppm` unattended (set `WORKSHOP_OS_URL` if the device is not at `10.0.0.28`):
 
 ```bash
 python3 scripts/capture_x2d_lifecycle_recover.py   # camera lifecycle only, retries logged

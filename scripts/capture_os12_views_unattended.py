@@ -279,7 +279,7 @@ def capture(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://10.0.0.124")
+    parser.add_argument("--base-url", default="http://10.0.0.28")
     parser.add_argument("--expect-source-sha", required=True)
     parser.add_argument("--output-dir")
     args = parser.parse_args()
