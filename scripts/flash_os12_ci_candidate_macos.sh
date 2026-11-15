@@ -267,7 +267,8 @@ printf '\n=== Return device to runtime ===\n'
 run_esptool run || true
 
 READY=0
-for _ in $(seq 1 30); do
+# Up to 2 min: the WS350 can need all three WiFi attempts after a USB reset (about 70 s, seen 15 Nov 2026).
+for _ in $(seq 1 60); do
   if curl -fsS --max-time 3 "$BASE_URL/recovery/status" >/dev/null 2>&1; then
     READY=1
     break
@@ -286,7 +287,13 @@ OTA_RESPONSE="$BACKUP_DIR/ota-upload-response.txt"
 # Firmware that still runs the retired 12.0.0 code-free overlay does not.
 COOKIE_ARGS=()
 UPDATE_STATUS_HTTP="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$BASE_URL/os12/update/status" || true)"
-if [[ "$UPDATE_STATUS_HTTP" == "401" ]]; then
+NEEDS_SESSION=0
+[[ "$UPDATE_STATUS_HTTP" == "401" ]] && NEEDS_SESSION=1
+# "open-readonly" portals answer reads without a session but refuse the upload (HTTP 401), so ask the portal itself.
+if curl -fsS --max-time 5 "$BASE_URL/api/portal-security" 2>/dev/null | grep -q '"mutationsRequireSession":true'; then
+  NEEDS_SESSION=1
+fi
+if [[ "$NEEDS_SESSION" -eq 1 ]]; then
   [[ -n "${WORKSHOP_OS_COOKIE_JAR:-}" ]] || WORKSHOP_OS_COOKIE_JAR="$BACKUP_DIR/.portal-session.cookies"
   export WORKSHOP_OS_COOKIE_JAR
   python3 scripts/accept_os12_portal_runtime.py --base-url "$BASE_URL" --sign-in
