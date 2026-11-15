@@ -2098,72 +2098,105 @@ function otaRollback(){
 
 /* Online-update helpers. The markup that calls them is still built only where
    ENABLE_OTA_AUTO is set; this file ships to every board, so on the others the
-   functions simply have no buttons to be reached from. */
-var _autoOtaUrl='',_autoOtaProgress=0;
+   functions simply have no buttons to be reached from.
+   They drive Workshop OS's own UpdateService (/os12/update/*): the display reads
+   the Pi's release manifest and verifies the image's size and SHA-256 itself. The
+   browser never names a firmware URL. */
+var _wsUpdatePoller=null,_wsUpdateInstalling=false,_wsUpdateProgress=0;
 function switchFwTab(t){
   document.getElementById('fw-tab-auto').style.display = t === 'auto' ? 'block' : 'none';
   document.getElementById('fw-tab-manual').style.display = t === 'manual' ? 'block' : 'none';
   document.getElementById('tab-auto-btn').setAttribute('aria-pressed', t === 'auto' ? 'true' : 'false');
   document.getElementById('tab-manual-btn').setAttribute('aria-pressed', t === 'manual' ? 'true' : 'false');
 }
-function checkForUpdates(){
+function wsUpdateApi(path, method){
+  return fetch(path,{method:method||'GET',cache:'no-store',credentials:'same-origin',headers:{'Accept':'application/json'}})
+    .then(function(r){
+      return r.text().then(function(body){
+        var d = null;
+        try { d = JSON.parse(body); } catch(e) { d = null; }
+        if (!d || typeof d !== 'object' || typeof d.phase !== 'string'){
+          if (r.status === 401 || r.status === 403) throw new Error('Sign in again to manage updates.');
+          throw new Error((d && d.error) ? d.error : 'The display answered HTTP ' + r.status + '.');
+        }
+        d.accepted = r.status === 200 || r.status === 202;
+        return d;
+      });
+    });
+}
+function wsUpdateStop(){ if (_wsUpdatePoller){ clearInterval(_wsUpdatePoller); _wsUpdatePoller = null; } }
+function wsUpdateBusy(busy){
+  var check = document.getElementById('checkUpdateBtn'), install = document.getElementById('installBtn');
+  if (check) check.disabled = busy;
+  if (install){ install.disabled = busy; install.textContent = busy && _wsUpdateInstalling ? 'Installing...' : 'Install update'; }
+}
+function wsUpdateFail(message){
+  wsUpdateStop(); _wsUpdateInstalling = false; wsUpdateBusy(false);
+  var res = document.getElementById('updateResult');
+  res.style.color = 'var(--danger)'; res.textContent = message;
+}
+function wsUpdateRender(d){
   var res = document.getElementById('updateResult'), info = document.getElementById('updateInfo');
-  res.style.color = 'var(--info)'; res.textContent = 'Checking...'; info.style.display = 'none'; _autoOtaUrl = '';
-  fetch('https://api.github.com/repos/Keralots/BambuHelper/releases/latest')
-    .then(function(r){ if (!r.ok) throw new Error('GitHub API returned ' + r.status); return r.json(); })
-    .then(function(d){
-      var latest = d.tag_name, current = DEV.fw;
-      function parseVer(v){ var m = v.replace(/^v/,'').match(/^(\d+)\.(\d+)(?:\.(\d+))?(.*)$/); return m ? {major:parseInt(m[1]),minor:parseInt(m[2]),patch:m[3]?parseInt(m[3]):0,pre:m[4]!==''} : null; }
-      function isNewer(a, b){ var av = parseVer(a), bv = parseVer(b); if (!av || !bv) return a !== b; if (av.major !== bv.major) return av.major > bv.major; if (av.minor !== bv.minor) return av.minor > bv.minor; if (av.patch !== bv.patch) return av.patch > bv.patch; return !av.pre && bv.pre; }
-      if (!isNewer(latest, current)){ res.style.color = 'var(--success)'; res.textContent = latest === current ? 'You are up to date (' + current + ')' : 'Running newer version (' + current + ')'; return; }
-      var board = DEV.board, expectedPrefix = 'BambuHelper-' + board + '-', otaBin = null;
-      for (var i = 0; i < d.assets.length; i++){ var n = d.assets[i].name; if (n.startsWith(expectedPrefix) && n.endsWith('-ota.bin')){ otaBin = d.assets[i]; break; } }
-      var slotB = parseInt(DEV.otaSlot, 10) || 0, flashMb = parseInt(DEV.flashMb, 10) || 0;
-      if (otaBin && slotB > 0 && otaBin.size > slotB){
-        res.style.color = 'var(--danger)';
-        res.textContent = 'Update ' + latest + ' (' + Math.round(otaBin.size/1024) + ' KB) does not fit the ' + Math.round(slotB/1024) + ' KB update slot on this device.' +
-          (flashMb >= 16 ? ' Back up settings (Export), then reflash once via the web flasher to repartition the ' + flashMb + ' MB chip - OTA works normally afterwards.'
-                         : ' This board cannot hold this update - stay on the current version.');
-        return;
-      }
-      res.style.color = 'var(--warn)'; res.textContent = 'Update available!';
-      document.getElementById('updateVer').textContent = latest;
-      document.getElementById('updateDate').textContent = new Date(d.published_at).toLocaleDateString();
-      var installBtn = document.getElementById('installBtn'), link = document.getElementById('updateLink');
-      if (otaBin){ _autoOtaUrl = otaBin.browser_download_url; link.href = otaBin.browser_download_url; link.style.display = 'inline-block'; installBtn.style.display = 'inline-block'; }
-      else { installBtn.style.display = 'none'; link.style.display = 'none'; }
-      info.style.display = 'block';
-    })
-    .catch(function(e){ res.style.color = 'var(--danger)'; res.textContent = 'Check failed: ' + e.message; console.warn('updateCheck:',e); });
+  var wrap = document.getElementById('autoOtaWrap'), bar = document.getElementById('autoOtaBar'), st = document.getElementById('autoOtaStatus');
+  var running = d.runningVersion || 'unknown', progress = Math.max(0, Math.min(100, parseInt(d.progress, 10) || 0));
+  _wsUpdateProgress = progress;
+  if (d.updateAvailable){
+    document.getElementById('updateVer').textContent = d.availableLabel || ('Workshop OS ' + (d.availableVersion || ''));
+    document.getElementById('updateChannel').textContent = (d.channel || 'Stable') + ' channel · running ' + running;
+    info.style.display = 'block';
+  } else if (!_wsUpdateInstalling) { info.style.display = 'none'; }
+  if (d.phase === 'Failed'){ wsUpdateFail(d.status || 'The update failed. The running version is unchanged.'); wrap.style.display = 'none'; return; }
+  if (_wsUpdateInstalling){
+    wrap.style.display = 'block'; bar.style.width = progress + '%';
+    st.style.color = ''; st.textContent = (d.status || d.phase) + ' (' + progress + '%)';
+    res.style.color = 'var(--info)'; res.textContent = d.phase;
+    if (d.phase === 'Restarting'){ wsUpdateStop(); bar.style.width = '100%'; st.style.color = 'var(--success)'; waitForReboot(st); return; }
+    if (!d.busy){ wsUpdateFail(d.status || 'The update stopped. The running version is unchanged.'); wrap.style.display = 'none'; }
+    return;
+  }
+  if (d.busy){ res.style.color = 'var(--info)'; res.textContent = d.status || 'Checking...'; return; }
+  wsUpdateStop(); wsUpdateBusy(false);
+  if (d.updateAvailable){ res.style.color = 'var(--warn)'; res.textContent = d.status || 'Update available.'; }
+  else { res.style.color = 'var(--success)'; res.textContent = (d.status || 'Workshop OS is up to date.') + ' Running ' + running + '.'; }
 }
-function installUpdate(){
-  if (!_autoOtaUrl) return;
-  var btn = document.getElementById('installBtn');
-  btn.disabled = true; btn.textContent = 'Installing...';
-  document.getElementById('autoOtaWrap').style.display = 'block';
-  document.getElementById('autoOtaBar').style.width = '0%';
-  document.getElementById('autoOtaStatus').textContent = 'Starting...';
-  _autoOtaProgress = 0;
-  var p = new URLSearchParams(); p.append('url', _autoOtaUrl);
-  fetch('/ota/auto',{method:'POST',body:p})
-    .then(function(r){return r.json();})
-    .then(function(d){ if (d.error) throw new Error(d.error); pollOtaStatus(); })
-    .catch(function(e){ document.getElementById('autoOtaStatus').style.color = 'var(--danger)'; document.getElementById('autoOtaStatus').textContent = 'Error: ' + e.message; btn.disabled = false; btn.textContent = 'Install Update'; });
-}
-var _otaPoller = null;
-function pollOtaStatus(){
-  _otaPoller = setInterval(function(){
-    fetch('/ota/status').then(function(r){return r.json();}).then(function(d){
-      var bar = document.getElementById('autoOtaBar'), st = document.getElementById('autoOtaStatus');
-      _autoOtaProgress = d.progress || 0;
-      bar.style.width = d.progress + '%';
-      if (d.status === 'done'){ clearInterval(_otaPoller); _otaPoller = null; bar.style.width = '100%'; st.style.color = 'var(--success)'; st.textContent = 'Done! Restarting device...'; waitForReboot(st); }
-      else if (d.status && d.status.indexOf('failed') === 0){ clearInterval(_otaPoller); _otaPoller = null; st.style.color = 'var(--danger)'; st.textContent = d.status; var btn = document.getElementById('installBtn'); btn.disabled = false; btn.textContent = 'Retry'; }
-      else { st.textContent = d.status + ' (' + d.progress + '%)'; }
-    }).catch(function(){
-      if (_autoOtaProgress >= 90){ clearInterval(_otaPoller); _otaPoller = null; var bar = document.getElementById('autoOtaBar'), st = document.getElementById('autoOtaStatus'); bar.style.width = '100%'; st.style.color = 'var(--success)'; st.textContent = 'Done! Restarting device...'; waitForReboot(st); }
+function wsUpdatePoll(){
+  wsUpdateStop();
+  var misses = 0;
+  _wsUpdatePoller = setInterval(function(){
+    wsUpdateApi('/os12/update/status').then(function(d){ misses = 0; wsUpdateRender(d); }).catch(function(e){
+      misses++;
+      // The display stops answering when it restarts into the new image.
+      if (_wsUpdateInstalling && _wsUpdateProgress >= 90){ wsUpdateStop(); var st = document.getElementById('autoOtaStatus'); st.style.color = 'var(--success)'; waitForReboot(st); return; }
+      if (misses >= 10) wsUpdateFail('Lost contact with the display: ' + e.message);
     });
   }, 1000);
+}
+function checkForUpdates(){
+  var res = document.getElementById('updateResult');
+  _wsUpdateInstalling = false; wsUpdateBusy(true);
+  document.getElementById('autoOtaWrap').style.display = 'none';
+  res.style.color = 'var(--info)'; res.textContent = 'Checking...';
+  wsUpdateApi('/os12/update/check','POST').then(function(d){
+    if (!d.accepted && !d.busy){ wsUpdateFail(d.status || 'The display could not start the check.'); return; }
+    wsUpdateRender(d); if (d.busy) wsUpdatePoll();
+  }).catch(function(e){ wsUpdateFail('Check failed: ' + e.message); console.warn('updateCheck:',e); });
+}
+function installUpdate(){
+  var name = document.getElementById('updateVer').textContent || 'the update';
+  if (!confirm('Install ' + name + '? The display verifies the image, then restarts. Keep it powered.')) return;
+  _wsUpdateInstalling = true; _wsUpdateProgress = 0; wsUpdateBusy(true);
+  var wrap = document.getElementById('autoOtaWrap'), st = document.getElementById('autoOtaStatus');
+  wrap.style.display = 'block'; document.getElementById('autoOtaBar').style.width = '0%';
+  st.style.color = ''; st.textContent = 'Starting...';
+  wsUpdateApi('/os12/update/install','POST').then(function(d){
+    if (!d.accepted){
+      // Refused before it began (a print is running, printer state unknown, nothing staged).
+      wrap.style.display = 'none';
+      wsUpdateFail(d.status || 'The display did not start the install. Check for updates again.');
+      return;
+    }
+    wsUpdateRender(d); wsUpdatePoll();
+  }).catch(function(e){ wrap.style.display = 'none'; wsUpdateFail('Install failed: ' + e.message); console.warn('updateInstall:',e); });
 }
 
 

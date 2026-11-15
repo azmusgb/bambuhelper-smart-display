@@ -56,6 +56,11 @@ The authenticated local portal also exposes the same service rather than a secon
 
 These routes are local control surfaces over `UpdateService`; they do not accept an arbitrary firmware URL.
 
+The portal's **WiFi & System → Firmware update → Online update** tab is the browser face of those routes: Check for
+updates, then Install update after a confirmation. It shows the service's own status text, including a refusal (a print
+is running, printer state unknown). It never asks GitHub for upstream BambuHelper releases; `scripts/validate_os12_device_update.py`
+fails if that code comes back.
+
 ## Recovery boundary
 
 The Full image is intentionally a recovery/migration artifact and is not a normal device update. A Full image belongs at flash offset `0x0` only during the approved USB recovery/full-flash flow. Device-native OTA must not attempt cross-partition-layout migration.
