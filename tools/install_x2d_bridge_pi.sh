@@ -76,7 +76,13 @@ WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
 sudo systemctl enable $UNIT >/dev/null 2>&1
-if [ -f /etc/x2d-bridge/rtsp-url ]; then sudo systemctl restart $UNIT; fi
+# /etc/x2d-bridge is the bridge user's alone (mode 700), so only root can see whether the URL is set.
+if sudo test -f /etc/x2d-bridge/rtsp-url; then
+  sudo systemctl restart $UNIT
+  echo "bridge: restarted with the new code"
+else
+  echo "bridge: idle until the stream URL is set (turn on LAN Only Liveview at the printer, then --set-code)"
+fi
 echo "ffmpeg: \$(ffmpeg -version | head -1 | cut -d' ' -f1-3)"
 REMOTE
-echo "Installed on $HOST. Next: turn on LAN Only Liveview at the printer, then: bash $0 --set-code"
+echo "Installed on $HOST. Check: bash $0 --status"
