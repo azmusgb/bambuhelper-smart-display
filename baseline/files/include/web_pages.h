@@ -1602,8 +1602,7 @@ static const char PAGE_HTML_2[] PROGMEM = R"rawliteral(
     <div class="card-head">
       <div><h3>Firmware update</h3></div>
       <div class="hstack" style="gap:var(--sp-3);align-items:center">
-        <a href="https://github.com/Keralots/BambuHelper/releases" target="_blank" class="small" style="color:var(--accent)">Release notes</a>
-        <span class="mono small text-dim">current: %FW_VER%</span>
+        <span class="mono small text-dim">Workshop OS %SMART_VER%</span>
       </div>
     </div>
 )rawliteral"

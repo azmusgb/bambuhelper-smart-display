@@ -2116,8 +2116,12 @@ function wsUpdateApi(path, method){
         var d = null;
         try { d = JSON.parse(body); } catch(e) { d = null; }
         if (!d || typeof d !== 'object' || typeof d.phase !== 'string'){
-          if (r.status === 401 || r.status === 403) throw new Error('Sign in again to manage updates.');
-          throw new Error((d && d.error) ? d.error : 'The display answered HTTP ' + r.status + '.');
+          // The guard's own replies carry a message (401 signed out, 403 cross-origin); a signed-out page
+          // request is redirected to /login and arrives here as that page's HTML.
+          var said = d && typeof d === 'object' ? (d.message || d.error) : '';
+          if (said) throw new Error(said);
+          if (r.status === 401 || r.status === 403 || r.redirected) throw new Error('Sign in again to manage updates.');
+          throw new Error('The display answered HTTP ' + r.status + '.');
         }
         d.accepted = r.status === 200 || r.status === 202;
         return d;

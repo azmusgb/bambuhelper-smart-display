@@ -180,7 +180,8 @@ def validate_portal_update_tab(source_root: Path) -> None:
         forbid(script, marker, "portal update tab")
     for marker in ('id="checkUpdateBtn"', 'id="installBtn"', 'id="updateChannel"', "Workshop OS updates from the Pi"):
         require(pages, marker, "portal update tab markup")
-    for marker in ("directly from GitHub", 'id="updateLink"'):
+    require(pages, "Workshop OS %SMART_VER%", "firmware card head")
+    for marker in ("directly from GitHub", 'id="updateLink"', "Keralots/BambuHelper/releases", "current: %FW_VER%"):
         forbid(pages, marker, "portal update tab markup")
 
 
