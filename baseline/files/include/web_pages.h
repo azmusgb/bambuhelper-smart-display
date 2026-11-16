@@ -1602,8 +1602,7 @@ static const char PAGE_HTML_2[] PROGMEM = R"rawliteral(
     <div class="card-head">
       <div><h3>Firmware update</h3></div>
       <div class="hstack" style="gap:var(--sp-3);align-items:center">
-        <a href="https://github.com/Keralots/BambuHelper/releases" target="_blank" class="small" style="color:var(--accent)">Release notes</a>
-        <span class="mono small text-dim">current: %FW_VER%</span>
+        <span class="mono small text-dim">Workshop OS %SMART_VER%</span>
       </div>
     </div>
 )rawliteral"
@@ -1614,20 +1613,19 @@ R"rawliteral(
       <button type="button" id="tab-manual-btn" aria-pressed="false" onclick="switchFwTab('manual')">Manual update</button>
     </div>
     <div id="fw-tab-auto">
-      <p class="small text-dim" style="margin-bottom:var(--sp-3)">Check for and install BambuHelper display device firmware updates directly from GitHub.</p>
+      <p class="small text-dim" style="margin-bottom:var(--sp-3)">Check for and install Workshop OS updates from the Pi. The display checks the image's size and SHA-256 before it restarts, and won't start while a print is running.</p>
       <div class="hstack" style="margin-bottom:var(--sp-3);gap:var(--sp-3);flex-wrap:wrap">
-        <button type="button" class="btn btn-ghost" onclick="checkForUpdates()">Check for Updates</button>
+        <button type="button" id="checkUpdateBtn" class="btn btn-ghost" onclick="checkForUpdates()">Check for updates</button>
         <span id="updateResult" class="small text-dim" role="status" aria-live="polite"></span>
       </div>
       <div id="updateInfo" style="display:none;padding:var(--sp-3);background:var(--bg-sub);border:1px solid var(--line-soft);border-radius:var(--radius-s)">
         <div class="hstack" style="justify-content:space-between;flex-wrap:wrap;gap:var(--sp-2)">
           <div>
             <strong id="updateVer" style="color:var(--success);font-size:14px"></strong>
-            <span id="updateDate" class="text-dim small" style="margin-left:8px"></span>
+            <span id="updateChannel" class="text-dim small" style="margin-left:8px"></span>
           </div>
           <div class="hstack" style="gap:var(--sp-2);flex-wrap:wrap">
             <button id="installBtn" type="button" class="btn btn-primary btn-sm" onclick="installUpdate()">Install update</button>
-            <a id="updateLink" href="#" target="_blank" class="btn btn-ghost btn-sm">Manual download</a>
           </div>
         </div>
         <div id="autoOtaWrap" style="display:none;margin-top:var(--sp-3)">
@@ -1635,7 +1633,7 @@ R"rawliteral(
             <div id="autoOtaBar" style="background:var(--accent);height:100%;width:0%;transition:width 0.4s"></div>
           </div>
           <div id="autoOtaStatus" role="status" aria-live="polite" class="small text-dim" style="text-align:center;margin-top:4px">Starting...</div>
-          <div class="hint" style="text-align:center;color:var(--warn)">&#9888; Do not power off or close this page</div>
+          <div class="hint" style="text-align:center;color:var(--warn)">&#9888; Do not power off the display</div>
         </div>
       </div>
     </div>

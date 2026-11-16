@@ -68,6 +68,7 @@ def validate_source(source_root: Path) -> None:
     acceptance = read(source_root / "scripts/accept_os12_update_runtime.py")
 
     validate_pi_address(source_root)
+    validate_portal_update_tab(source_root)
 
     for needle in (
         "workshopUpdateRequestCheck",
@@ -163,6 +164,25 @@ def validate_source(source_root: Path) -> None:
             raise ValidationError("size/SHA-256 verification rules missing")
         if rules.get("fullFlashRequiresRecoveryFlow") is not True:
             raise ValidationError("Full image recovery boundary missing")
+
+
+def validate_portal_update_tab(source_root: Path) -> None:
+    """The portal's Online update tab drives UpdateService, never the retired upstream updater.
+
+    The legacy tab asked GitHub for upstream BambuHelper releases and posted the asset URL to /ota/auto, a route OS12
+    does not register: it offered a stock image and then failed with a JSON parse error.
+    """
+    script = read(source_root / "baseline" / "files" / "web" / "app.js")
+    pages = read(source_root / "baseline" / "files" / "include" / "web_pages.h")
+    for route in ("/os12/update/status", "/os12/update/check", "/os12/update/install"):
+        require(script, route, "portal update tab")
+    for marker in ("api.github.com", "/ota/auto", "/ota/status", "browser_download_url"):
+        forbid(script, marker, "portal update tab")
+    for marker in ('id="checkUpdateBtn"', 'id="installBtn"', 'id="updateChannel"', "Workshop OS updates from the Pi"):
+        require(pages, marker, "portal update tab markup")
+    require(pages, "Workshop OS %SMART_VER%", "firmware card head")
+    for marker in ("directly from GitHub", 'id="updateLink"', "Keralots/BambuHelper/releases", "current: %FW_VER%"):
+        forbid(pages, marker, "portal update tab markup")
 
 
 def validate_reconstructed(repo: Path) -> None:

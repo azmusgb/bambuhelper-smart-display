@@ -169,6 +169,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check app.js
+          node --test scripts/test_portal_update_tab.mjs
           python3 build.py
           python3 scripts/validate_static_installer.py
 
