@@ -20,6 +20,7 @@ service. Bind it only on a trusted LAN/VPN.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -43,6 +44,9 @@ DEFAULT_URL_FILE = DEFAULT_CAMERA_ROOT / "url.txt"
 MAX_JPEG_BYTES = 1024 * 1024
 # A pipeline that has exited, or produced no frame for this long, is restarted.
 STALL_SECONDS = 15.0
+# FFmpeg repeats the last frame when the printer's stream stalls, so frames keep arriving while the picture is frozen.
+# A live camera never returns byte-identical JPEGs (sensor noise), so identical bytes for this long mean a frozen source.
+FROZEN_SECONDS = 20.0
 RESTART_BACKOFF_SECONDS = (2.0, 5.0, 15.0, 30.0, 60.0)
 
 
@@ -66,16 +70,23 @@ class LatestFrame:
         self._frame: Optional[bytes] = None
         self._sequence = 0
         self._updated_monotonic = 0.0
+        self._digest = b""
+        self._changed_monotonic = 0.0
 
     def update(self, frame: bytes) -> None:
         if len(frame) < 4 or len(frame) > MAX_JPEG_BYTES:
             return
         if not (frame.startswith(b"\xff\xd8") and frame.endswith(b"\xff\xd9")):
             return
+        digest = hashlib.blake2b(frame, digest_size=8).digest()
         with self._lock:
+            now = time.monotonic()
             self._frame = frame
             self._sequence += 1
-            self._updated_monotonic = time.monotonic()
+            self._updated_monotonic = now
+            if digest != self._digest:
+                self._digest = digest
+                self._changed_monotonic = now
 
     def snapshot(self) -> tuple[Optional[bytes], int, Optional[float]]:
         with self._lock:
@@ -83,6 +94,13 @@ class LatestFrame:
             if self._updated_monotonic:
                 age = max(0.0, time.monotonic() - self._updated_monotonic)
             return self._frame, self._sequence, age
+
+    def changed_age(self) -> Optional[float]:
+        """Seconds since the picture last differed from the one before it; None before the first frame."""
+        with self._lock:
+            if not self._changed_monotonic:
+                return None
+            return max(0.0, time.monotonic() - self._changed_monotonic)
 
 
 class CameraPipeline:
@@ -545,11 +563,14 @@ def needs_restart(pipeline: CameraPipeline, latest: LatestFrame, started: float,
         return None
     if age is None or age > STALL_SECONDS:
         return f"no camera frame for {STALL_SECONDS:.0f} s"
+    changed = latest.changed_age()
+    if changed is not None and changed > FROZEN_SECONDS:
+        return f"camera frame unchanged for {FROZEN_SECONDS:.0f} s"
     return None
 
 
 def supervise(pipeline: CameraPipeline, latest: LatestFrame, stop: threading.Event) -> None:
-    """Restart the camera pipeline when it exits or stalls.
+    """Restart the camera pipeline when it exits, stalls, or keeps repeating one frame.
 
     The printer only streams while Bambu Studio's live view is open, and
     bambu_source exits when the tunnel closes. Restarting re-reads url.txt, so
@@ -658,10 +679,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
         encoder = getattr(self.server.pipeline, "encoder", None)
         source_rc = source.poll() if source else None
         ffmpeg_rc = encoder.poll() if encoder else None
+        changed = self.server.latest.changed_age()
         payload = {
-            "ok": bool(frame is not None and age is not None and age <= 3.0 and source_rc is None and ffmpeg_rc is None),
+            "ok": bool(
+                frame is not None and age is not None and age <= 3.0 and source_rc is None and ffmpeg_rc is None
+                and changed is not None and changed <= FROZEN_SECONDS
+            ),
             "frameSequence": sequence,
             "frameAgeMs": None if age is None else round(age * 1000),
+            "frameChangedAgeMs": None if changed is None else round(changed * 1000),
             "frameBytes": 0 if frame is None else len(frame),
             "detectSequence": det_seq,
             "detectAgeMs": None if det_age is None else round(det_age * 1000),

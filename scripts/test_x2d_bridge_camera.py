@@ -132,6 +132,26 @@ class SupervisorTests(unittest.TestCase):
         latest.update(self.JPEG)
         self.assertIsNone(bridge.needs_restart(FakePipeline(True), latest, 0.0, bridge.STALL_SECONDS + 5))
 
+    def test_repeated_identical_frames_count_as_frozen(self) -> None:
+        """FFmpeg repeats the last frame when the printer's stream stalls, so frame age alone stays fresh."""
+        latest = bridge.LatestFrame()
+        latest.update(self.JPEG)
+        latest._changed_monotonic -= bridge.FROZEN_SECONDS + 1   # the content last changed this long ago
+        latest.update(self.JPEG)                                  # ... and the same bytes arrive again, so age is fresh
+        self.assertLess(latest.snapshot()[2], 1.0)
+        reason = bridge.needs_restart(FakePipeline(True), latest, 0.0, bridge.STALL_SECONDS + 5)
+        self.assertIn("unchanged", reason)
+
+    def test_changing_frames_are_not_frozen(self) -> None:
+        latest = bridge.LatestFrame()
+        latest.update(b"\xff\xd8one\xff\xd9")
+        latest._changed_monotonic -= bridge.FROZEN_SECONDS + 1
+        latest.update(b"\xff\xd8two\xff\xd9")                     # new content resets the clock
+        self.assertIsNone(bridge.needs_restart(FakePipeline(True), latest, 0.0, bridge.STALL_SECONDS + 5))
+
+    def test_changed_age_is_none_before_any_frame(self) -> None:
+        self.assertIsNone(bridge.LatestFrame().changed_age())
+
 
 class RtspSourceTests(unittest.TestCase):
     """--rtsp-url-file: the printer's LAN stream read by FFmpeg alone (the Raspberry Pi bridge)."""
