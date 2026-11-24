@@ -14,10 +14,10 @@
     "acceptanceEvidence": "Exact-head CI + healthy WS350 read-only interrogation + complete 29-view credential-safe framebuffer capture"
   },
   "download": {
-    "channel": "production-workshop-os-12.9.0",
-    "version": "12.9.0",
-    "rollbackVersion": "12.8.0",
-    "note": "The installer and the device's Stable channel offer Workshop OS 12.9.0: the exact CI image of main 076c460, installed on the WS350 by OTA and passed by accept_os12_unattended.py on 3 Nov 2026. It adds the display camera (X2D bridge through the Pi failover), which passed the camera merge gate on #250: a 30-minute soak, Mac Wi-Fi and bridge failover, and the owner's hands-on checks. Workshop OS 12.8.0 is the immediate rollback; 12.7.1, 12.4.4, v11.19.1 and Smart Home v7.2 stay as older ones."
+    "channel": "production-workshop-os-12.9.1",
+    "version": "12.9.1",
+    "rollbackVersion": "12.9.0",
+    "note": "The installer and the device's Stable channel offer Workshop OS 12.9.1. Provenance: the source is main eefaab4. The WS350 has run a CI build of eefaab4 since about 15 Nov 2026, installed through the candidate installer (#286); that build's bytes expired with CI's 7-day artifact retention. These bytes are a re-run of the same CI job on the same commit (Firmware run 43797627036, attempt 2, 24 Nov 2026): the source matches what the display runs, but the bytes are not proven identical to those on the device. On 24 Nov 2026 the owner chose this over the exact-artifact promotion rule in docs/DEVICE_NATIVE_UPDATES.md, with nine days of use on the display as the acceptance evidence. 12.9.1 is 12.9.0 plus honest readings (stale telemetry is no longer shown as current: no temperature drawn as 0, no 'Ready' without a recent report that says idle, no assumed 1000 g spool for an AMS tray) and the portal Online update fix (#286: the portal drives Workshop OS's own updater), with the other changes on main since 076c460 (the reserved Pi address 10.0.0.80 for the updater and camera bridge, Archivo display text with no text under 14 px). Workshop OS 12.9.0 is the immediate rollback; 12.8.0, 12.7.1, 12.4.4, v11.19.1 and Smart Home v7.2 stay as older ones."
   },
   "candidate": {
     "version": "12.3.9",
