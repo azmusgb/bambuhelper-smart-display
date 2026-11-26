@@ -1,0 +1,1063 @@
+{
+ "version": 1,
+ "areas": [
+  {
+   "id": "home",
+   "label": "Home",
+   "order": 1,
+   "landing": "home"
+  },
+  {
+   "id": "workshop",
+   "label": "Workshop",
+   "order": 2,
+   "landing": "printer"
+  },
+  {
+   "id": "household",
+   "label": "Household",
+   "order": 3,
+   "landing": "movies"
+  },
+  {
+   "id": "network",
+   "label": "Network",
+   "order": 4,
+   "landing": "lights"
+  },
+  {
+   "id": "system",
+   "label": "System",
+   "order": 5,
+   "landing": "health"
+  }
+ ],
+ "pages": [
+  {
+   "id": "home",
+   "system": "hub",
+   "area": "home",
+   "label": "Home",
+   "purpose": "Your home at a glance",
+   "path": "/",
+   "role": "page",
+   "reach": [
+    "rail",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/next",
+    "/apps"
+   ]
+  },
+  {
+   "id": "wall",
+   "system": "hub",
+   "area": "home",
+   "label": "Wall display",
+   "purpose": "Glanceable ambient display",
+   "path": "/wall",
+   "role": "ambient",
+   "reach": [
+    "foot",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "printer",
+   "system": "hub",
+   "area": "workshop",
+   "label": "Printer",
+   "purpose": "The X2D: what it's doing and what it needs",
+   "path": "/workshop",
+   "role": "page",
+   "reach": [
+    "rail",
+    "strip",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/apps/bambuddy",
+    "/bambuddy"
+   ],
+   "tools": [
+    "bambuddy"
+   ]
+  },
+  {
+   "id": "lab",
+   "system": "hub",
+   "area": "workshop",
+   "label": "Print lab",
+   "purpose": "Experiments, test coupons and operator verdicts",
+   "path": "/lab",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "lab-experiments",
+   "system": "hub",
+   "area": "workshop",
+   "label": "Experiments",
+   "path": "/lab",
+   "role": "tab",
+   "parent": "lab",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "lab-designs",
+   "system": "hub",
+   "area": "workshop",
+   "label": "Designs",
+   "path": "/lab/designs",
+   "role": "tab",
+   "parent": "lab",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "built": false
+  },
+  {
+   "id": "lab-tools",
+   "system": "hub",
+   "area": "workshop",
+   "label": "Lab tools",
+   "path": "/lab/tools",
+   "role": "tab",
+   "parent": "lab",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "built": false
+  },
+  {
+   "id": "quick",
+   "system": "hub",
+   "area": "workshop",
+   "label": "Quick Print",
+   "purpose": "Slice an STL or 3MF on the Mac and look at the result",
+   "path": "/quick",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "tools": [
+    "bambuddy"
+   ]
+  },
+  {
+   "id": "movies",
+   "system": "hub",
+   "area": "household",
+   "label": "Movies",
+   "purpose": "What's playing and what to watch",
+   "path": "/media",
+   "role": "page",
+   "reach": [
+    "rail",
+    "strip",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/movies"
+   ],
+   "tools": [
+    "plex"
+   ]
+  },
+  {
+   "id": "papers",
+   "system": "hub",
+   "area": "household",
+   "label": "Papers",
+   "purpose": "Find and file papers",
+   "path": "/documents",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "tools": [
+    "paperless"
+   ]
+  },
+  {
+   "id": "scan",
+   "system": "hub",
+   "area": "household",
+   "label": "Scan",
+   "purpose": "Scan a page",
+   "path": "/scan",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/apps/scan"
+   ],
+   "tools": [
+    "scan"
+   ]
+  },
+  {
+   "id": "print",
+   "system": "hub",
+   "area": "household",
+   "label": "Print",
+   "purpose": "Send jobs to the HP DeskJet",
+   "path": "/print",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "lists",
+   "system": "hub",
+   "area": "household",
+   "label": "Lists",
+   "purpose": "Shopping, to-dos, and notes",
+   "path": "/lists",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "drives",
+   "system": "hub",
+   "area": "household",
+   "label": "Drives",
+   "purpose": "The movies drive and the copy from the PC",
+   "path": "/drives",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "lights",
+   "system": "hub",
+   "area": "network",
+   "label": "Lights",
+   "purpose": "Lights, plugs and the other things in the house",
+   "path": "/devices",
+   "role": "page",
+   "reach": [
+    "rail",
+    "strip",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/control"
+   ],
+   "tools": [
+    "devices"
+   ]
+  },
+  {
+   "id": "internet",
+   "system": "hub",
+   "area": "network",
+   "label": "Internet",
+   "purpose": "The connection, ad blocking and guest Wi-Fi",
+   "path": "/network",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/apps/grafana",
+    "/grafana"
+   ],
+   "tools": [
+    "adguard",
+    "network"
+   ]
+  },
+  {
+   "id": "weather",
+   "system": "hub",
+   "area": "network",
+   "label": "Weather",
+   "purpose": "Current conditions and forecast",
+   "path": "/weather",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "health",
+   "system": "hub",
+   "area": "system",
+   "label": "Health",
+   "purpose": "How the hub and the Pi are doing, and what to try",
+   "path": "/system",
+   "role": "page",
+   "reach": [
+    "rail",
+    "strip",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/pi",
+    "/apps/status",
+    "/status"
+   ],
+   "tools": [
+    "pi",
+    "healthchecks"
+   ]
+  },
+  {
+   "id": "backups",
+   "system": "hub",
+   "area": "system",
+   "label": "Backups",
+   "purpose": "What is backed up, and when",
+   "path": "/backups",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "tools": [
+    "backups"
+   ]
+  },
+  {
+   "id": "versions",
+   "system": "hub",
+   "area": "system",
+   "label": "Versions",
+   "purpose": "What is live where",
+   "path": "/versions",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "missions",
+   "system": "hub",
+   "area": "system",
+   "label": "Missions",
+   "purpose": "Initiatives: their stages, decisions and evidence",
+   "path": "/missions",
+   "role": "detail",
+   "parent": "versions",
+   "reach": [
+    "card:versions",
+    "palette",
+    "map"
+   ],
+   "built": false
+  },
+  {
+   "id": "mission",
+   "system": "hub",
+   "area": "system",
+   "label": "Mission",
+   "purpose": "One initiative: where it stands, what it needs from you, and its evidence",
+   "path": "/missions/<initiative>",
+   "role": "detail",
+   "parent": "versions",
+   "reach": [
+    "card:missions"
+   ],
+   "built": false
+  },
+  {
+   "id": "alerts",
+   "system": "hub",
+   "area": "system",
+   "label": "Alerts",
+   "purpose": "Recent system and device events",
+   "path": "/alerts",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "automations",
+   "system": "hub",
+   "area": "system",
+   "label": "Automations",
+   "purpose": "Set up things the house can do for you",
+   "path": "/rules",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings",
+   "system": "hub",
+   "area": "system",
+   "label": "Settings",
+   "purpose": "Configure your Pi Hub",
+   "path": "/settings",
+   "role": "page",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings-general",
+   "system": "hub",
+   "area": "system",
+   "label": "General",
+   "path": "/settings",
+   "role": "tab",
+   "parent": "settings",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings-home",
+   "system": "hub",
+   "area": "system",
+   "label": "Home",
+   "path": "/settings#group-home",
+   "role": "tab",
+   "parent": "settings",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings-outside",
+   "system": "hub",
+   "area": "system",
+   "label": "Weather and calendar",
+   "path": "/settings#group-outside",
+   "role": "tab",
+   "parent": "settings",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings-phone",
+   "system": "hub",
+   "area": "system",
+   "label": "Phone messages",
+   "path": "/settings#group-phone",
+   "role": "tab",
+   "parent": "settings",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings-people",
+   "system": "hub",
+   "area": "system",
+   "label": "People and access",
+   "path": "/settings#group-people",
+   "role": "tab",
+   "parent": "settings",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "settings-pi",
+   "system": "hub",
+   "area": "system",
+   "label": "The Pi",
+   "path": "/settings#group-pi",
+   "role": "tab",
+   "parent": "settings",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "map",
+   "system": "hub",
+   "area": "system",
+   "label": "Site map",
+   "purpose": "Every page and tool, and where it lives",
+   "path": "/map",
+   "role": "page",
+   "reach": [
+    "strip",
+    "foot",
+    "palette",
+    "map"
+   ],
+   "aliases": [
+    "/more"
+   ]
+  },
+  {
+   "id": "privacy",
+   "system": "hub",
+   "label": "Privacy note",
+   "purpose": "What the off-site backup's Google app can see, and what it keeps",
+   "path": "/privacy",
+   "role": "standalone",
+   "reach": [
+    "palette",
+    "map"
+   ]
+  },
+  {
+   "id": "ask",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "ask",
+   "label": "Ask",
+   "purpose": "Start something, or pick up where you left off",
+   "path": "/assistant",
+   "role": "page",
+   "view": "home",
+   "reach": [
+    "button",
+    "strip",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "chat",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "ask",
+   "label": "Chat",
+   "purpose": "Private conversation with your local models",
+   "path": "/assistant/chat",
+   "role": "mode",
+   "parent": "ask",
+   "view": "ask",
+   "reach": [
+    "button",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "image",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "ask",
+   "label": "Image",
+   "purpose": "Generate images with your local models",
+   "path": "/assistant/image",
+   "role": "mode",
+   "parent": "ask",
+   "view": "create",
+   "reach": [
+    "button",
+    "palette",
+    "map"
+   ],
+   "tools": [
+    "comfy"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "decisions",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "ask",
+   "label": "Decisions",
+   "purpose": "Approvals you gave or refused",
+   "path": "/assistant/decisions",
+   "role": "tab",
+   "parent": "ask",
+   "view": "inbox",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "work",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "work",
+   "label": "Work",
+   "purpose": "Everything running and done, in one place",
+   "path": "/assistant/work",
+   "role": "page",
+   "view": "work",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "agent-world",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "work",
+   "label": "Agent World",
+   "purpose": "Give the team a goal; watch them work it",
+   "path": "/assistant/agent-world",
+   "role": "tab",
+   "parent": "work",
+   "view": "agents",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "assistant-automations",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "work",
+   "label": "Assistant automations",
+   "purpose": "Scheduled prompts and research, health checks and the morning brief",
+   "path": "/assistant/automations",
+   "role": "tab",
+   "parent": "work",
+   "view": "automationStudio",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "spreadsheets",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "work",
+   "label": "Spreadsheets",
+   "purpose": "Ask for a spreadsheet on the Windows computer to be checked or changed",
+   "path": "/assistant/spreadsheets",
+   "role": "tab",
+   "parent": "work",
+   "view": "spreadsheets",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "projects",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "projects",
+   "label": "Projects",
+   "purpose": "Group related work with its own sources and memory",
+   "path": "/assistant/projects",
+   "role": "page",
+   "view": "projects",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "sources",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "projects",
+   "label": "Sources",
+   "purpose": "Files and notes the Assistant can search",
+   "path": "/assistant/sources",
+   "role": "tab",
+   "parent": "projects",
+   "view": "knowledge",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "memory",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "projects",
+   "label": "Memory",
+   "purpose": "Facts the Assistant keeps about each project",
+   "path": "/assistant/memory",
+   "role": "tab",
+   "parent": "projects",
+   "view": "memory",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "library",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "projects",
+   "label": "Library",
+   "purpose": "What you kept: chats, research and images",
+   "path": "/assistant/library",
+   "role": "tab",
+   "parent": "projects",
+   "view": "library",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "changes",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "improve",
+   "label": "Changes",
+   "purpose": "Everything that could change in the Assistant, in three stages: Backlog, In progress and Shipped",
+   "path": "/assistant/changes",
+   "role": "page",
+   "view": "backlog",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "signals",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "improve",
+   "label": "Signals",
+   "purpose": "Problems the Assistant noticed; serious ones join the Backlog",
+   "path": "/assistant/signals",
+   "role": "tab",
+   "parent": "changes",
+   "view": "signals",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "claude-code",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "improve",
+   "label": "Claude Code",
+   "purpose": "Chat with your Claude Code sessions and watch them work",
+   "path": "/assistant/claude-code",
+   "role": "tab",
+   "parent": "changes",
+   "view": "claude",
+   "reach": [
+    "tabs",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "atlas",
+   "system": "assistant",
+   "area": "assistant",
+   "section": "improve",
+   "label": "Atlas",
+   "purpose": "System Atlas: topology, changes, risk, evidence and local architecture intelligence",
+   "path": "/assistant/atlas",
+   "role": "page",
+   "view": "architecture",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "assistant-system",
+   "system": "assistant",
+   "area": "system",
+   "label": "Assistant",
+   "purpose": "Whether the Assistant is working, its models and tools, settings and audit log",
+   "path": "/assistant/system",
+   "role": "page",
+   "view": "system",
+   "reach": [
+    "strip",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "status",
+   "system": "assistant",
+   "area": "system",
+   "label": "Assistant status",
+   "purpose": "Whether the Assistant is working, and which optional services are up",
+   "path": "/assistant/status",
+   "role": "detail",
+   "parent": "assistant-system",
+   "view": "status",
+   "reach": [
+    "card:assistant-system",
+    "palette",
+    "map"
+   ],
+   "needs": "pc",
+   "drawn": "hub"
+  },
+  {
+   "id": "models",
+   "system": "assistant",
+   "area": "system",
+   "label": "Models",
+   "purpose": "Installed models and what's loaded now",
+   "path": "/assistant/models",
+   "role": "detail",
+   "parent": "assistant-system",
+   "view": "models",
+   "reach": [
+    "card:assistant-system",
+    "palette",
+    "map"
+   ],
+   "needs": "pc",
+   "drawn": "hub"
+  },
+  {
+   "id": "developer-tools",
+   "system": "assistant",
+   "area": "system",
+   "label": "Developer tools",
+   "purpose": "Files, Repository, PowerShell, Browser & computer and n8n workflows",
+   "path": "/assistant/tools",
+   "role": "detail",
+   "parent": "assistant-system",
+   "view": "tools",
+   "reach": [
+    "card:assistant-system",
+    "palette",
+    "map"
+   ],
+   "tools": [
+    "n8n"
+   ],
+   "cards": [
+    {
+     "id": "files",
+     "label": "Files",
+     "purpose": "Browse, search and safely edit mounted folders",
+     "path": "/assistant/tools/files",
+     "view": "workbench"
+    },
+    {
+     "id": "repository",
+     "label": "Repository",
+     "purpose": "Inspect repos and run allow-listed commands",
+     "path": "/assistant/tools/repository",
+     "view": "repoTools"
+    },
+    {
+     "id": "powershell",
+     "label": "PowerShell",
+     "purpose": "Approval-gated scripts on the Windows host",
+     "path": "/assistant/tools/powershell",
+     "view": "powershell"
+    },
+    {
+     "id": "browser",
+     "label": "Browser & computer",
+     "purpose": "Fetch pages and run approved local actions",
+     "path": "/assistant/tools/browser",
+     "view": "actions"
+    },
+    {
+     "id": "n8n",
+     "label": "n8n workflows",
+     "purpose": "Build advanced workflows in n8n",
+     "path": "/assistant/tools/n8n",
+     "view": "automations"
+    }
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "assistant-settings",
+   "system": "assistant",
+   "area": "system",
+   "label": "Assistant settings",
+   "purpose": "Notifications, sign-in, home location and the pages you open",
+   "path": "/assistant/settings",
+   "role": "detail",
+   "parent": "assistant-system",
+   "view": "settings",
+   "reach": [
+    "card:assistant-system",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "audit-log",
+   "system": "assistant",
+   "area": "system",
+   "label": "Audit log",
+   "purpose": "What happened on the appliance, and when",
+   "path": "/assistant/audit-log",
+   "role": "detail",
+   "parent": "assistant-system",
+   "view": "activity",
+   "reach": [
+    "card:assistant-system",
+    "palette",
+    "map"
+   ],
+   "needs": "pc"
+  },
+  {
+   "id": "run",
+   "system": "assistant",
+   "area": "assistant",
+   "label": "Task",
+   "purpose": "One task the Assistant is working on or has finished",
+   "path": "/assistant/run/<id>",
+   "role": "detail",
+   "reach": [
+    "card:work"
+   ],
+   "needs": "pc",
+   "drawn": "hub"
+  },
+  {
+   "id": "camera-fit",
+   "system": "mac",
+   "label": "Camera fit",
+   "role": "standalone",
+   "reach": [
+    "card:lab-tools",
+    "palette",
+    "map"
+   ],
+   "needs": "mac"
+  }
+ ],
+ "redirects": [
+  {
+   "id": "changes-in-progress",
+   "path": "/assistant/changes/in-progress",
+   "to": "changes",
+   "stage": "in-progress"
+  },
+  {
+   "id": "changes-shipped",
+   "path": "/assistant/changes/shipped",
+   "to": "changes",
+   "stage": "shipped"
+  },
+  {
+   "id": "assistant-status",
+   "to": "status"
+  },
+  {
+   "id": "tools-files",
+   "to": "developer-tools",
+   "card": "files"
+  },
+  {
+   "id": "tools-repository",
+   "to": "developer-tools",
+   "card": "repository"
+  },
+  {
+   "id": "tools-powershell",
+   "to": "developer-tools",
+   "card": "powershell"
+  },
+  {
+   "id": "tools-browser",
+   "to": "developer-tools",
+   "card": "browser"
+  },
+  {
+   "id": "tools-n8n",
+   "to": "developer-tools",
+   "card": "n8n"
+  }
+ ]
+}
